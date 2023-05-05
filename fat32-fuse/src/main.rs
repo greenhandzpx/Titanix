@@ -1,0 +1,120 @@
+use std::env;
+use std::fs;
+use std::fs::{read_dir, File, OpenOptions};
+use std::io;
+use std::io::{Read, Seek, SeekFrom, Write};
+
+use clap::ArgMatches;
+use clap::{App, Arg};
+use fatfs::{format_volume, FormatVolumeOptions, StdIoWrapper};
+use fscommon::BufStream;
+use fatfs::{FileSystem, FsOptions};
+
+fn mkfs(filename: String) -> io::Result<()> {
+    let file = fs::OpenOptions::new().read(true).write(true).open(&filename)?;
+    let buf_file = BufStream::new(file);
+    format_volume(&mut StdIoWrapper::from(buf_file), FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32))?;
+    Ok(())
+}
+
+fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
+    // let src_path = matches.value_of("source").unwrap();
+    let target_path = matches.value_of("target").unwrap();
+    let target_path2 = matches.value_of("target2").unwrap();
+    println!("target_path = {}", target_path);
+
+
+    let img_file = match OpenOptions::new().read(true).write(true).open(filename) {
+        Ok(file) => file,
+        Err(err) => {
+            println!("Failed to open image!");
+            return Err(err);
+        }
+    };
+    let buf_stream = BufStream::new(img_file);
+    let options = FsOptions::new().update_accessed_date(true);
+    let fs = FileSystem::new(buf_stream, options)?;
+
+
+    // let apps: Vec<_> = read_dir(src_path)
+    let apps: Vec<_> = read_dir(target_path)
+        .unwrap()
+        .into_iter()
+        .map(|dir_entry| {
+            dir_entry.unwrap().file_name().into_string().unwrap()
+            
+            // let mut name_with_ext = dir_entry.unwrap().file_name().into_string().unwrap();
+            // name_with_ext.drain(name_with_ext.find('.').unwrap()..name_with_ext.len());
+            // name_with_ext
+        })
+        .filter(|name| *name != "mnt" && *name != "fs.img")
+        .collect();
+
+    for app in apps {
+        // load app data from host file system
+        let mut host_file = File::open(format!("{}{}", target_path, app)).unwrap();
+        let mut all_data: Vec<u8> = Vec::new();
+        host_file.read_to_end(&mut all_data).unwrap();
+        // create a file in fat-fs
+        let mut file = fs.root_dir().create_file(&app)?;
+        // write data to fat-fs
+        file.write_all(&all_data)?;
+    }
+
+    let init_usershell: Vec<&str> = vec!["initproc", "shell"];
+
+    for app in init_usershell {
+        let mut host_file = File::open(format!("{}{}", target_path2, app)).unwrap();
+        let mut all_data: Vec<u8> = Vec::new();
+        host_file.read_to_end(&mut all_data).unwrap();
+        // create a file in fat-fs
+        let mut file = fs.root_dir().create_file(&app)?;
+
+        // write data to fat-fs
+        file.write_all(&all_data)?;
+    }
+    
+
+    println!("pack apps finished");
+
+    Ok(())
+}
+
+
+fn main() -> io::Result<()> {
+
+    let matches = App::new("Fat32FileSystem packer")
+        .arg(
+            Arg::with_name("fs_img")
+                .short("f")
+                .long("fs_img")
+                .takes_value(true)
+                .help("Fs img"),
+        )
+        .arg(
+            Arg::with_name("source")
+                .short("s")
+                .long("source")
+                .takes_value(true)
+                .help("Executable source dir(with backslash)"),
+        )
+        .arg(
+            Arg::with_name("target")
+                .short("t")
+                .long("target")
+                .takes_value(true)
+                .help("Executable target dir(with backslash)"),
+        )
+        .arg(
+            Arg::with_name("target2")
+                .short("e")
+                .long("target2")
+                .takes_value(true)
+                .help("Executable target dir(with backslash)"),
+        )
+        .get_matches();
+    let filename = matches.value_of("fs_img").unwrap().to_string();
+    mkfs(filename.clone())?;
+    pack_elfs(matches, filename.clone())?;
+    Ok(())
+}
