@@ -126,11 +126,11 @@ pub trait Inode: Send + Sync {
     ) -> GeneralRet<()> {
         todo!()
     }
-    /// Read data from block device
-    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<Arc<Page>> {
+    /// Read data at the given file offset from block device
+    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
         todo!()
     }
-    /// Write data to block device
+    /// Write data to the given file offset in block device
     fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
         todo!()
     }
