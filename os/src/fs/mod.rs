@@ -80,7 +80,7 @@ impl OpenFlags {
 impl From<MapPermission> for OpenFlags {
     fn from(perm: MapPermission) -> Self {
         let mut res = OpenFlags::from_bits(0).unwrap();
-        if perm.contains(MapPermission::R) && perm.contains(MapPermission::W){
+        if perm.contains(MapPermission::R) && perm.contains(MapPermission::W) {
             res |= OpenFlags::RDWR;
         } else if perm.contains(MapPermission::R) {
             res |= OpenFlags::RDONLY;

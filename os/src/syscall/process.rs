@@ -1,8 +1,8 @@
 use core::f32::consts::E;
 
 use crate::config::signal::SIG_NUM;
+use crate::fs::inode_tmp::open_file;
 use crate::fs::OpenFlags;
-use crate::fs::inode_tmp::{open_file};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -511,9 +511,10 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     .as_mut()
                     .unwrap()
                     .modify_right_bound(new_heap_end);
-                debug!("new heap end {}", proc.memory_set
-                    .heap_range
-                    .unwrap().end().0);
+                debug!(
+                    "new heap end {}",
+                    proc.memory_set.heap_range.unwrap().end().0
+                );
                 Ok(0)
             }
         } else {

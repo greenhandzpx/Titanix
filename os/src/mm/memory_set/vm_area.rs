@@ -37,6 +37,10 @@ pub struct BackupFile {
     pub file: Arc<dyn File>,
 }
 
+struct VmAreaBuilder {
+    // TODO
+}
+
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct VmArea {
     /// Vpn range

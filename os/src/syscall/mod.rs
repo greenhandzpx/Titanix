@@ -42,11 +42,13 @@ const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXEC: usize = 221;
 const SYSCALL_MMAP: usize = 222;
+const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAITPID: usize = 260;
 
 const AT_FDCWD: isize = -100;
 
 mod fs;
+mod mm;
 mod process;
 mod sync;
 
@@ -54,6 +56,7 @@ use core::arch::asm;
 
 use fs::*;
 use log::error;
+use mm::*;
 use process::*;
 
 use crate::{signal::SigAction, utils::error::SyscallRet};
@@ -125,6 +128,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[4],
             args[5],
         ),
+        SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1]).await,
         SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
         _ => {

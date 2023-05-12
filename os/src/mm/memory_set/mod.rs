@@ -64,7 +64,7 @@ pub fn init_kernel_space() {
 //         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 // }
 
-/// Heap range 
+/// Heap range
 pub type HeapRange = SimpleRange<VirtAddr>;
 
 /// memory set structure, controls virtual-memory space
@@ -174,7 +174,6 @@ impl MemorySet {
         }
     }
 
-
     /// Handle page fault
     pub fn handle_page_fault(&mut self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
         // There are serveral kinds of page faults:
@@ -206,7 +205,6 @@ impl MemorySet {
             Err(SyscallErr::EFAULT)
         }
     }
-
 
     /// Insert vm area lazily
     pub fn insert_area(&mut self, mut vma: VmArea) {
@@ -622,8 +620,13 @@ impl MemorySet {
                 continue;
             }
             if vma.1.end_vpn() > start_vpn && vma.1.start_vpn() < end_vpn {
-                debug!("conflict vpn range: input vpnr: [{:#x}, {:#x}], old vpnr: [{:#x}, {:#x}]", 
-                    start_vpn.0, end_vpn.0, vma.1.start_vpn().0, vma.1.end_vpn().0);
+                debug!(
+                    "conflict vpn range: input vpnr: [{:#x}, {:#x}], old vpnr: [{:#x}, {:#x}]",
+                    start_vpn.0,
+                    end_vpn.0,
+                    vma.1.start_vpn().0,
+                    vma.1.end_vpn().0
+                );
                 return true;
             }
         }
@@ -657,7 +660,6 @@ bitflags! {
         const COW = 1 << 8;
     }
 }
-
 
 #[allow(unused)]
 ///Check PageTable running correctly

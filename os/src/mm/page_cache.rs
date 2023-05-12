@@ -6,7 +6,10 @@ use log::info;
 
 use crate::{config::mm::PAGE_SIZE_BITS, fs::Inode, utils::error::GeneralRet};
 
-use super::{page::{Page, PageBuilder}, radix_tree::RadixTree};
+use super::{
+    page::{Page, PageBuilder},
+    radix_tree::RadixTree,
+};
 
 /// i.e. linux's `address_space`
 /// TODO: add lru policy?
@@ -37,7 +40,12 @@ impl PageCache {
             Ok(page)
         } else {
             // TODO add evict policy
-            let page = Arc::new(PageBuilder::new().offset(offset).inode(self.inode.clone().unwrap()).build());
+            let page = Arc::new(
+                PageBuilder::new()
+                    .offset(offset)
+                    .inode(self.inode.clone().unwrap())
+                    .build(),
+            );
             self.pages.insert(offset >> PAGE_SIZE_BITS, page.clone());
             Ok(page)
         }

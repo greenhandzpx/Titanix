@@ -8,13 +8,16 @@ use log::debug;
 use riscv::register::scause::Scause;
 
 use crate::{
+    config::mm::PAGE_SIZE,
+    fs::OpenFlags,
     mm::{
-        frame_alloc, page_table::PTEFlags, FrameTracker, PageTable, PageTableEntry, PhysPageNum,
-        VirtAddr, MapPermission,
+        frame_alloc, page_table::PTEFlags, FrameTracker, MapPermission, PageTable, PageTableEntry,
+        PhysPageNum, VirtAddr,
     },
     processor::current_process,
     sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallErr}, fs::OpenFlags, syscall::MmapFlags, config::mm::PAGE_SIZE,
+    syscall::MmapFlags,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::VmArea;
@@ -94,7 +97,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         vma: &VmArea,
         page_table: &mut PageTable,
     ) -> GeneralRet<()> {
-
         debug!("handle sbrk page fault");
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
@@ -105,7 +107,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
         Ok(())
-
     }
 
     fn box_clone(&self) -> Box<dyn PageFaultHandler> {
@@ -118,7 +119,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
 pub struct MmapPageFaultHandler {}
 
 impl PageFaultHandler for MmapPageFaultHandler {
-
     // tmp version
     fn handle_page_fault(
         &self,
@@ -134,13 +134,11 @@ impl PageFaultHandler for MmapPageFaultHandler {
         let open_flags: OpenFlags = vma.map_perm.into();
         // let file = inode.file.open(inode.file.clone(), open_flags)?;
         debug!("mmap backup file name {}", file.metadata().path);
-        let data_frames = unsafe {
-            &mut (*vma.data_frames.get())
-        };
+        let data_frames = unsafe { &mut (*vma.data_frames.get()) };
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
         data_frames.0.insert(va.floor(), Arc::new(frame));
-        let bytes_array = ppn.bytes_array(); 
+        let bytes_array = ppn.bytes_array();
         file.seek(offset)?;
         file.sync_read(bytes_array)?;
 

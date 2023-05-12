@@ -15,11 +15,7 @@ mod pid;
 
 use crate::{
     config::{mm::USER_STACK_SIZE, process::CLONE_STACK_SIZE},
-    fs::{
-        self,
-        inode_tmp::{open_file},
-        FdTable, OpenFlags,
-    },
+    fs::{self, inode_tmp::open_file, FdTable, OpenFlags},
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySet, RecycleAllocator},
     process::thread::terminate_all_threads_except_main,
