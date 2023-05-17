@@ -8,10 +8,8 @@ use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
 use log::{debug, error, info};
 
-use crate::config::fs;
 use crate::fs::inode::INODE_CACHE;
 use crate::utils::error::{self, SyscallErr};
-use crate::utils::path;
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     processor::SumGuard,
@@ -632,6 +630,7 @@ pub fn init() -> GeneralRet<()> {
     ROOT_FS.init_ref("/", FileSystemType::VFAT)?;
     let root_inode = ROOT_FS.metadata().root_inode.unwrap();
     root_inode.mkdir(root_inode.clone(), "mnt", InodeMode::FileDIR)?;
+
     // FILE_SYSTEM_MANAGER
     //     .fs_mgr
     //     .lock()

@@ -31,8 +31,9 @@ const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
-const SYSCALL_SIGACTION: usize = 134;
-const SYSCALL_SIGRETURN: usize = 139;
+const SYSCALL_RT_SIGACTION: usize = 134;
+const SYSCALL_RT_SIGPROCMASK: usize = 135;
+const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;
@@ -62,7 +63,7 @@ use mm::*;
 use process::*;
 use sync::*;
 
-use crate::{signal::SigAction, utils::error::SyscallRet};
+use crate::{signal::{SigAction, SigSet}, utils::error::SyscallRet};
 
 
 /// handle syscall exception with `syscall_id` and other arguments
@@ -102,12 +103,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
-        SYSCALL_SIGACTION => sys_rt_sigaction(
+        SYSCALL_RT_SIGACTION => sys_rt_sigaction(
             args[0] as i32,
             args[1] as *const SigAction,
             args[2] as *mut SigAction,
         ),
-        SYSCALL_SIGRETURN => sys_rt_sigreturn(),
+        SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1] as *const usize, args[2] as *mut SigSet),
+        SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_UNAME => sys_uname(args[0]),
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
@@ -151,7 +153,7 @@ pub fn user_sigreturn() {
             inlateout("x10") 0 as isize => ret,
             in("x11") 0,
             in("x12") 0,
-            in("x17") SYSCALL_SIGRETURN
+            in("x17") SYSCALL_RT_SIGRETURN
         );
     }
 }

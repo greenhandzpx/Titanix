@@ -11,7 +11,7 @@ use crate::process::thread::{
 };
 use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, local_hart, SumGuard};
-use crate::signal::{SigAction, SigInfo, Signal};
+use crate::signal::{SigAction, SigInfo, Signal, SigSet};
 use crate::timer::get_time_ms;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
@@ -379,6 +379,68 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             .lock()
             .set_sigaction(sig as usize, unsafe { *act });
         Ok(0)
+    })
+}
+
+enum SigProcmaskHow {
+    SigBlock = 0,
+    SigUnblock = 1,
+    SigSetmask = 2,
+}
+
+pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> SyscallRet {
+    current_process().inner_handler(|proc| {
+        if old_set as usize != 0 {
+            UserCheck::new().check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
+            let _sum_guard = SumGuard::new();
+            unsafe {
+                *old_set = proc.pending_sigs.blocked_sigs;
+            }
+        }
+        if set as usize == 0 {
+            debug!("arg set is null");
+            return Ok(0)
+        } 
+        UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
+        match how {
+            _ if how == SigProcmaskHow::SigBlock as i32 => {
+                if let Some(new_sig_mask) = unsafe {
+                    SigSet::from_bits(*set)
+                } {
+                    proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                    return Ok(0)
+                } else {
+                    debug!("invalid set arg");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
+            _ if how == SigProcmaskHow::SigUnblock as i32 => {
+                if let Some(new_sig_mask) = unsafe {
+                    SigSet::from_bits(*set)
+                } {
+                    proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
+                    return Ok(0)
+                } else {
+                    debug!("invalid set arg");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
+            _ if how == SigProcmaskHow::SigSetmask as i32 => {
+                if let Some(new_sig_mask) = unsafe {
+                    SigSet::from_bits(*set)
+                } {
+                    proc.pending_sigs.blocked_sigs = new_sig_mask;
+                    return Ok(0)
+                } else {
+                    debug!("invalid set arg");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
+            _ => {
+                debug!("invalid how");
+                return Err(SyscallErr::EINVAL);
+            }
+        }
     })
 }
 
