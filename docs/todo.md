@@ -12,11 +12,10 @@
 - 给每一处unsafe都加上safety保证
 - 使用radix-tree来组织mmap区域
 - 当clone出一个新的线程时，应该在内核态添加exit调用，而不是像现在这样在用户态封装函数
-- 目前clone中传入的函数指针是用户自定义的wrapper，并不符合posix标准，需要重构
+- - [x] 目前clone中传入的函数指针是用户自定义的wrapper，并不符合posix标准，需要重构
 - 目前用户自定义信号处理函数必须在最后手动调用`sigreturn`，是否能够让内核自动添加？
 - 信号系统目前还未完善，如上述一点，另外可以支持设置信号栈
 - 共享内存
-- 给所有的unsafe标上SAFETY保证
 - 测试单核和多核的性能
 - per-CPU allocator:每个核心一个内存分配器，减少锁的争抢
 - per-CPU page frame

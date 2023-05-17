@@ -22,18 +22,18 @@ use self::thread_state::{ThreadState, ThreadStateAtomic};
 use super::Process;
 use crate::executor;
 use crate::signal::SignalContext;
-use crate::{mm::PageTable, trap::TrapContext};
+use crate::{trap::TrapContext};
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::future::Future;
-use core::intrinsics::{atomic_load_acquire, atomic_store_relaxed, atomic_store_release};
-use core::sync::atomic::{AtomicBool, Ordering};
+
+
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
 };
-use log::debug;
+
 use threadloop::threadloop;
-pub use tid::TidHandle;
+pub use tid::{TidHandle, TidAddress};
 
 // pub use task::TaskControlBlock;
 // pub use task::TaskStatus;
@@ -69,6 +69,8 @@ pub struct ThreadInner {
     /// Note that this may be modified by another thread, which
     /// need to be sync
     pub state: ThreadStateAtomic,
+    /// Tid address, which may be modified by `set_tid_address` syscall
+    pub tid_addr: Option<TidAddress>,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -92,6 +94,7 @@ impl Thread {
                 signal_context: None,
                 ustack_base,
                 state: ThreadStateAtomic::new(),
+                tid_addr: None,
                 // terminated: AtomicBool::new(false),
             }),
         };
@@ -130,6 +133,7 @@ impl Thread {
                 signal_context: None,
                 ustack_base: unsafe { (*self.inner.get()).ustack_base },
                 state: ThreadStateAtomic::new(),
+                tid_addr: None,
                 // terminated: AtomicBool::new(false),
             }),
         }
@@ -184,6 +188,7 @@ impl Thread {
         unsafe { (*self.inner.get()).state.load() == ThreadState::Sleep }
     }
     /// Let this thread sleep
+    /// Note that we now only use this state in sys_futex
     pub fn sleep(&self) {
         unsafe {
             (*self.inner.get()).state.store(ThreadState::Sleep);

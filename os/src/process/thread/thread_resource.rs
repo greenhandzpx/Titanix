@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, sync::Arc};
+use alloc::boxed::Box;
 use log::debug;
 
 use crate::{

@@ -21,13 +21,14 @@ pub use env::SumGuard;
 const HART_EACH: Hart = Hart::new();
 pub static mut HARTS: [Hart; HART_NUM] = [HART_EACH; HART_NUM];
 
-unsafe fn get_hart_by_id(hart_id: usize) -> &'static Hart {
-    &HARTS[hart_id]
+unsafe fn get_hart_by_id(hart_id: usize) -> &'static mut Hart {
+    &mut HARTS[hart_id]
 }
 
 /// Set the cpu hart control block according to `hard_id`
 pub unsafe fn set_local_hart(hart_id: usize) {
     let hart = get_hart_by_id(hart_id);
+    hart.set_hart_id(hart_id);
     let hart_addr = hart as *const _ as usize;
     asm!("mv tp, {}", in(reg) hart_addr);
 }

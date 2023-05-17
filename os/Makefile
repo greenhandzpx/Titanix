@@ -35,7 +35,7 @@ TEST ?=
 
 # Qemu opts
 ifndef CPUS
-CPUS := 1
+CPUS := 2
 endif
 
 

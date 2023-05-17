@@ -13,6 +13,7 @@ use super::context::{EnvContext, KernelTaskContext, LocalContext};
 
 /// The processor has several `Hart`s
 pub struct Hart {
+    hart_id: usize,
     /// Spare env ctx when in need(e.g. kernel thread or idle thread)
     spare_env_ctx: EnvContext,
     local_ctx: LocalContext,
@@ -51,10 +52,17 @@ impl Hart {
     pub const fn new() -> Self {
         // TODO: modify kstack_bottom init val
         Hart {
+            hart_id: 0,
             spare_env_ctx: EnvContext::new(),
             local_ctx: LocalContext::Idle,
             kstack_bottom: 0,
         }
+    }
+    pub fn set_hart_id(&mut self, hart_id: usize) {
+        self.hart_id = hart_id;
+    }
+    pub fn hart_id(&self) -> usize {
+        self.hart_id
     }
     pub fn set_stack(&mut self, kstack: usize) {
         self.kstack_bottom = kstack;

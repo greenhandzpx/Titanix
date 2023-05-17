@@ -72,7 +72,7 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, Ordering, self},
 };
 
 use log::info;
@@ -107,6 +107,7 @@ fn clear_bss() {
 //     }
 // }
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
+static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
 // TODO: We will add multi cores support in the future
 #[no_mangle]
@@ -117,7 +118,7 @@ pub fn rust_main(hart_id: usize) {
         .compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
         .is_ok()
     {
-        // the first hart
+        // The first hart
         clear_bss();
 
         processor::init();
@@ -162,6 +163,9 @@ pub fn rust_main(hart_id: usize) {
             // println!("after initproc!");
         });
 
+        // INIT_FINISHED.store(true, Ordering::Release);
+        INIT_FINISHED.store(true, Ordering::SeqCst);
+
         let hart_num = unsafe { HARTS.len() };
         for i in 0..hart_num {
             if i == hart_id {
@@ -170,6 +174,12 @@ pub fn rust_main(hart_id: usize) {
             hart_start(i, HART_START_ADDR);
         }
     } else {
+
+        // The other harts
+
+        // while !INIT_FINISHED.load(Ordering::Acquire) {}
+        while !INIT_FINISHED.load(Ordering::SeqCst) {}
+
         unsafe {
             processor::set_local_hart(hart_id);
         }
@@ -181,10 +191,12 @@ pub fn rust_main(hart_id: usize) {
                 .activate();
         }
         info!("[kernel] ---------- hart {} started ---------- ", hart_id);
-        return;
+        
+        // return;
     }
-    executor::run_until_idle();
 
-    // process::run_tasks();
+    loop {
+        executor::run_until_idle();
+    }
     panic!("Unreachable in rust_main!");
 }

@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
 use crate::{
-    processor::{current_process, current_task, hart_idle_now},
+    processor::{current_process, current_task, hart_idle_now, local_hart},
     sync::mutex::SpinNoIrqLock as Mutex,
 };
 
@@ -96,10 +96,11 @@ impl Log for SimpleLogger {
         if hart_idle_now() {
             print_in_color(
                 format_args!(
-                    "[{:>5}][{}:{}][-,-] {}\n",
+                    "[{:>5}][{}:{}][{},-,-] {}\n",
                     record.level(),
                     record.file().unwrap(),
                     record.line().unwrap(),
+                    local_hart().hart_id(),
                     // current_process().pid.0,
                     // current_task().tid.0,
                     record.args()
@@ -109,10 +110,11 @@ impl Log for SimpleLogger {
         } else {
             print_in_color(
                 format_args!(
-                    "[{:>5}][{}:{}][{},{}] {}\n",
+                    "[{:>5}][{}:{}][{},{},{}] {}\n",
                     record.level(),
                     record.file().unwrap(),
                     record.line().unwrap(),
+                    local_hart().hart_id(),
                     current_process().pid(),
                     current_task().tid(),
                     record.args()

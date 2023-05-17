@@ -7,7 +7,7 @@ use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
 use crate::process::thread::{
-    self, exit_and_terminate_all_threads, terminate_given_thread, Thread,
+    self, exit_and_terminate_all_threads, terminate_given_thread, Thread, TidHandle,
 };
 use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, local_hart, SumGuard};
@@ -228,7 +228,7 @@ pub fn sys_clone(
     }
 }
 
-pub fn sys_exec(path: *const u8, mut args: *const usize) -> SyscallRet {
+pub fn sys_execve(path: *const u8, mut args: *const usize) -> SyscallRet {
     stack_trace!();
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
@@ -355,7 +355,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     }
 }
 
-pub fn sys_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
+pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
     if sig < 0 || sig as usize >= SIG_NUM {
         return Err(SyscallErr::EINVAL);
@@ -382,7 +382,7 @@ pub fn sys_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) ->
     })
 }
 
-pub fn sys_sigreturn() -> SyscallRet {
+pub fn sys_rt_sigreturn() -> SyscallRet {
     stack_trace!();
     let signal_context = current_task().signal_context();
     // restore the old sig mask

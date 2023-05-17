@@ -26,6 +26,7 @@ const SYSCALL_WRITE: usize = 64;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
+const SYSCALL_SET_TID_ADDRESS: usize = 96;
 const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_YIELD: usize = 124;
@@ -54,14 +55,15 @@ mod sync;
 
 use core::arch::asm;
 
+pub use sync::futex_wake;
 use fs::*;
 use log::error;
 use mm::*;
 use process::*;
+use sync::*;
 
 use crate::{signal::SigAction, utils::error::SyscallRet};
 
-use self::sync::sys_futex;
 
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
@@ -95,16 +97,17 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
+        SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
-        SYSCALL_SIGACTION => sys_sigaction(
+        SYSCALL_SIGACTION => sys_rt_sigaction(
             args[0] as i32,
             args[1] as *const SigAction,
             args[2] as *mut SigAction,
         ),
-        SYSCALL_SIGRETURN => sys_sigreturn(),
+        SYSCALL_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_UNAME => sys_uname(args[0]),
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
@@ -119,7 +122,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3] as *const u8,
             args[4] as *const u8,
         ),
-        SYSCALL_EXEC => sys_exec(args[0] as *const u8, args[1] as *const usize),
+        SYSCALL_EXEC => sys_execve(args[0] as *const u8, args[1] as *const usize),
         SYSCALL_MMAP => sys_mmap(
             args[0] as *const u8,
             args[1],
@@ -197,4 +200,12 @@ bitflags! {
         /// Anonymous
         const MAP_ANONYMOUS = 1 << 5;
     }
+}
+
+/// Futex Operations
+pub enum FutexOperations {
+    /// Wait
+    FutexWait = 1,
+    /// Wake up
+    FutexWake = 2,
 }
