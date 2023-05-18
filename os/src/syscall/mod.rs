@@ -23,6 +23,7 @@ const SYSCALL_PIPE: usize = 59;
 const SYSCALL_GETDENTS: usize = 61;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
@@ -79,7 +80,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_OPEN => sys_openat(
-            args[0],
+            args[0] as isize,
             args[1] as *const u8,
             args[2] as u32,
             args[3] as u32,
@@ -89,6 +90,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETDENTS => sys_getdents(args[0], args[1], args[2]),
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
+        SYSCALL_NEWFSTATAT => sys_newfstatat(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2],
+            args[3] as u32,
+        ),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
