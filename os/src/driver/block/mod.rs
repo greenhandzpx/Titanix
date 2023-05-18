@@ -1,5 +1,7 @@
 pub mod buffer_cache;
 // mod io_device_tmp;
+mod sdcard;
+mod spi;
 mod virtio_blk;
 use core::any::Any;
 
@@ -16,7 +18,7 @@ use crate::config::{board::MMIO, mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE};
 #[cfg(feature = "board_qemu")]
 pub type BlockDeviceImpl = virtio_blk::VirtIOBlock;
 
-#[cfg(feature = "board_k210")]
+#[cfg(feature = "board_fu740")]
 pub type BlockDeviceImpl = sdcard::SDCardWrapper;
 
 /// MMIO virtual address

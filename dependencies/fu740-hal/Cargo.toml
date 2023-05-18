@@ -1,0 +1,15 @@
+[package]
+name = "fu740-hal"
+version = "0.1.0"
+authors = ["The RISC-V Team <risc-v@teams.rust-embedded.org>"]
+description = "HAL for FU740 SoC"
+license = "MIT OR Apache-2.0"
+edition = "2018"
+
+[dependencies]
+# fu740-pac = { git = "https://github.com/riscv-rust/fu740-pac.git", rev = "2ea5c43365fef48cc5bcdeaa884ec6b9a5d91b0b" }
+fu740-pac = { path="../fu740-pac"} 
+embedded-hal = { version = "0.2.3", features = ["unproven"] }
+nb = "0.1.2"
+riscv = "0.7.0"
+# riscv = { path = "../riscv" }

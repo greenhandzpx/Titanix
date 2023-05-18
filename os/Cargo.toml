@@ -18,8 +18,13 @@ async-trait = "0.1.53"
 async-task = { path = "../dependencies/async-task", default-features = false }
 easy-fs = { path = "../dependencies/easy-fs" }
 # fatfs temporarily
-fatfs = { path = "../dependencies/rust-fatfs", default-features = false, features = ["lfn", "alloc"] }
+fatfs = { path = "../dependencies/rust-fatfs", default-features = false, features = [
+    "lfn",
+    "alloc",
+] }
 # futures = "0.3"
+fu740-pac = { path = "../dependencies/fu740-pac" }
+fu740-hal = { path = "../dependencies/fu740-hal" }
 
 [features]
 # default = []
