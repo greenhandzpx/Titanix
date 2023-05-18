@@ -8,7 +8,7 @@ use user_lib::{console::getchar, execve, fork, getpid, wait, yield_};
 
 #[no_mangle]
 fn main() -> i32 {
-    // println!("initproc!!");
+    println!("initproc!!");
     if fork() == 0 {
         // println!("exec user shell");
         // let c = getchar();
@@ -19,6 +19,7 @@ fn main() -> i32 {
         );
         // println!("exec after");
     } else {
+        println!("[initproc] Wait for children");
         loop {
             let mut exit_code: i32 = 0;
             // println!("exit code addr {:#x}", &exit_code as *const _ as usize);
@@ -33,6 +34,7 @@ fn main() -> i32 {
                 pid, exit_code,
             );
         }
+        println!("[initproc] will die!!");
     }
     0
 }

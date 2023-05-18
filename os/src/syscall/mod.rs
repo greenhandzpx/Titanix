@@ -42,7 +42,7 @@ const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
-const SYSCALL_EXEC: usize = 221;
+const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAITPID: usize = 260;
@@ -124,7 +124,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3] as *const u8,
             args[4] as *const u8,
         ),
-        SYSCALL_EXEC => sys_execve(args[0] as *const u8, args[1] as *const usize),
+        SYSCALL_EXECVE => sys_execve(args[0] as *const u8, args[1] as *const usize, args[2] as *const usize),
         SYSCALL_MMAP => sys_mmap(
             args[0] as *const u8,
             args[1],

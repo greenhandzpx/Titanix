@@ -1,7 +1,7 @@
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::VecDeque;
 use async_task::{Runnable, Task};
-use log::debug;
+use log::{debug, info};
 use core::future::Future;
 use lazy_static::*;
 
@@ -53,7 +53,7 @@ pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
         if let Some(task) = TASK_QUEUE.fetch_task() {
-            // debug!("fetch a task");
+            // info!("fetch a task");
             task.run();
             n += 1;
         } else {

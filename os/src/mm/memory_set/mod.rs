@@ -523,7 +523,7 @@ impl MemorySet {
 
         for (_, area) in user_space.areas.iter_mut() {
             // clear write bit && add cow bit
-            if area.map_perm.contains(MapPermission::W) {
+            if area.map_perm.contains(MapPermission::W) || area.map_perm.contains(MapPermission::COW) {
                 area.map_perm |= MapPermission::COW;
                 area.map_perm.remove(MapPermission::W);
                 area.handler = Some(Box::new(ForkPageFaultHandler {}));
@@ -540,7 +540,8 @@ impl MemorySet {
                 if let Some(ph_frame) = unsafe { (*area.data_frames.get()).0.get(&vpn) } {
                     // If there is related physcial frame, then we let the child and father share it.
                     let pte = unsafe { (*user_space.page_table.get()).find_pte(vpn).unwrap() };
-                    if pte.flags().contains(PTEFlags::W) {
+
+                    if pte.flags().contains(PTEFlags::W) || pte.flags().contains(PTEFlags::COW) {
                         let mut new_flags = pte.flags() | PTEFlags::COW;
                         new_flags.remove(PTEFlags::W);
                         pte.set_flags(new_flags);
@@ -562,6 +563,7 @@ impl MemorySet {
             }
             memory_set.push_lazily(new_area, None);
         }
+        user_space.activate();
         new_pagetable.activate();
         memory_set
     }

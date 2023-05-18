@@ -74,6 +74,10 @@ impl ProcessArguments {
     }
 }
 
+const PRELIMINARY_TESTS_2: [&str; 1] = [
+    "clone",
+];
+
 const PRELIMINARY_TESTS: [&str; 32] = [
     "getdents",
     "brk",
@@ -140,8 +144,8 @@ pub fn main() -> i32 {
     let mut line: String = String::new();
 
     // #[cfg(feature = "preliminary")]
-    // preliminary_test();
-    // exit(0);
+    preliminary_test();
+    exit(0);
 
     print!("{}", LINE_START);
     loop {

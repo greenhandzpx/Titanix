@@ -76,6 +76,7 @@ use core::{
 };
 
 use log::info;
+use sbi::shutdown;
 
 use crate::{
     config::mm::HART_START_ADDR,
@@ -125,9 +126,9 @@ pub fn rust_main(hart_id: usize) {
         unsafe {
             processor::set_local_hart(hart_id);
         }
+        utils::logging::init();
         processor::set_hart_stack();
 
-        utils::logging::init();
 
         info!(r#"  _______ __              _     "#);
         info!(r#" /_  __(_) /_____ _____  (_)  __"#);
@@ -177,6 +178,7 @@ pub fn rust_main(hart_id: usize) {
 
         // The other harts
 
+
         // while !INIT_FINISHED.load(Ordering::Acquire) {}
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
@@ -198,5 +200,6 @@ pub fn rust_main(hart_id: usize) {
     loop {
         executor::run_until_idle();
     }
-    panic!("Unreachable in rust_main!");
+    // executor::run_until_idle();
+    // panic!("Unreachable in rust_main!");
 }

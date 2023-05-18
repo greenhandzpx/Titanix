@@ -73,10 +73,10 @@ pub async fn trap_handler() {
     let stval = stval::read();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
-            stack_trace!();
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
+            let old_user_x17 = cx.user_x[17];
             // get system call return value
             let result = syscall(
                 cx.user_x[17],
@@ -93,11 +93,13 @@ pub async fn trap_handler() {
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
             stack_trace!();
+            // if old_user_x17 == 220 {
+            //     info!("sys_clone sepc {:#x}", cx.sepc);
+            // }
             cx.user_x[10] = match result {
                 Ok(ret) => ret as usize,
                 Err(err) => -(err as isize) as usize,
             }
-            // todo!("Change into async syscall");
             // TODO: Change into async syscall
         }
         Trap::Exception(Exception::StoreFault)
@@ -120,7 +122,7 @@ pub async fn trap_handler() {
                 }
                 Err(_) => {
                     println!("Error here");
-                    error!(
+                    warn!(
                         "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it. pid: {}",
                         scause.cause(),
                         scause.bits(),
@@ -166,6 +168,7 @@ pub async fn trap_handler() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // debug!("time interrupt, pid {}", current_process().pid());
             // debug!("sstatus {:#x}", sstatus::read().bits());
+            debug!("timer interrrupt");
             set_next_trigger();
             process::yield_now().await
             // suspend_current_and_run_next();
@@ -207,6 +210,7 @@ pub async fn trap_handler() {
 //         );
 //     }
 // }
+
 /// 回到用户态，注意不需要切换页表，故不需要清空tlb
 pub fn trap_return(trap_context: &mut TrapContext) {
     set_user_trap_entry();
@@ -216,6 +220,7 @@ pub fn trap_return(trap_context: &mut TrapContext) {
     }
 
     check_signal_for_current_process();
+    // info!("trap return sepc {:#x}", trap_context.sepc);
     unsafe {
         __return_to_user(trap_context);
     }

@@ -30,6 +30,7 @@ use alloc::{
     collections::BTreeMap,
     string::String,
     sync::{Arc, Weak},
+    vec,
     vec::Vec,
 };
 // use lazy_static::*;
@@ -62,53 +63,53 @@ pub fn add_initproc() {
     unsafe { INITPROC = Some(Process::new(elf_data)) }
 }
 
-const PRELIMINARY_TESTS: [&str; 31] = [
-    "brk",
-    "chdir",
-    "clone",
-    "close",
-    "dup2",
-    "dup",
-    "execve",
-    "exit",
-    "fork",
-    "fstat",
-    "getcwd",
-    "getdents",
-    "getpid",
-    "getppid",
-    "gettimeofday",
-    "mkdir_",
-    "mmap",
-    "mount",
-    "munmap",
-    "openat",
-    "open",
-    "pipe",
-    "read",
-    "times",
-    "umount",
-    "uname",
-    "unlink",
-    "wait",
-    "waitpid",
-    "write",
-    "yield",
-];
+// const PRELIMINARY_TESTS: [&str; 31] = [
+//     "brk",
+//     "chdir",
+//     "clone",
+//     "close",
+//     "dup2",
+//     "dup",
+//     "execve",
+//     "exit",
+//     "fork",
+//     "fstat",
+//     "getcwd",
+//     "getdents",
+//     "getpid",
+//     "getppid",
+//     "gettimeofday",
+//     "mkdir_",
+//     "mmap",
+//     "mount",
+//     "munmap",
+//     "openat",
+//     "open",
+//     "pipe",
+//     "read",
+//     "times",
+//     "umount",
+//     "uname",
+//     "unlink",
+//     "wait",
+//     "waitpid",
+//     "write",
+//     "yield",
+// ];
 
-/// Scan all prilimary tests
-pub fn scan_prilimary_tests() {
-    info!("---------- SCAN PRELIMINARY TEST -----------\n");
-    for test in PRELIMINARY_TESTS {
-        let inode = fs::fat32_tmp::open_file(test, OpenFlags::RDONLY);
-        if inode.is_none() {
-            continue;
-        }
-        let inode = inode.unwrap();
-        let elf_data = inode.read_all();
-        Process::new(&elf_data);
-    }
-}
+// /// Scan all prilimary tests
+// pub fn scan_prilimary_tests() {
+//     info!("---------- SCAN PRELIMINARY TEST -----------\n");
+//     for test in PRELIMINARY_TESTS {
+//         let inode = fs::fat32_tmp::open_file(test, OpenFlags::RDONLY);
+//         if inode.is_none() {
+//             continue;
+//         }
+//         let inode = inode.unwrap();
+//         let elf_data = inode.read_all();
+//         Process::new(&elf_data);
+//     }
+// }
 
 use self::thread::TidHandle;
 
@@ -282,7 +283,7 @@ impl Process {
     /// Note that the return value is `argc`.
     /// When one process invokes `exec`, all of the threads will terminate except the
     /// main thread, and the new program is executed in the main thread.
-    pub fn exec(&self, elf_data: &[u8], args: Vec<String>) -> SyscallRet {
+    pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
         debug!("exec pid {}", current_process().pid());
         let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
         let task_ptr: *const Thread = self.inner_handler(|proc| {
@@ -290,7 +291,7 @@ impl Process {
             // memory_set with elf program headers/trampoline/trap context/user stack
             // substitute memory_set
             memory_set.activate();
-            // change hart local context's pagetable (quite important!!!)
+            // Change hart local context's pagetable (quite important!!!)
             let hart = local_hart();
             hart.change_page_table(memory_set.page_table.clone());
             // process_inner.memory_set = memory_set;
@@ -298,7 +299,7 @@ impl Process {
         });
 
         terminate_all_threads_except_main();
-        // then we alloc user resource for main thread again
+        // Then we alloc user resource for main thread again
         // since memory_set has been changed
         let task = unsafe {
             &*task_ptr
@@ -318,51 +319,81 @@ impl Process {
         // alloc new ustack
         task.alloc_ustack();
 
-        // push arguments on user stack
+        // ---- The following to to push arguments on user stack ----
+
         let mut user_sp = task.ustack_top();
-        // enable kernel to visit user space
+        // Enable kernel to visit user space
         let _sum_guard = SumGuard::new();
         debug!("exec args len {}", args.len());
-        let len = (args.len() + 1) * core::mem::size_of::<usize>();
-        user_sp -= len;
 
-        // check wether this user space can be written
-        UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
-
-        let argv_base = user_sp;
-        let mut argv: Vec<_> = (0..=args.len())
-            .map(|arg| (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize)
-            .collect();
-        unsafe {
-            *argv[args.len()] = 0;
+        // argv is a vector of each arg's addr
+        let mut argv = vec![0; args.len()];
+        // envp is a vector of each env's addr
+        let mut envp = vec![0; envs.len()];
+        // Copy each env to the newly allocated stack
+        for i in 0..envs.len() {
+            // Here we leave one byte to store a '\0' as a terminator
+            user_sp -= envs[i].len() + 1;
+            UserCheck::new().check_writable_slice(user_sp as *mut u8, envs[i].len() + 1)?;
+            let p = user_sp as *mut u8;
+            unsafe {
+                envp[i] = user_sp;
+                p.copy_from(envs[i].as_ptr(), envs[i].len());
+                *((p as usize + envs[i].len()) as *mut u8) = 0;
+            }
         }
-
-        user_sp -= core::mem::size_of::<usize>();
-        // save the argc
-        unsafe {
-            *(user_sp as *mut usize) = args.len();
-        }
-        let argc_addr = user_sp;
-
+        // Copy each arg to the newly allocated stack
         for i in 0..args.len() {
+            // Here we leave one byte to store a '\0' as a terminator
             user_sp -= args[i].len() + 1;
             UserCheck::new().check_writable_slice(user_sp as *mut u8, args[i].len() + 1)?;
             let p = user_sp as *mut u8;
             unsafe {
-                *argv[i] = user_sp;
+                argv[i] = user_sp;
                 p.copy_from(args[i].as_ptr(), args[i].len());
                 *((p as usize + args[i].len()) as *mut u8) = 0;
             }
         }
-        // make the user_sp aligned to 8B for k210 platform
-        let len = user_sp % core::mem::size_of::<usize>();
+        // Construct envp
+        let len = (envs.len() + 1) * core::mem::size_of::<usize>();
         user_sp -= len;
-
-        user_sp = argc_addr;
-
         UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
+        let envp_base = user_sp;
+        for i in 0..envs.len() {
+            unsafe {
+                *((envp_base + i * core::mem::size_of::<usize>()) as *mut usize) = envp[i];
+            }
+        }
+        unsafe {
+            *((envp_base + envs.len() * core::mem::size_of::<usize>()) as *mut usize) = 0;
+        }
+        // Construct argv
+        let len = (args.len() + 1) * core::mem::size_of::<usize>();
+        user_sp -= len;
+        UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
+        let argv_base = user_sp;
+        for i in 0..args.len() {
+            unsafe {
+                *((argv_base + i * core::mem::size_of::<usize>()) as *mut usize) = argv[i];
+            }
+        }
+        unsafe {
+            *((argv_base + args.len() * core::mem::size_of::<usize>()) as *mut usize) = 0;
+        }
+        // We save the argc just below the argv_base.
+        // Note that this is required by POSIX
+        user_sp -= core::mem::size_of::<usize>();
+        UserCheck::new().check_writable_slice(user_sp as *mut u8, core::mem::size_of::<usize>())?;
+        unsafe {
+            *(user_sp as *mut usize) = args.len();
+        }
+        // let argc_addr = user_sp;
 
-        // initialize trap_cx
+        // // // Make the user_sp aligned to 8B for k210 platform
+        // // let len = user_sp % core::mem::size_of::<usize>();
+        // // user_sp -= len;
+
+        // Initialize trap_cx
         let mut trap_cx = TrapContext::app_init_context(entry_point, user_sp);
         debug!("entry {:#x}, sp {:#x}", entry_point, user_sp);
         let argc = unsafe { *(user_sp as *const usize) };
@@ -447,8 +478,8 @@ impl Process {
             );
             // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
             // here we just copy on write
-            let memory_set = MemorySet::from_existed_user_lazily(&mut parent_inner.memory_set);
-            // let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+            // let memory_set = MemorySet::from_existed_user_lazily(&mut parent_inner.memory_set);
+            let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
 
             // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
@@ -488,12 +519,14 @@ impl Process {
             .lock()
             .threads
             .push(Arc::downgrade(&main_thread));
-        // add this thread to scheduler
-        thread::spawn_thread(main_thread);
         PROCESS_MANAGER
             .lock()
             .0
             .insert(child.pid(), Arc::downgrade(&child));
+        // add this thread to scheduler
+        main_thread.trap_context_mut().user_x[10] = 0;
+        // info!("fork return1, sepc: {:#x}", main_thread.trap_context_mut().sepc);
+        thread::spawn_thread(main_thread);
         Ok(child)
     }
 }

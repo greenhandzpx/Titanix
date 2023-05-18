@@ -13,8 +13,8 @@
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 /// Trap context structure containing sstatus, sepc and registers
-#[repr(C)]
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct TrapContext {
     /// user-to-kernel should save:
     /// general regs[0..31]

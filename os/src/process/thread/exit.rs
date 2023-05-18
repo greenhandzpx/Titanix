@@ -1,6 +1,6 @@
 use crate::{process::INITPROC, processor::current_process, stack_trace};
 use alloc::sync::Arc;
-use log::debug;
+use log::{debug, info};
 
 use super::Thread;
 
@@ -8,6 +8,9 @@ use super::Thread;
 pub fn handle_exit(thread: &Arc<Thread>) {
     stack_trace!();
     debug!("thread {} handle exit", thread.tid());
+    if thread.process.pid() == 0 {
+        panic!("initproc die!!!");
+    }
     // Thread resource(i.e. tid, ustack) will be
     // released when the thread is destructed automatically
 
@@ -16,14 +19,20 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // same time
     let mut process_inner = thread.process.inner.lock();
 
+
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
-        // # SAFETY:
-        // it is impossibe for the case like one thread is dead
-        // but hasn't been removed from its process's `threads` member
-        // since one thread must be removed from `threads` first and then
-        // die
-        if unsafe { (*t.as_ptr()).tid.0 == thread.tid.0 } {
+        // // # SAFETY:
+        // // it is impossibe for the case like one thread is dead
+        // // but hasn't been removed from its process's `threads` member
+        // // since one thread must be removed from `threads` first and then
+        // // die
+        // if unsafe { (*t.as_ptr()).tid.0 == thread.tid.0 } {
+        //     idx = Some(i);
+        //     break;
+        // }
+        // TODO: not sure whether it is safe to unwrap here
+        if t.upgrade().unwrap().tid.0 == thread.tid.0 {
             idx = Some(i);
             break;
         }
@@ -108,7 +117,7 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
         for (_, thread) in proc.threads.iter_mut().enumerate() {
             let t = unsafe { &mut *(thread.as_ptr() as *mut Thread) };
             if t.tid() == tid {
-                debug!("terminate given tid {}", tid);
+                // info!("terminate given tid {}", tid);
                 t.terminate();
                 // idx = Some(i);
                 break;

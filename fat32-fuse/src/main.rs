@@ -70,10 +70,9 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         file.write_all(&all_data)?;
     }
 
-    // let init_usershell: Vec<&str> = vec!["initproc", "shell"];
+    let init_usershell: Vec<&str> = vec!["initproc", "shell"];
 
-    // for app in init_usershell {
-    for app in apps_rust {
+    for app in init_usershell {
         let mut host_file = File::open(format!("{}{}", target_path2, app)).unwrap();
         let mut all_data: Vec<u8> = Vec::new();
         host_file.read_to_end(&mut all_data).unwrap();
@@ -83,6 +82,16 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         // write data to fat-fs
         file.write_all(&all_data)?;
     }
+    // for app in apps_rust {
+    //     let mut host_file = File::open(format!("{}{}", target_path2, app)).unwrap();
+    //     let mut all_data: Vec<u8> = Vec::new();
+    //     host_file.read_to_end(&mut all_data).unwrap();
+    //     // create a file in fat-fs
+    //     let mut file = fs.root_dir().create_file(&app)?;
+
+    //     // write data to fat-fs
+    //     file.write_all(&all_data)?;
+    // }
     
 
     println!("pack apps finished");

@@ -4,7 +4,7 @@ use alloc::{
     boxed::Box,
     sync::{Arc, Weak},
 };
-use log::debug;
+use log::{debug, info};
 use riscv::register::scause::Scause;
 
 use crate::{
@@ -193,7 +193,7 @@ impl PageFaultHandler for ForkPageFaultHandler {
         vma: &VmArea,
         page_table: &mut PageTable,
     ) -> GeneralRet<()> {
-        debug!("handle fork page fault(cow)");
+        debug!("handle fork page fault(cow), va {:#x}", va.0);
         // panic!();
         let data_frames = unsafe { &mut *vma.data_frames.get() };
         let vpn = va.floor();
@@ -210,6 +210,27 @@ impl PageFaultHandler for ForkPageFaultHandler {
             // modify pte
             let mut pte_flags = pte.flags() | PTEFlags::W;
             pte_flags.remove(PTEFlags::COW);
+
+
+                // // Else
+                // // we should allocate new frame and decrease
+                // // old frame's ref cnt
+                // let new_frame = frame_alloc().unwrap();
+                // // copy old frame's data to the new frame
+                // new_frame
+                //     .ppn
+                //     .bytes_array()
+                //     .copy_from_slice(&old_frame.ppn.bytes_array());
+                // // modify page table
+                // page_table.unmap(vpn);
+                // page_table.map(vpn, new_frame.ppn, pte_flags);
+                // page_table.activate();
+                // // decrease old frame's ref cnt
+                // debug!("ph frame ref cnt {}", Arc::strong_count(old_frame));
+                // data_frames.0.remove(&vpn);
+                // data_frames.0.insert(vpn, Arc::new(new_frame));
+
+
             // Note that we must hold the process_inner's lock now
             // so it is safe for us to check the ref count.
             if Arc::strong_count(old_frame) == 1 {
@@ -241,9 +262,11 @@ impl PageFaultHandler for ForkPageFaultHandler {
                 data_frames.0.remove(&vpn);
                 data_frames.0.insert(vpn, Arc::new(new_frame));
             }
+
         } else {
             // the page still not allocated (maybe because of lazy alloc(e.g. ustack))
             // we should allocate new frame
+            info!("no such frame in cow, va {:#x}", va.0);
             let new_frame = frame_alloc().unwrap();
             let mut pte_flags = PTEFlags::from_bits(vma.map_perm.bits()).unwrap() | PTEFlags::W;
             pte_flags.remove(PTEFlags::COW);

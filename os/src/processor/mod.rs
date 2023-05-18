@@ -15,6 +15,7 @@ pub mod hart;
 
 use alloc::sync::Arc;
 pub use env::SumGuard;
+use log::info;
 
 /// We store the local hart's addr in `tp` reg, instead of the hart id,
 
@@ -39,6 +40,7 @@ pub fn set_hart_stack() {
     unsafe {
         asm!("mv {}, sp", out(reg) sp);
     }
+    info!("set_hart_stack: sp {:#x}", sp);
     h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
 }
 
