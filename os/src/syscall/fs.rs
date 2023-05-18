@@ -1,4 +1,5 @@
 //! File and filesystem-related syscalls
+use core::intrinsics::mul_with_overflow;
 use core::mem::size_of_val;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
@@ -22,7 +23,7 @@ use crate::mm::memory_set::{PageFaultHandler, VmArea};
 use crate::mm::user_check::UserCheck;
 use crate::mm::{MapPermission, VirtAddr};
 use crate::processor::{current_process, SumGuard};
-use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD};
+use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::get_time_ms;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
@@ -446,6 +447,45 @@ pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32)
     let fd = _openat(absolute_path, flags)?;
 
     _fstat(fd as usize, kst)
+}
+
+pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
+    stack_trace!();
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.readable() {
+        return Err(SyscallErr::EACCES);
+    }
+    match whence {
+        SEEK_SET => {
+            file.seek(offset as usize)?;
+            Ok(offset)
+        }
+        SEEK_CUR => {
+            let pos = file.metadata().inner.lock().pos;
+            let off = pos + offset as usize;
+            file.seek(off)?;
+            Ok(off as isize)
+        }
+        SEEK_END => {
+            let size = file
+                .metadata()
+                .inner
+                .lock()
+                .inode
+                .as_ref()
+                .unwrap()
+                .metadata()
+                .inner
+                .lock()
+                .data_len;
+            let off = size + offset as usize;
+            file.seek(off)?;
+            Ok(off as isize)
+        }
+        _ => Err(SyscallErr::EINVAL),
+    }
 }
 
 pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
