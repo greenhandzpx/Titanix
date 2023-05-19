@@ -1,4 +1,4 @@
-use log::warn;
+use log::{warn, debug};
 
 use crate::{processor::{current_process, SumGuard}, mm::user_check::UserCheck, syscall::{futex_wake}};
 
@@ -14,6 +14,7 @@ pub struct TidAddress {
 
 impl Drop for TidAddress {
     fn drop(&mut self) {
+        debug!("Drop tid address {:#x}", self.addr);
         if UserCheck::new().check_writable_slice(self.addr as *mut u8, core::mem::size_of::<usize>()).is_ok() {
             let _sum_guard = SumGuard::new();
             unsafe {

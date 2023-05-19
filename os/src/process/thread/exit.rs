@@ -1,6 +1,6 @@
-use crate::{process::INITPROC, processor::current_process, stack_trace};
-use alloc::sync::Arc;
-use log::{debug, info};
+use crate::{process::INITPROC, processor::current_process, stack_trace, mm::user_check::UserCheck};
+use alloc::{sync::Arc, vec::Vec};
+use log::{debug, info, error};
 
 use super::Thread;
 
@@ -81,50 +81,68 @@ pub fn handle_exit(thread: &Arc<Thread>) {
 /// Exit and terminate all threads of the current process.
 /// Note that the caller cannot hold the process inner's lock
 pub fn exit_and_terminate_all_threads(exit_code: i8) {
-    current_process().inner_handler(|proc| {
+    let threads = current_process().inner_handler(|proc| {
+        let mut threads: Vec<Arc<Thread>> = Vec::new();
         proc.exit_code = exit_code;
         proc.is_zombie = true;
         for thread in proc.threads.iter_mut() {
-            unsafe { (*thread.as_ptr()).terminate() }
+            threads.push(thread.upgrade().unwrap());
+            // unsafe { (*thread.as_ptr()).terminate() }
         }
+        threads
         // proc.threads.clear();
     });
+    for thread in threads {
+        thread.terminate();
+    }
 }
 
 /// Terminate all threads of the current process except main thread(i.e. idx = 0).
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_all_threads_except_main() {
-    current_process().inner_handler(|proc| {
+    let threads = current_process().inner_handler(|proc| {
+        let mut threads: Vec<Arc<Thread>> = Vec::new();
         for (i, thread) in proc.threads.iter_mut().enumerate() {
             if i == 0 {
                 continue;
             }
-            unsafe { (*thread.as_ptr()).terminate() }
+            threads.push(thread.upgrade().unwrap());
+            // unsafe { (*thread.as_ptr()).terminate() }
         }
-        // let len = proc.threads.len();
-        // for _ in 0..len - 1 {
-        //     proc.threads.pop();
-        // }
+        threads
     });
+    for thread in threads {
+        thread.terminate();
+    }
 }
 
 /// Terminate the given thread
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_given_thread(tid: usize, exit_code: i8) {
-    current_process().inner_handler(|proc| {
+
+    if let Some(thread) = current_process().inner_handler(|proc| {
         proc.exit_code = exit_code;
         // let mut idx: Option<usize> = None;
         for (_, thread) in proc.threads.iter_mut().enumerate() {
-            let t = unsafe { &mut *(thread.as_ptr() as *mut Thread) };
-            if t.tid() == tid {
-                // info!("terminate given tid {}", tid);
-                t.terminate();
-                // idx = Some(i);
-                break;
+            // let t = unsafe { &mut *(thread.as_ptr() as *mut Thread) };
+            if let Some(t) = thread.upgrade() {
+                if t.tid() == tid {
+                    return Some(t);
+                    // // idx = Some(i);
+                    // break;
+                }
+            } else {
+                panic!("Weak thread pointer is invalid in process {}", current_process().pid());
+                // return None;
             }
         }
+        return None;
         // if let Some(idx) = idx {
         //     proc.threads.remove(idx);
         // }
-    });
+    }) {
+        debug!("terminate given tid {}", tid);
+        thread.terminate();
+    }
 }
+

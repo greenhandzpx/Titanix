@@ -494,11 +494,15 @@ impl MemorySet {
 
 
         let mut max_end_vpn = VirtPageNum(0);
+        let mut head_va = 0;
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
+                if head_va == 0 {
+                    head_va = start_va.0;
+                }
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
                 if ph_flags.is_read() {
@@ -536,6 +540,12 @@ impl MemorySet {
             }
         }
 
+        let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
+        debug!("from_elf: AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
+        auxv.push(AuxHeader {
+            aux_type: AT_PHDR,
+            value: ph_head_addr as usize,
+        });
 
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.into();

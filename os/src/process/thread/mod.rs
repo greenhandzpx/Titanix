@@ -24,6 +24,7 @@ use crate::executor;
 use crate::signal::SignalContext;
 use crate::{trap::TrapContext};
 use alloc::sync::Arc;
+use log::debug;
 use core::cell::UnsafeCell;
 use core::future::Future;
 
@@ -168,13 +169,21 @@ impl Thread {
 
     /// Terminate this thread
     pub fn terminate(&self) {
-        unsafe {
-            (*self.inner.get()).state.store(ThreadState::Zombie);
-            // (*self.inner.get())
-            //     .terminated
-            //     .store(true, Ordering::Relaxed)
-        }
+        // unsafe {
+        //     (*self.inner.get()).state.store(ThreadState::Zombie);
+        //     // (*self.inner.get())
+        //     //     .terminated
+        //     //     .store(true, Ordering::Relaxed)
+        // }
+        let inner = unsafe {
+            &mut (*self.inner.get())
+        };
+        debug!("clear tid address");
+        // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
+        inner.tid_addr.take();
+        inner.state.store(ThreadState::Zombie);
     }
+
     /// Whether this thread has been terminated or not
     pub fn is_zombie(&self) -> bool {
         unsafe { (*self.inner.get()).state.load() == ThreadState::Zombie }

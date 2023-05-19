@@ -82,6 +82,8 @@ impl Hart {
             || task.task_ctx().thread.process.pid()
                 != self.local_ctx.task_ctx().thread.process.pid()
         {
+            stack_trace!();
+            assert!(!task.is_idle());
             // Only flush tlb when switching process
             unsafe {
                 (*task.task_ctx().page_table.get()).activate();

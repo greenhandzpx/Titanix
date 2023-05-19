@@ -194,7 +194,7 @@ pub fn rust_main(hart_id: usize) {
         }
         info!("[kernel] ---------- hart {} started ---------- ", hart_id);
         
-        // return;
+        return;
     }
 
     loop {

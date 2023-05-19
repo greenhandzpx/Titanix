@@ -1,5 +1,7 @@
 use core::intrinsics::atomic_load_acquire;
 
+use log::debug;
+
 use crate::{
     mm::user_check::UserCheck,
     process::thread::{self, TidAddress},
@@ -61,6 +63,7 @@ pub fn futex_wake(uaddr: usize, val: usize) -> SyscallRet {
 }
 
 pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
+    debug!("tid_ptr: {:#x}", tid_ptr);
     if UserCheck::new()
         .check_writable_slice(tid_ptr as *mut u8, core::mem::size_of::<usize>())
         .is_err()

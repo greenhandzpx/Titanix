@@ -459,7 +459,7 @@ impl Process {
         trap_cx.user_x[11] = argv_base;
         trap_cx.user_x[12] = envp_base;
         trap_cx.user_x[13] = auxv_base;
-        debug!("a0 {:#x}, a1 {:#x}", args.len(), argv_base);
+        debug!("a0(argc) {:#x}, a1(argv) {:#x}, a2(envp) {:#x} a3(auxv) {:#x}", args.len(), argv_base, envp_base, auxv_base);
 
         task_inner.trap_context = trap_cx;
         Ok(args.len() as isize)
