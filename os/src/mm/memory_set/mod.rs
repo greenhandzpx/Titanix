@@ -1,7 +1,7 @@
 use core::{arch::asm, cell::SyncUnsafeCell};
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
-use log::{debug, error, info, warn};
+use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::{Vec}, vec};
+use log::{debug, error, info, warn, trace};
 use riscv::register::{satp, scause::Scause};
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     },
     driver::block::MMIO_VIRT,
     mm::memory_set::page_fault_handler::SBrkPageFaultHandler,
-    utils::error::{GeneralRet, SyscallErr}, process::aux::*,
+    utils::error::{GeneralRet, SyscallErr}, process::aux::*, stack_trace,
 };
 
 pub use self::{
@@ -220,6 +220,7 @@ impl MemorySet {
     ) {
         self.push(
             VmArea::new(start_va, end_va, MapType::Framed, permission, None, None),
+            0,
             None,
         );
     }
@@ -258,11 +259,12 @@ impl MemorySet {
         // }
     }
     /// Add the map area to memory set and map the map area(allocating physical frames)
-    fn push(&mut self, mut vm_area: VmArea, data: Option<&[u8]>) {
+    fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
+        stack_trace!();
         let pgtbl_ref = unsafe { &mut (*self.page_table.get()) };
         vm_area.map(pgtbl_ref);
         if let Some(data) = data {
-            vm_area.copy_data(pgtbl_ref, data);
+            vm_area.copy_data_with_offset(pgtbl_ref, data_offset, data);
         }
         self.areas.insert(vm_area.start_vpn(), vm_area);
     }
@@ -310,6 +312,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping .rodata section");
@@ -322,6 +325,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping .data section");
@@ -334,6 +338,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         // add stack section in `linker.ld`
@@ -347,6 +352,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping .bss section");
@@ -359,6 +365,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping physical memory");
@@ -371,6 +378,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping memory-mapped registers");
@@ -386,6 +394,7 @@ impl MemorySet {
                     None,
                     None,
                 ),
+                0,
                 None,
             );
         }
@@ -423,7 +432,6 @@ impl MemorySet {
             aux_type: AT_PAGESZ,
             value: PAGE_SIZE as usize,
         });
-
         auxv.push(AuxHeader {
             aux_type: AT_BASE,
             value: 0 as usize,
@@ -504,13 +512,31 @@ impl MemorySet {
                 }
                 let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
                 max_end_vpn = vm_area.vpn_range.end();
+
+                // let seg_size = (end_va.ceil().0 - start_va.floor().0) * PAGE_SIZE;
+                // let mut raw_data = vec![0 as u8; seg_size];
+                // let _ = &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize].iter().enumerate().for_each(|(i, byte)| {
+                //     raw_data[i + start_va.0 - start_va.floor().0 * PAGE_SIZE] = *byte;
+                // });
+                // memory_set.push(
+                //     vm_area,
+                //     Some(&raw_data),
+                // );
+                let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
                 memory_set.push(
                     vm_area,
+                    offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
                 debug!("from elf: {:#x}, {:#x}, map_perm: {:#x}", start_va.0, end_va.0, map_perm.bits());
+                // let magic = 0x1213d0;
+                // if start_va.0 < magic && magic < end_va.0 {
+                //     trace!("{:#x}: raw value: {:#x}", magic, )
+                // }
             }
         }
+
+
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.into();
         let mut user_stack_bottom: usize = max_end_va.into();
@@ -531,7 +557,7 @@ impl MemorySet {
             Some(Box::new(SBrkPageFaultHandler {})),
             None,
         );
-        memory_set.push(heap_vma, None);
+        memory_set.push(heap_vma, 0, None);
         memory_set.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
         debug!(
             "from elf: map heap: {:#x}, {:#x}",

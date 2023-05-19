@@ -326,7 +326,6 @@ impl Process {
         task.alloc_ustack();
 
 
-
         // ---- The following to to push arguments on user stack ----
 
         let mut user_sp = task.ustack_top();
@@ -338,6 +337,7 @@ impl Process {
         let mut argv = vec![0; args.len()];
         // envp is a vector of each env's addr
         let mut envp = vec![0; envs.len()];
+
         // Copy each env to the newly allocated stack
         for i in 0..envs.len() {
             // Here we leave one byte to store a '\0' as a terminator
@@ -351,6 +351,7 @@ impl Process {
             }
         }        
         user_sp -= user_sp % core::mem::size_of::<usize>();
+
         // Copy each arg to the newly allocated stack
         for i in 0..args.len() {
             // Here we leave one byte to store a '\0' as a terminator
@@ -364,6 +365,7 @@ impl Process {
             }
         }
         user_sp -= user_sp % core::mem::size_of::<usize>();
+
         // Copy `platform`
         let platform = "RISC-V64";
         user_sp -= platform.len() + 1;
@@ -394,13 +396,16 @@ impl Process {
         }); // end
 
         // Construct auxv
+        debug!("auxv len {}", auxs.len());
         let len = auxs.len() * core::mem::size_of::<AuxHeader>();
         user_sp -= len;
         UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
         let auxv_base = user_sp;
         for i in 0..auxs.len() {
             unsafe {
-                *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut AuxHeader) = auxs[i];
+                // *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut AuxHeader) = auxs[i];
+                *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut usize) = auxs[i].aux_type;
+                *((user_sp + i * core::mem::size_of::<AuxHeader>() + core::mem::size_of::<usize>()) as *mut usize) = auxs[i].value;
             }
         }
         // Construct envp

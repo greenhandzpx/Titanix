@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 
 use crate::{
     mm::{PageTable, KERNEL_SPACE},
-    process::thread::Thread,
+    process::thread::Thread, stack_trace,
 };
 
 use super::context::{EnvContext, KernelTaskContext, LocalContext};
@@ -33,6 +33,7 @@ impl Hart {
     pub fn current_task(&self) -> &Arc<Thread> {
         // TODO: add debug assert to ensure now the hart must have a task
         // assert_ne!(self.local_ctx.task_ctx())
+        stack_trace!();
         &self.local_ctx.task_ctx().thread
     }
 
@@ -43,6 +44,7 @@ impl Hart {
         }
     }
     pub fn change_page_table(&mut self, page_table: Arc<SyncUnsafeCell<PageTable>>) {
+        stack_trace!();
         let task_ctx = self.local_ctx.task_ctx_mut();
         task_ctx.page_table = page_table;
     }
@@ -72,6 +74,7 @@ impl Hart {
     pub fn push_task(&mut self, task: &mut LocalContext) {
         // println!("push user task");
         // let dummy = self.local_ctx.as_mut();
+        stack_trace!();
         let new_env = task.env(&mut self.spare_env_ctx);
         let old_env = self.local_ctx.env(&mut self.spare_env_ctx);
         EnvContext::env_change(new_env, old_env);

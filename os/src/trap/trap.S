@@ -19,9 +19,9 @@ __trap_from_user:
     sd x1, 1*8(sp)
     # skip sp(x2), we will save it later
     sd x3, 3*8(sp)
-    # skip tp(x4), application does not use it
-    # save x5~x31
-    .set n, 5
+    # # skip tp(x4), application does not use it
+    # save x4~x31
+    .set n, 4
     .rept 27
         SAVE_GP %n
         .set n, n+1
@@ -53,6 +53,7 @@ __trap_from_user:
     ld s11, 47*8(sp)
     # load kernel fp
     ld fp, 48*8(sp)
+    ld tp, 49*8(sp)
     ld sp, 34*8(sp)
     # return to kernel ra
     ret  
@@ -83,6 +84,7 @@ __return_to_user:
     sd s10, 46*8(a0)
     sd s11, 47*8(a0)
     sd fp, 48*8(a0)
+    sd tp, 49*8(a0)
 
     mv sp, a0
     # now sp points to TrapContext in user space, start restoring based on it

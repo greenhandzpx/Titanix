@@ -147,7 +147,7 @@ const PRELIMINARY_TESTS: [&str; 32] = [
 fn preliminary_test() {
     print!("---------- START TO RUN PRELIMINARY TEST -----------\n");
     println!("");
-    for test in PRELIMINARY_TESTS_2 {
+    for test in PRELIMINARY_TESTS {
         let pid = fork();
         if pid == 0 {
             // println!("==== start to test {} ====", test);
@@ -175,8 +175,8 @@ pub fn main() -> i32 {
     let mut line: String = String::new();
 
     // #[cfg(feature = "preliminary")]
-    preliminary_test();
-    exit(0);
+    // preliminary_test();
+    // exit(0);
 
     print!("{}", LINE_START);
     loop {

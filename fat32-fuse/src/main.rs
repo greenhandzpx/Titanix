@@ -80,7 +80,36 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
     // write data to fat-fs
     file.write_all(&all_data)?;
 
+    // Write busybox_debug
+    let busybox_path = "../testcases/busybox/busybox_debug";
+    let mut host_file = File::open(busybox_path).unwrap();
+    let mut all_data: Vec<u8> = Vec::new();
+    host_file.read_to_end(&mut all_data).unwrap();
+    // create a file in fat-fs
+    let mut file = fs.root_dir().create_file("busybox_debug")?;
+    // write data to fat-fs
+    file.write_all(&all_data)?;
 
+    // Write libc
+    let libc_path = "../libc/build/";
+    let libc_apps: Vec<_> = read_dir(libc_path)
+        .unwrap()
+        .into_iter()
+        .map(|dir_entry| {
+            dir_entry.unwrap().file_name().into_string().unwrap()
+        })
+        // .filter(|name| *name != "mnt" && *name != "fs.img")
+        .collect();
+    for app in libc_apps {
+        // load app data from host file system
+        let mut host_file = File::open(format!("{}{}", libc_path, app)).unwrap();
+        let mut all_data: Vec<u8> = Vec::new();
+        host_file.read_to_end(&mut all_data).unwrap();
+        // create a file in fat-fs
+        let mut file = fs.root_dir().create_file(&app)?;
+        // write data to fat-fs
+        file.write_all(&all_data)?;
+    }
 
 
     let init_usershell: Vec<&str> = vec!["initproc", "shell"];
