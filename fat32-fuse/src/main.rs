@@ -91,7 +91,7 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
     file.write_all(&all_data)?;
 
     // Write libc
-    let libc_path = "../libc/build/";
+    let libc_path = "../testcases/libc/";
     let libc_apps: Vec<_> = read_dir(libc_path)
         .unwrap()
         .into_iter()
