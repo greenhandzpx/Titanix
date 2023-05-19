@@ -9,21 +9,20 @@
  * Copyright (c) 2023 by greenhandzpx 893522573@qq.com, All Rights Reserved.
  */
 
-use core::sync::atomic::Ordering;
 
 use alloc::sync::Arc;
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     process::thread::exit::handle_exit,
     processor::{current_process, current_task},
-    stack_trace, trap,
+    stack_trace, trap::{self, TrapContext},
 };
 
 use super::Thread;
 
 pub async fn threadloop(thread: Arc<Thread>) {
-    debug!("into thread loop");
+    debug!("into thread loop, sepc {:#x}, trap cx addr {:#x}", current_task().trap_context_ref().sepc, current_task().trap_context_ref() as *const TrapContext as usize);
     loop {
         // println!("pid {} back to threadloop", current_process().get_pid());
         // return to user mode

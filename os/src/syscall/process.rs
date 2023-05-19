@@ -1,23 +1,25 @@
 use core::f32::consts::E;
 
 use crate::config::signal::SIG_NUM;
+use crate::fs::inode_tmp::open_file;
 use crate::fs::OpenFlags;
-use crate::fs::inode_tmp::{open_file};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
 use crate::process::thread::{
-    self, exit_and_terminate_all_threads, terminate_given_thread, Thread,
+    self, exit_and_terminate_all_threads, terminate_given_thread, Thread, TidHandle,
 };
 use crate::process::PROCESS_MANAGER;
-use crate::processor::{current_process, current_task, local_hart, SumGuard};
-use crate::signal::{SigAction, SigInfo, Signal};
+use crate::processor::{current_process, current_task, local_hart, SumGuard, current_trap_cx};
+use crate::sbi::shutdown;
+use crate::signal::{SigAction, SigInfo, Signal, SigSet};
 use crate::timer::get_time_ms;
+use crate::trap::TrapContext;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::string::c_str_to_string;
 use crate::{fs, process, stack_trace};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{debug, info, warn};
 
@@ -38,9 +40,10 @@ pub fn sys_exit(exit_code: i8) -> SyscallRet {
     stack_trace!();
     // // TODO how can we only exit one thread but still let the parent process can wait for the child
     // sys_exit_group(exit_code)
-    debug!("sys exit, exit code {}", exit_code);
+    debug!("sys exit, exit code {}, sepc {:#x}", exit_code, current_trap_cx().sepc);
     let tid = local_hart().current_task().tid();
     terminate_given_thread(tid, exit_code);
+    // info!("exit finished");
     Ok(0)
 }
 
@@ -70,7 +73,7 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
         sec: current_time / 1000,
         usec: current_time % 1000 * 1000,
     };
-    debug!("get time of day, time(ms): {}", current_time);
+    // debug!("get time of day, time(ms): {}", current_time);
     unsafe {
         time_val_ptr.write_volatile(time_val);
     }
@@ -188,6 +191,7 @@ pub fn sys_clone(
     }
 
     let clone_flags = {
+        // TODO: This is just a workaround for preliminary test
         if flags == Signal::SIGCHLD as usize {
             CloneFlags::from_bits(0).unwrap()
         } else {
@@ -212,6 +216,9 @@ pub fn sys_clone(
         // we do not have to move to next instruction since we have done it before
         // for child process, fork returns 0
         trap_cx.user_x[10] = 0;
+
+        let sepc = trap_cx.sepc;
+        // info!("fork return, sepc: {:#x} addr: {:#x}", sepc, trap_cx as *mut TrapContext as usize);
         // // add new task to scheduler
         // add_task(new_task);
         Ok(new_pid as isize)
@@ -228,7 +235,7 @@ pub fn sys_clone(
     }
 }
 
-pub fn sys_exec(path: *const u8, mut args: *const usize) -> SyscallRet {
+pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usize) -> SyscallRet {
     stack_trace!();
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
@@ -244,12 +251,25 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> SyscallRet {
             args = args.add(1);
         }
     }
+    let mut envs_vec: Vec<String> = Vec::new();
+    loop {
+        if unsafe { *envs == 0 } {
+            break;
+        }
+        envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
+        debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
+        unsafe {
+            envs = envs.add(1);
+        }
+    }
+    envs_vec.push("PATH=/".to_string());
     // UserCheck::new().readable_slice(path, len);
     UserCheck::new().check_c_str(path)?;
     let path = c_str_to_string(path);
+    debug!("sys exec {}", path);
     if path == "shell" {
         if let Some(elf_data) = get_app_data_by_name("shell") {
-            current_process().exec(elf_data, args_vec)
+            current_process().exec(elf_data, args_vec, envs_vec)
         } else {
             warn!("[sys_exec] Cannot find this elf file {}", path);
             Err(SyscallErr::EACCES)
@@ -257,7 +277,7 @@ pub fn sys_exec(path: *const u8, mut args: *const usize) -> SyscallRet {
     } else {
         if let Some(app_inode) = fs::fat32_tmp::open_file(&path, OpenFlags::RDONLY) {
             let elf_data = app_inode.read_all();
-            current_process().exec(&elf_data, args_vec)
+            current_process().exec(&elf_data, args_vec, envs_vec)
         } else {
             warn!("[sys_exec] Cannot find this elf file {}", path);
             Err(SyscallErr::EACCES)
@@ -278,12 +298,13 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     stack_trace!();
     let process = current_process();
 
-    if exit_status_addr != 0 {
-        UserCheck::new()
-            .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
-    }
+    // if exit_status_addr != 0 {
+    //     UserCheck::new()
+    //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
+    // }
     loop {
-        let ret = process.inner_handler(move |proc| {
+        stack_trace!();
+        let (found_pid, exit_code) = process.inner_handler(move |proc| {
             // find a child process
             if !proc
                 .children
@@ -291,8 +312,8 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 .any(|p| pid == -1 || pid as usize == p.pid())
             {
                 if pid == -1 && proc.children.len() == 0 {
-                    // system exit
-                    return Ok(-3);
+                    // system exit, since no children is alive
+                    return Ok((-3, 0));
                 }
                 warn!(
                     "proc[{}] no such pid {} exit code addr {:#x}",
@@ -303,6 +324,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 return Err(SyscallErr::ECHILD);
             }
 
+            stack_trace!();
             let idx = proc
                 .children
                 .iter()
@@ -310,6 +332,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 .find(|(_, p)| p.is_zombie() && (pid == -1 || pid as usize == p.pid()))
                 .map(|(idx, _)| idx);
             if let Some(idx) = idx {
+                stack_trace!();
                 // the child has become zombie
                 let child = proc.children.remove(idx);
 
@@ -322,40 +345,72 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 // get child's exit code
                 let exit_code = child.exit_code();
                 debug!("waitpid: found pid {} exit code {}", found_pid, exit_code);
-                if exit_status_addr != 0 {
-                    let _sum_guard = SumGuard::new();
-                    let exit_status_ptr = exit_status_addr as *mut i32;
-                    debug!("waitpid: write pid to exit_status_ptr before");
-                    unsafe {
-                        exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
-                        debug!(
-                            "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
-                            (*exit_status_ptr & 0xff00) >> 8
-                        );
-                    }
-                }
-                Ok(found_pid as isize)
+                // info!("waitpid: found pid {} exit code {}", found_pid, exit_code);
+                // if exit_status_addr != 0 {
+                //     UserCheck::new()
+                //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
+                //     let _sum_guard = SumGuard::new();
+                //     let exit_status_ptr = exit_status_addr as *mut i32;
+                //     // debug!("waitpid: write pid to exit_status_ptr before");
+                //     info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
+                //     unsafe {
+                //         exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
+                //         // debug!(
+                //         //     "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
+                //         //     (*exit_status_ptr & 0xff00) >> 8
+                //         // );
+                //         info!(
+                //             "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
+                //             (*exit_status_ptr & 0xff00) >> 8
+                //         );
+                //     }
+                // }
+                Ok((found_pid as isize, exit_code as i32))
             } else {
                 // the child still alive
-                Ok(-1 as isize)
+                Ok((-1 as isize, 0))
             }
         })?;
 
-        if ret == -1 {
+        if found_pid == -1 {
+            // info!("yield now");
             process::yield_now().await;
-        } else if ret == -3 {
+        } else if found_pid == -3 {
             // system exit
             info!("os will exit");
             exit_and_terminate_all_threads(0);
-            return Ok(ret);
+            // TODO: not sure where to invoke `shutdown`
+            shutdown();
+            // return Ok(ret);
         } else {
-            debug!("ret {}", ret);
-            return Ok(ret);
+            if exit_status_addr != 0 {
+                UserCheck::new()
+                    .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
+                // TODO: here may cause some concurrency problem between we user_check and write it 
+                let _sum_guard = SumGuard::new();
+                let exit_status_ptr = exit_status_addr as *mut i32;
+                debug!("waitpid: write pid to exit_status_ptr before");
+                // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
+                unsafe {
+                    exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
+                    debug!(
+                        "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
+                        (*exit_status_ptr & 0xff00) >> 8
+                    );
+                    // info!(
+                    //     "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
+                    //     (*exit_status_ptr & 0xff00) >> 8
+                    // );
+                }
+            }
+            debug!("ret {}", found_pid);
+            // info!("ret {}", found_pid);
+            return Ok(found_pid);
         }
     }
 }
 
-pub fn sys_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
+pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
     if sig < 0 || sig as usize >= SIG_NUM {
         return Err(SyscallErr::EINVAL);
@@ -382,7 +437,69 @@ pub fn sys_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) ->
     })
 }
 
-pub fn sys_sigreturn() -> SyscallRet {
+enum SigProcmaskHow {
+    SigBlock = 0,
+    SigUnblock = 1,
+    SigSetmask = 2,
+}
+
+pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> SyscallRet {
+    current_process().inner_handler(|proc| {
+        if old_set as usize != 0 {
+            UserCheck::new().check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
+            let _sum_guard = SumGuard::new();
+            unsafe {
+                *old_set = proc.pending_sigs.blocked_sigs;
+            }
+        }
+        if set as usize == 0 {
+            debug!("arg set is null");
+            return Ok(0)
+        } 
+        UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
+        match how {
+            _ if how == SigProcmaskHow::SigBlock as i32 => {
+                if let Some(new_sig_mask) = unsafe {
+                    SigSet::from_bits(*set)
+                } {
+                    proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                    return Ok(0)
+                } else {
+                    debug!("invalid set arg");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
+            _ if how == SigProcmaskHow::SigUnblock as i32 => {
+                if let Some(new_sig_mask) = unsafe {
+                    SigSet::from_bits(*set)
+                } {
+                    proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
+                    return Ok(0)
+                } else {
+                    debug!("invalid set arg");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
+            _ if how == SigProcmaskHow::SigSetmask as i32 => {
+                if let Some(new_sig_mask) = unsafe {
+                    SigSet::from_bits(*set)
+                } {
+                    proc.pending_sigs.blocked_sigs = new_sig_mask;
+                    return Ok(0)
+                } else {
+                    debug!("invalid set arg");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
+            _ => {
+                debug!("invalid how");
+                return Err(SyscallErr::EINVAL);
+            }
+        }
+    })
+}
+
+pub fn sys_rt_sigreturn() -> SyscallRet {
     stack_trace!();
     let signal_context = current_task().signal_context();
     // restore the old sig mask
@@ -511,9 +628,10 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     .as_mut()
                     .unwrap()
                     .modify_right_bound(new_heap_end);
-                debug!("new heap end {}", proc.memory_set
-                    .heap_range
-                    .unwrap().end().0);
+                debug!(
+                    "new heap end {}",
+                    proc.memory_set.heap_range.unwrap().end().0
+                );
                 Ok(0)
             }
         } else {
@@ -547,4 +665,10 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
             }
         }
     })
+}
+
+
+pub fn sys_getuid() -> SyscallRet {
+    // TODO: not sure
+    Ok(0)
 }

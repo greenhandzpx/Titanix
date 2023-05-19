@@ -1,6 +1,7 @@
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::VecDeque;
 use async_task::{Runnable, Task};
+use log::{debug, info};
 use core::future::Future;
 use lazy_static::*;
 
@@ -36,7 +37,7 @@ lazy_static! {
 //     TASK_QUEUE.init();
 // }
 
-/// 将一个任务加入执行器
+/// Add a task into task queue
 pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)
 where
     F: Future + Send + 'static,
@@ -47,12 +48,12 @@ where
     })
 }
 
-/// 返回执行了多少个future
+/// Return the number of the tasks executed
 pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
         if let Some(task) = TASK_QUEUE.fetch_task() {
-            // println!("fetch a task");
+            // info!("fetch a task");
             task.run();
             n += 1;
         } else {

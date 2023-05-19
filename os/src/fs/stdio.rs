@@ -6,7 +6,7 @@ use crate::{
     process,
     processor::SumGuard,
     sbi::console_getchar,
-    utils::error::{SyscallErr, SyscallRet},
+    utils::error::{SyscallErr, SyscallRet}, sync::mutex::SpinNoIrqLock,
 };
 
 use super::file::{File, FileMeta};
@@ -14,6 +14,7 @@ use super::file::{File, FileMeta};
 pub struct Stdin;
 
 pub struct Stdout;
+
 
 #[async_trait]
 impl File for Stdin {
@@ -64,6 +65,10 @@ impl File for Stdin {
     }
 }
 
+const PRINT_LOCKED: bool = true;
+
+static PRINT_MUTEX: SpinNoIrqLock<bool> = SpinNoIrqLock::new(false);
+
 #[async_trait]
 impl File for Stdout {
     fn readable(&self) -> bool {
@@ -86,7 +91,12 @@ impl File for Stdout {
     async fn write(&self, buf: &[u8]) -> SyscallRet {
         let _sum_guard = SumGuard::new();
         // let buff = unsafe { core::slice::from_raw_parts(buf, len) };
-        print!("{}", core::str::from_utf8(buf).unwrap());
+        if PRINT_LOCKED {
+            let _locked = PRINT_MUTEX.lock();    
+            print!("{}", core::str::from_utf8(buf).unwrap());
+        } else {
+            print!("{}", core::str::from_utf8(buf).unwrap());
+        }
         Ok(buf.len() as isize)
     }
 }

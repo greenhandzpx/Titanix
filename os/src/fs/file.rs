@@ -34,7 +34,7 @@ pub trait File: Send + Sync {
     async fn read(&self, buf: &mut [u8]) -> SyscallRet;
     /// For default file, data must be written to page cache first
     async fn write(&self, buf: &[u8]) -> SyscallRet;
-    
+
     /// For default file, data must be read from page cache first
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
         todo!()

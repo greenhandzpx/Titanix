@@ -10,11 +10,15 @@
  */
 //! Implementation of [`TrapContext`]
 
+use core::arch::asm;
+
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
+use crate::processor::local_hart;
+
 /// Trap context structure containing sstatus, sepc and registers
-#[repr(C)]
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct TrapContext {
     /// user-to-kernel should save:
     /// general regs[0..31]
@@ -32,6 +36,7 @@ pub struct TrapContext {
     // pub trap_handler: usize,
 
     /// kernel-to-user should save:
+    ///
     pub kernel_sp: usize, // 34
     ///
     pub kernel_ra: usize, // 35
@@ -39,6 +44,8 @@ pub struct TrapContext {
     pub kernel_s: [usize; 12], // 36 - 47
     ///
     pub kernel_fp: usize, // 48
+    /// kernel hart address
+    pub kernel_tp: usize, // 49
 }
 
 /// User context that used for signal handling
@@ -79,6 +86,10 @@ impl TrapContext {
         let mut sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
+        let tp: usize;
+        unsafe {
+            asm!("mv {}, tp", out(reg) tp);
+        }
         let mut cx = Self {
             user_x: [0; 32],
             sstatus,
@@ -89,6 +100,7 @@ impl TrapContext {
             kernel_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
+            kernel_tp: tp,
         };
         cx.set_sp(sp);
         cx

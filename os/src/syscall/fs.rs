@@ -374,6 +374,12 @@ pub fn sys_uname(buf: usize) -> SyscallRet {
     Ok(0)
 }
 
+pub fn sys_newfstatst(fd: usize, pathname: *const u8, kst: usize, _flags: usize) -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+    // todo!()
+}
+
 /// fstat() function return information about a file, in the buffer pointed to by kst.
 /// This function except that the file about which information is to be retrieved is specified by the file descriptor fd.
 pub fn sys_fstat(fd: usize, kst: usize) -> SyscallRet {
@@ -623,69 +629,4 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     buf[1] = write_fd as i32;
     debug!("[sys_pipe]: read fd {}, write fd {}", read_fd, write_fd);
     Ok(0)
-}
-
-/// Note that we just ignore the `addr`
-pub fn sys_mmap(
-    _addr: *const u8,
-    length: usize,
-    prot: i32,
-    flags: i32,
-    fd: usize,
-    offset: usize,
-) -> SyscallRet {
-    stack_trace!();
-    debug!("[sys_mmap]: start... len {}, fd {}", length, fd);
-    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
-    let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
-    if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        todo!("Handle anonymous mmap")
-    } else {
-        current_process().inner_handler(|proc| {
-            let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-
-            // let mut buf: [u8; 36] = [0; 36];
-            // file.seek(0)?;
-            // file.sync_read(&mut buf)?;
-
-            let mut map_permission = MapPermission::from_bits(0).unwrap();
-            if prot.contains(MmapProt::PROT_READ) {
-                map_permission |= MapPermission::R;
-            }
-            if prot.contains(MmapProt::PROT_WRITE) {
-                map_permission |= MapPermission::W;
-            }
-            if prot.contains(MmapProt::PROT_EXEC) {
-                map_permission |= MapPermission::X;
-            }
-            let mut vma = proc
-                .memory_set
-                .find_unused_area(length, map_permission)
-                .ok_or(SyscallErr::ENOMEM)?;
-            vma.mmap_flags = Some(flags);
-            let handler = MmapPageFaultHandler {};
-            vma.handler = Some(handler.box_clone());
-            vma.backup_file = Some(BackupFile {
-                offset,
-                file: file.clone(), // .metadata()
-                                    // .inner
-                                    // .lock()
-                                    // .inode
-                                    // .as_ref()
-                                    // .cloned()
-                                    // .unwrap(),
-            });
-            let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_set.insert_area(vma);
-
-            debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
-            Ok(start_va.0 as isize)
-        })
-        // let vm_area = VmArea::new()
-    }
-}
-
-pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
-    Ok(0)
-    // todo!()
 }

@@ -12,7 +12,7 @@ use crate::{
         FrameTracker, PageTable, PhysPageNum, VirtAddr, VirtPageNum,
     },
     syscall::MmapFlags,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::error::{GeneralRet, SyscallErr}, stack_trace,
 };
 
 use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType, MemorySet};
@@ -35,6 +35,10 @@ pub struct BackupFile {
     // pub file: Arc<dyn Inode>,
     /// TODO: refactor
     pub file: Arc<dyn File>,
+}
+
+struct VmAreaBuilder {
+    // TODO
 }
 
 /// map area structure, controls a contiguous piece of virtual memory
@@ -196,6 +200,31 @@ impl VmArea {
     pub fn unmap_lazily(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.unmap_one_lazily(page_table, vpn);
+        }
+    }
+
+    /// data: at the offset of the start va
+    /// assume that all frames were cleared before
+    pub fn copy_data_with_offset(&mut self, page_table: &mut PageTable, mut offset: usize, data: &[u8]) {
+        stack_trace!();
+        assert_eq!(self.map_type, MapType::Framed);
+        let mut start: usize = 0;
+        let mut current_vpn = self.vpn_range.start();
+        let len = data.len();
+        loop {
+            let src = &data[start..len.min(start + PAGE_SIZE - offset)];
+            let dst = &mut page_table
+                .translate(current_vpn)
+                .unwrap()
+                .ppn()
+                .bytes_array()[offset..offset + src.len()];
+            dst.copy_from_slice(src);
+            start += PAGE_SIZE - offset;
+            offset = 0;
+            if start >= len {
+                break;
+            }
+            current_vpn.step();
         }
     }
     /// data: start-aligned but maybe with shorter length

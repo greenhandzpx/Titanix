@@ -71,8 +71,6 @@ impl PageBuilder {
     }
 }
 
-
-
 impl Page {
     // /// Create a new page
     // pub fn new(inode: Option<Weak<dyn Inode>>) -> Self {
@@ -140,13 +138,11 @@ impl PageInner {
         for idx in start_buffer_idx..end_buffer_idx {
             if self.data_states[idx] == DataState::Outdated {
                 let page_offset = idx * BLOCK_SIZE;
-                let file_offset = page_offset + self.file_offset.unwrap(); 
-                self.inode
-                    .as_ref()
-                    .unwrap()
-                    .upgrade()
-                    .unwrap()
-                    .read(file_offset, &mut self.data[page_offset..page_offset + BLOCK_SIZE])?;
+                let file_offset = page_offset + self.file_offset.unwrap();
+                self.inode.as_ref().unwrap().upgrade().unwrap().read(
+                    file_offset,
+                    &mut self.data[page_offset..page_offset + BLOCK_SIZE],
+                )?;
                 self.data_states[idx] = DataState::Coherent;
             }
         }

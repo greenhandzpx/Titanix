@@ -1,7 +1,7 @@
 use core::{arch::asm, cell::SyncUnsafeCell};
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
-use log::{debug, error, info, warn};
+use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::{Vec}, vec};
+use log::{debug, error, info, warn, trace};
 use riscv::register::{satp, scause::Scause};
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     },
     driver::block::MMIO_VIRT,
     mm::memory_set::page_fault_handler::SBrkPageFaultHandler,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::error::{GeneralRet, SyscallErr}, process::aux::*, stack_trace,
 };
 
 pub use self::{
@@ -64,7 +64,7 @@ pub fn init_kernel_space() {
 //         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 // }
 
-/// Heap range 
+/// Heap range
 pub type HeapRange = SimpleRange<VirtAddr>;
 
 /// memory set structure, controls virtual-memory space
@@ -174,7 +174,6 @@ impl MemorySet {
         }
     }
 
-
     /// Handle page fault
     pub fn handle_page_fault(&mut self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
         // There are serveral kinds of page faults:
@@ -207,7 +206,6 @@ impl MemorySet {
         }
     }
 
-
     /// Insert vm area lazily
     pub fn insert_area(&mut self, mut vma: VmArea) {
         self.push_lazily(vma, None);
@@ -222,6 +220,7 @@ impl MemorySet {
     ) {
         self.push(
             VmArea::new(start_va, end_va, MapType::Framed, permission, None, None),
+            0,
             None,
         );
     }
@@ -260,11 +259,12 @@ impl MemorySet {
         // }
     }
     /// Add the map area to memory set and map the map area(allocating physical frames)
-    fn push(&mut self, mut vm_area: VmArea, data: Option<&[u8]>) {
+    fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
+        stack_trace!();
         let pgtbl_ref = unsafe { &mut (*self.page_table.get()) };
         vm_area.map(pgtbl_ref);
         if let Some(data) = data {
-            vm_area.copy_data(pgtbl_ref, data);
+            vm_area.copy_data_with_offset(pgtbl_ref, data_offset, data);
         }
         self.areas.insert(vm_area.start_vpn(), vm_area);
     }
@@ -312,6 +312,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping .rodata section");
@@ -324,6 +325,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping .data section");
@@ -336,6 +338,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         // add stack section in `linker.ld`
@@ -349,6 +352,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping .bss section");
@@ -361,6 +365,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping physical memory");
@@ -373,6 +378,7 @@ impl MemorySet {
                 None,
                 None,
             ),
+            0,
             None,
         );
         info!("[kernel]mapping memory-mapped registers");
@@ -388,6 +394,7 @@ impl MemorySet {
                     None,
                     None,
                 ),
+                0,
                 None,
             );
         }
@@ -397,7 +404,7 @@ impl MemorySet {
     /// Include sections in elf and trampoline and TrapContext and user stack,
     /// also returns user_sp and entry point.
     /// TODO: resolve elf file lazily
-    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
+    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
         // let mut memory_set = Self::new_bare();
         let mut memory_set = Self::new_from_global();
         // // map trampoline
@@ -409,12 +416,93 @@ impl MemorySet {
         let magic = elf_header.pt1.magic;
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
+
+        let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
+
+        auxv.push(AuxHeader {
+            aux_type: AT_PHENT,
+            value: elf.header.pt2.ph_entry_size() as usize,
+        }); // ELF64 header 64bytes
+
+        auxv.push(AuxHeader {
+            aux_type: AT_PHNUM,
+            value: ph_count as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_PAGESZ,
+            value: PAGE_SIZE as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_BASE,
+            value: 0 as usize,
+        });
+
+        // _at_base = memory_set.load_dl(&elf);
+
+        // if _at_base != 0 {
+        //     auxv.push(AuxHeader {
+        //         aux_type: AT_BASE,
+        //         value: DYNAMIC_LINKER as usize,
+        //     });
+        //     _at_base += DYNAMIC_LINKER;
+        // }
+
+        auxv.push(AuxHeader {
+            aux_type: AT_FLAGS,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_ENTRY,
+            value: elf.header.pt2.entry_point() as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_UID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_EUID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_GID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_EGID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_PLATFORM,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_HWCAP,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_CLKTCK,
+            value: 100 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_SECURE,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_NOTELF,
+            value: 0x112d as usize,
+        });
+
+
         let mut max_end_vpn = VirtPageNum(0);
+        let mut head_va = 0;
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
                 let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
+                if head_va == 0 {
+                    head_va = start_va.0;
+                }
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
                 if ph_flags.is_read() {
@@ -428,13 +516,37 @@ impl MemorySet {
                 }
                 let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
                 max_end_vpn = vm_area.vpn_range.end();
+
+                // let seg_size = (end_va.ceil().0 - start_va.floor().0) * PAGE_SIZE;
+                // let mut raw_data = vec![0 as u8; seg_size];
+                // let _ = &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize].iter().enumerate().for_each(|(i, byte)| {
+                //     raw_data[i + start_va.0 - start_va.floor().0 * PAGE_SIZE] = *byte;
+                // });
+                // memory_set.push(
+                //     vm_area,
+                //     Some(&raw_data),
+                // );
+                let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
                 memory_set.push(
                     vm_area,
+                    offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                debug!("from elf: {:#x}, {:#x}", start_va.0, end_va.0);
+                debug!("from elf: {:#x}, {:#x}, map_perm: {:#x}", start_va.0, end_va.0, map_perm.bits());
+                // let magic = 0x1213d0;
+                // if start_va.0 < magic && magic < end_va.0 {
+                //     trace!("{:#x}: raw value: {:#x}", magic, )
+                // }
             }
         }
+
+        let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
+        debug!("from_elf: AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
+        auxv.push(AuxHeader {
+            aux_type: AT_PHDR,
+            value: ph_head_addr as usize,
+        });
+
         // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.into();
         let mut user_stack_bottom: usize = max_end_va.into();
@@ -455,7 +567,7 @@ impl MemorySet {
             Some(Box::new(SBrkPageFaultHandler {})),
             None,
         );
-        memory_set.push(heap_vma, None);
+        memory_set.push(heap_vma, 0, None);
         memory_set.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
         debug!(
             "from elf: map heap: {:#x}, {:#x}",
@@ -486,6 +598,7 @@ impl MemorySet {
             memory_set,
             user_stack_bottom,
             elf.header.pt2.entry_point() as usize,
+            auxv
         )
     }
     ///Clone a same `MemorySet`
@@ -525,7 +638,7 @@ impl MemorySet {
 
         for (_, area) in user_space.areas.iter_mut() {
             // clear write bit && add cow bit
-            if area.map_perm.contains(MapPermission::W) {
+            if area.map_perm.contains(MapPermission::W) || area.map_perm.contains(MapPermission::COW) {
                 area.map_perm |= MapPermission::COW;
                 area.map_perm.remove(MapPermission::W);
                 area.handler = Some(Box::new(ForkPageFaultHandler {}));
@@ -542,18 +655,19 @@ impl MemorySet {
                 if let Some(ph_frame) = unsafe { (*area.data_frames.get()).0.get(&vpn) } {
                     // If there is related physcial frame, then we let the child and father share it.
                     let pte = unsafe { (*user_space.page_table.get()).find_pte(vpn).unwrap() };
-                    if pte.flags().contains(PTEFlags::W) {
+
+                    if pte.flags().contains(PTEFlags::W) || pte.flags().contains(PTEFlags::COW) {
                         let mut new_flags = pte.flags() | PTEFlags::COW;
                         new_flags.remove(PTEFlags::W);
                         pte.set_flags(new_flags);
                         assert!(pte.flags().contains(PTEFlags::COW));
                         assert!(!pte.flags().contains(PTEFlags::W));
                     }
-                    new_area
-                        .data_frames
-                        .get_mut()
-                        .0
-                        .insert(vpn, ph_frame.clone());
+                    // new_area
+                    //     .data_frames
+                    //     .get_mut()
+                    //     .0
+                    //     .insert(vpn, ph_frame.clone());
                     let _dst_ppn = new_area.map_one_lazily(new_pagetable, vpn, ph_frame);
                     // dst_ppn
                     //     .get_bytes_array()
@@ -564,6 +678,7 @@ impl MemorySet {
             }
             memory_set.push_lazily(new_area, None);
         }
+        user_space.activate();
         new_pagetable.activate();
         memory_set
     }
@@ -622,8 +737,13 @@ impl MemorySet {
                 continue;
             }
             if vma.1.end_vpn() > start_vpn && vma.1.start_vpn() < end_vpn {
-                debug!("conflict vpn range: input vpnr: [{:#x}, {:#x}], old vpnr: [{:#x}, {:#x}]", 
-                    start_vpn.0, end_vpn.0, vma.1.start_vpn().0, vma.1.end_vpn().0);
+                debug!(
+                    "conflict vpn range: input vpnr: [{:#x}, {:#x}], old vpnr: [{:#x}, {:#x}]",
+                    start_vpn.0,
+                    end_vpn.0,
+                    vma.1.start_vpn().0,
+                    vma.1.end_vpn().0
+                );
                 return true;
             }
         }
@@ -657,7 +777,6 @@ bitflags! {
         const COW = 1 << 8;
     }
 }
-
 
 #[allow(unused)]
 ///Check PageTable running correctly

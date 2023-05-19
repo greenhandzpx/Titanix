@@ -28,22 +28,26 @@ const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
+const SYSCALL_SET_TID_ADDRESS: usize = 96;
 const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
-const SYSCALL_SIGACTION: usize = 134;
-const SYSCALL_SIGRETURN: usize = 139;
+const SYSCALL_RT_SIGACTION: usize = 134;
+const SYSCALL_RT_SIGPROCMASK: usize = 135;
+const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
+const SYSCALL_GETUID: usize = 174;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
-const SYSCALL_EXEC: usize = 221;
+const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
+const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAITPID: usize = 260;
 
 const AT_FDCWD: isize = -100;
@@ -52,22 +56,28 @@ const SEEK_CUR: u8 = 1;
 const SEEK_END: u8 = 2;
 
 mod fs;
+mod mm;
 mod process;
 mod sync;
 
 use core::arch::asm;
 
 use fs::*;
-use log::error;
+use log::{debug, error, trace};
+use mm::*;
 use process::*;
+pub use sync::futex_wake;
+use sync::*;
 
-use crate::{signal::SigAction, utils::error::SyscallRet};
-
-use self::sync::sys_futex;
+use crate::{
+    signal::{SigAction, SigSet},
+    utils::error::SyscallRet,
+};
 
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
+    trace!("syscall id: {}", syscall_id);
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
         SYSCALL_DUP => sys_dup(args[0]),
@@ -104,21 +114,28 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
+        SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
-        SYSCALL_SIGACTION => sys_sigaction(
+        SYSCALL_RT_SIGACTION => sys_rt_sigaction(
             args[0] as i32,
             args[1] as *const SigAction,
             args[2] as *mut SigAction,
         ),
-        SYSCALL_SIGRETURN => sys_sigreturn(),
+        SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(
+            args[0] as i32,
+            args[1] as *const usize,
+            args[2] as *mut SigSet,
+        ),
+        SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_UNAME => sys_uname(args[0]),
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
+        SYSCALL_GETUID => sys_getuid(),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
         SYSCALL_CLONE => sys_clone(
@@ -128,7 +145,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3] as *const u8,
             args[4] as *const u8,
         ),
-        SYSCALL_EXEC => sys_exec(args[0] as *const u8, args[1] as *const usize),
+        SYSCALL_EXECVE => sys_execve(
+            args[0] as *const u8,
+            args[1] as *const usize,
+            args[2] as *const usize,
+        ),
         SYSCALL_MMAP => sys_mmap(
             args[0] as *const u8,
             args[1],
@@ -137,10 +158,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[4],
             args[5],
         ),
+        SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1]).await,
         SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
         _ => {
-            error!("Unsupported syscall_id: {}", syscall_id);
+            panic!("Unsupported syscall_id: {}", syscall_id);
             Ok(0)
         }
     }
@@ -156,7 +178,7 @@ pub fn user_sigreturn() {
             inlateout("x10") 0 as isize => ret,
             in("x11") 0,
             in("x12") 0,
-            in("x17") SYSCALL_SIGRETURN
+            in("x17") SYSCALL_RT_SIGRETURN
         );
     }
 }
@@ -205,4 +227,12 @@ bitflags! {
         /// Anonymous
         const MAP_ANONYMOUS = 1 << 5;
     }
+}
+
+/// Futex Operations
+pub enum FutexOperations {
+    /// Wait
+    FutexWait = 1,
+    /// Wake up
+    FutexWake = 2,
 }

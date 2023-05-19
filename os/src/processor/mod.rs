@@ -15,19 +15,21 @@ pub mod hart;
 
 use alloc::sync::Arc;
 pub use env::SumGuard;
+use log::info;
 
 /// We store the local hart's addr in `tp` reg, instead of the hart id,
 
 const HART_EACH: Hart = Hart::new();
 pub static mut HARTS: [Hart; HART_NUM] = [HART_EACH; HART_NUM];
 
-unsafe fn get_hart_by_id(hart_id: usize) -> &'static Hart {
-    &HARTS[hart_id]
+unsafe fn get_hart_by_id(hart_id: usize) -> &'static mut Hart {
+    &mut HARTS[hart_id]
 }
 
 /// Set the cpu hart control block according to `hard_id`
 pub unsafe fn set_local_hart(hart_id: usize) {
     let hart = get_hart_by_id(hart_id);
+    hart.set_hart_id(hart_id);
     let hart_addr = hart as *const _ as usize;
     asm!("mv tp, {}", in(reg) hart_addr);
 }
@@ -38,6 +40,7 @@ pub fn set_hart_stack() {
     unsafe {
         asm!("mv {}, sp", out(reg) sp);
     }
+    info!("set_hart_stack: sp {:#x}", sp);
     h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
 }
 

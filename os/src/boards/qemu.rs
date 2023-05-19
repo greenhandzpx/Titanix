@@ -2,7 +2,7 @@
 
 pub const CLOCK_FREQ: usize = 12500000;
 // pub const MEMORY_END: usize = 0x81000000;
-pub const MEMORY_END: usize = 0x83000000;
+pub const MEMORY_END: usize = 0x88000000;
 
 #[cfg(feature = "board_qemu")]
 pub const MMIO: &[(usize, usize)] = &[

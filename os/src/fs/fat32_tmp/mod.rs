@@ -4,14 +4,12 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::{boxed::Box, vec::Vec};
 use async_trait::async_trait;
-use fatfs::{DirEntry, Read, Write, Seek};
+use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
 use log::{debug, error, info};
 
-use crate::config::fs;
 use crate::fs::inode::INODE_CACHE;
 use crate::utils::error::{self, SyscallErr};
-use crate::utils::path;
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     processor::SumGuard,
@@ -437,13 +435,20 @@ impl File for Fat32File {
             Fat32NodeType::Dir(dir) => panic!(),
             Fat32NodeType::File(file) => {
                 let res = file.read(buf);
-                debug!("[sync_read]: pos: {:#x}", file.seek(fatfs::SeekFrom::Current(0)).unwrap());
+                debug!(
+                    "[sync_read]: pos: {:#x}",
+                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
+                );
                 res
             }
         };
         total_read_size += bytes.unwrap();
         inner.offset += total_read_size;
-        debug!("[sync_read]: read size {}, buf len {}", total_read_size, buf.len());
+        debug!(
+            "[sync_read]: read size {}, buf len {}",
+            total_read_size,
+            buf.len()
+        );
         Ok(total_read_size as isize)
     }
 
@@ -455,13 +460,25 @@ impl File for Fat32File {
             Fat32NodeType::Dir(dir) => panic!(),
             Fat32NodeType::File(file) => {
                 let res = file.write(buf);
-                debug!("[write]: pos: {:#x}", file.seek(fatfs::SeekFrom::Current(0)).unwrap());
+                debug!(
+                    "[write]: pos: {:#x}",
+                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
+                );
                 res
             }
         };
         total_write_size += bytes.unwrap();
         inner.offset += total_write_size;
-        self.metadata().inner.lock().inode.as_ref().unwrap().metadata().inner.lock().size += total_write_size;
+        self.metadata()
+            .inner
+            .lock()
+            .inode
+            .as_ref()
+            .unwrap()
+            .metadata()
+            .inner
+            .lock()
+            .size += total_write_size;
         debug!("[write]: write size {}", total_write_size);
         Ok(total_write_size as isize)
     }
@@ -474,13 +491,25 @@ impl File for Fat32File {
             Fat32NodeType::Dir(dir) => panic!(),
             Fat32NodeType::File(file) => {
                 let res = file.write(buf);
-                debug!("[sync_write]: pos: {:#x}", file.seek(fatfs::SeekFrom::Current(0)).unwrap());
+                debug!(
+                    "[sync_write]: pos: {:#x}",
+                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
+                );
                 res
             }
         };
         total_write_size += bytes.unwrap();
         inner.offset += total_write_size;
-        self.metadata().inner.lock().inode.as_ref().unwrap().metadata().inner.lock().size += total_write_size;
+        self.metadata()
+            .inner
+            .lock()
+            .inode
+            .as_ref()
+            .unwrap()
+            .metadata()
+            .inner
+            .lock()
+            .size += total_write_size;
         debug!("[sync_write]: write size {}", total_write_size);
         Ok(total_write_size as isize)
     }
@@ -489,7 +518,10 @@ impl File for Fat32File {
         match &mut inner.node {
             Fat32NodeType::Dir(dir) => panic!(),
             Fat32NodeType::File(file) => {
-                debug!("[seek]: before pos: {:#x}", file.seek(fatfs::SeekFrom::Current(0)).unwrap());
+                debug!(
+                    "[seek]: before pos: {:#x}",
+                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
+                );
                 if let Some(pos) = file.seek(fatfs::SeekFrom::Start(offset as u64)).ok() {
                     debug!("[seek]: after pos: {:#x}(offset:{})", pos, offset);
                     Ok(pos as isize)
@@ -498,7 +530,6 @@ impl File for Fat32File {
                 }
             }
         }
-
     }
 }
 
@@ -599,6 +630,7 @@ pub fn init() -> GeneralRet<()> {
     ROOT_FS.init_ref("/", FileSystemType::VFAT)?;
     let root_inode = ROOT_FS.metadata().root_inode.unwrap();
     root_inode.mkdir(root_inode.clone(), "mnt", InodeMode::FileDIR)?;
+
     // FILE_SYSTEM_MANAGER
     //     .fs_mgr
     //     .lock()
