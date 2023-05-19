@@ -19,7 +19,7 @@ use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::string::c_str_to_string;
 use crate::{fs, process, stack_trace};
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{debug, info, warn};
 
@@ -262,6 +262,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             envs = envs.add(1);
         }
     }
+    envs_vec.push("PATH=/".to_string());
     // UserCheck::new().readable_slice(path, len);
     UserCheck::new().check_c_str(path)?;
     let path = c_str_to_string(path);
@@ -664,4 +665,10 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
             }
         }
     })
+}
+
+
+pub fn sys_getuid() -> SyscallRet {
+    // TODO: not sure
+    Ok(0)
 }

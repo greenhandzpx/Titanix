@@ -121,7 +121,6 @@ pub async fn trap_handler() {
                     );
                 }
                 Err(_) => {
-                    println!("Error here");
                     warn!(
                         "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it. pid: {}",
                         scause.cause(),
@@ -168,7 +167,7 @@ pub async fn trap_handler() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // debug!("time interrupt, pid {}", current_process().pid());
             // debug!("sstatus {:#x}", sstatus::read().bits());
-            debug!("timer interrrupt");
+            // debug!("timer interrrupt");
             set_next_trigger();
             process::yield_now().await
             // suspend_current_and_run_next();
@@ -186,7 +185,7 @@ pub async fn trap_handler() {
     // trap_return();
 }
 
-#[no_mangle]
+/// #[no_mangle]
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
@@ -211,7 +210,10 @@ pub async fn trap_handler() {
 //     }
 // }
 
-/// 回到用户态，注意不需要切换页表，故不需要清空tlb
+#[no_mangle]
+/// Back to user mode.
+/// Note that we don't need to flush TLB since user and 
+/// kernel use the same pagetable.
 pub fn trap_return(trap_context: &mut TrapContext) {
     set_user_trap_entry();
     extern "C" {

@@ -23,6 +23,7 @@ const SYSCALL_PIPE: usize = 59;
 const SYSCALL_GETDENTS: usize = 61;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
@@ -39,6 +40,7 @@ const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
+const SYSCALL_GETUID: usize = 174;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -58,7 +60,7 @@ use core::arch::asm;
 
 pub use sync::futex_wake;
 use fs::*;
-use log::error;
+use log::{error, debug, trace};
 use mm::*;
 use process::*;
 use sync::*;
@@ -69,6 +71,7 @@ use crate::{signal::{SigAction, SigSet}, utils::error::SyscallRet};
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
+    trace!("syscall id: {}", syscall_id);
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
         SYSCALL_DUP => sys_dup(args[0]),
@@ -95,6 +98,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETDENTS => sys_getdents(args[0], args[1], args[2]),
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
+        SYSCALL_NEWFSTATAT => sys_newfstatst(args[0], args[1] as *const u8, args[2], args[3]),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
@@ -115,6 +119,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
+        SYSCALL_GETUID => sys_getuid(),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
         SYSCALL_CLONE => sys_clone(

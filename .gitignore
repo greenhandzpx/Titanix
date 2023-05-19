@@ -20,3 +20,4 @@ easy-fs-fuse/target/*
 tools/
 pushall.sh
 *.img
+objdump/

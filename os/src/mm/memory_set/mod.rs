@@ -1,6 +1,6 @@
 use core::{arch::asm, cell::SyncUnsafeCell};
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
+use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, warn};
 use riscv::register::{satp, scause::Scause};
 
@@ -13,7 +13,7 @@ use crate::{
     },
     driver::block::MMIO_VIRT,
     mm::memory_set::page_fault_handler::SBrkPageFaultHandler,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::error::{GeneralRet, SyscallErr}, process::aux::*,
 };
 
 pub use self::{
@@ -395,7 +395,7 @@ impl MemorySet {
     /// Include sections in elf and trampoline and TrapContext and user stack,
     /// also returns user_sp and entry point.
     /// TODO: resolve elf file lazily
-    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
+    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
         // let mut memory_set = Self::new_bare();
         let mut memory_set = Self::new_from_global();
         // // map trampoline
@@ -407,6 +407,84 @@ impl MemorySet {
         let magic = elf_header.pt1.magic;
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
+
+        let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
+
+        auxv.push(AuxHeader {
+            aux_type: AT_PHENT,
+            value: elf.header.pt2.ph_entry_size() as usize,
+        }); // ELF64 header 64bytes
+
+        auxv.push(AuxHeader {
+            aux_type: AT_PHNUM,
+            value: ph_count as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_PAGESZ,
+            value: PAGE_SIZE as usize,
+        });
+
+        auxv.push(AuxHeader {
+            aux_type: AT_BASE,
+            value: 0 as usize,
+        });
+
+        // _at_base = memory_set.load_dl(&elf);
+
+        // if _at_base != 0 {
+        //     auxv.push(AuxHeader {
+        //         aux_type: AT_BASE,
+        //         value: DYNAMIC_LINKER as usize,
+        //     });
+        //     _at_base += DYNAMIC_LINKER;
+        // }
+
+        auxv.push(AuxHeader {
+            aux_type: AT_FLAGS,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_ENTRY,
+            value: elf.header.pt2.entry_point() as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_UID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_EUID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_GID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_EGID,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_PLATFORM,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_HWCAP,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_CLKTCK,
+            value: 100 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_SECURE,
+            value: 0 as usize,
+        });
+        auxv.push(AuxHeader {
+            aux_type: AT_NOTELF,
+            value: 0x112d as usize,
+        });
+
+
         let mut max_end_vpn = VirtPageNum(0);
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -430,7 +508,7 @@ impl MemorySet {
                     vm_area,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                debug!("from elf: {:#x}, {:#x}", start_va.0, end_va.0);
+                debug!("from elf: {:#x}, {:#x}, map_perm: {:#x}", start_va.0, end_va.0, map_perm.bits());
             }
         }
         // map user stack with U flags
@@ -484,6 +562,7 @@ impl MemorySet {
             memory_set,
             user_stack_bottom,
             elf.header.pt2.entry_point() as usize,
+            auxv
         )
     }
     ///Clone a same `MemorySet`
@@ -548,11 +627,11 @@ impl MemorySet {
                         assert!(pte.flags().contains(PTEFlags::COW));
                         assert!(!pte.flags().contains(PTEFlags::W));
                     }
-                    new_area
-                        .data_frames
-                        .get_mut()
-                        .0
-                        .insert(vpn, ph_frame.clone());
+                    // new_area
+                    //     .data_frames
+                    //     .get_mut()
+                    //     .0
+                    //     .insert(vpn, ph_frame.clone());
                     let _dst_ppn = new_area.map_one_lazily(new_pagetable, vpn, ph_frame);
                     // dst_ppn
                     //     .get_bytes_array()

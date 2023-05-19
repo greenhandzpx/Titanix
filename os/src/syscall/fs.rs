@@ -373,6 +373,13 @@ pub fn sys_uname(buf: usize) -> SyscallRet {
     Ok(0)
 }
 
+
+pub fn sys_newfstatst(fd: usize, pathname: *const u8, kst: usize, _flags: usize) -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+    // todo!()
+}
+
 /// fstat() function return information about a file, in the buffer pointed to by kst.
 /// This function except that the file about which information is to be retrieved is specified by the file descriptor fd.
 pub fn sys_fstat(fd: usize, kst: usize) -> SyscallRet {

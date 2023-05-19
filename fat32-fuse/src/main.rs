@@ -70,6 +70,19 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         file.write_all(&all_data)?;
     }
 
+    // Write busybox
+    let busybox_path = "../testcases/busybox/busybox";
+    let mut host_file = File::open(busybox_path).unwrap();
+    let mut all_data: Vec<u8> = Vec::new();
+    host_file.read_to_end(&mut all_data).unwrap();
+    // create a file in fat-fs
+    let mut file = fs.root_dir().create_file("busybox")?;
+    // write data to fat-fs
+    file.write_all(&all_data)?;
+
+
+
+
     let init_usershell: Vec<&str> = vec!["initproc", "shell"];
 
     for app in init_usershell {

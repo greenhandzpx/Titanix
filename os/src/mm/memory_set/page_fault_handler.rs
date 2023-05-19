@@ -212,23 +212,23 @@ impl PageFaultHandler for ForkPageFaultHandler {
             pte_flags.remove(PTEFlags::COW);
 
 
-                // // Else
-                // // we should allocate new frame and decrease
-                // // old frame's ref cnt
-                // let new_frame = frame_alloc().unwrap();
-                // // copy old frame's data to the new frame
-                // new_frame
-                //     .ppn
-                //     .bytes_array()
-                //     .copy_from_slice(&old_frame.ppn.bytes_array());
-                // // modify page table
-                // page_table.unmap(vpn);
-                // page_table.map(vpn, new_frame.ppn, pte_flags);
-                // page_table.activate();
-                // // decrease old frame's ref cnt
-                // debug!("ph frame ref cnt {}", Arc::strong_count(old_frame));
-                // data_frames.0.remove(&vpn);
-                // data_frames.0.insert(vpn, Arc::new(new_frame));
+            // // Else
+            // // we should allocate new frame and decrease
+            // // old frame's ref cnt
+            // let new_frame = frame_alloc().unwrap();
+            // // copy old frame's data to the new frame
+            // new_frame
+            //     .ppn
+            //     .bytes_array()
+            //     .copy_from_slice(&old_frame.ppn.bytes_array());
+            // // modify page table
+            // page_table.unmap(vpn);
+            // page_table.map(vpn, new_frame.ppn, pte_flags);
+            // page_table.activate();
+            // // decrease old frame's ref cnt
+            // debug!("ph frame ref cnt {}", Arc::strong_count(old_frame));
+            // data_frames.0.remove(&vpn);
+            // data_frames.0.insert(vpn, Arc::new(new_frame));
 
 
             // Note that we must hold the process_inner's lock now

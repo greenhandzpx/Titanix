@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     config::{mm::PAGE_SIZE, mm::USER_STACK_SIZE},
@@ -52,6 +52,7 @@ impl Thread {
                 MapPermission::R | MapPermission::W | MapPermission::U,
                 Some(Box::new(UStackPageFaultHandler {})),
             );
+            proc.memory_set.activate();
         });
         // self.process.inner_handler(move |proc| {
         //     if proc

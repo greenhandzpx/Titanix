@@ -10,15 +10,17 @@ pub use thread::yield_now;
 
 mod manager;
 mod pid;
+/// Aux header
+pub mod aux;
 // #[allow(clippy::module_inception)]
 // mod task;
 
 use crate::{
     config::{mm::USER_STACK_SIZE, process::CLONE_STACK_SIZE},
-    fs::{self, inode_tmp::open_file, FdTable, OpenFlags},
+    fs::FdTable,
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySet, RecycleAllocator},
-    process::thread::terminate_all_threads_except_main,
+    process::{thread::terminate_all_threads_except_main, aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM}},
     processor::{current_process, current_task, local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
@@ -62,6 +64,8 @@ pub fn add_initproc() {
     let elf_data = get_app_data_by_name("initproc").unwrap();
     unsafe { INITPROC = Some(Process::new(elf_data)) }
 }
+
+
 
 // const PRELIMINARY_TESTS: [&str; 31] = [
 //     "brk",
@@ -228,7 +232,7 @@ impl Drop for Process {
 impl Process {
     /// Create a new process
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
-        let (memory_set, user_sp_base, entry_point) = MemorySet::from_elf(elf_data);
+        let (memory_set, user_sp_base, entry_point, auxv) = MemorySet::from_elf(elf_data);
         // let debug_pa = memory_set.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
         // println!("entry pa {:#x}", debug_pa);
         // Alloc a pid
@@ -285,7 +289,8 @@ impl Process {
     /// main thread, and the new program is executed in the main thread.
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
         debug!("exec pid {}", current_process().pid());
-        let (memory_set, ustack_base, entry_point) = MemorySet::from_elf(elf_data);
+        stack_trace!();
+        let (memory_set, ustack_base, entry_point, mut auxs) = MemorySet::from_elf(elf_data);
         let task_ptr: *const Thread = self.inner_handler(|proc| {
             assert_eq!(proc.thread_count(), 1);
             // memory_set with elf program headers/trampoline/trap context/user stack
@@ -311,13 +316,16 @@ impl Process {
 
         self.inner_handler(|proc| {
             proc.ustack_base = ustack_base;
+            proc.memory_set = memory_set;
         });
         // // dealloc old ustack
         // task.dealloc_ustack();
-        self.inner.lock().memory_set = memory_set;
+        // self.inner.lock().memory_set = memory_set;
         task_inner.ustack_base = ustack_base;
         // alloc new ustack
         task.alloc_ustack();
+
+
 
         // ---- The following to to push arguments on user stack ----
 
@@ -341,7 +349,8 @@ impl Process {
                 p.copy_from(envs[i].as_ptr(), envs[i].len());
                 *((p as usize + envs[i].len()) as *mut u8) = 0;
             }
-        }
+        }        
+        user_sp -= user_sp % core::mem::size_of::<usize>();
         // Copy each arg to the newly allocated stack
         for i in 0..args.len() {
             // Here we leave one byte to store a '\0' as a terminator
@@ -352,6 +361,46 @@ impl Process {
                 argv[i] = user_sp;
                 p.copy_from(args[i].as_ptr(), args[i].len());
                 *((p as usize + args[i].len()) as *mut u8) = 0;
+            }
+        }
+        user_sp -= user_sp % core::mem::size_of::<usize>();
+        // Copy `platform`
+        let platform = "RISC-V64";
+        user_sp -= platform.len() + 1;
+        user_sp -= user_sp % core::mem::size_of::<usize>();
+        let p = user_sp as *mut u8;
+        unsafe {
+            p.copy_from(platform.as_ptr(), platform.len());
+            *((p as usize + platform.len()) as *mut u8) = 0;
+        }
+
+        // Copy 16 random bytes(here is 0)
+        user_sp -= 16;
+        auxs.push(AuxHeader {
+            aux_type: AT_RANDOM,
+            value: user_sp,
+        });
+
+        // Padding
+        user_sp -= user_sp % 16;
+
+        auxs.push(AuxHeader {
+            aux_type: AT_EXECFN,
+            value: argv[0],
+        }); // file name
+        auxs.push(AuxHeader {
+            aux_type: AT_NULL,
+            value: 0,
+        }); // end
+
+        // Construct auxv
+        let len = auxs.len() * core::mem::size_of::<AuxHeader>();
+        user_sp -= len;
+        UserCheck::new().check_writable_slice(user_sp as *mut u8, len)?;
+        let auxv_base = user_sp;
+        for i in 0..auxs.len() {
+            unsafe {
+                *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut AuxHeader) = auxs[i];
             }
         }
         // Construct envp
@@ -398,11 +447,13 @@ impl Process {
         debug!("entry {:#x}, sp {:#x}", entry_point, user_sp);
         let argc = unsafe { *(user_sp as *const usize) };
         debug!("argc {}", argc);
-        // a0 -> argc, a1 -> argv[0]
 
         // trap_cx.user_x[10] = user_sp;
+        // a0 -> argc, a1 -> argv, a2 -> envp
         trap_cx.user_x[10] = args.len();
         trap_cx.user_x[11] = argv_base;
+        trap_cx.user_x[12] = envp_base;
+        trap_cx.user_x[13] = auxv_base;
         debug!("a0 {:#x}, a1 {:#x}", args.len(), argv_base);
 
         task_inner.trap_context = trap_cx;
@@ -478,8 +529,8 @@ impl Process {
             );
             // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
             // here we just copy on write
-            // let memory_set = MemorySet::from_existed_user_lazily(&mut parent_inner.memory_set);
-            let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+            let memory_set = MemorySet::from_existed_user_lazily(&mut parent_inner.memory_set);
+            // let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
 
             // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);

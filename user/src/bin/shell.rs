@@ -74,8 +74,39 @@ impl ProcessArguments {
     }
 }
 
-const PRELIMINARY_TESTS_2: [&str; 1] = [
+const PRELIMINARY_TESTS_2: [&str; 31] = [
+    "getdents",
+    "brk",
+    "chdir",
     "clone",
+    "close",
+    "dup2",
+    "dup",
+    "sleep",
+    "execve",
+    "exit",
+    "fork",
+    "fstat",
+    "getcwd",
+    "getpid",
+    "getppid",
+    "gettimeofday",
+    "mkdir_",
+    // "mmap",
+    "mount",
+    "open",
+    "pipe",
+    "read",
+    "times",
+    "umount",
+    "uname",
+    "unlink",
+    "wait",
+    "waitpid",
+    "write",
+    "yield",
+    "munmap",
+    "openat",
 ];
 
 const PRELIMINARY_TESTS: [&str; 32] = [
@@ -116,7 +147,7 @@ const PRELIMINARY_TESTS: [&str; 32] = [
 fn preliminary_test() {
     print!("---------- START TO RUN PRELIMINARY TEST -----------\n");
     println!("");
-    for test in PRELIMINARY_TESTS {
+    for test in PRELIMINARY_TESTS_2 {
         let pid = fork();
         if pid == 0 {
             // println!("==== start to test {} ====", test);
