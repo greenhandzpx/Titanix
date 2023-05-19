@@ -1,6 +1,6 @@
 use core::panic;
 
-use alloc::sync::Arc;
+use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 
 use crate::{
     driver::{block::{BlockDevice, self}},
@@ -8,15 +8,18 @@ use crate::{
     utils::error::{GeneralRet, SyscallRet, SyscallErr},
 };
 
-use self::{bpb::BootSector, fsinfo::FSInfo};
+use self::{bpb::BootSector, fsinfo::FSInfo, inode::FAT32Inode};
+use self::{fat::FileAllocTable};
 
-use super::{file_system::FileSystemMeta, FileSystem, FileSystemType, Inode};
+use super::{file_system::FileSystemMeta, FileSystem, FileSystemType, Inode, fat32_tmp::Fat32Inode};
 
 // layouts
 mod bpb;
 mod disk_dentry;
 mod fsinfo;
 mod util;
+mod fat;
+mod inode;
 
 const SECTOR_SIZE: usize = 512;
 
@@ -32,7 +35,6 @@ pub struct FAT32FileSystemMeta {
     root_cluster_id: usize,       // root cluster id
     fsinfo_sector_id: usize,      // FSInfo sector id
 }
-
 
 pub struct FAT32FSInfoMeta {
     free_count: u32,  // how many free clusters ? (0xFFFFFFFF for I dont know)
@@ -50,11 +52,13 @@ impl FAT32FSInfoMeta {
 
 pub struct FAT32FileSystem {
     block_device: Arc<dyn BlockDevice>,
-    fs_meta: FAT32FileSystemMeta,
+    fat32fs_meta: FAT32FileSystemMeta,
     fsinfo_meta: FAT32FSInfoMeta,
+    fat: FileAllocTable,
+
+    fsmeta: Option<FileSystemMeta>,
+    root_inode: Option<FAT32Inode>,
 }
-
-
 
 impl FAT32FileSystem {
     pub fn new(block_device: Arc<dyn BlockDevice>) -> GeneralRet<Self> {
@@ -65,7 +69,7 @@ impl FAT32FileSystem {
             Some(bs) => bs,
             None => return Err(SyscallErr::ENONET)
         };
-        let fs_meta = FAT32FileSystemMeta {
+        let fat32fs_meta = FAT32FileSystemMeta {
             sector_per_cluster: bs.BPB_SectorPerCluster as usize,
             reserved_sector_count: bs.BPB_ReservedSectorCount as usize,
             num_fat: bs.BPB_NumFATs as usize,
@@ -76,17 +80,24 @@ impl FAT32FileSystem {
         };
         // read FSInfo Sector
         block_device.read_block(0, &mut data[..]);
-        let mut fsinfo_meta: FAT32FSInfoMeta = FAT32FSInfoMeta::default();
+        let fsinfo_meta: FAT32FSInfoMeta;
         if let Some(fsinfo) = FSInfo::new(&data) {
             fsinfo_meta = FAT32FSInfoMeta {
                 free_count: fsinfo.FSI_Free_Count,
                 nxt_free: fsinfo.FSI_Nxt_Free,
             }
+        } else {
+            fsinfo_meta = FAT32FSInfoMeta::default();
         }
+        let fat = FileAllocTable::new(Arc::clone(&block_device), &fat32fs_meta, &fsinfo_meta);
+
         let ret =  Self{
             block_device: Arc::clone(&block_device),
-            fs_meta,
-            fsinfo_meta
+            fat32fs_meta,
+            fsinfo_meta,
+            fat,
+            fsmeta: None,
+            root_inode: None,
         };
         Ok(ret)
     }
@@ -99,22 +110,22 @@ impl FileSystem for FAT32FileSystem {
         mount_point: &str,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
+
+        // let mut ret: FAT32Inode = Fat32Inode::new_inode(Arc::new(self.fat), self.fat32fs_meta.root_cluster_id);
+        
     }
-    fn init(&mut self, mount_point: &str, ftype: FileSystemType) -> GeneralRet<()> {
-        todo!()
-    }
-    fn mount(&self) {}
-    fn dirty_inode(&self, inode: Arc<dyn Inode>) {}
+    
     fn write_inode(&self, inode: Arc<dyn Inode>) -> SyscallRet {
         todo!()
     }
+    
     fn sync_fs(&self) -> SyscallRet {
         todo!()
     }
     fn set_metadata(&mut self, meta_data: FileSystemMeta) {
-        todo!()
+        self.fsmeta = Some(meta_data)
     }
     fn metadata(&self) -> FileSystemMeta {
-        todo!()
+        self.fsmeta.as_ref().unwrap().clone()
     }
 }
