@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use async_trait::async_trait;
-use log::warn;
+use log::{warn, debug};
 
 use crate::{
     process,
@@ -31,26 +31,35 @@ impl File for Stdin {
     }
 
     async fn read(&self, buf: &mut [u8]) -> SyscallRet {
-        // TODO: add read buf whose len is longer than 1
-        // Urgent!! Since async trait will allocate heap memory every
-        // time this function is invoked, we should decrease the times
-        // of invocation
-        assert_eq!(buf.len(), 1, "Only support len = 1 in sys_read!");
+        // // TODO: add read buf whose len is longer than 1
+        // // Urgent!! Since async trait will allocate heap memory every
+        // // time this function is invoked, we should decrease the times
+        // // of invocation
+        // assert_eq!(buf.len(), 1, "Only support len = 1 in sys_read!");
+        
+        let _sum_guard = SumGuard::new();
         let mut c: usize;
+        let mut cnt = 0;
         loop {
-            c = console_getchar();
-            process::yield_now().await;
-            // suspend_current_and_run_next();
-            if c == 0 {
-                continue;
-            } else {
-                break;
+            loop {
+                c = console_getchar();
+                // suspend_current_and_run_next();
+                if c == 0 {
+                    process::yield_now().await;
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            let ch = c as u8;
+            buf[cnt] = ch;
+            cnt += 1;
+            // debug!("stdin read a char {}, cnt {}, buf len {}", ch, cnt, buf.len());
+            if cnt == buf.len() {
+                break
             }
         }
-        let ch = c as u8;
-        let _sum_guard = SumGuard::new();
-        buf[0] = ch;
-        Ok(1)
+        Ok(buf.len() as isize)
         // unsafe {
 
         //     let buf = buf as *mut u8;
