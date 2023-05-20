@@ -211,7 +211,6 @@ impl PageFaultHandler for ForkPageFaultHandler {
             let mut pte_flags = pte.flags() | PTEFlags::W;
             pte_flags.remove(PTEFlags::COW);
 
-
             // // Else
             // // we should allocate new frame and decrease
             // // old frame's ref cnt
@@ -229,7 +228,6 @@ impl PageFaultHandler for ForkPageFaultHandler {
             // debug!("ph frame ref cnt {}", Arc::strong_count(old_frame));
             // data_frames.0.remove(&vpn);
             // data_frames.0.insert(vpn, Arc::new(new_frame));
-
 
             // Note that we must hold the process_inner's lock now
             // so it is safe for us to check the ref count.
@@ -262,7 +260,6 @@ impl PageFaultHandler for ForkPageFaultHandler {
                 data_frames.0.remove(&vpn);
                 data_frames.0.insert(vpn, Arc::new(new_frame));
             }
-
         } else {
             // the page still not allocated (maybe because of lazy alloc(e.g. ustack))
             // we should allocate new frame

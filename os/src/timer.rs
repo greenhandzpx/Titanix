@@ -3,7 +3,6 @@
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::syscall::TimeDiff;
 use alloc::collections::BTreeMap;
 use lazy_static::*;
 use log::info;
@@ -15,6 +14,43 @@ const MSEC_PER_SEC: usize = 1000;
 /// for clock_gettime
 pub const CLOCK_REALTIME: usize = 0;
 pub const CLOCK_MONOTONIC: usize = 1;
+
+/// Used for get time
+#[repr(C)]
+pub struct TimeVal {
+    pub sec: usize,
+    pub usec: usize,
+}
+
+/// Used for nanosleep
+#[repr(C)]
+pub struct TimeSpec {
+    pub sec: usize,
+    pub nsec: usize,
+}
+
+/// Used for clock_gettime
+/// arg_timespec - device_timespec = diff
+pub struct TimeDiff {
+    pub sec: isize,
+    pub nsec: isize,
+}
+
+impl TimeDiff {
+    /// Creates a blank diff time_spec
+    pub fn init() -> Self {
+        Self { sec: 0, nsec: 0 }
+    }
+}
+
+/// Used for times
+#[repr(C)]
+pub struct Tms {
+    pub utime: usize,
+    pub stime: usize,
+    pub cutime: usize,
+    pub cstime: usize,
+}
 
 ///get current time
 fn get_time() -> usize {

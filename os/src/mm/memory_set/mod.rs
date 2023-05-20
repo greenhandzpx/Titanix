@@ -1,7 +1,7 @@
 use core::{arch::asm, cell::SyncUnsafeCell};
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::{Vec}, vec};
-use log::{debug, error, info, warn, trace};
+use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec, vec::Vec};
+use log::{debug, error, info, trace, warn};
 use riscv::register::{satp, scause::Scause};
 
 use crate::{
@@ -13,7 +13,9 @@ use crate::{
     },
     driver::block::MMIO_VIRT,
     mm::memory_set::page_fault_handler::SBrkPageFaultHandler,
-    utils::error::{GeneralRet, SyscallErr}, process::aux::*, stack_trace,
+    process::aux::*,
+    stack_trace,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 pub use self::{
@@ -492,7 +494,6 @@ impl MemorySet {
             value: 0x112d as usize,
         });
 
-
         let mut max_end_vpn = VirtPageNum(0);
         let mut head_va = 0;
         for i in 0..ph_count {
@@ -532,7 +533,12 @@ impl MemorySet {
                     offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                debug!("from elf: {:#x}, {:#x}, map_perm: {:#x}", start_va.0, end_va.0, map_perm.bits());
+                debug!(
+                    "from elf: {:#x}, {:#x}, map_perm: {:#x}",
+                    start_va.0,
+                    end_va.0,
+                    map_perm.bits()
+                );
                 // let magic = 0x1213d0;
                 // if start_va.0 < magic && magic < end_va.0 {
                 //     trace!("{:#x}: raw value: {:#x}", magic, )
@@ -598,7 +604,7 @@ impl MemorySet {
             memory_set,
             user_stack_bottom,
             elf.header.pt2.entry_point() as usize,
-            auxv
+            auxv,
         )
     }
     ///Clone a same `MemorySet`
@@ -638,7 +644,9 @@ impl MemorySet {
 
         for (_, area) in user_space.areas.iter_mut() {
             // clear write bit && add cow bit
-            if area.map_perm.contains(MapPermission::W) || area.map_perm.contains(MapPermission::COW) {
+            if area.map_perm.contains(MapPermission::W)
+                || area.map_perm.contains(MapPermission::COW)
+            {
                 area.map_perm |= MapPermission::COW;
                 area.map_perm.remove(MapPermission::W);
                 area.handler = Some(Box::new(ForkPageFaultHandler {}));

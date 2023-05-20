@@ -77,6 +77,7 @@ use sync::*;
 
 use crate::{
     signal::{SigAction, SigSet},
+    timer::*,
     utils::error::SyscallRet,
 };
 
@@ -190,43 +191,6 @@ pub fn user_sigreturn() {
             in("x17") SYSCALL_RT_SIGRETURN
         );
     }
-}
-
-/// Used for get time
-#[repr(C)]
-pub struct TimeVal {
-    sec: usize,
-    usec: usize,
-}
-
-/// Used for nanosleep
-#[repr(C)]
-pub struct TimeSpec {
-    sec: usize,
-    nsec: usize,
-}
-
-/// Used for clock_gettime
-/// arg_timespec - device_timespec = diff
-pub struct TimeDiff {
-    sec: isize,
-    nsec: isize,
-}
-
-impl TimeDiff {
-    /// Creates a blank diff time_spec
-    pub fn init() -> Self {
-        Self { sec: 0, nsec: 0 }
-    }
-}
-
-/// Used for times
-#[repr(C)]
-pub struct Tms {
-    utime: usize,
-    stime: usize,
-    cutime: usize,
-    cstime: usize,
 }
 
 bitflags! {

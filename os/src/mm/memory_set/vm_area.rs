@@ -11,8 +11,9 @@ use crate::{
         page_table::PTEFlags,
         FrameTracker, PageTable, PhysPageNum, VirtAddr, VirtPageNum,
     },
+    stack_trace,
     syscall::MmapFlags,
-    utils::error::{GeneralRet, SyscallErr}, stack_trace,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType, MemorySet};
@@ -205,7 +206,12 @@ impl VmArea {
 
     /// data: at the offset of the start va
     /// assume that all frames were cleared before
-    pub fn copy_data_with_offset(&mut self, page_table: &mut PageTable, mut offset: usize, data: &[u8]) {
+    pub fn copy_data_with_offset(
+        &mut self,
+        page_table: &mut PageTable,
+        mut offset: usize,
+        data: &[u8],
+    ) {
         stack_trace!();
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;

@@ -4,7 +4,8 @@ use alloc::sync::Arc;
 
 use crate::{
     mm::{PageTable, KERNEL_SPACE},
-    process::thread::Thread, stack_trace,
+    process::thread::Thread,
+    stack_trace,
 };
 
 use super::context::{EnvContext, KernelTaskContext, LocalContext};

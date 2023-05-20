@@ -8,10 +8,10 @@ pub mod thread;
 use log::{debug, info, warn};
 pub use thread::yield_now;
 
-mod manager;
-mod pid;
 /// Aux header
 pub mod aux;
+mod manager;
+mod pid;
 // #[allow(clippy::module_inception)]
 // mod task;
 
@@ -20,7 +20,10 @@ use crate::{
     fs::FdTable,
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySet, RecycleAllocator},
-    process::{thread::terminate_all_threads_except_main, aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM}},
+    process::{
+        aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
+        thread::terminate_all_threads_except_main,
+    },
     processor::{current_process, current_task, local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
@@ -64,8 +67,6 @@ pub fn add_initproc() {
     let elf_data = get_app_data_by_name("initproc").unwrap();
     unsafe { INITPROC = Some(Process::new(elf_data)) }
 }
-
-
 
 // const PRELIMINARY_TESTS: [&str; 31] = [
 //     "brk",
@@ -325,7 +326,6 @@ impl Process {
         // alloc new ustack
         task.alloc_ustack();
 
-
         // ---- The following to to push arguments on user stack ----
 
         let mut user_sp = task.ustack_top();
@@ -349,7 +349,7 @@ impl Process {
                 p.copy_from(envs[i].as_ptr(), envs[i].len());
                 *((p as usize + envs[i].len()) as *mut u8) = 0;
             }
-        }        
+        }
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
         // Copy each arg to the newly allocated stack
@@ -404,8 +404,10 @@ impl Process {
         for i in 0..auxs.len() {
             unsafe {
                 // *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut AuxHeader) = auxs[i];
-                *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut usize) = auxs[i].aux_type;
-                *((user_sp + i * core::mem::size_of::<AuxHeader>() + core::mem::size_of::<usize>()) as *mut usize) = auxs[i].value;
+                *((user_sp + i * core::mem::size_of::<AuxHeader>()) as *mut usize) =
+                    auxs[i].aux_type;
+                *((user_sp + i * core::mem::size_of::<AuxHeader>() + core::mem::size_of::<usize>())
+                    as *mut usize) = auxs[i].value;
             }
         }
         // Construct envp
@@ -459,7 +461,13 @@ impl Process {
         trap_cx.user_x[11] = argv_base;
         trap_cx.user_x[12] = envp_base;
         trap_cx.user_x[13] = auxv_base;
-        debug!("a0(argc) {:#x}, a1(argv) {:#x}, a2(envp) {:#x} a3(auxv) {:#x}", args.len(), argv_base, envp_base, auxv_base);
+        debug!(
+            "a0(argc) {:#x}, a1(argv) {:#x}, a2(envp) {:#x} a3(auxv) {:#x}",
+            args.len(),
+            argv_base,
+            envp_base,
+            auxv_base
+        );
 
         task_inner.trap_context = trap_cx;
         Ok(args.len() as isize)

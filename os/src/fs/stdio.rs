@@ -1,12 +1,13 @@
 use alloc::boxed::Box;
 use async_trait::async_trait;
-use log::{warn, debug};
+use log::{debug, warn};
 
 use crate::{
     process,
     processor::SumGuard,
     sbi::console_getchar,
-    utils::error::{SyscallErr, SyscallRet}, sync::mutex::SpinNoIrqLock,
+    sync::mutex::SpinNoIrqLock,
+    utils::error::{SyscallErr, SyscallRet},
 };
 
 use super::file::{File, FileMeta};
@@ -14,7 +15,6 @@ use super::file::{File, FileMeta};
 pub struct Stdin;
 
 pub struct Stdout;
-
 
 #[async_trait]
 impl File for Stdin {
@@ -36,7 +36,7 @@ impl File for Stdin {
         // // time this function is invoked, we should decrease the times
         // // of invocation
         // assert_eq!(buf.len(), 1, "Only support len = 1 in sys_read!");
-        
+
         let _sum_guard = SumGuard::new();
         let mut c: usize;
         let mut cnt = 0;
@@ -56,7 +56,7 @@ impl File for Stdin {
             cnt += 1;
             // debug!("stdin read a char {}, cnt {}, buf len {}", ch, cnt, buf.len());
             if cnt == buf.len() {
-                break
+                break;
             }
         }
         Ok(buf.len() as isize)
@@ -101,7 +101,7 @@ impl File for Stdout {
         let _sum_guard = SumGuard::new();
         // let buff = unsafe { core::slice::from_raw_parts(buf, len) };
         if PRINT_LOCKED {
-            let _locked = PRINT_MUTEX.lock();    
+            let _locked = PRINT_MUTEX.lock();
             print!("{}", core::str::from_utf8(buf).unwrap());
         } else {
             print!("{}", core::str::from_utf8(buf).unwrap());

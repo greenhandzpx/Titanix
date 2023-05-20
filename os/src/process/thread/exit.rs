@@ -1,6 +1,8 @@
-use crate::{process::INITPROC, processor::current_process, stack_trace, mm::user_check::UserCheck};
+use crate::{
+    mm::user_check::UserCheck, process::INITPROC, processor::current_process, stack_trace,
+};
 use alloc::{sync::Arc, vec::Vec};
-use log::{debug, info, error};
+use log::{debug, error, info};
 
 use super::Thread;
 
@@ -18,7 +20,6 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // since different harts may arrive here at the
     // same time
     let mut process_inner = thread.process.inner.lock();
-
 
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
@@ -119,7 +120,6 @@ pub fn terminate_all_threads_except_main() {
 /// Terminate the given thread
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_given_thread(tid: usize, exit_code: i8) {
-
     if let Some(thread) = current_process().inner_handler(|proc| {
         proc.exit_code = exit_code;
         // let mut idx: Option<usize> = None;
@@ -132,7 +132,10 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
                     // break;
                 }
             } else {
-                panic!("Weak thread pointer is invalid in process {}", current_process().pid());
+                panic!(
+                    "Weak thread pointer is invalid in process {}",
+                    current_process().pid()
+                );
                 // return None;
             }
         }
@@ -145,4 +148,3 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
         thread.terminate();
     }
 }
-

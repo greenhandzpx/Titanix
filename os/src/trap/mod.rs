@@ -212,7 +212,7 @@ pub async fn trap_handler() {
 
 #[no_mangle]
 /// Back to user mode.
-/// Note that we don't need to flush TLB since user and 
+/// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
 pub fn trap_return(trap_context: &mut TrapContext) {
     set_user_trap_entry();
