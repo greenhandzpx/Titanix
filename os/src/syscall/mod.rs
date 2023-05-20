@@ -12,6 +12,7 @@
 const SYSCALL_GETCWD: usize = 17;
 const SYSCALL_DUP: usize = 23;
 const SYSCALL_DUP3: usize = 24;
+const SYSCALL_IOCTL: usize = 29;
 const SYSCALL_UNLINK: usize = 35;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UMOUNT: usize = 39;
@@ -55,6 +56,7 @@ const SEEK_SET: u8 = 0;
 const SEEK_CUR: u8 = 1;
 const SEEK_END: u8 = 2;
 
+mod dev;
 mod fs;
 mod mm;
 mod process;
@@ -62,6 +64,7 @@ mod sync;
 
 use core::arch::asm;
 
+use dev::*;
 use fs::*;
 use log::{debug, error, trace};
 use mm::*;
@@ -82,6 +85,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
         SYSCALL_DUP => sys_dup(args[0]),
         SYSCALL_DUP3 => sys_dup3(args[0], args[1], args[2] as u32),
+        SYSCALL_IOCTL => sys_ioctl(args[0], args[1] as isize, args[2]),
         SYSCALL_UNLINK => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
         SYSCALL_UMOUNT => sys_umount(args[0] as *const u8, args[1] as u32),
