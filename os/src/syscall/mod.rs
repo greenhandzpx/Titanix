@@ -21,6 +21,7 @@ const SYSCALL_OPEN: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_PIPE: usize = 59;
 const SYSCALL_GETDENTS: usize = 61;
+const SYSCALL_LSEEK: usize = 62;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_NEWFSTATAT: usize = 79;
@@ -50,6 +51,9 @@ const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAITPID: usize = 260;
 
 const AT_FDCWD: isize = -100;
+const SEEK_SET: u8 = 0;
+const SEEK_CUR: u8 = 1;
+const SEEK_END: u8 = 2;
 
 mod fs;
 mod mm;
@@ -58,15 +62,17 @@ mod sync;
 
 use core::arch::asm;
 
-pub use sync::futex_wake;
 use fs::*;
-use log::{error, debug, trace};
+use log::{debug, error, trace};
 use mm::*;
 use process::*;
+pub use sync::futex_wake;
 use sync::*;
 
-use crate::{signal::{SigAction, SigSet}, utils::error::SyscallRet};
-
+use crate::{
+    signal::{SigAction, SigSet},
+    utils::error::SyscallRet,
+};
 
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
@@ -88,7 +94,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_OPEN => sys_openat(
-            args[0],
+            args[0] as isize,
             args[1] as *const u8,
             args[2] as u32,
             args[3] as u32,
@@ -96,9 +102,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_CLOSE => sys_close(args[0]),
         SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
         SYSCALL_GETDENTS => sys_getdents(args[0], args[1], args[2]),
+        SYSCALL_LSEEK => sys_lseek(args[0], args[1] as isize, args[2] as u8),
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
-        SYSCALL_NEWFSTATAT => sys_newfstatst(args[0], args[1] as *const u8, args[2], args[3]),
+        SYSCALL_NEWFSTATAT => sys_newfstatat(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2],
+            args[3] as u32,
+        ),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
@@ -112,7 +124,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[1] as *const SigAction,
             args[2] as *mut SigAction,
         ),
-        SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(args[0] as i32, args[1] as *const usize, args[2] as *mut SigSet),
+        SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(
+            args[0] as i32,
+            args[1] as *const usize,
+            args[2] as *mut SigSet,
+        ),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_UNAME => sys_uname(args[0]),
@@ -129,7 +145,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3] as *const u8,
             args[4] as *const u8,
         ),
-        SYSCALL_EXECVE => sys_execve(args[0] as *const u8, args[1] as *const usize, args[2] as *const usize),
+        SYSCALL_EXECVE => sys_execve(
+            args[0] as *const u8,
+            args[1] as *const usize,
+            args[2] as *const usize,
+        ),
         SYSCALL_MMAP => sys_mmap(
             args[0] as *const u8,
             args[1],
