@@ -6,6 +6,7 @@ use crate::sync::mutex::SpinNoIrqLock;
 use crate::syscall::TimeDiff;
 use alloc::collections::BTreeMap;
 use lazy_static::*;
+use log::debug;
 use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
@@ -34,4 +35,13 @@ lazy_static! {
     /// Clock manager that used for looking for a given process
     pub static ref CLOCK_MANAGER: SpinNoIrqLock<ClockManager> =
         SpinNoIrqLock::new(ClockManager(BTreeMap::new()));
+}
+
+pub fn init() {
+    debug!("init clock manager start");
+    CLOCK_MANAGER
+        .lock()
+        .0
+        .insert(CLOCK_MONOTONIC, TimeDiff::init());
+    debug!("init clock manager finished");
 }

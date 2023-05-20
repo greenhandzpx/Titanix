@@ -212,6 +212,13 @@ pub struct TimeDiff {
     nsec: isize,
 }
 
+impl TimeDiff {
+    /// Creates a blank diff time_spec
+    pub fn init() -> Self {
+        Self { sec: 0, nsec: 0 }
+    }
+}
+
 /// Used for times
 #[repr(C)]
 pub struct Tms {

@@ -72,7 +72,7 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering, self},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use log::info;
@@ -129,7 +129,6 @@ pub fn rust_main(hart_id: usize) {
         utils::logging::init();
         processor::set_hart_stack();
 
-
         info!(r#"  _______ __              _     "#);
         info!(r#" /_  __(_) /_____ _____  (_)  __"#);
         info!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);
@@ -156,6 +155,8 @@ pub fn rust_main(hart_id: usize) {
 
         fs::init();
 
+        timer::init();
+
         mm::page_cache_test();
 
         process::thread::spawn_kernel_thread(async move {
@@ -175,9 +176,7 @@ pub fn rust_main(hart_id: usize) {
             hart_start(i, HART_START_ADDR);
         }
     } else {
-
         // The other harts
-
 
         // while !INIT_FINISHED.load(Ordering::Acquire) {}
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
@@ -193,7 +192,7 @@ pub fn rust_main(hart_id: usize) {
                 .activate();
         }
         info!("[kernel] ---------- hart {} started ---------- ", hart_id);
-        
+
         return;
     }
 
