@@ -6,7 +6,7 @@ use crate::sync::mutex::SpinNoIrqLock;
 use crate::syscall::TimeDiff;
 use alloc::collections::BTreeMap;
 use lazy_static::*;
-use log::debug;
+use log::info;
 use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
@@ -38,10 +38,10 @@ lazy_static! {
 }
 
 pub fn init() {
-    debug!("init clock manager start");
+    info!("init clock manager start");
     CLOCK_MANAGER
         .lock()
         .0
         .insert(CLOCK_MONOTONIC, TimeDiff::init());
-    debug!("init clock manager finished");
+    info!("init clock manager finished");
 }
