@@ -36,13 +36,6 @@ pub struct TimeDiff {
     pub nsec: isize,
 }
 
-impl TimeDiff {
-    /// Creates a blank diff time_spec
-    pub fn init() -> Self {
-        Self { sec: 0, nsec: 0 }
-    }
-}
-
 /// Used for times
 #[repr(C)]
 pub struct Tms {
@@ -74,10 +67,9 @@ lazy_static! {
 }
 
 pub fn init() {
-    info!("init clock manager start");
     CLOCK_MANAGER
         .lock()
         .0
-        .insert(CLOCK_MONOTONIC, TimeDiff::init());
-    info!("init clock manager finished");
+        .insert(CLOCK_MONOTONIC, TimeDiff { sec: 0, nsec: 0 });
+    info!("init clock manager success");
 }
