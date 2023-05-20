@@ -708,11 +708,12 @@ impl MemorySet {
         }
         let mut last_start = MMAP_TOP;
         // traverse reversely
-        let page_len = (length - 1 + PAGE_SIZE) / PAGE_SIZE;
+        let length_rounded = (length - 1 + PAGE_SIZE) / PAGE_SIZE * PAGE_SIZE;
         for vma in self.areas.iter().rev() {
-            let curr_end = vma.1.end_vpn().0;
-            if last_start - curr_end >= length {
-                let new_start = last_start - page_len;
+            // debug!("start {:#x}, end {:#x}", vma.1.start_vpn().0, vma.1.end_vpn().0);
+            let curr_end = vma.1.end_vpn().0 * PAGE_SIZE;
+            if last_start - curr_end >= length_rounded {
+                let new_start = last_start - length_rounded;
                 debug!("find an unused area: [{:#x}, {:#x}]", new_start, last_start);
                 return Some(VmArea::new(
                     new_start.into(),
@@ -723,7 +724,7 @@ impl MemorySet {
                     None,
                 ));
             }
-            last_start = vma.1.start_vpn().0;
+            last_start = vma.1.start_vpn().0 * PAGE_SIZE;
         }
         error!("Cannot find any unused vm area!!");
         None
