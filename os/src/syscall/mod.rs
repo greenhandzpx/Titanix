@@ -32,6 +32,8 @@ const SYSCALL_EXIT_GROUP: usize = 94;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
 const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
+const SYSCALL_CLOCK_SETTIME: usize = 112;
+const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_RT_SIGACTION: usize = 134;
@@ -121,6 +123,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
+        SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0], args[1] as *const TimeSpec),
+        SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(
@@ -188,18 +192,28 @@ pub fn user_sigreturn() {
 }
 
 /// Used for get time
+#[repr(C)]
 pub struct TimeVal {
     sec: usize,
     usec: usize,
 }
 
 /// Used for nanosleep
+#[repr(C)]
 pub struct TimeSpec {
     sec: usize,
     nsec: usize,
 }
 
+/// Used for clock_gettime
+/// arg_timespec - device_timespec = diff
+pub struct TimeDiff {
+    sec: isize,
+    nsec: isize,
+}
+
 /// Used for times
+#[repr(C)]
 pub struct Tms {
     utime: usize,
     stime: usize,

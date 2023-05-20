@@ -10,10 +10,11 @@ use crate::process::thread::{
     self, exit_and_terminate_all_threads, terminate_given_thread, Thread, TidHandle,
 };
 use crate::process::PROCESS_MANAGER;
-use crate::processor::{current_process, current_task, local_hart, SumGuard, current_trap_cx};
+use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
-use crate::signal::{SigAction, SigInfo, Signal, SigSet};
-use crate::timer::get_time_ms;
+use crate::signal::{SigAction, SigInfo, SigSet, Signal};
+use crate::syscall::TimeDiff;
+use crate::timer::{get_time_ms, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::trap::TrapContext;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
@@ -40,7 +41,11 @@ pub fn sys_exit(exit_code: i8) -> SyscallRet {
     stack_trace!();
     // // TODO how can we only exit one thread but still let the parent process can wait for the child
     // sys_exit_group(exit_code)
-    debug!("sys exit, exit code {}, sepc {:#x}", exit_code, current_trap_cx().sepc);
+    debug!(
+        "sys exit, exit code {}, sepc {:#x}",
+        exit_code,
+        current_trap_cx().sepc
+    );
     let tid = local_hart().current_task().tid();
     terminate_given_thread(tid, exit_code);
     // info!("exit finished");
@@ -78,6 +83,73 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
         time_val_ptr.write_volatile(time_val);
     }
     Ok(0)
+}
+
+fn get_time_spec() -> TimeSpec {
+    let current_time = get_time_ms();
+    let time_spec = TimeSpec {
+        sec: current_time / 1000,
+        nsec: current_time % 1000000 * 1000000,
+    };
+    time_spec
+}
+
+pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new()
+        .check_readable_slice(time_spec_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+    let _sum_guard = SumGuard::new();
+    let time_spec = unsafe { &*time_spec_ptr };
+    if (time_spec.sec as isize) < 0 {
+        debug!("Cannot set time. sec is negative");
+        return Err(SyscallErr::EINVAL);
+    } else if (time_spec.nsec as isize) < 0 || time_spec.nsec > 999999999 {
+        debug!("Cannot set time. nsec is invalid");
+        return Err(SyscallErr::EINVAL);
+    } else if clock_id == CLOCK_REALTIME && time_spec.sec < get_time_ms() / 1000 {
+        debug!("set the time to a value less than the current value of the CLOCK_MONOTONIC clock.");
+        return Err(SyscallErr::EINVAL);
+    }
+
+    // calculate the diff
+    // arg_timespec - device_timespec = diff
+    let dev_spec = get_time_spec();
+    let diff_spec = TimeDiff {
+        sec: time_spec.sec as isize - dev_spec.sec as isize,
+        nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
+    };
+
+    let mut manager_unlock = CLOCK_MANAGER.lock();
+    manager_unlock.0.insert(clock_id, diff_spec);
+
+    Ok(0)
+}
+
+pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new()
+        .check_writable_slice(time_spec_ptr as *mut u8, core::mem::size_of::<TimeSpec>())?;
+    let _sum_guard = SumGuard::new();
+    let manager_unlock = CLOCK_MANAGER.lock();
+    let clock = manager_unlock.0.get(&clock_id);
+    match clock {
+        Some(clock) => {
+            debug!("Find the clock");
+            let dev_spec = get_time_spec();
+            let time_spec = TimeSpec {
+                sec: (dev_spec.sec as isize + clock.sec) as usize,
+                nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
+            };
+            unsafe {
+                time_spec_ptr.write_volatile(time_spec);
+            }
+            Ok(0)
+        }
+        None => {
+            debug!("Cannot find the clock");
+            Err(SyscallErr::EINVAL)
+        }
+    }
 }
 
 pub fn sys_times(buf: *mut Tms) -> SyscallRet {
@@ -384,9 +456,11 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
             // return Ok(ret);
         } else {
             if exit_status_addr != 0 {
-                UserCheck::new()
-                    .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
-                // TODO: here may cause some concurrency problem between we user_check and write it 
+                UserCheck::new().check_writable_slice(
+                    exit_status_addr as *mut u8,
+                    core::mem::size_of::<i32>(),
+                )?;
+                // TODO: here may cause some concurrency problem between we user_check and write it
                 let _sum_guard = SumGuard::new();
                 let exit_status_ptr = exit_status_addr as *mut i32;
                 debug!("waitpid: write pid to exit_status_ptr before");
@@ -446,7 +520,8 @@ enum SigProcmaskHow {
 pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> SyscallRet {
     current_process().inner_handler(|proc| {
         if old_set as usize != 0 {
-            UserCheck::new().check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
+            UserCheck::new()
+                .check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
             let _sum_guard = SumGuard::new();
             unsafe {
                 *old_set = proc.pending_sigs.blocked_sigs;
@@ -454,38 +529,32 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
         }
         if set as usize == 0 {
             debug!("arg set is null");
-            return Ok(0)
-        } 
+            return Ok(0);
+        }
         UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
-                if let Some(new_sig_mask) = unsafe {
-                    SigSet::from_bits(*set)
-                } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
-                    return Ok(0)
+                    return Ok(0);
                 } else {
                     debug!("invalid set arg");
                     return Err(SyscallErr::EINVAL);
                 }
             }
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
-                if let Some(new_sig_mask) = unsafe {
-                    SigSet::from_bits(*set)
-                } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
-                    return Ok(0)
+                    return Ok(0);
                 } else {
                     debug!("invalid set arg");
                     return Err(SyscallErr::EINVAL);
                 }
             }
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
-                if let Some(new_sig_mask) = unsafe {
-                    SigSet::from_bits(*set)
-                } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
-                    return Ok(0)
+                    return Ok(0);
                 } else {
                     debug!("invalid set arg");
                     return Err(SyscallErr::EINVAL);
@@ -666,7 +735,6 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
         }
     })
 }
-
 
 pub fn sys_getuid() -> SyscallRet {
     // TODO: not sure

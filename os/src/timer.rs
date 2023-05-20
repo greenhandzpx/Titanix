@@ -2,10 +2,19 @@
 
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
+use crate::sync::mutex::SpinNoIrqLock;
+use crate::syscall::TimeDiff;
+use alloc::collections::BTreeMap;
+use lazy_static::*;
 use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
+
+/// for clock_gettime
+pub const CLOCK_REALTIME: usize = 0;
+pub const CLOCK_MONOTONIC: usize = 1;
+
 ///get current time
 fn get_time() -> usize {
     time::read()
@@ -17,4 +26,12 @@ pub fn get_time_ms() -> usize {
 /// set the next timer interrupt
 pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
+}
+
+pub struct ClockManager(pub BTreeMap<usize, TimeDiff>);
+
+lazy_static! {
+    /// Clock manager that used for looking for a given process
+    pub static ref CLOCK_MANAGER: SpinNoIrqLock<ClockManager> =
+        SpinNoIrqLock::new(ClockManager(BTreeMap::new()));
 }
