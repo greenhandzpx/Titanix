@@ -1,6 +1,5 @@
 //! File and filesystem-related syscalls
-use core::intrinsics::mul_with_overflow;
-use core::mem::size_of_val;
+use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
 
@@ -9,26 +8,20 @@ use alloc::sync::Arc;
 use log::{debug, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
-use crate::fs::inode::INODE_CACHE;
 use crate::fs::kstat::{KSTAT, KSTAT_SIZE};
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
     dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
-    UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    Iovec, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
-use crate::mm::memory_set::page_fault_handler::MmapPageFaultHandler;
-use crate::mm::memory_set::vm_area::BackupFile;
-use crate::mm::memory_set::{PageFaultHandler, VmArea};
 use crate::mm::user_check::UserCheck;
-use crate::mm::{MapPermission, VirtAddr};
 use crate::processor::{current_process, SumGuard};
 use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::get_time_ms;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
 use crate::utils::string::c_str_to_string;
-use crate::utils::{debug, path};
 use crate::{fs, stack_trace};
 
 // const FD_STDIN: usize = 0;
@@ -576,6 +569,45 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     file.write(buf).await
+}
+
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
+    stack_trace!();
+    debug!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.writable() {
+        return Err(SyscallErr::EPERM);
+    }
+
+    stack_trace!();
+    let mut ret: usize = 0;
+    let iovec_size = core::mem::size_of::<Iovec>();
+
+    let _sum_guard = SumGuard::new();
+
+    for i in 0..iovcnt {
+        debug!("write the {} buf", i + 1);
+        // current iovec pointer
+        let current = iov.add(iovec_size * i);
+        debug!("current iov: {}", current);
+        UserCheck::new().check_readable_slice(current as *const u8, iovec_size)?;
+        debug!("pass readable check");
+        let iov_base = unsafe { &*(current as *const Iovec) }.iov_base;
+        debug!("get iov_base: {}", iov_base);
+        let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
+        debug!("get iov_len: {}", iov_len);
+        ret += iov_len;
+        UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
+        let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
+        let fw_ret = file.write(buf).await;
+        // if error, return
+        if fw_ret.is_err() {
+            return fw_ret;
+        }
+    }
+    Ok(ret as isize)
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {

@@ -15,6 +15,7 @@ pub mod pipe;
 mod procfs;
 mod stdio;
 mod testfs;
+mod uio;
 
 // pub use dentry::Dentry;
 pub use dirent::Dirent;
@@ -29,6 +30,7 @@ pub use inode::Inode;
 pub use inode::InodeMode;
 pub use stdio::Stdin;
 pub use stdio::Stdout;
+pub use uio::*;
 pub use utsname::UtsName;
 pub use utsname::UTSNAME_SIZE;
 
