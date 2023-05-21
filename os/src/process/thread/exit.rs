@@ -17,15 +17,14 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // Thread resource(i.e. tid, ustack) will be
     // released when the thread is destructed automatically
 
+    // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
+    let inner = unsafe { &mut (*thread.inner.get()) };
+    debug!("clear tid address");
+    inner.tid_addr.take();
     // We should visit the process inner exclusively
     // since different harts may arrive here at the
     // same time
     let mut process_inner = thread.process.inner.lock();
-
-    let inner = unsafe { &mut (*thread.inner.get()) };
-    debug!("clear tid address");
-    // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
-    inner.tid_addr.take();
 
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
