@@ -49,8 +49,6 @@ printf("fstat: dev: %d, inode: %d, mode: %d, nlink: %d, size: %d, atime: %d, mti
 
 需要返回当前进程的工作目录（cwd），需要对传入的用户态的内存空间进行check，可以写入之后将cwd拷贝到用户空间的指定位置
 
-已经通过
-
 # getdents
 
 比赛官方要求实现getdents64的系统调用，该dirent的结构是特殊的，不是vfs需要实现的dentry，是需要返回给用户的dirent，因此：
@@ -59,19 +57,13 @@ printf("fstat: dev: %d, inode: %d, mode: %d, nlink: %d, size: %d, atime: %d, mti
 
 该系统调用实现将传入的fd对应的file下面的inode的所有孩子inode的部分信息返回到指定的用户空间的内存当中，并返回拷贝的长度。
 
-已经通过
-
 # mkdir
 
 This system call will create a new inode for the new directory, and write to disk. Besides, it will create "." directory and ".." directory to connect with the parent directory.
 
 EEXIST pathname already exists (not necessarily as a directory). This includes the case where pathname is a symbolic link, dangling or not.
 
-已通过
-
 # mount
-
-*需要更改UserCheck，目前不能实现不带大小的check*
 
 在Linux中，mount系统调用需要以下参数：
 
@@ -122,7 +114,9 @@ EEXIST pathname already exists (not necessarily as a directory). This includes t
 
 返回挂载点对象，表示成功挂载文件系统。
 
-openat: 队长已实现
+# openat
+
+打开指定dird下面的
 
 pipe: 队长已实现
 
@@ -133,8 +127,6 @@ umount:
 # uname
 
 This system call is used to get the name and some information about current kernel.
-
-已经通过
 
 # unlink
 

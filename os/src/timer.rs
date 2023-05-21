@@ -71,5 +71,11 @@ pub fn init() {
         .lock()
         .0
         .insert(CLOCK_MONOTONIC, TimeDiff { sec: 0, nsec: 0 });
+
+    CLOCK_MANAGER
+        .lock()
+        .0
+        .insert(CLOCK_REALTIME, TimeDiff { sec: 0, nsec: 0 });
+
     info!("init clock manager success");
 }

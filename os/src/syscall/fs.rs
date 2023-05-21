@@ -12,7 +12,7 @@ use crate::fs::kstat::{KSTAT, KSTAT_SIZE};
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
     dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
-    Iovec, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    Iovec, StatFlags, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
@@ -424,22 +424,42 @@ fn _fstat(fd: usize, kst: usize) -> SyscallRet {
 
 pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32) -> SyscallRet {
     stack_trace!();
+    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(pathname)?;
     UserCheck::new().check_writable_slice(kst as *mut u8, KSTAT_SIZE)?;
     stack_trace!();
     let absolute_path: Option<String>;
-    if dirfd == AT_FDCWD {
-        debug!("path with cwd");
-        absolute_path = Path::path_process(pathname);
-    } else {
-        debug!("path with dirfd");
-        absolute_path = Path::path_with_dirfd(dirfd, pathname);
+    if flags.contains(StatFlags::AT_SYMLINK_NOFOLLOW) {
+        // todo: support symlink?
+        debug!("the pathname represent a symbolic link");
     }
+    if flags.contains(StatFlags::AT_EMPTY_PATH) {
+        // path is empty
+        // If dirfd is AT_FDCWD, change it to absolute path
+        if dirfd == AT_FDCWD {
+            debug!("[newfstatat] empty path with cwd");
+            let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+            debug!("cwd {}", cwd);
+            absolute_path = Some(cwd);
+        } else {
+            debug!("[newfstatat] empty path with dirfd");
+            return _fstat(dirfd as usize, kst);
+        }
+    } else {
+        if dirfd == AT_FDCWD {
+            debug!("[newfstatat] path with cwd");
+            absolute_path = Path::path_process(pathname);
+        } else {
+            debug!("[newfstatat] path with dirfd");
+            absolute_path = Path::path_with_dirfd(dirfd, pathname);
+        }
+    }
+    debug!("[newfstatat] final absolute path: {:?}", absolute_path);
 
-    let fd = _openat(absolute_path, flags)?;
+    let fd = _openat(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
 
-    _fstat(fd as usize, kst)
+    return _fstat(fd as usize, kst);
 }
 
 pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
@@ -499,6 +519,10 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
 /// We should give the absolute path (Or None) to _openat function.
 fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
     stack_trace!();
+    debug!(
+        "[_openat] absolute path: {:?}, flags: {}",
+        absolute_path, flags
+    );
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     match absolute_path {
         Some(absolute_path) => {
@@ -528,7 +552,10 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                 Err(SyscallErr::EACCES)
             }
         }
-        None => Err(SyscallErr::ENOENT),
+        None => {
+            debug!("cannot find the file, absolute_path is none");
+            Err(SyscallErr::ENOENT)
+        }
     }
 }
 

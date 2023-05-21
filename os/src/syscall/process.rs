@@ -12,8 +12,8 @@ use crate::process::thread::{
 use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
-use crate::signal::{SigAction, SigInfo, SigSet, Signal, SigActionKernel};
-use crate::timer::{get_time_ms, CLOCK_REALTIME, TimeDiff, CLOCK_MANAGER};
+use crate::signal::{SigAction, SigActionKernel, SigInfo, SigSet, Signal};
+use crate::timer::{get_time_ms, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::trap::TrapContext;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
@@ -150,7 +150,7 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             Ok(0)
         }
         None => {
-            debug!("Cannot find the clock");
+            debug!("Cannot find the clock: {}", clock_id);
             Err(SyscallErr::EINVAL)
         }
     }
@@ -513,7 +513,10 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             let sig_handler_locked = proc.sig_handler.lock();
             let oldact_ref = sig_handler_locked.get(sig as usize);
             unsafe {
-                oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, core::mem::size_of::<SigAction>());
+                oldact.copy_from(
+                    &oldact_ref.unwrap().sig_action as *const SigAction,
+                    core::mem::size_of::<SigAction>(),
+                );
             }
         }
         UserCheck::new()
@@ -523,7 +526,10 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             sig_action: unsafe { *act },
             is_user_defined: true,
         };
-        debug!("[sys_rt_sigaction]: set new sig handler {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize);
+        debug!(
+            "[sys_rt_sigaction]: set new sig handler {:#x}",
+            new_sigaction.sig_action.sa_handler as *const usize as usize
+        );
         proc.sig_handler
             .lock()
             .set_sigaction(sig as usize, new_sigaction);
@@ -571,7 +577,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
                     return Ok(0);
                 } else {
-                    warn!("[sys_rt_sigprocmask]: invalid set arg, raw sig mask {}", unsafe { *set });
+                    warn!(
+                        "[sys_rt_sigprocmask]: invalid set arg, raw sig mask {}",
+                        unsafe { *set }
+                    );
                     return Err(SyscallErr::EINVAL);
                 }
             }

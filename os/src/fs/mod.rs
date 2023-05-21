@@ -63,6 +63,13 @@ bitflags! {
         ///Directory
         const DIRECTORY = 1 << 21;
     }
+
+    /// stat flags
+    pub struct StatFlags: u32 {
+        const AT_EMPTY_PATH = 1 << 0;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_SYMLINK_NOFOLLOW = 1 << 8;
+    }
 }
 
 impl OpenFlags {
