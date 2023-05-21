@@ -13,7 +13,7 @@ use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::{SigAction, SigInfo, SigSet, Signal, SigActionKernel};
-use crate::timer::get_time_ms;
+use crate::timer::{get_time_ms, CLOCK_REALTIME, TimeDiff, CLOCK_MANAGER};
 use crate::trap::TrapContext;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
@@ -87,6 +87,73 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
         time_val_ptr.write_volatile(time_val);
     }
     Ok(0)
+}
+
+fn get_time_spec() -> TimeSpec {
+    let current_time = get_time_ms();
+    let time_spec = TimeSpec {
+        sec: current_time / 1000,
+        nsec: current_time % 1000000 * 1000000,
+    };
+    time_spec
+}
+
+pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new()
+        .check_readable_slice(time_spec_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+    let _sum_guard = SumGuard::new();
+    let time_spec = unsafe { &*time_spec_ptr };
+    if (time_spec.sec as isize) < 0 {
+        debug!("Cannot set time. sec is negative");
+        return Err(SyscallErr::EINVAL);
+    } else if (time_spec.nsec as isize) < 0 || time_spec.nsec > 999999999 {
+        debug!("Cannot set time. nsec is invalid");
+        return Err(SyscallErr::EINVAL);
+    } else if clock_id == CLOCK_REALTIME && time_spec.sec < get_time_ms() / 1000 {
+        debug!("set the time to a value less than the current value of the CLOCK_MONOTONIC clock.");
+        return Err(SyscallErr::EINVAL);
+    }
+
+    // calculate the diff
+    // arg_timespec - device_timespec = diff
+    let dev_spec = get_time_spec();
+    let diff_spec = TimeDiff {
+        sec: time_spec.sec as isize - dev_spec.sec as isize,
+        nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
+    };
+
+    let mut manager_unlock = CLOCK_MANAGER.lock();
+    manager_unlock.0.insert(clock_id, diff_spec);
+
+    Ok(0)
+}
+
+pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new()
+        .check_writable_slice(time_spec_ptr as *mut u8, core::mem::size_of::<TimeSpec>())?;
+    let _sum_guard = SumGuard::new();
+    let manager_unlock = CLOCK_MANAGER.lock();
+    let clock = manager_unlock.0.get(&clock_id);
+    match clock {
+        Some(clock) => {
+            debug!("Find the clock");
+            let dev_spec = get_time_spec();
+            let time_spec = TimeSpec {
+                sec: (dev_spec.sec as isize + clock.sec) as usize,
+                nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
+            };
+            unsafe {
+                time_spec_ptr.write_volatile(time_spec);
+            }
+            Ok(0)
+        }
+        None => {
+            debug!("Cannot find the clock");
+            Err(SyscallErr::EINVAL)
+        }
+    }
 }
 
 pub fn sys_times(buf: *mut Tms) -> SyscallRet {

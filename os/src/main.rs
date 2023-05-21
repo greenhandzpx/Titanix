@@ -151,6 +151,8 @@ pub fn rust_main(hart_id: usize) {
 
         fs::init();
 
+        timer::init();
+
         mm::page_cache_test();
 
         process::thread::spawn_kernel_thread(async move {
