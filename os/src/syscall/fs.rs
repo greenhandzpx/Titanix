@@ -624,3 +624,9 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     debug!("[sys_pipe]: read fd {}, write fd {}", read_fd, write_fd);
     Ok(0)
 }
+
+pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
+    debug!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
+    // TODO
+    Ok(0)
+}

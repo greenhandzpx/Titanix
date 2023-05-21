@@ -12,6 +12,7 @@
 const SYSCALL_GETCWD: usize = 17;
 const SYSCALL_DUP: usize = 23;
 const SYSCALL_DUP3: usize = 24;
+const SYSCALL_FCNTL: usize = 25;
 const SYSCALL_IOCTL: usize = 29;
 const SYSCALL_UNLINK: usize = 35;
 const SYSCALL_MKDIR: usize = 34;
@@ -41,11 +42,14 @@ const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
 const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
+const SYSCALL_SETPGID: usize = 154;
+const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
+const SYSCALL_GETEUID: usize = 175;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -78,17 +82,18 @@ use sync::*;
 use crate::{
     signal::{SigAction, SigSet},
     timer::*,
-    utils::error::SyscallRet,
+    utils::error::SyscallRet, processor::current_trap_cx,
 };
 
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!("syscall id: {}", syscall_id);
+    trace!("syscall id: {}, sepc {:#x}", syscall_id, current_trap_cx().sepc);
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
         SYSCALL_DUP => sys_dup(args[0]),
         SYSCALL_DUP3 => sys_dup3(args[0], args[1], args[2] as u32),
+        SYSCALL_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2] as usize),
         SYSCALL_IOCTL => sys_ioctl(args[0], args[1] as isize, args[2]),
         SYSCALL_UNLINK => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
         SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
@@ -141,11 +146,14 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
+        SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
+        SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_UNAME => sys_uname(args[0]),
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
+        SYSCALL_GETEUID => sys_geteuid(),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
         SYSCALL_CLONE => sys_clone(
@@ -170,9 +178,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
         SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1]).await,
-        SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
         _ => {
-            panic!("Unsupported syscall_id: {}", syscall_id);
+            // panic!("Unsupported syscall_id: {}", syscall_id);
+            error!("Unsupported syscall_id: {}", syscall_id);
             Ok(0)
         }
     }

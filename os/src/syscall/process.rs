@@ -501,41 +501,42 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
 
 pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
-    if sig < 0 || sig as usize >= SIG_NUM {
-        return Err(SyscallErr::EINVAL);
-    }
-    debug!("[sys_rt_sigaction]: sig {}", sig);
-    current_process().inner_handler(|proc| {
-        let _sum_guard = SumGuard::new();
+    Ok(0)
+    // if sig < 0 || sig as usize >= SIG_NUM {
+    //     return Err(SyscallErr::EINVAL);
+    // }
+    // debug!("[sys_rt_sigaction]: sig {}", sig);
+    // current_process().inner_handler(|proc| {
+    //     let _sum_guard = SumGuard::new();
 
-        if oldact as *const u8 != core::ptr::null::<u8>() {
-            UserCheck::new()
-                .check_writable_slice(oldact as *mut u8, core::mem::size_of::<SigAction>())?;
-            let sig_handler_locked = proc.sig_handler.lock();
-            let oldact_ref = sig_handler_locked.get(sig as usize);
-            unsafe {
-                oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, core::mem::size_of::<SigAction>());
-            }
-        }
+    //     if oldact as *const u8 != core::ptr::null::<u8>() {
+    //         UserCheck::new()
+    //             .check_writable_slice(oldact as *mut u8, core::mem::size_of::<SigAction>())?;
+    //         let sig_handler_locked = proc.sig_handler.lock();
+    //         let oldact_ref = sig_handler_locked.get(sig as usize);
+    //         unsafe {
+    //             oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, core::mem::size_of::<SigAction>());
+    //         }
+    //     }
 
-        debug!("ra1: {:#x}, sp {:#x}", current_trap_cx().user_x[1], current_trap_cx().user_x[2]);
+    //     debug!("ra1: {:#x}, sp {:#x}", current_trap_cx().user_x[1], current_trap_cx().user_x[2]);
 
-        if act as *const u8 != core::ptr::null::<u8>() {
-            UserCheck::new()
-                .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
+    //     if act as *const u8 != core::ptr::null::<u8>() {
+    //         UserCheck::new()
+    //             .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
-            let new_sigaction = SigActionKernel {
-                sig_action: unsafe { *act },
-                is_user_defined: true,
-            };
-            debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
-            proc.sig_handler
-                .lock()
-                .set_sigaction(sig as usize, new_sigaction);
+    //         let new_sigaction = SigActionKernel {
+    //             sig_action: unsafe { *act },
+    //             is_user_defined: true,
+    //         };
+    //         debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
+    //         proc.sig_handler
+    //             .lock()
+    //             .set_sigaction(sig as usize, new_sigaction);
 
-        }
-        Ok(0)
-    })
+    //     }
+    //     Ok(0)
+    // })
 }
 
 enum SigProcmaskHow {
@@ -774,5 +775,20 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
 
 pub fn sys_getuid() -> SyscallRet {
     // TODO: not sure
+    Ok(0)
+}
+
+pub fn sys_getpgid(_pid: usize) -> SyscallRet {
+    // TODO
+    Ok(0)
+}
+
+pub fn sys_setpgid(_pid: usize, _gid: usize) -> SyscallRet {
+    // TODO
+    Ok(0)
+}
+
+pub fn sys_geteuid() -> SyscallRet {
+    // TODO
     Ok(0)
 }

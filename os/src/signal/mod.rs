@@ -86,9 +86,9 @@ impl SigHandlerManager {
 #[repr(C)]
 pub struct SigAction {
     pub sa_handler: fn(usize),
+    pub sa_flags: usize,
     // pub sa_sigaction: fn(i32, *const u8, *const u8),
     // pub sa_sigaction: usize,
-    pub sa_flags: usize,
     pub sa_restorer: usize,
     pub sa_mask: [SigSet; 1],
     // pub sa_mask: [SigSet; 2],
