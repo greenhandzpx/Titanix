@@ -1,13 +1,14 @@
-use core::{cell::SyncUnsafeCell, arch::asm};
+use core::{arch::asm, cell::SyncUnsafeCell};
 
 use alloc::sync::Arc;
 use log::info;
 use riscv::register::sstatus::{self, FS};
 
 use crate::{
+    config::{mm::PAGE_SIZE, processor::HART_NUM},
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
-    stack_trace, config::{processor::HART_NUM, mm::PAGE_SIZE},
+    stack_trace,
 };
 
 use super::context::{EnvContext, KernelTaskContext, LocalContext};
@@ -129,7 +130,6 @@ impl Hart {
     }
 }
 
-
 const HART_EACH: Hart = Hart::new();
 pub static mut HARTS: [Hart; HART_NUM] = [HART_EACH; HART_NUM];
 
@@ -164,9 +164,12 @@ pub fn local_hart() -> &'static mut Hart {
     }
 }
 
-
 pub fn init(hart_id: usize) {
-    unsafe { set_local_hart(hart_id); }
+    unsafe {
+        set_local_hart(hart_id);
+    }
     set_hart_stack();
-    unsafe { sstatus::set_fs(FS::Clean); }
+    unsafe {
+        sstatus::set_fs(FS::Clean);
+    }
 }

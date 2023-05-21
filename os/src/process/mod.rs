@@ -24,7 +24,7 @@ use crate::{
         aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
         thread::terminate_all_threads_except_main,
     },
-    processor::{current_process, current_task, SumGuard, hart::local_hart},
+    processor::{current_process, current_task, hart::local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar},

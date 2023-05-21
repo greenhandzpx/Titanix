@@ -41,6 +41,7 @@ bitflags! {
         const SIGTERM = 1 << 15;
         const SIGCHLD = 1 << 17;
         const SIGSTOP = 1 << 19;
+        const SIGRTMIN = 1 << 32;
     }
 }
 
@@ -50,7 +51,8 @@ pub struct SigHandlerManager {
 
 impl SigHandlerManager {
     pub fn new() -> Self {
-        let mut sigactions: [SigActionKernel; SIG_NUM] = core::array::from_fn(|_| SigActionKernel::new(false));
+        let mut sigactions: [SigActionKernel; SIG_NUM] =
+            core::array::from_fn(|_| SigActionKernel::new(false));
         sigactions[Signal::SIGABRT as usize].sig_action.sa_handler = core_sig_handler;
         sigactions[Signal::SIGHUP as usize].sig_action.sa_handler = term_sig_handler;
         sigactions[Signal::SIGINT as usize].sig_action.sa_handler = term_sig_handler;
@@ -84,14 +86,23 @@ impl SigHandlerManager {
 #[repr(C)]
 pub struct SigAction {
     pub sa_handler: fn(usize),
-    pub sa_mask: SigSet,
+    // pub sa_sigaction: fn(i32, *const u8, *const u8),
+    // pub sa_sigaction: usize,
+    pub sa_flags: usize,
+    pub sa_restorer: usize,
+    pub sa_mask: [SigSet; 1],
+    // pub sa_mask: [SigSet; 2],
+    // pub sa_restorer: fn(),
 }
 
 impl SigAction {
     pub fn new() -> Self {
         Self {
             sa_handler: default_sig_handler,
-            sa_mask: SigSet::from_bits(0).unwrap(),
+            // sa_sigaction: 0,
+            sa_mask: [SigSet::from_bits(0).unwrap(); 1],
+            sa_flags: 0,
+            sa_restorer: 0,
         }
     }
 }
@@ -133,8 +144,10 @@ pub fn check_signal_for_current_process() {
             save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
 
             proc.pending_sigs.blocked_sigs |= signo_shift;
-            proc.pending_sigs.blocked_sigs |=
-                proc.sig_handler.lock().sigactions[sig_info.signo].sig_action.sa_mask;
+            // TODO: only use the first element now
+            proc.pending_sigs.blocked_sigs |= proc.sig_handler.lock().sigactions[sig_info.signo]
+                .sig_action
+                .sa_mask[0];
 
             Some((sig_info, proc.sig_handler.lock().sigactions[signo]))
         }) {
@@ -148,10 +161,15 @@ pub fn check_signal_for_current_process() {
 }
 
 fn handle_signal(signo: usize, sig_action: SigActionKernel) {
+    debug!("handle signal {}", signo);
     if sig_action.is_user_defined {
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;
+        if sig_action.sig_action.sa_restorer != 0 {
+            // ra
+            current_trap_cx().user_x[1] = sig_action.sig_action.sa_restorer;
+        }
     } else {
         // Just in kernel mode
         // TODO: change to async

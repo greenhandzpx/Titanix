@@ -6,7 +6,7 @@ use crate::{
 
 pub use self::hart::{local_hart, HARTS};
 
-use self::{context::EnvContext};
+use self::context::EnvContext;
 pub mod context;
 pub mod env;
 pub mod hart;
@@ -15,7 +15,6 @@ use alloc::sync::Arc;
 pub use env::SumGuard;
 
 /// We store the local hart's addr in `tp` reg, instead of the hart id,
-
 
 pub fn local_env() -> &'static mut EnvContext {
     local_hart().env()

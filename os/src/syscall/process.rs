@@ -12,8 +12,8 @@ use crate::process::thread::{
 use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
-use crate::signal::{SigAction, SigInfo, SigSet, Signal, SigActionKernel};
-use crate::timer::{get_time_ms, CLOCK_REALTIME, TimeDiff, CLOCK_MANAGER};
+use crate::signal::{SigAction, SigActionKernel, SigInfo, SigSet, Signal};
+use crate::timer::{get_time_ms, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::trap::TrapContext;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
@@ -504,6 +504,7 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
     if sig < 0 || sig as usize >= SIG_NUM {
         return Err(SyscallErr::EINVAL);
     }
+    debug!("[sys_rt_sigaction]: sig {}", sig);
     current_process().inner_handler(|proc| {
         let _sum_guard = SumGuard::new();
 
@@ -516,17 +517,23 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
                 oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, core::mem::size_of::<SigAction>());
             }
         }
-        UserCheck::new()
-            .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
-        let new_sigaction = SigActionKernel {
-            sig_action: unsafe { *act },
-            is_user_defined: true,
-        };
-        debug!("[sys_rt_sigaction]: set new sig handler {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize);
-        proc.sig_handler
-            .lock()
-            .set_sigaction(sig as usize, new_sigaction);
+        debug!("ra1: {:#x}, sp {:#x}", current_trap_cx().user_x[1], current_trap_cx().user_x[2]);
+
+        if act as *const u8 != core::ptr::null::<u8>() {
+            UserCheck::new()
+                .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
+
+            let new_sigaction = SigActionKernel {
+                sig_action: unsafe { *act },
+                is_user_defined: true,
+            };
+            debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
+            proc.sig_handler
+                .lock()
+                .set_sigaction(sig as usize, new_sigaction);
+
+        }
         Ok(0)
     })
 }
@@ -571,7 +578,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
                     return Ok(0);
                 } else {
-                    warn!("[sys_rt_sigprocmask]: invalid set arg, raw sig mask {}", unsafe { *set });
+                    warn!(
+                        "[sys_rt_sigprocmask]: invalid set arg, raw sig mask {:#x}",
+                        unsafe { *set }
+                    );
                     return Err(SyscallErr::EINVAL);
                 }
             }
