@@ -15,6 +15,7 @@ pub mod pipe;
 mod procfs;
 mod stdio;
 mod testfs;
+mod uio;
 
 // pub use dentry::Dentry;
 pub use dirent::Dirent;
@@ -29,6 +30,7 @@ pub use inode::Inode;
 pub use inode::InodeMode;
 pub use stdio::Stdin;
 pub use stdio::Stdout;
+pub use uio::*;
 pub use utsname::UtsName;
 pub use utsname::UTSNAME_SIZE;
 
@@ -60,6 +62,13 @@ bitflags! {
         const TRUNC = 1 << 10;
         ///Directory
         const DIRECTORY = 1 << 21;
+    }
+
+    /// stat flags
+    pub struct StatFlags: u32 {
+        const AT_EMPTY_PATH = 1 << 0;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_SYMLINK_NOFOLLOW = 1 << 8;
     }
 }
 

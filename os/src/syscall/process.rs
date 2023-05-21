@@ -150,7 +150,7 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             Ok(0)
         }
         None => {
-            debug!("Cannot find the clock");
+            debug!("Cannot find the clock: {}", clock_id);
             Err(SyscallErr::EINVAL)
         }
     }

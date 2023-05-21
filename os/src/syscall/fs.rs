@@ -1,6 +1,5 @@
 //! File and filesystem-related syscalls
-use core::intrinsics::mul_with_overflow;
-use core::mem::size_of_val;
+use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
 
@@ -9,26 +8,20 @@ use alloc::sync::Arc;
 use log::{debug, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
-use crate::fs::inode::INODE_CACHE;
 use crate::fs::kstat::{KSTAT, KSTAT_SIZE};
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
     dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
-    UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    Iovec, StatFlags, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
-use crate::mm::memory_set::page_fault_handler::MmapPageFaultHandler;
-use crate::mm::memory_set::vm_area::BackupFile;
-use crate::mm::memory_set::{PageFaultHandler, VmArea};
 use crate::mm::user_check::UserCheck;
-use crate::mm::{MapPermission, VirtAddr};
 use crate::processor::{current_process, SumGuard};
 use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::get_time_ms;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
 use crate::utils::string::c_str_to_string;
-use crate::utils::{debug, path};
 use crate::{fs, stack_trace};
 
 // const FD_STDIN: usize = 0;
@@ -431,22 +424,42 @@ fn _fstat(fd: usize, kst: usize) -> SyscallRet {
 
 pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32) -> SyscallRet {
     stack_trace!();
+    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(pathname)?;
     UserCheck::new().check_writable_slice(kst as *mut u8, KSTAT_SIZE)?;
     stack_trace!();
     let absolute_path: Option<String>;
-    if dirfd == AT_FDCWD {
-        debug!("path with cwd");
-        absolute_path = Path::path_process(pathname);
-    } else {
-        debug!("path with dirfd");
-        absolute_path = Path::path_with_dirfd(dirfd, pathname);
+    if flags.contains(StatFlags::AT_SYMLINK_NOFOLLOW) {
+        // todo: support symlink?
+        debug!("the pathname represent a symbolic link");
     }
+    if flags.contains(StatFlags::AT_EMPTY_PATH) {
+        // path is empty
+        // If dirfd is AT_FDCWD, change it to absolute path
+        if dirfd == AT_FDCWD {
+            debug!("[newfstatat] empty path with cwd");
+            let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+            debug!("cwd {}", cwd);
+            absolute_path = Some(cwd);
+        } else {
+            debug!("[newfstatat] empty path with dirfd");
+            return _fstat(dirfd as usize, kst);
+        }
+    } else {
+        if dirfd == AT_FDCWD {
+            debug!("[newfstatat] path with cwd");
+            absolute_path = Path::path_process(pathname);
+        } else {
+            debug!("[newfstatat] path with dirfd");
+            absolute_path = Path::path_with_dirfd(dirfd, pathname);
+        }
+    }
+    debug!("[newfstatat] final absolute path: {:?}", absolute_path);
 
-    let fd = _openat(absolute_path, flags)?;
+    let fd = _openat(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
 
-    _fstat(fd as usize, kst)
+    return _fstat(fd as usize, kst);
 }
 
 pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
@@ -506,6 +519,10 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
 /// We should give the absolute path (Or None) to _openat function.
 fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
     stack_trace!();
+    debug!(
+        "[_openat] absolute path: {:?}, flags: {}",
+        absolute_path, flags
+    );
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     match absolute_path {
         Some(absolute_path) => {
@@ -535,7 +552,10 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                 Err(SyscallErr::EACCES)
             }
         }
-        None => Err(SyscallErr::ENOENT),
+        None => {
+            debug!("cannot find the file, absolute_path is none");
+            Err(SyscallErr::ENOENT)
+        }
     }
 }
 
@@ -576,6 +596,45 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     file.write(buf).await
+}
+
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
+    stack_trace!();
+    debug!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.writable() {
+        return Err(SyscallErr::EPERM);
+    }
+
+    stack_trace!();
+    let mut ret: usize = 0;
+    let iovec_size = core::mem::size_of::<Iovec>();
+
+    let _sum_guard = SumGuard::new();
+
+    for i in 0..iovcnt {
+        debug!("write the {} buf", i + 1);
+        // current iovec pointer
+        let current = iov.add(iovec_size * i);
+        debug!("current iov: {}", current);
+        UserCheck::new().check_readable_slice(current as *const u8, iovec_size)?;
+        debug!("pass readable check");
+        let iov_base = unsafe { &*(current as *const Iovec) }.iov_base;
+        debug!("get iov_base: {}", iov_base);
+        let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
+        debug!("get iov_len: {}", iov_len);
+        ret += iov_len;
+        UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
+        let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
+        let fw_ret = file.write(buf).await;
+        // if error, return
+        if fw_ret.is_err() {
+            return fw_ret;
+        }
+    }
+    Ok(ret as isize)
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
