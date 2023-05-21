@@ -32,3 +32,16 @@
 - 将所有的`lookup_from_root_tmp`替换
 - FileSystemMeta相关方法重构
 - 重构mmap中的backup file结构，用inode而不是用file
+- 通过builder模式来重构一些类的构造过程
+- 实现读写锁
+- 系统调用快速路径
+- fat32懒加载时需要注意文件对应簇的缓存
+- 实现睡眠锁（FTL的实在过于复杂）
+- 内核态地址空间映射重构
+- 第三方库下载到本地
+- 完善readme
+- 优雅关机
+- 适配opensbi
+- 引入线程调度状态机，防止一个线程被多次唤醒时多次加入调度器
+- lazy_static!据说无法在hifive上使用，需要换为lazy cell
+- 目前thread的所有权是由调度future持有

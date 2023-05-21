@@ -135,9 +135,11 @@ bitflags! {
     ///Open file flags
     pub struct CloneFlags: u32 {
         const CLONE_THREAD = 1 << 4;
+        const CLONE_CHILD_CLEARTID = 1 << 5;
         const CLONE_VM = 1 << 8;
         const CLONE_FS = 1 << 9;
         const CLONE_FILES = 1 << 10;
+        const CLONE_CHILD_SETTID = 1 << 12;
     }
 }
 
@@ -203,6 +205,13 @@ pub fn sys_clone(
         // fork
 
         // TODO: maybe we should take more flags into account?
+        if clone_flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
+            debug!("clone process contains CLEARTID");
+        }
+        if clone_flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
+            debug!("clone process contains SETTID");
+        }
+
 
         let current_process = current_process();
         let stack = match stack as usize {
@@ -226,7 +235,7 @@ pub fn sys_clone(
         // clone(i.e. create a new thread)
 
         debug!("clone a new thread");
-
+        
         // let f = unsafe {
         //     core::mem::transmute::<*const (), fn(*const ())->isize>(f as *const ())
         // };
@@ -389,7 +398,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 // TODO: here may cause some concurrency problem between we user_check and write it 
                 let _sum_guard = SumGuard::new();
                 let exit_status_ptr = exit_status_addr as *mut i32;
-                debug!("waitpid: write pid to exit_status_ptr before");
+                debug!("waitpid: write pid to exit_status_ptr {:#x} before", exit_status_addr);
                 // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
                 unsafe {
                     exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);

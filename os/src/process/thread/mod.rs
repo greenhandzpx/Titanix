@@ -178,9 +178,6 @@ impl Thread {
         let inner = unsafe {
             &mut (*self.inner.get())
         };
-        debug!("clear tid address");
-        // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
-        inner.tid_addr.take();
         inner.state.store(ThreadState::Zombie);
     }
 

@@ -1,4 +1,5 @@
 use alloc::{boxed::Box, collections::VecDeque};
+use log::debug;
 
 use crate::{
     config::signal::SIG_NUM,
@@ -84,6 +85,7 @@ impl SigHandlerManager {
 #[derive(Clone, Copy)]
 pub struct SigAction {
     pub sa_handler: fn(usize),
+    pub is_user_defined: bool,
     pub sa_mask: SigSet,
 }
 
@@ -91,6 +93,7 @@ impl SigAction {
     pub fn new() -> Self {
         Self {
             sa_handler: default_sig_handler,
+            is_user_defined: false,
             sa_mask: SigSet::from_bits(0).unwrap(),
         }
     }
@@ -98,12 +101,14 @@ impl SigAction {
 
 pub fn check_signal_for_current_process() {
     loop {
-        if let Some((sig_info, sig_handler)) = current_process().inner_handler(|proc| {
+        if let Some((sig_info, sig_action)) = current_process().inner_handler(|proc| {
             if proc.pending_sigs.sig_queue.is_empty() {
                 return None;
             }
             let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
             assert!(sig_info.signo < SIG_NUM);
+
+            debug!("find a sig {}", sig_info.signo);
 
             let signo = sig_info.signo;
 
@@ -121,22 +126,28 @@ pub fn check_signal_for_current_process() {
 
             Some((
                 sig_info,
-                proc.sig_handler.lock().sigactions[signo].sa_handler as *const u8 as usize,
+                proc.sig_handler.lock().sigactions[signo]
             ))
         }) {
             // Note that serveral sig handlers may be executed at the same time by different threads
             // since we don't hold the process inner lock
-            handle_signal(sig_info.signo, sig_handler);
+            handle_signal(sig_info.signo, sig_action);
         } else {
             break;
         }
     }
 }
 
-fn handle_signal(signo: usize, sig_handler: usize) {
-    current_trap_cx().sepc = sig_handler;
-    // a0
-    current_trap_cx().user_x[10] = signo;
+fn handle_signal(signo: usize, sig_action: SigAction) {
+    if sig_action.is_user_defined {
+        current_trap_cx().sepc = sig_action.sa_handler as *const usize as usize;
+        // a0
+        current_trap_cx().user_x[10] = signo;
+    } else {
+        // Just in kernel mode
+        // TODO: change to async
+        (sig_action.sa_handler)(signo);
+    }
     // current_trap_cx().sepc = sigaction_handler_wrapper as *const u8 as usize;
     // // a0
     // current_trap_cx().user_x[10] = sig_handler;
@@ -170,5 +181,11 @@ impl SigQueue {
             sig_queue: VecDeque::new(),
             blocked_sigs: SigSet::from_bits(0).unwrap(),
         }
+    }
+    pub fn send_signal(&mut self, sig: Signal) {
+        self.sig_queue.push_back(SigInfo {
+            signo: sig as usize,
+            errno: 0,
+        });
     }
 }

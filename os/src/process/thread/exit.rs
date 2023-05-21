@@ -1,6 +1,8 @@
-use crate::{process::INITPROC, processor::current_process, stack_trace, mm::user_check::UserCheck};
+use crate::{
+    mm::user_check::UserCheck, process::INITPROC, processor::current_process, stack_trace, signal::Signal,
+};
 use alloc::{sync::Arc, vec::Vec};
-use log::{debug, info, error};
+use log::{debug, error, info, warn};
 
 use super::Thread;
 
@@ -19,6 +21,10 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // same time
     let mut process_inner = thread.process.inner.lock();
 
+    let inner = unsafe { &mut (*thread.inner.get()) };
+    debug!("clear tid address");
+    // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
+    inner.tid_addr.take();
 
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
@@ -56,6 +62,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // Final exited thread should:
     // 1. mark the process as zombie
     // 2. handle the process's children migration
+    // 3. send signal to parent process
     debug!(
         "final thread {} terminated, process become zombie",
         thread.tid()
@@ -75,6 +82,19 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     }
     // TODO: Maybe we don't need to clear here?()
     process_inner.children.clear();
+    let parent_prcess = {
+        if let Some(parent_process) = process_inner.parent.as_ref() {
+            parent_process.upgrade().unwrap()
+        } else {
+            panic!("initproc will die");
+        }
+    };
+    // In order to avoid dead lock
+    drop(process_inner);
+    debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
+    parent_prcess.inner_handler(|proc| {
+        proc.pending_sigs.send_signal(Signal::SIGCHLD)
+    })
     // todo!("Handle thread exit")
 }
 
@@ -119,7 +139,6 @@ pub fn terminate_all_threads_except_main() {
 /// Terminate the given thread
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_given_thread(tid: usize, exit_code: i8) {
-
     if let Some(thread) = current_process().inner_handler(|proc| {
         proc.exit_code = exit_code;
         // let mut idx: Option<usize> = None;
@@ -132,7 +151,10 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
                     // break;
                 }
             } else {
-                panic!("Weak thread pointer is invalid in process {}", current_process().pid());
+                panic!(
+                    "Weak thread pointer is invalid in process {}",
+                    current_process().pid()
+                );
                 // return None;
             }
         }
@@ -145,4 +167,3 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
         thread.terminate();
     }
 }
-
