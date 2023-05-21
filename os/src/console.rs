@@ -4,7 +4,6 @@ use core::fmt::{self, Write};
 
 struct Stdout;
 
-
 const PRINT_LOCKED: bool = true;
 
 static PRINT_MUTEX: SpinNoIrqLock<()> = SpinNoIrqLock::new(());
@@ -20,7 +19,7 @@ impl Write for Stdout {
 
 pub fn print(args: fmt::Arguments) {
     if PRINT_LOCKED {
-        let _locked = PRINT_MUTEX.lock();    
+        let _locked = PRINT_MUTEX.lock();
         Stdout.write_fmt(args).unwrap();
     } else {
         Stdout.write_fmt(args).unwrap();

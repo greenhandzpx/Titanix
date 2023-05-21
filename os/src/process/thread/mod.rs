@@ -22,19 +22,17 @@ use self::thread_state::{ThreadState, ThreadStateAtomic};
 use super::Process;
 use crate::executor;
 use crate::signal::SignalContext;
-use crate::{trap::TrapContext};
+use crate::trap::TrapContext;
 use alloc::sync::Arc;
-use log::debug;
 use core::cell::UnsafeCell;
 use core::future::Future;
-
 
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
 };
 
 use threadloop::threadloop;
-pub use tid::{TidHandle, TidAddress};
+pub use tid::{TidAddress, TidHandle};
 
 // pub use task::TaskControlBlock;
 // pub use task::TaskStatus;
@@ -175,9 +173,7 @@ impl Thread {
         //     //     .terminated
         //     //     .store(true, Ordering::Relaxed)
         // }
-        let inner = unsafe {
-            &mut (*self.inner.get())
-        };
+        let inner = unsafe { &mut (*self.inner.get()) };
         inner.state.store(ThreadState::Zombie);
     }
 

@@ -1,16 +1,19 @@
 use log::debug;
 
 use crate::{
+    config::{fs::FILE_PAGE_SIZE, mm::PAGE_SIZE},
     mm::{
         memory_set::{
-            page_fault_handler::{MmapPageFaultHandler, SBrkPageFaultHandler}, vm_area::BackupFile, PageFaultHandler,
+            page_fault_handler::{MmapPageFaultHandler, SBrkPageFaultHandler},
+            vm_area::BackupFile,
+            PageFaultHandler,
         },
         MapPermission, VirtAddr,
     },
     processor::current_process,
     stack_trace,
     syscall::{MmapFlags, MmapProt},
-    utils::error::{SyscallErr, SyscallRet}, config::{fs::FILE_PAGE_SIZE, mm::PAGE_SIZE},
+    utils::error::{SyscallErr, SyscallRet},
 };
 
 /// Note that we just ignore the `addr`
@@ -38,7 +41,7 @@ pub fn sys_mmap(
     }
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        debug!("handle anonymous mmap");
+        debug!("handle anonymous mmap, prot {:?}, flags {:?}", prot, flags);
         if offset != 0 {
             return Err(SyscallErr::EINVAL);
         }

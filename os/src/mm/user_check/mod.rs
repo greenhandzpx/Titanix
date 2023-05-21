@@ -7,8 +7,9 @@ use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
     process::thread::exit_and_terminate_all_threads,
     processor::{current_process, local_hart, SumGuard},
+    stack_trace,
     trap::trap_from_kernel,
-    utils::error::{GeneralRet, SyscallErr}, stack_trace,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::VirtAddr;

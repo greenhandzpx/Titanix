@@ -72,15 +72,14 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering, self},
+    sync::atomic::{self, AtomicBool, Ordering},
 };
 
 use log::info;
-use sbi::shutdown;
 
 use crate::{
     config::mm::HART_START_ADDR,
-    fs::inode_tmp::list_apps,
+    // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     processor::{hart, HARTS},
     sbi::hart_start,
@@ -123,12 +122,8 @@ pub fn rust_main(hart_id: usize) {
         clear_bss();
 
         processor::init();
-        unsafe {
-            processor::set_local_hart(hart_id);
-        }
+        hart::init(hart_id);
         utils::logging::init();
-        processor::set_hart_stack();
-
 
         info!(r#"  _______ __              _     "#);
         info!(r#" /_  __(_) /_____ _____  (_)  __"#);
@@ -175,17 +170,12 @@ pub fn rust_main(hart_id: usize) {
             hart_start(i, HART_START_ADDR);
         }
     } else {
-
         // The other harts
-
 
         // while !INIT_FINISHED.load(Ordering::Acquire) {}
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
-        unsafe {
-            processor::set_local_hart(hart_id);
-        }
-        processor::set_hart_stack();
+        hart::init(hart_id);
         unsafe {
             KERNEL_SPACE
                 .as_ref()
@@ -193,7 +183,7 @@ pub fn rust_main(hart_id: usize) {
                 .activate();
         }
         info!("[kernel] ---------- hart {} started ---------- ", hart_id);
-        
+
         return;
     }
 

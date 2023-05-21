@@ -158,7 +158,7 @@ pub async fn trap_handler() {
             // todo!("Exit current process when encounting illegal addr");
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            // println!("[kernel] IllegalInstruction in application, kernel killed it.");
+            warn!("[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}", stval);
             // // illegal instruction exit code
             current_process().set_zombie();
             // exit_current_and_run_next(-3);
@@ -212,7 +212,7 @@ pub async fn trap_handler() {
 
 #[no_mangle]
 /// Back to user mode.
-/// Note that we don't need to flush TLB since user and 
+/// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
 pub fn trap_return(trap_context: &mut TrapContext) {
     set_user_trap_entry();

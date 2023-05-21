@@ -10,9 +10,9 @@ use crate::process::thread::{
     self, exit_and_terminate_all_threads, terminate_given_thread, Thread, TidHandle,
 };
 use crate::process::PROCESS_MANAGER;
-use crate::processor::{current_process, current_task, local_hart, SumGuard, current_trap_cx};
+use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
-use crate::signal::{SigAction, SigInfo, Signal, SigSet};
+use crate::signal::{SigAction, SigInfo, SigSet, Signal, SigActionKernel};
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use crate::utils::error::SyscallErr;
@@ -40,7 +40,11 @@ pub fn sys_exit(exit_code: i8) -> SyscallRet {
     stack_trace!();
     // // TODO how can we only exit one thread but still let the parent process can wait for the child
     // sys_exit_group(exit_code)
-    debug!("sys exit, exit code {}, sepc {:#x}", exit_code, current_trap_cx().sepc);
+    debug!(
+        "[sys_exit]: exit code {}, sepc {:#x}",
+        exit_code,
+        current_trap_cx().sepc
+    );
     let tid = local_hart().current_task().tid();
     terminate_given_thread(tid, exit_code);
     // info!("exit finished");
@@ -49,6 +53,11 @@ pub fn sys_exit(exit_code: i8) -> SyscallRet {
 
 pub fn sys_exit_group(exit_code: i8) -> SyscallRet {
     stack_trace!();
+    debug!(
+        "[sys_exit_group]: exit code {}, sepc {:#x}",
+        exit_code,
+        current_trap_cx().sepc
+    );
     exit_and_terminate_all_threads(exit_code);
     // current_process().set_exit_code(exit_code);
     // current_process().set_zombie();
@@ -212,7 +221,6 @@ pub fn sys_clone(
             debug!("clone process contains SETTID");
         }
 
-
         let current_process = current_process();
         let stack = match stack as usize {
             0 => None,
@@ -235,7 +243,7 @@ pub fn sys_clone(
         // clone(i.e. create a new thread)
 
         debug!("clone a new thread");
-        
+
         // let f = unsafe {
         //     core::mem::transmute::<*const (), fn(*const ())->isize>(f as *const ())
         // };
@@ -393,12 +401,17 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
             // return Ok(ret);
         } else {
             if exit_status_addr != 0 {
-                UserCheck::new()
-                    .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
-                // TODO: here may cause some concurrency problem between we user_check and write it 
+                UserCheck::new().check_writable_slice(
+                    exit_status_addr as *mut u8,
+                    core::mem::size_of::<i32>(),
+                )?;
+                // TODO: here may cause some concurrency problem between we user_check and write it
                 let _sum_guard = SumGuard::new();
                 let exit_status_ptr = exit_status_addr as *mut i32;
-                debug!("waitpid: write pid to exit_status_ptr {:#x} before", exit_status_addr);
+                debug!(
+                    "waitpid: write pid to exit_status_ptr {:#x} before",
+                    exit_status_addr
+                );
                 // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
                 unsafe {
                     exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
@@ -433,15 +446,20 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             let sig_handler_locked = proc.sig_handler.lock();
             let oldact_ref = sig_handler_locked.get(sig as usize);
             unsafe {
-                oldact.copy_from(oldact_ref.unwrap(), core::mem::size_of::<SigAction>());
+                oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, core::mem::size_of::<SigAction>());
             }
         }
         UserCheck::new()
             .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
+        let new_sigaction = SigActionKernel {
+            sig_action: unsafe { *act },
+            is_user_defined: true,
+        };
+        debug!("[sys_rt_sigaction]: set new sig handler {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize);
         proc.sig_handler
             .lock()
-            .set_sigaction(sig as usize, unsafe { *act });
+            .set_sigaction(sig as usize, new_sigaction);
         Ok(0)
     })
 }
@@ -453,9 +471,11 @@ enum SigProcmaskHow {
 }
 
 pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> SyscallRet {
+    stack_trace!();
     current_process().inner_handler(|proc| {
         if old_set as usize != 0 {
-            UserCheck::new().check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
+            UserCheck::new()
+                .check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
             let _sum_guard = SumGuard::new();
             unsafe {
                 *old_set = proc.pending_sigs.blocked_sigs;
@@ -463,45 +483,42 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
         }
         if set as usize == 0 {
             debug!("arg set is null");
-            return Ok(0)
-        } 
+            return Ok(0);
+        }
         UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
+        let _sum_guard = SumGuard::new();
+        debug!("[sys_rt_sigprocmask]: how: {}", how);
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
-                if let Some(new_sig_mask) = unsafe {
-                    SigSet::from_bits(*set)
-                } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
-                    return Ok(0)
+                    return Ok(0);
                 } else {
-                    debug!("invalid set arg");
+                    warn!("invalid set arg");
                     return Err(SyscallErr::EINVAL);
                 }
             }
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
-                if let Some(new_sig_mask) = unsafe {
-                    SigSet::from_bits(*set)
-                } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
+                    debug!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
-                    return Ok(0)
+                    return Ok(0);
                 } else {
-                    debug!("invalid set arg");
+                    warn!("[sys_rt_sigprocmask]: invalid set arg, raw sig mask {}", unsafe { *set });
                     return Err(SyscallErr::EINVAL);
                 }
             }
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
-                if let Some(new_sig_mask) = unsafe {
-                    SigSet::from_bits(*set)
-                } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
-                    return Ok(0)
+                    return Ok(0);
                 } else {
-                    debug!("invalid set arg");
+                    warn!("invalid set arg");
                     return Err(SyscallErr::EINVAL);
                 }
             }
             _ => {
-                debug!("invalid how");
+                warn!("invalid how");
                 return Err(SyscallErr::EINVAL);
             }
         }
@@ -602,7 +619,9 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
 
 pub fn sys_brk(addr: usize) -> SyscallRet {
     stack_trace!();
+    debug!("handle sys brk");
     if addr == 0 {
+        debug!("[sys_brk]: addr: 0");
         return Ok(current_process()
             .inner_handler(|proc| proc.memory_set.heap_range.unwrap().end().0)
             as isize);
@@ -613,7 +632,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
         let current_heap_end: VirtAddr = proc.memory_set.heap_range.unwrap().end();
         let new_heap_end: VirtAddr = addr.into();
         debug!(
-            "[sys_brk]: old heap end: {}, new heap end: {}",
+            "[sys_brk]: old heap end: {:#x}, new heap end: {:#x}",
             current_heap_end.0, new_heap_end.0
         );
         if addr > current_heap_end.0 {
@@ -638,7 +657,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     .unwrap()
                     .modify_right_bound(new_heap_end);
                 debug!(
-                    "new heap end {}",
+                    "new heap end {:#x}",
                     proc.memory_set.heap_range.unwrap().end().0
                 );
                 Ok(0)
@@ -675,7 +694,6 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
         }
     })
 }
-
 
 pub fn sys_getuid() -> SyscallRet {
     // TODO: not sure

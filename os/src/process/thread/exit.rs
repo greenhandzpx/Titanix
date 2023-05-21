@@ -1,5 +1,6 @@
 use crate::{
-    mm::user_check::UserCheck, process::INITPROC, processor::current_process, stack_trace, signal::Signal,
+    mm::user_check::UserCheck, process::INITPROC, processor::current_process, signal::Signal,
+    stack_trace,
 };
 use alloc::{sync::Arc, vec::Vec};
 use log::{debug, error, info, warn};
@@ -92,19 +93,19 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // In order to avoid dead lock
     drop(process_inner);
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
-    parent_prcess.inner_handler(|proc| {
-        proc.pending_sigs.send_signal(Signal::SIGCHLD)
-    })
+    parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(Signal::SIGCHLD))
     // todo!("Handle thread exit")
 }
 
 /// Exit and terminate all threads of the current process.
 /// Note that the caller cannot hold the process inner's lock
 pub fn exit_and_terminate_all_threads(exit_code: i8) {
+    debug!("exit and terminate all threads, exit code {}", exit_code);
     let threads = current_process().inner_handler(|proc| {
         let mut threads: Vec<Arc<Thread>> = Vec::new();
         proc.exit_code = exit_code;
         proc.is_zombie = true;
+        // current_process().set_zombie();
         for thread in proc.threads.iter_mut() {
             threads.push(thread.upgrade().unwrap());
             // unsafe { (*thread.as_ptr()).terminate() }
