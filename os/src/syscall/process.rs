@@ -89,7 +89,7 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
     Ok(0)
 }
 
-fn get_time_spec() -> TimeSpec {
+pub fn get_time_spec() -> TimeSpec {
     let current_time = get_time_ms();
     let time_spec = TimeSpec {
         sec: current_time / 1000,

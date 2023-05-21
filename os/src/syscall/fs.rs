@@ -8,8 +8,8 @@ use alloc::sync::Arc;
 use log::{debug, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
-use crate::fs::kstat::{KSTAT, KSTAT_SIZE};
 use crate::fs::pipe::make_pipe;
+use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
     dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
     Iovec, StatFlags, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
@@ -17,8 +17,8 @@ use crate::fs::{
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
+use crate::syscall::process::get_time_spec;
 use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::get_time_ms;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
 use crate::utils::string::c_str_to_string;
@@ -163,10 +163,8 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                     match parent_inode {
                         Some(parent_inode) => match parent_inode.metadata().mode {
                             InodeMode::FileDIR => {
-                                parent_inode.metadata().inner.lock().st_atime =
-                                    (get_time_ms() / 1000) as i64;
-                                parent_inode.metadata().inner.lock().st_mtime =
-                                    (get_time_ms() / 1000) as i64;
+                                parent_inode.metadata().inner.lock().st_atim = get_time_spec();
+                                parent_inode.metadata().inner.lock().st_mtim = get_time_spec();
                                 parent_inode.mkdir(
                                     parent_inode.clone(),
                                     &Path::get_name(&absolute_path),
@@ -303,7 +301,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
         Some(inode) => {
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
-            inode.metadata().inner.lock().st_atime = (get_time_ms() / 1000) as i64;
+            inode.metadata().inner.lock().st_atim = get_time_spec();
             let dirents = Dirent::get_dirents(inode);
             let num_bytes = DIRENT_SIZE as usize * dirents.len();
             debug!(
@@ -341,7 +339,7 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     let target_inode = <dyn Inode>::lookup_from_root_tmp(path);
     match target_inode {
         Some(target_inode) => {
-            target_inode.metadata().inner.lock().st_atime = (get_time_ms() / 1000) as i64;
+            target_inode.metadata().inner.lock().st_atim = get_time_spec();
             if target_inode.metadata().mode == InodeMode::FileDIR {
                 current_process().inner_handler(move |proc| proc.cwd = path.to_string());
                 Ok(0)
@@ -367,18 +365,18 @@ pub fn sys_uname(buf: usize) -> SyscallRet {
     Ok(0)
 }
 
-/// fstat() function return information about a file, in the buffer pointed to by kst.
+/// fstat() function return information about a file, in the buffer pointed to by stat_buf.
 /// This function except that the file about which information is to be retrieved is specified by the file descriptor fd.
-pub fn sys_fstat(fd: usize, kst: usize) -> SyscallRet {
+pub fn sys_fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    UserCheck::new().check_writable_slice(kst as *mut u8, KSTAT_SIZE)?;
-    _fstat(fd, kst)
+    UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
+    _fstat(fd, stat_buf)
 }
 
-/// We should give the kstat which has already been checked to _fstat function.
-fn _fstat(fd: usize, kst: usize) -> SyscallRet {
-    let mut kstat = KSTAT::new();
+/// We should give the stat_buf which has already been checked to _fstat function.
+fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
+    let mut kstat = STAT::new();
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -407,27 +405,29 @@ fn _fstat(fd: usize, kst: usize) -> SyscallRet {
     kstat.st_ino = 1 as u64;
     kstat.st_mode = inode_meta.mode as u32;
     kstat.st_size = inode_meta.inner.lock().size as u64;
-    kstat.st_blocks = (kstat.st_size / kstat.st_blsize as u64) as u64;
-    kstat.st_atime_sec = inode_meta.inner.lock().st_atime;
-    kstat.st_atime_nsec = kstat.st_atime_sec * 10i64.pow(9);
-    kstat.st_mtime_sec = inode_meta.inner.lock().st_mtime;
-    kstat.st_mtime_nsec = kstat.st_mtime_sec * 10i64.pow(9);
-    kstat.st_ctime_sec = inode_meta.inner.lock().st_ctime;
-    kstat.st_ctime_nsec = kstat.st_ctime_sec * 10i64.pow(9);
+    kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
+    kstat.st_atim = inode_meta.inner.lock().st_atim;
+    kstat.st_mtim = inode_meta.inner.lock().st_mtim;
+    kstat.st_ctim = inode_meta.inner.lock().st_ctim;
 
-    let kst_ptr = kst as *mut KSTAT;
+    let kst_ptr = stat_buf as *mut STAT;
     unsafe {
         ptr::write(kst_ptr, kstat);
     }
     Ok(0)
 }
 
-pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32) -> SyscallRet {
+pub fn sys_newfstatat(
+    dirfd: isize,
+    pathname: *const u8,
+    stat_buf: usize,
+    flags: u32,
+) -> SyscallRet {
     stack_trace!();
     let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(pathname)?;
-    UserCheck::new().check_writable_slice(kst as *mut u8, KSTAT_SIZE)?;
+    UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
     stack_trace!();
     let absolute_path: Option<String>;
     if flags.contains(StatFlags::AT_SYMLINK_NOFOLLOW) {
@@ -444,7 +444,7 @@ pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32)
             absolute_path = Some(cwd);
         } else {
             debug!("[newfstatat] empty path with dirfd");
-            return _fstat(dirfd as usize, kst);
+            return _fstat(dirfd as usize, stat_buf);
         }
     } else {
         if dirfd == AT_FDCWD {
@@ -459,7 +459,7 @@ pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32)
 
     let fd = _openat(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
 
-    return _fstat(fd as usize, kst);
+    return _fstat(fd as usize, stat_buf);
 }
 
 pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
@@ -528,7 +528,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
         Some(absolute_path) => {
             debug!("file name {}", absolute_path);
             if let Some(inode) = fs::inode::open_file(&absolute_path, flags) {
-                inode.metadata().inner.lock().st_atime = (get_time_ms() / 1000) as i64;
+                inode.metadata().inner.lock().st_atim = get_time_spec();
                 let fd = current_process().inner_handler(|proc| {
                     let fd = proc.fd_table.alloc_fd();
                     let file = inode.open(inode.clone(), flags)?;

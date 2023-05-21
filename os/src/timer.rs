@@ -23,10 +23,22 @@ pub struct TimeVal {
 }
 
 /// Used for nanosleep
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct TimeSpec {
     pub sec: usize,
     pub nsec: usize,
+}
+
+impl TimeSpec {
+    pub fn new() -> Self {
+        // new a time spec with machine time
+        let current_time = get_time_ms();
+        Self {
+            sec: current_time / 1000,
+            nsec: current_time % 1000000 * 1000000,
+        }
+    }
 }
 
 /// Used for clock_gettime

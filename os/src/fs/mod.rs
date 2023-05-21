@@ -6,7 +6,7 @@ mod file;
 mod file_system;
 mod hash_name;
 pub mod inode;
-pub mod kstat;
+pub mod stat;
 pub mod utsname;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;

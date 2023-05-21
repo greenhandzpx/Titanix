@@ -16,7 +16,7 @@ use log::{debug, warn};
 use crate::{
     driver::block::BlockDevice,
     mm::{Page, PageCache},
-    timer::get_time_ms,
+    timer::{get_time_ms, TimeSpec},
     utils::{
         error::{GeneralRet, SyscallRet},
         hash_table::HashTable,
@@ -291,11 +291,11 @@ pub struct InodeMetaInner {
     /// inode' file's size
     pub size: usize,
     /// last access time, need to flush to disk.
-    pub st_atime: i64,
+    pub st_atim: TimeSpec,
     /// last modification time, need to flush to disk
-    pub st_mtime: i64,
+    pub st_mtim: TimeSpec,
     /// last status change time, need to flush to disk
-    pub st_ctime: i64,
+    pub st_ctim: TimeSpec,
     /// hash name(Note that this doesn't consider the parent uid)
     pub hash_name: HashName,
     /// parent
@@ -337,9 +337,9 @@ impl InodeMeta {
             uid: INODE_UID_ALLOCATOR.fetch_add(1, Ordering::Relaxed),
             inner: Mutex::new(InodeMetaInner {
                 size: 0,
-                st_atime: (get_time_ms() / 1000) as i64,
-                st_mtime: (get_time_ms() / 1000) as i64,
-                st_ctime: (get_time_ms() / 1000) as i64,
+                st_atim: TimeSpec::new(),
+                st_mtim: TimeSpec::new(),
+                st_ctim: TimeSpec::new(),
                 parent,
                 brothers: BTreeMap::new(),
                 children: BTreeMap::new(),
