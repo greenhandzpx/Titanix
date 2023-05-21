@@ -1,17 +1,22 @@
+use log::debug;
+
 use crate::{process::thread::exit_and_terminate_all_threads, stack_trace};
 
 pub fn term_sig_handler(signo: usize) {
     stack_trace!();
+    debug!("term sig handler, sig {}", signo);
     // TODO: not sure what the exit code should be here
     exit_and_terminate_all_threads(-1);
 }
 
 pub fn ign_sig_handler(signo: usize) {
     stack_trace!();
+    debug!("ignore this sig {}", signo);
 }
 
 pub fn core_sig_handler(signo: usize) {
     stack_trace!();
+    debug!("core sig handler, sig {}", signo);
     // TODO: not sure what the exit code should be here
     exit_and_terminate_all_threads(-1);
     // TODO: add core dump ?
@@ -29,4 +34,6 @@ pub fn cont_sig_handler(signo: usize) {
 
 pub fn default_sig_handler(signo: usize) {
     // Nothing to do here
+    stack_trace!();
+    debug!("default handler for this sig {}", signo);
 }

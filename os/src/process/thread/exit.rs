@@ -1,8 +1,9 @@
 use crate::{
-    mm::user_check::UserCheck, process::INITPROC, processor::current_process, stack_trace,
+    mm::user_check::UserCheck, process::INITPROC, processor::current_process, signal::Signal,
+    stack_trace,
 };
 use alloc::{sync::Arc, vec::Vec};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use super::Thread;
 
@@ -20,6 +21,11 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // since different harts may arrive here at the
     // same time
     let mut process_inner = thread.process.inner.lock();
+
+    let inner = unsafe { &mut (*thread.inner.get()) };
+    debug!("clear tid address");
+    // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
+    inner.tid_addr.take();
 
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
@@ -57,6 +63,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // Final exited thread should:
     // 1. mark the process as zombie
     // 2. handle the process's children migration
+    // 3. send signal to parent process
     debug!(
         "final thread {} terminated, process become zombie",
         thread.tid()
@@ -76,16 +83,29 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     }
     // TODO: Maybe we don't need to clear here?()
     process_inner.children.clear();
+    let parent_prcess = {
+        if let Some(parent_process) = process_inner.parent.as_ref() {
+            parent_process.upgrade().unwrap()
+        } else {
+            panic!("initproc will die");
+        }
+    };
+    // In order to avoid dead lock
+    drop(process_inner);
+    debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
+    parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(Signal::SIGCHLD))
     // todo!("Handle thread exit")
 }
 
 /// Exit and terminate all threads of the current process.
 /// Note that the caller cannot hold the process inner's lock
 pub fn exit_and_terminate_all_threads(exit_code: i8) {
+    debug!("exit and terminate all threads, exit code {}", exit_code);
     let threads = current_process().inner_handler(|proc| {
         let mut threads: Vec<Arc<Thread>> = Vec::new();
         proc.exit_code = exit_code;
         proc.is_zombie = true;
+        // current_process().set_zombie();
         for thread in proc.threads.iter_mut() {
             threads.push(thread.upgrade().unwrap());
             // unsafe { (*thread.as_ptr()).terminate() }

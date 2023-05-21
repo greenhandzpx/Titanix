@@ -26,7 +26,6 @@ use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::future::Future;
-use log::debug;
 
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
@@ -175,9 +174,6 @@ impl Thread {
         //     //     .store(true, Ordering::Relaxed)
         // }
         let inner = unsafe { &mut (*self.inner.get()) };
-        debug!("clear tid address");
-        // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
-        inner.tid_addr.take();
         inner.state.store(ThreadState::Zombie);
     }
 

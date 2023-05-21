@@ -6,7 +6,7 @@ use log::debug;
 
 lazy_static! {
     pub static ref PID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
-        SpinNoIrqLock::new(RecycleAllocator::new());
+        SpinNoIrqLock::new(RecycleAllocator::new(1));
 }
 ///Bind pid lifetime to `PidHandle`
 pub struct PidHandle(pub usize);

@@ -41,7 +41,7 @@ pub fn sys_mmap(
     }
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        debug!("handle anonymous mmap");
+        debug!("handle anonymous mmap, prot {:?}, flags {:?}", prot, flags);
         if offset != 0 {
             return Err(SyscallErr::EINVAL);
         }

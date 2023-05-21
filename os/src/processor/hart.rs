@@ -1,11 +1,13 @@
-use core::cell::SyncUnsafeCell;
+use core::{cell::SyncUnsafeCell, arch::asm};
 
 use alloc::sync::Arc;
+use log::info;
+use riscv::register::sstatus::{self, FS};
 
 use crate::{
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
-    stack_trace,
+    stack_trace, config::{processor::HART_NUM, mm::PAGE_SIZE},
 };
 
 use super::context::{EnvContext, KernelTaskContext, LocalContext};
@@ -125,4 +127,46 @@ impl Hart {
         // TODO: recover sie state?
         // core::mem::swap(&mut self.local_ctx, task);
     }
+}
+
+
+const HART_EACH: Hart = Hart::new();
+pub static mut HARTS: [Hart; HART_NUM] = [HART_EACH; HART_NUM];
+
+unsafe fn get_hart_by_id(hart_id: usize) -> &'static mut Hart {
+    &mut HARTS[hart_id]
+}
+
+/// Set the cpu hart control block according to `hard_id`
+pub unsafe fn set_local_hart(hart_id: usize) {
+    let hart = get_hart_by_id(hart_id);
+    hart.set_hart_id(hart_id);
+    let hart_addr = hart as *const _ as usize;
+    asm!("mv tp, {}", in(reg) hart_addr);
+}
+
+pub fn set_hart_stack() {
+    let h = local_hart();
+    let sp: usize;
+    unsafe {
+        asm!("mv {}, sp", out(reg) sp);
+    }
+    info!("set_hart_stack: sp {:#x}", sp);
+    h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
+}
+
+/// Get the current local hart
+pub fn local_hart() -> &'static mut Hart {
+    unsafe {
+        let tp: usize;
+        asm!("mv {}, tp", out(reg) tp);
+        &mut *(tp as *mut Hart)
+    }
+}
+
+
+pub fn init(hart_id: usize) {
+    unsafe { set_local_hart(hart_id); }
+    set_hart_stack();
+    unsafe { sstatus::set_fs(FS::Clean); }
 }

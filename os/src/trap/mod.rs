@@ -158,7 +158,7 @@ pub async fn trap_handler() {
             // todo!("Exit current process when encounting illegal addr");
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            // println!("[kernel] IllegalInstruction in application, kernel killed it.");
+            warn!("[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}", stval);
             // // illegal instruction exit code
             current_process().set_zombie();
             // exit_current_and_run_next(-3);

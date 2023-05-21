@@ -1,11 +1,10 @@
-use alloc::{boxed::Box, collections::VecDeque};
+use alloc::collections::VecDeque;
+use log::debug;
 
 use crate::{
     config::signal::SIG_NUM,
-    mm::user_check::UserCheck,
     processor::{current_process, current_task, current_trap_cx},
-    signal::{self, signal_handler::default_sig_handler},
-    syscall::user_sigreturn,
+    signal::signal_handler::default_sig_handler,
     trap::UserContext,
 };
 
@@ -46,27 +45,27 @@ bitflags! {
 }
 
 pub struct SigHandlerManager {
-    sigactions: [SigAction; SIG_NUM],
+    sigactions: [SigActionKernel; SIG_NUM],
 }
 
 impl SigHandlerManager {
     pub fn new() -> Self {
-        let mut sigactions: [SigAction; SIG_NUM] = core::array::from_fn(|_| SigAction::new());
-        sigactions[Signal::SIGABRT as usize].sa_handler = core_sig_handler;
-        sigactions[Signal::SIGHUP as usize].sa_handler = term_sig_handler;
-        sigactions[Signal::SIGINT as usize].sa_handler = term_sig_handler;
-        sigactions[Signal::SIGKILL as usize].sa_handler = term_sig_handler;
-        sigactions[Signal::SIGBUS as usize].sa_handler = core_sig_handler;
-        sigactions[Signal::SIGSEGV as usize].sa_handler = core_sig_handler;
-        sigactions[Signal::SIGSTOP as usize].sa_handler = stop_sig_handler;
-        sigactions[Signal::SIGCHLD as usize].sa_handler = ign_sig_handler;
-        sigactions[Signal::SIGALRM as usize].sa_handler = term_sig_handler;
-        sigactions[Signal::SIGTERM as usize].sa_handler = term_sig_handler;
-        sigactions[Signal::SIGILL as usize].sa_handler = core_sig_handler;
+        let mut sigactions: [SigActionKernel; SIG_NUM] = core::array::from_fn(|_| SigActionKernel::new(false));
+        sigactions[Signal::SIGABRT as usize].sig_action.sa_handler = core_sig_handler;
+        sigactions[Signal::SIGHUP as usize].sig_action.sa_handler = term_sig_handler;
+        sigactions[Signal::SIGINT as usize].sig_action.sa_handler = term_sig_handler;
+        sigactions[Signal::SIGKILL as usize].sig_action.sa_handler = term_sig_handler;
+        sigactions[Signal::SIGBUS as usize].sig_action.sa_handler = core_sig_handler;
+        sigactions[Signal::SIGSEGV as usize].sig_action.sa_handler = core_sig_handler;
+        sigactions[Signal::SIGSTOP as usize].sig_action.sa_handler = stop_sig_handler;
+        sigactions[Signal::SIGCHLD as usize].sig_action.sa_handler = ign_sig_handler;
+        sigactions[Signal::SIGALRM as usize].sig_action.sa_handler = term_sig_handler;
+        sigactions[Signal::SIGTERM as usize].sig_action.sa_handler = term_sig_handler;
+        sigactions[Signal::SIGILL as usize].sig_action.sa_handler = core_sig_handler;
         Self { sigactions }
     }
 
-    pub fn get(&self, signo: usize) -> Option<&SigAction> {
+    pub fn get(&self, signo: usize) -> Option<&SigActionKernel> {
         if signo < SIG_NUM {
             Some(&self.sigactions[signo])
         } else {
@@ -74,7 +73,7 @@ impl SigHandlerManager {
         }
     }
 
-    pub fn set_sigaction(&mut self, signo: usize, sigaction: SigAction) {
+    pub fn set_sigaction(&mut self, signo: usize, sigaction: SigActionKernel) {
         if signo < SIG_NUM {
             self.sigactions[signo] = sigaction;
         }
@@ -82,6 +81,7 @@ impl SigHandlerManager {
 }
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct SigAction {
     pub sa_handler: fn(usize),
     pub sa_mask: SigSet,
@@ -96,14 +96,31 @@ impl SigAction {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct SigActionKernel {
+    pub sig_action: SigAction,
+    pub is_user_defined: bool,
+}
+
+impl SigActionKernel {
+    pub fn new(is_user_defined: bool) -> Self {
+        Self {
+            is_user_defined,
+            sig_action: SigAction::new(),
+        }
+    }
+}
+
 pub fn check_signal_for_current_process() {
     loop {
-        if let Some((sig_info, sig_handler)) = current_process().inner_handler(|proc| {
+        if let Some((sig_info, sig_action)) = current_process().inner_handler(|proc| {
             if proc.pending_sigs.sig_queue.is_empty() {
                 return None;
             }
             let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
             assert!(sig_info.signo < SIG_NUM);
+
+            debug!("find a sig {}", sig_info.signo);
 
             let signo = sig_info.signo;
 
@@ -117,26 +134,29 @@ pub fn check_signal_for_current_process() {
 
             proc.pending_sigs.blocked_sigs |= signo_shift;
             proc.pending_sigs.blocked_sigs |=
-                proc.sig_handler.lock().sigactions[sig_info.signo].sa_mask;
+                proc.sig_handler.lock().sigactions[sig_info.signo].sig_action.sa_mask;
 
-            Some((
-                sig_info,
-                proc.sig_handler.lock().sigactions[signo].sa_handler as *const u8 as usize,
-            ))
+            Some((sig_info, proc.sig_handler.lock().sigactions[signo]))
         }) {
             // Note that serveral sig handlers may be executed at the same time by different threads
             // since we don't hold the process inner lock
-            handle_signal(sig_info.signo, sig_handler);
+            handle_signal(sig_info.signo, sig_action);
         } else {
             break;
         }
     }
 }
 
-fn handle_signal(signo: usize, sig_handler: usize) {
-    current_trap_cx().sepc = sig_handler;
-    // a0
-    current_trap_cx().user_x[10] = signo;
+fn handle_signal(signo: usize, sig_action: SigActionKernel) {
+    if sig_action.is_user_defined {
+        current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
+        // a0
+        current_trap_cx().user_x[10] = signo;
+    } else {
+        // Just in kernel mode
+        // TODO: change to async
+        (sig_action.sig_action.sa_handler)(signo);
+    }
     // current_trap_cx().sepc = sigaction_handler_wrapper as *const u8 as usize;
     // // a0
     // current_trap_cx().user_x[10] = sig_handler;
@@ -170,5 +190,11 @@ impl SigQueue {
             sig_queue: VecDeque::new(),
             blocked_sigs: SigSet::from_bits(0).unwrap(),
         }
+    }
+    pub fn send_signal(&mut self, sig: Signal) {
+        self.sig_queue.push_back(SigInfo {
+            signo: sig as usize,
+            errno: 0,
+        });
     }
 }
