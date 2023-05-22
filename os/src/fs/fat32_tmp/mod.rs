@@ -9,7 +9,7 @@ use lazy_static::*;
 use log::{debug, error, info};
 
 use crate::fs::inode::INODE_CACHE;
-use crate::utils::error::{self, SyscallErr};
+use crate::utils::error::{self, AsyscallRet, SyscallErr};
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     processor::SumGuard,
@@ -397,7 +397,7 @@ impl Fat32File {
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl File for Fat32File {
     fn readable(&self) -> bool {
         self.readable
@@ -411,19 +411,21 @@ impl File for Fat32File {
         self.meta.as_ref().unwrap()
     }
 
-    async fn read(&self, buf: &mut [u8]) -> SyscallRet {
-        // let mut inner = self.inner.lock();
-        let mut total_read_size = 0usize;
-        let _sum_guard = SumGuard::new();
-        let mut inner = self.inner.lock();
-        let bytes = match &mut inner.node {
-            Fat32NodeType::Dir(dir) => panic!(),
-            Fat32NodeType::File(file) => file.read(buf),
-        };
-        total_read_size += bytes.unwrap();
-        inner.offset += total_read_size;
-        debug!("read size {}", total_read_size);
-        Ok(total_read_size as isize)
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+        Box::pin(async move {
+            // let mut inner = self.inner.lock();
+            let mut total_read_size = 0usize;
+            let _sum_guard = SumGuard::new();
+            let mut inner = self.inner.lock();
+            let bytes = match &mut inner.node {
+                Fat32NodeType::Dir(dir) => panic!(),
+                Fat32NodeType::File(file) => file.read(buf),
+            };
+            total_read_size += bytes.unwrap();
+            inner.offset += total_read_size;
+            debug!("read size {}", total_read_size);
+            Ok(total_read_size as isize)
+        })
     }
 
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
@@ -452,35 +454,37 @@ impl File for Fat32File {
         Ok(total_read_size as isize)
     }
 
-    async fn write(&self, buf: &[u8]) -> SyscallRet {
-        let mut total_write_size = 0usize;
-        let _sum_guard = SumGuard::new();
-        let mut inner = self.inner.lock();
-        let bytes = match &mut inner.node {
-            Fat32NodeType::Dir(dir) => panic!(),
-            Fat32NodeType::File(file) => {
-                let res = file.write(buf);
-                debug!(
-                    "[write]: pos: {:#x}",
-                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
-                );
-                res
-            }
-        };
-        total_write_size += bytes.unwrap();
-        inner.offset += total_write_size;
-        self.metadata()
-            .inner
-            .lock()
-            .inode
-            .as_ref()
-            .unwrap()
-            .metadata()
-            .inner
-            .lock()
-            .size += total_write_size;
-        debug!("[write]: write size {}", total_write_size);
-        Ok(total_write_size as isize)
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+        Box::pin(async move {
+            let mut total_write_size = 0usize;
+            let _sum_guard = SumGuard::new();
+            let mut inner = self.inner.lock();
+            let bytes = match &mut inner.node {
+                Fat32NodeType::Dir(dir) => panic!(),
+                Fat32NodeType::File(file) => {
+                    let res = file.write(buf);
+                    debug!(
+                        "[write]: pos: {:#x}",
+                        file.seek(fatfs::SeekFrom::Current(0)).unwrap()
+                    );
+                    res
+                }
+            };
+            total_write_size += bytes.unwrap();
+            inner.offset += total_write_size;
+            self.metadata()
+                .inner
+                .lock()
+                .inode
+                .as_ref()
+                .unwrap()
+                .metadata()
+                .inner
+                .lock()
+                .size += total_write_size;
+            debug!("[write]: write size {}", total_write_size);
+            Ok(total_write_size as isize)
+        })
     }
 
     fn sync_write(&self, buf: &[u8]) -> SyscallRet {

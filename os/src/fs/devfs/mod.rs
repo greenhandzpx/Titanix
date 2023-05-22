@@ -9,6 +9,7 @@ use alloc::{
 use async_trait::async_trait;
 use log::{debug, info};
 
+use crate::utils::error::AsyscallRet;
 use crate::utils::path::Path;
 use crate::{
     driver::block::{BlockDevice, BlockDeviceImpl},
@@ -100,7 +101,7 @@ pub struct DevRootDir {
     meta: FileMeta,
 }
 
-#[async_trait]
+// #[async_trait]
 impl File for DevRootDir {
     fn readable(&self) -> bool {
         true
@@ -111,12 +112,12 @@ impl File for DevRootDir {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-    async fn read(&self, buf: &mut [u8]) -> SyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         todo!("how to read dir file?")
         // buf.fill(0);
         // Ok(buf.len() as isize)
     }
-    async fn write(&self, buf: &[u8]) -> SyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         todo!("how to write dir file?")
     }
 }

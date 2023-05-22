@@ -11,7 +11,7 @@ impl FdTable {
         Self {
             fd_table: vec![
                 // 0 -> stdin
-                Some(Arc::new(Stdin)),
+                Some(Arc::new(Stdin::new())),
                 // 1 -> stdout
                 Some(Arc::new(Stdout)),
                 // 2 -> stderr

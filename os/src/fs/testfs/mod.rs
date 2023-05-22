@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use log::{debug, info, warn};
 
 use crate::mm::memory_set::VmArea;
+use crate::utils::error::AsyscallRet;
 use crate::{
     fs::file_system::FILE_SYSTEM_MANAGER,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
@@ -88,13 +89,13 @@ impl File for TestRootFile {
     fn writable(&self) -> bool {
         true
     }
-    async fn read(&self, buf: &mut [u8]) -> SyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         debug!("try to read from test root file");
-        Ok(0)
+        Box::pin(async move { Ok(0) })
     }
-    async fn write(&self, buf: &[u8]) -> SyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         debug!("try to write to test root file");
-        Ok(0)
+        Box::pin(async move { Ok(0) })
     }
     fn metadata(&self) -> &FileMeta {
         self.metadata.as_ref().unwrap()

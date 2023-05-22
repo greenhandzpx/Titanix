@@ -16,13 +16,17 @@ use crate::fs::{
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
+use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
+use crate::signal::SigSet;
 use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::get_time_ms;
+use crate::timer::{get_time_ms, TimeSpec};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
 use crate::utils::string::c_str_to_string;
 use crate::{fs, stack_trace};
+
+use super::PollFd;
 
 // const FD_STDIN: usize = 0;
 // const FD_STDOUT: usize = 1;
@@ -685,7 +689,114 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
 }
 
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
+    stack_trace!();
     debug!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
     // TODO
     Ok(0)
+}
+
+bitflags! {
+    pub struct PollEvents: u16 {
+        const POLLIN = 1 << 0;
+        const POLLPRI = 1 << 1;
+        const POLLOUT = 1 << 2;
+        const POLLERR = 1 << 3;
+        const POLLHUP = 1 << 4;
+        const POLLNVAL = 1 << 5;
+    }
+}
+
+pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+
+    stack_trace!();
+    UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
+    let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
+
+    let start_ms = get_time_ms();
+    let infinite_timeout: bool;
+    let timeout: usize;
+    if timeout_ptr == 0 {
+        debug!("[sys_ppoll]: infinite timeout");
+        infinite_timeout = true;
+        timeout = 0;
+    } else {
+        infinite_timeout = false;
+        stack_trace!();
+        UserCheck::new().check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+        let timeout_delta = unsafe {
+            *(timeout_ptr as *const TimeSpec)
+        };
+        // if timeout_delta < 0 {
+        //     warn!("invalid timeout");
+        //     return Err(SyscallErr::EINVAL);
+        // } 
+        timeout = timeout_delta.sec * 1000 + timeout_delta.nsec / 1000000;
+    }
+    let expire_time = start_ms + timeout;
+
+    if sigmask != 0 {
+        stack_trace!();
+        UserCheck::new().check_readable_slice(sigmask as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe {
+            *(sigmask as *const usize)
+        };
+        current_process().inner_handler(|proc| {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+            } else {
+                warn!("invalid set arg");
+            }
+        });
+    }
+
+
+    loop {
+        // TODO: how to avoid user modify the address?
+        let mut cnt = 0;
+        for i in 0..nfds {
+            let current_fd = &mut fds[i];
+            debug!("[sys_ppoll]: poll fd {}", current_fd.fd);
+            if let Some(file) = current_process().inner_handler(|proc| {
+                proc.fd_table.get(current_fd.fd as usize)
+            }) {
+                if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
+                    current_fd.revents = 0;
+                    if events.contains(PollEvents::POLLIN) {
+                        // file.read()
+                        if file.pollin()? {
+                            current_fd.revents |= PollEvents::POLLIN.bits() as i16;
+                            cnt += 1;
+                            continue;
+                        }
+                    }
+                    if events.contains(PollEvents::POLLOUT) {
+                        // file.read()
+                        if file.pollout()? {
+                            current_fd.revents |= PollEvents::POLLOUT.bits() as i16;
+                            cnt += 1;
+                            continue;
+                        }
+                    }
+                } else {
+                    warn!("Invalid events: {:#x}", current_fd.events);
+                    // TODO: not sure
+                    return Err(SyscallErr::EINVAL);
+                }
+            } else {
+                debug!("No such file for fd {}", current_fd.fd);
+                continue;
+            }
+        }
+        if cnt > 0 {
+            return Ok(cnt as isize);
+        } else if !infinite_timeout && get_time_ms() >= expire_time {
+            debug!("[sys_ppoll]: timeout!");
+            return Ok(0)
+        } else {
+            thread::yield_now().await;
+        }
+    }
+
 }

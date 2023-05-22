@@ -23,6 +23,7 @@ pub struct TimeVal {
 }
 
 /// Used for nanosleep
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct TimeSpec {
     pub sec: usize,
