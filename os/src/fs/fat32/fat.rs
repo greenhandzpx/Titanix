@@ -17,7 +17,7 @@ const FATENTRY_PER_SECTOR : usize = 128;
 
 /// if data_size < cluster_size*fatentry_per_cluster*fat_cache_count:
 /// we don't have cache miss.
-const FAT_CACHE_SIZE: usize = 1024;
+const FAT_CACHE_SIZE: usize = 16;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum FATSectorBufferState {
@@ -60,10 +60,6 @@ impl Default for FATSectorBuffer {
 }
 
 impl FATSectorBuffer {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub fn sync(&mut self, block_device: Arc<dyn BlockDevice>, fatinfo: &FATInfoMeta) {
         if self.state == FATSectorBufferState::Dirty {
             for i in 0..fatinfo.fat_count {
@@ -139,7 +135,7 @@ impl FATBufferCache {
                 buffer_replaced_locked.init(Arc::clone(&self.block_device), &self.fatinfo, sector_no);
                 data_locked.push_front((sector_no, Arc::clone(&buffer_replaced)));
             } else {
-                let mut new_buffer = FATSectorBuffer::new();
+                let mut new_buffer = FATSectorBuffer::default();
                 new_buffer.init(Arc::clone(&self.block_device), &self.fatinfo, sector_no);
                 data_locked.push_front((sector_no, Arc::new(Mutex::new(new_buffer))));
             }

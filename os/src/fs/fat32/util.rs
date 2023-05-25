@@ -1,5 +1,8 @@
 use core::mem::*;
 use core::ptr::*;
+use core::time;
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub fn load_fn<T: Copy>(dst: &mut T, src: &[u8], offset: &mut usize) {
     unsafe {

@@ -1,9 +1,11 @@
 use core::panic;
 
 use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
+use lazy_static::lazy_static;
+use log::info;
 
 use crate::{
-    driver::{block::{BlockDevice, self}},
+    driver::{block::{BlockDevice, self, IoDevice, BLOCK_DEVICE}},
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallRet, SyscallErr},
 };
@@ -11,7 +13,7 @@ use crate::{
 use self::{bpb::BootSector, fsinfo::FSInfo, inode::FAT32Inode};
 use self::{fat::FileAllocTable};
 
-use super::{file_system::FileSystemMeta, FileSystem, FileSystemType, Inode, fat32_tmp::Fat32Inode};
+use super::{file_system::FileSystemMeta, FileSystem, FileSystemType, Inode, InodeMode};
 
 // layouts
 mod bpb;
@@ -20,6 +22,7 @@ mod fsinfo;
 mod util;
 mod fat;
 mod inode;
+mod time;
 
 const SECTOR_SIZE: usize = 512;
 
@@ -61,14 +64,11 @@ pub struct FAT32FileSystem {
 }
 
 impl FAT32FileSystem {
-    pub fn new(block_device: Arc<dyn BlockDevice>) -> GeneralRet<Self> {
+    pub fn new(block_device: Arc<dyn BlockDevice>) -> Option<Self> {
         let mut data: [u8; 512] = [0; 512];
         // read Boot Sector
         block_device.read_block(0, &mut data[..]);
-        let bs = match BootSector::new(&data) {
-            Some(bs) => bs,
-            None => return Err(SyscallErr::ENONET)
-        };
+        let bs = BootSector::new(&data)?;
         let fat32fs_meta = FAT32FileSystemMeta {
             sector_per_cluster: bs.BPB_SectorPerCluster as usize,
             reserved_sector_count: bs.BPB_ReservedSectorCount as usize,
@@ -99,20 +99,24 @@ impl FAT32FileSystem {
             fsmeta: None,
             root_inode: None,
         };
-        Ok(ret)
+        Some(ret)
     }
 }
 
 impl FileSystem for FAT32FileSystem {
+    // 为 FS 初始化一个根目录，这个函数只能被调用一次。
     fn create_root(
         &self,
         parent: Option<Arc<dyn Inode>>,
         mount_point: &str,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        todo!()
-
-        // let mut ret: FAT32Inode = Fat32Inode::new_inode(Arc::new(self.fat), self.fat32fs_meta.root_cluster_id);
-        
+        match self.root_inode {
+            Some(_) => Err(SyscallErr::EEXIST), // call it more than once
+            None => {
+                todo!();
+                // self.root_inode = Some
+            }
+        }
     }
     
     fn write_inode(&self, inode: Arc<dyn Inode>) -> SyscallRet {
@@ -122,10 +126,42 @@ impl FileSystem for FAT32FileSystem {
     fn sync_fs(&self) -> SyscallRet {
         todo!()
     }
+
+    /// 设置 FS 的 metadata。
     fn set_metadata(&mut self, meta_data: FileSystemMeta) {
         self.fsmeta = Some(meta_data)
     }
+
+    /// 返回 meatdata 的副本。
     fn metadata(&self) -> FileSystemMeta {
         self.fsmeta.as_ref().unwrap().clone()
     }
+}
+
+
+
+lazy_static! {
+    pub static ref ROOT_FS: FAT32FileSystem = {
+        info!("start to init RootFS...");
+        let maybe_ret = FAT32FileSystem::new(Arc::clone(&BLOCK_DEVICE));
+        match maybe_ret {
+            Some(ret) => {
+                info!("init RootFS success!");
+                ret
+            },
+            None => {
+                panic!("init RootFS failed!");
+            }
+        }
+        
+    };
+}
+
+pub fn init() -> GeneralRet<()> {
+    info!("start to init FAT32 FS...");
+    ROOT_FS.init_ref("/", FileSystemType::VFAT)?;
+    let root_inode = ROOT_FS.metadata().root_inode.unwrap();
+    root_inode.mkdir(root_inode.clone(), "mnt", InodeMode::FileDIR)?;
+    info!("init FAT32 FS success!");
+    Ok(())
 }
