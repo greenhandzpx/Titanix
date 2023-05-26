@@ -2,23 +2,57 @@
 use alloc::sync::Arc;
 
 use crate::{
-    fs::inode::{Inode, InodeMode, InodeMeta, InodeMetaInner},
+    fs::{inode::{Inode, InodeMode, InodeMeta, InodeMetaInner}, Mutex},
     driver::{block::{BlockDevice, self}},
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallRet, SyscallErr},
     mm::Page,
 };
 
+use super::{SHORTNAME_LEN, time::FAT32Timestamp, LONGNAME_LEN};
 
+/// 这里的 Inode 对应一个文件或者一个目录，
+/// 也就是，对应一个 Cluster开始的链。
+/// 
+/// 
+/// 
+/// 
+pub struct FAT32Inode {
+    block_device: Arc<dyn BlockDevice>,
+}
+
+impl FAT32Inode {
+    pub fn new() -> Self {
+        todo!();
+        
+    }
+}
+
+
+
+/*
 pub struct FAT32Inode {
     meta: InodeMeta,
 }
 
 impl FAT32Inode {
-    fn new(first_cluster: usize) {
-        
+    pub fn new(
+        parent: Option<Arc<dyn Inode>>,
+        path: &str,
+        mode: InodeMode,
+        data_len: usize
+    ) -> Self {
+        Self {
+            meta: InodeMeta::new(
+                parent,
+                path,
+                mode,
+                data_len
+            )
+        }
     }
 }
+*/
 
 impl Inode for FAT32Inode {
     fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {

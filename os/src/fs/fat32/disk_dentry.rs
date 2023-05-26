@@ -4,37 +4,39 @@ use super::util::*;
 #[derive(Copy, Clone, Default)]
 // Dentry and part of long dentry
 pub struct DiskDirEntry {
-    DIR_Name: [u8; 11],
-    DIR_Attr: u8,
-    DIR_NTRes: u8,
-    DIR_CrtTimeTenth: u8,
-    DIR_CrtTime: u16,
-    DIR_CrtDate: u16,
-    DIR_LstAccDate: u16,
-    DIR_FstClusHI: u16,
-    DIR_WrtTime: u16,
-    DIR_WrtDate: u16,
-    DIR_FstClusLO: u16,
-    DIR_FileSize: u32,
+    pub DIR_Name: [u8; 11],
+    pub DIR_Attr: u8,
+    pub DIR_NTRes: u8,
+    pub DIR_CrtTimeTenth: u8,
+    pub DIR_CrtTime: u16,
+    pub DIR_CrtDate: u16,
+    pub DIR_LstAccDate: u16,
+    pub DIR_FstClusHI: u16,
+    pub DIR_WrtTime: u16,
+    pub DIR_WrtDate: u16,
+    pub DIR_FstClusLO: u16,
+    pub DIR_FileSize: u32,
 }
+
+
 
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, Default)]
 pub struct DiskLongDirEntry {
-    LDIR_Ord: u8,
-    LDIR_Name1: [u16; 5],
-    LDIR_Attr: u8,
-    LDIR_Type: u8,
-    LDIR_Chksum: u8,
-    LDIR_Name2: [u16; 6],
-    LDIR_FstClusLO: u16,
-    LDIR_Name3: [u16; 2],
+    pub LDIR_Ord: u8,
+    pub LDIR_Name1: [u16; 5],
+    pub LDIR_Attr: u8,
+    pub LDIR_Type: u8,
+    pub LDIR_Chksum: u8,
+    pub LDIR_Name2: [u16; 6],
+    pub LDIR_FstClusLO: u16,
+    pub LDIR_Name3: [u16; 2],
 }
 
 
 impl DiskDirEntry {
     /// Initialize a BPB
-    pub fn load(&mut self, src: &[u8; 32]) {
+    pub fn load(&mut self, src: &[u8]) {
         let mut offset: usize = 0;
         macro_rules ! load {
             ($v: expr) => {
@@ -55,7 +57,7 @@ impl DiskDirEntry {
         load!(self.DIR_FileSize);
     }
     
-    pub fn store(&mut self, dest: &mut[u8; 32]) {
+    pub fn store(&mut self, dest: &mut[u8]) {
         let mut offset: usize = 0;
         macro_rules ! store {
             ($v: expr) => {
@@ -75,11 +77,17 @@ impl DiskDirEntry {
         store!(self.DIR_FstClusLO);
         store!(self.DIR_FileSize);
     }
+
+    pub fn new(src: &[u8]) -> Self {
+        let mut ret = Self::default();
+        ret.load(src);
+        ret
+    }
 }
 
 impl DiskLongDirEntry {
     /// Initialize a BPB
-    pub fn load(&mut self, src: &[u8; 32]) {
+    pub fn load(&mut self, src: &[u8]) {
         let mut offset: usize = 0;
         macro_rules ! load {
             ($v: expr) => {
@@ -96,7 +104,7 @@ impl DiskLongDirEntry {
         load!(self.LDIR_Name3);
     }
     
-    pub fn store(&mut self, dest: &mut[u8; 32]) {
+    pub fn store(&mut self, dest: &mut[u8]) {
         let mut offset: usize = 0;
         macro_rules ! store {
             ($v: expr) => {
@@ -111,6 +119,11 @@ impl DiskLongDirEntry {
         store!(self.LDIR_Name2);
         store!(self.LDIR_FstClusLO);
         store!(self.LDIR_Name3);
+    }
+    pub fn new(src: &[u8]) -> Self {
+        let mut ret = Self::default();
+        ret.load(src);
+        ret
     }
 }
 

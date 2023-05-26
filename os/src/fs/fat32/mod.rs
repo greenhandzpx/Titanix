@@ -2,12 +2,12 @@ use core::panic;
 
 use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
 use lazy_static::lazy_static;
-use log::info;
+use log::{debug, info};
 
 use crate::{
     driver::{block::{BlockDevice, self, IoDevice, BLOCK_DEVICE}},
     sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallRet, SyscallErr},
+    utils::{error::{GeneralRet, SyscallRet, SyscallErr},path::Path},
 };
 
 use self::{bpb::BootSector, fsinfo::FSInfo, inode::FAT32Inode};
@@ -21,10 +21,13 @@ mod disk_dentry;
 mod fsinfo;
 mod util;
 mod fat;
+mod dentry;
 mod inode;
 mod time;
 
 const SECTOR_SIZE: usize = 512;
+const SHORTNAME_LEN: usize = 11;
+const LONGNAME_LEN: usize = 255;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -58,12 +61,12 @@ pub struct FAT32FileSystem {
     fat32fs_meta: FAT32FileSystemMeta,
     fsinfo_meta: FAT32FSInfoMeta,
     fat: FileAllocTable,
-
-    fsmeta: Option<FileSystemMeta>,
-    root_inode: Option<FAT32Inode>,
+    fsmeta: Arc<Mutex<FileSystemMeta>>,
 }
 
 impl FAT32FileSystem {
+    /// 传入一个 block_device，初始化 FAT32 的基本信息。如果出现错误，返回None。
+    /// 否则返回新构造出来的 FS，但是还需要调用初始化，将其挂载。
     pub fn new(block_device: Arc<dyn BlockDevice>) -> Option<Self> {
         let mut data: [u8; 512] = [0; 512];
         // read Boot Sector
@@ -90,33 +93,70 @@ impl FAT32FileSystem {
             fsinfo_meta = FAT32FSInfoMeta::default();
         }
         let fat = FileAllocTable::new(Arc::clone(&block_device), &fat32fs_meta, &fsinfo_meta);
-
-        let ret =  Self{
+        let ret =  Self {
             block_device: Arc::clone(&block_device),
             fat32fs_meta,
             fsinfo_meta,
             fat,
-            fsmeta: None,
-            root_inode: None,
+            fsmeta: Arc::new(Mutex::new(FileSystemMeta {
+                ftype: FileSystemType::VFAT,
+                root_inode: None,
+                mnt_flags: false,
+                s_dirty: Vec::new(),
+            })),
         };
         Some(ret)
     }
+
+    fn mount(&self, mount_point: &str) -> GeneralRet<()> {
+        let mut fsmeta_locked = self.fsmeta.lock();
+        let parent = match Path::get_parent_dir(mount_point) {
+            Some(parent_dir) => <dyn Inode>::lookup_from_root_tmp(&parent_dir),
+            None => None,
+        };
+        let root_inode = FAT32Inode::new();
+        fsmeta_locked.root_inode = Some(Arc::new(root_inode));
+        fsmeta_locked.mnt_flags = true;
+        Ok(())
+    }
+
+    fn unmount(&self) -> GeneralRet<()> {
+        self.sync_fs()?;
+        let mut fsmeta_locked = self.fsmeta.lock();
+        fsmeta_locked.root_inode = None;
+        fsmeta_locked.mnt_flags = false;
+        Ok(())
+    }
+
+    fn root_inode(&self) -> Option<Arc<dyn Inode>> {
+        let fsmeta_locked = self.fsmeta.lock();
+        let root_inode = fsmeta_locked.root_inode.as_ref()?;
+        Some(Arc::clone(root_inode))
+    }
+
+    fn sync_fs(&self) -> GeneralRet<()> {
+        todo!()
+    }
+
 }
 
 impl FileSystem for FAT32FileSystem {
     // 为 FS 初始化一个根目录，这个函数只能被调用一次。
     fn create_root(
         &self,
-        parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
+        _: Option<Arc<dyn Inode>>,
+        _: &str,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        match self.root_inode {
-            Some(_) => Err(SyscallErr::EEXIST), // call it more than once
-            None => {
-                todo!();
-                // self.root_inode = Some
-            }
-        }
+        panic!("Abolished function!");
+    }
+
+    fn init_ref(&self, _: &str, _: FileSystemType) -> GeneralRet<()> {
+        panic!("Abolished function!");
+    }
+
+    fn init(&mut self, mount_point: &str, _: FileSystemType) -> GeneralRet<()> {
+        panic!("Abolished function!");
+        Ok(())
     }
     
     fn write_inode(&self, inode: Arc<dyn Inode>) -> SyscallRet {
@@ -129,12 +169,12 @@ impl FileSystem for FAT32FileSystem {
 
     /// 设置 FS 的 metadata。
     fn set_metadata(&mut self, meta_data: FileSystemMeta) {
-        self.fsmeta = Some(meta_data)
+        todo!();
     }
 
     /// 返回 meatdata 的副本。
     fn metadata(&self) -> FileSystemMeta {
-        self.fsmeta.as_ref().unwrap().clone()
+        todo!();
     }
 }
 
