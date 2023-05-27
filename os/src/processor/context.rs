@@ -29,6 +29,8 @@ impl LocalContext {
 
     pub fn env(&mut self, spare_env: *mut EnvContext) -> &mut EnvContext {
         match self {
+            // SAFETY: 
+            // spare_env is the local hart's member, which lives forever
             Self::Idle => unsafe { &mut *spare_env },
             Self::TaskContext(task) => &mut task.env,
         }

@@ -13,7 +13,10 @@ use alloc::sync::Arc;
 // use easy_fs::BlockDevice;
 use lazy_static::*;
 
-use crate::config::{board::MMIO, mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE};
+use crate::config::{
+    board::MMIO,
+    mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+};
 
 #[cfg(feature = "board_qemu")]
 pub type BlockDeviceImpl = virtio_blk::VirtIOBlock;
@@ -22,8 +25,10 @@ pub type BlockDeviceImpl = virtio_blk::VirtIOBlock;
 pub type BlockDeviceImpl = sdcard::SDCardWrapper;
 
 /// MMIO virtual address
-pub const MMIO_VIRT: &[(usize, usize)] =
-    &[(MMIO[0].0 + KERNEL_DIRECT_OFFSET * PAGE_SIZE, MMIO[0].1)];
+pub const MMIO_VIRT: &[(usize, usize)] = &[(
+    MMIO[0].0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS),
+    MMIO[0].1,
+)];
 
 lazy_static! {
     pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = {

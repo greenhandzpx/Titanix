@@ -51,14 +51,14 @@ use core::{
 use log::info;
 
 use crate::{
-    config::mm::HART_START_ADDR,
+    config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     processor::{hart, HARTS},
     sbi::hart_start,
 };
 
-global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("entry.S"));
 global_asm!(include_str!("link_app.S"));
 /// clear BSS segment
 fn clear_bss() {
@@ -81,6 +81,19 @@ fn clear_bss() {
 // }
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
+
+///
+#[no_mangle]
+pub fn fake_main(hart_id: usize) {
+    unsafe {
+        asm!("add sp, sp, {}", in(reg) KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
+        asm!("la t0, rust_main");
+        asm!("add t0, t0, {}", in(reg) KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
+        asm!("mv a0, {}", in(reg) hart_id);
+        asm!("jalr zero, 0(t0)");
+    }
+}
+
 
 // TODO: We will add multi cores support in the future
 #[no_mangle]

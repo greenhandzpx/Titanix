@@ -2,7 +2,7 @@
 
 pub const CLOCK_FREQ: usize = 12500000;
 // pub const MEMORY_END: usize = 0x81000000;
-pub const MEMORY_END: usize = 0x88000000;
+pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x88000000;
 
 #[cfg(feature = "board_qemu")]
 pub const MMIO: &[(usize, usize)] = &[
@@ -14,6 +14,8 @@ pub const MMIO: &[(usize, usize)] = &[
 
 //ref:: https://github.com/andre-richter/qemu-exit
 use core::arch::asm;
+
+use crate::config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS};
 
 const EXIT_SUCCESS: u32 = 0x5555; // Equals `exit(0)`. qemu successful exit
 

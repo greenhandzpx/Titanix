@@ -1,6 +1,7 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-BASE_ADDRESS = 0x80200000;
+/* BASE_ADDRESS = 0x80200000; */
+BASE_ADDRESS = 0xffffffc080200000;
 
 SECTIONS
 {
@@ -24,27 +25,30 @@ SECTIONS
         *(.rodata .rodata.*)
         *(.srodata .srodata.*)
     }
+
     . = ALIGN(4K);
     erodata = .;
-
     sdata = .;
     .data : {
         *(.data .data.*)
         *(.sdata .sdata.*)
     }
+
     . = ALIGN(4K);
     edata = .;
-
     sstack = .;
+    /* boot stack(in entry.S) */
     .stack : {
         *(.bss.stack)
     }
-    estack = .;
 
-    sbss_with_stack = .;
+    . = ALIGN(4K);
+    estack = .;
+    /* sbss_with_stack = .; */
+    sbss = .;
     .bss : {
-        *(.bss.stack)
-        sbss = .;
+        /* *(.bss.stack) */
+        /* sbss = .; */
         *(.bss .bss.*)
         *(.sbss .sbss.*)
     }

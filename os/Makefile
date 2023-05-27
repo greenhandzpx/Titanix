@@ -56,11 +56,19 @@ env:
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
+# kernel:
+# 	@echo "build user and kernel"
+# 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
+# 	@echo Platform: $(BOARD)
+# 	@cp src/linker-$(BOARD).ld src/linker.ld
+# 	@cargo build --release
+# 	@rm src/linker.ld
+
 kernel:
 	@echo "build user and kernel"
 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
 	@echo Platform: $(BOARD)
-	@cp src/linker-$(BOARD).ld src/linker.ld
+	@cp src/linker64.ld src/linker.ld
 	@cargo build --release
 	@rm src/linker.ld
 

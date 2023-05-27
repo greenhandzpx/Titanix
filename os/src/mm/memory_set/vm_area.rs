@@ -128,7 +128,9 @@ impl VmArea {
         let ppn: PhysPageNum;
         match self.map_type {
             MapType::Identical => {
-                ppn = PhysPageNum(vpn.0);
+                ppn = PhysPageNum(vpn.0 - KERNEL_DIRECT_OFFSET);
+                // println!("ppn {:#x}, vpn {:#x}", ppn.0, vpn.0);
+                // ppn = PhysPageNum(vpn.0);
             }
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();

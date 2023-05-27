@@ -1,4 +1,5 @@
 use alloc::{boxed::Box, sync::Arc};
+use log::debug;
 use core::{
     future::Future,
     pin::Pin,
@@ -75,11 +76,6 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         hart.push_task(&mut this.task_ctx);
         // hart.push_task(&mut self.task_ctx);
 
-        // // TODO: refactor ?
-        // let ret = Poll::Pending;
-        // if this.task_ctx.task_ctx().thread.runnable() {
-        // }
-
         // run the `threadloop`
         // SAFETY:
         // the task future(i.e. threadloop) won't be moved.
@@ -88,8 +84,6 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
         hart.pop_task(&mut this.task_ctx);
 
-        // TODO change back old thread ctx
-        // TODO clear tlb
         ret
     }
 }
@@ -114,6 +108,7 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        debug!("switch to kernel task");
         let this = unsafe { self.get_unchecked_mut() };
 
         let hart = processor::local_hart();

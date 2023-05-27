@@ -6,11 +6,11 @@ use super::{
     frame_alloc, FrameTracker, MapPermission, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum,
     KERNEL_SPACE,
 };
-use alloc::vec;
+use alloc::{vec, string::String};
 use alloc::vec::Vec;
 use bitflags::*;
 use core::arch::asm;
-use log::error;
+use log::{error, info};
 use riscv::register::satp;
 
 bitflags! {
@@ -162,10 +162,34 @@ impl PageTable {
 
     /// Switch to this pagetable
     pub fn activate(&self) {
+        // self.dump();
         let satp = self.token();
         unsafe {
             satp::write(satp);
             asm!("sfence.vma");
+        }
+    }
+
+    /// Dump page table
+    pub fn dump(&self) {
+        info!("----- Dump page table -----");
+        self._dump(self.root_ppn, 0);
+    }
+
+    fn _dump(&self, ppn: PhysPageNum, level: usize) {
+        if level >= 3 {
+            return;
+        }
+        for k in 0..512 {
+            let pte = ppn.pte_array()[k];
+            if pte.is_valid() {
+                let mut prefix = String::from("");
+                for _ in 0..level {
+                    prefix += "-";
+                }
+                info!("{} ppn {:#x}, flags {:?}", prefix, pte.ppn().0, pte.flags());
+                self._dump(pte.ppn(), level + 1);
+            }
         }
     }
 
