@@ -1,4 +1,4 @@
-use core::{fmt, pin::Pin, future::Future};
+use core::{fmt, future::Future, pin::Pin};
 
 use alloc::boxed::Box;
 
@@ -9,7 +9,6 @@ pub type SysFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub type AsyscallRet<'a> = SysFuture<'a, SyscallRet>;
 pub type AgeneralRet<'a, T> = SysFuture<'a, GeneralRet<T>>;
-
 
 #[derive(Debug)]
 pub enum SyscallErr {

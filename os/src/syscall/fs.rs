@@ -724,24 +724,22 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
     } else {
         infinite_timeout = false;
         stack_trace!();
-        UserCheck::new().check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
-        let timeout_delta = unsafe {
-            *(timeout_ptr as *const TimeSpec)
-        };
+        UserCheck::new()
+            .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+        let timeout_delta = unsafe { *(timeout_ptr as *const TimeSpec) };
         // if timeout_delta < 0 {
         //     warn!("invalid timeout");
         //     return Err(SyscallErr::EINVAL);
-        // } 
+        // }
         timeout = timeout_delta.sec * 1000 + timeout_delta.nsec / 1000000;
     }
     let expire_time = start_ms + timeout;
 
     if sigmask != 0 {
         stack_trace!();
-        UserCheck::new().check_readable_slice(sigmask as *const u8, core::mem::size_of::<SigSet>())?;
-        let sigmask = unsafe {
-            *(sigmask as *const usize)
-        };
+        UserCheck::new()
+            .check_readable_slice(sigmask as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe { *(sigmask as *const usize) };
         current_process().inner_handler(|proc| {
             if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
                 proc.pending_sigs.blocked_sigs |= new_sig_mask;
@@ -751,16 +749,15 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
         });
     }
 
-
     loop {
         // TODO: how to avoid user modify the address?
         let mut cnt = 0;
         for i in 0..nfds {
             let current_fd = &mut fds[i];
             debug!("[sys_ppoll]: poll fd {}", current_fd.fd);
-            if let Some(file) = current_process().inner_handler(|proc| {
-                proc.fd_table.get(current_fd.fd as usize)
-            }) {
+            if let Some(file) =
+                current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
+            {
                 if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
                     current_fd.revents = 0;
                     if events.contains(PollEvents::POLLIN) {
@@ -793,10 +790,9 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
             return Ok(cnt as isize);
         } else if !infinite_timeout && get_time_ms() >= expire_time {
             debug!("[sys_ppoll]: timeout!");
-            return Ok(0)
+            return Ok(0);
         } else {
             thread::yield_now().await;
         }
     }
-
 }

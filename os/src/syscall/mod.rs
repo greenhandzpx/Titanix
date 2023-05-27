@@ -68,6 +68,7 @@ mod dev;
 mod fs;
 mod mm;
 mod process;
+mod signal;
 mod sync;
 
 use core::arch::asm;
@@ -77,20 +78,26 @@ use fs::*;
 use log::{debug, error, trace};
 use mm::*;
 use process::*;
+use signal::*;
 pub use sync::futex_wake;
 use sync::*;
 
 use crate::{
     fs::Iovec,
+    processor::current_trap_cx,
     signal::{SigAction, SigSet},
     timer::*,
-    utils::error::SyscallRet, processor::current_trap_cx,
+    utils::error::SyscallRet,
 };
 
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!("syscall id: {}, sepc {:#x}", syscall_id, current_trap_cx().sepc);
+    trace!(
+        "syscall id: {}, sepc {:#x}",
+        syscall_id,
+        current_trap_cx().sepc
+    );
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
         SYSCALL_DUP => sys_dup(args[0]),
@@ -244,7 +251,7 @@ pub enum FutexOperations {
 pub struct PollFd {
     /// Fd
     pub fd: i32,
-    /// Requested events 
+    /// Requested events
     pub events: i16,
     /// Returned events
     pub revents: i16,
