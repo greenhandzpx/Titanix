@@ -1,10 +1,10 @@
 use alloc::{boxed::Box, sync::Arc};
-use log::debug;
 use core::{
     future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
+use log::debug;
 
 use crate::{
     processor::{

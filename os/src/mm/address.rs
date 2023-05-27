@@ -2,7 +2,11 @@
 use log::warn;
 
 use super::PageTableEntry;
-use crate::config::{mm::PAGE_SIZE, mm::{PAGE_SIZE_BITS, KERNEL_DIRECT_OFFSET}, mm::PAGE_TABLE_LEVEL_NUM};
+use crate::config::{
+    mm::PAGE_SIZE,
+    mm::PAGE_TABLE_LEVEL_NUM,
+    mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+};
 use core::fmt::{self, Debug, Formatter};
 /// physical address
 const PA_WIDTH_SV39: usize = 56;
@@ -53,7 +57,7 @@ impl Debug for PhysPageNum {
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << PA_WIDTH_SV39) - 1))
-        let tmp = (v as isize >> PA_WIDTH_SV39) as isize; 
+        let tmp = (v as isize >> PA_WIDTH_SV39) as isize;
         assert!(tmp == 0 || tmp == -1);
         Self(v)
     }
@@ -61,7 +65,7 @@ impl From<usize> for PhysAddr {
 impl From<usize> for PhysPageNum {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << PPN_WIDTH_SV39) - 1))
-        let tmp = (v as isize >> PPN_WIDTH_SV39) as isize; 
+        let tmp = (v as isize >> PPN_WIDTH_SV39) as isize;
         assert!(tmp == 0 || tmp == -1);
         Self(v)
     }
@@ -69,18 +73,18 @@ impl From<usize> for PhysPageNum {
 impl From<usize> for VirtAddr {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << VA_WIDTH_SV39) - 1))
-        let tmp = (v as isize >> VA_WIDTH_SV39) as isize; 
+        let tmp = (v as isize >> VA_WIDTH_SV39) as isize;
         if tmp != 0 && tmp != -1 {
             warn!("v {:#x}, tmp {:#x}", v, tmp);
         }
         assert!(tmp == 0 || tmp == -1);
-        Self(v) 
+        Self(v)
     }
 }
 impl From<usize> for VirtPageNum {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << VPN_WIDTH_SV39) - 1))
-        let tmp = (v as isize >> VPN_WIDTH_SV39) as isize; 
+        let tmp = (v as isize >> VPN_WIDTH_SV39) as isize;
         assert!(tmp == 0 || tmp == -1);
         Self(v)
     }

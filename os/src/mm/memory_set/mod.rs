@@ -693,7 +693,7 @@ impl MemorySet {
     ///Refresh TLB with `sfence.vma`
     pub fn activate(&self) {
         unsafe {
-            let page_table  = &mut (*self.page_table.get());
+            let page_table = &mut (*self.page_table.get());
             page_table.activate();
             // let satp = (*self.page_table.get()).token();
             // // println!("satp {:#x}", satp);
@@ -798,9 +798,13 @@ pub fn remap_test() {
     let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
     // let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
-    let mid_rodata: VirtAddr = (srodata as usize + (erodata as usize - srodata as usize ) / 2).into();
+    let mid_rodata: VirtAddr =
+        (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
     let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
-    debug!("mid text {:#x}, mid rodata {:#x}, mid data {:#x}", mid_text.0, mid_rodata.0, mid_data.0);
+    debug!(
+        "mid text {:#x}, mid rodata {:#x}, mid data {:#x}",
+        mid_text.0, mid_rodata.0, mid_data.0
+    );
     unsafe {
         assert!(!(*kernel_space.page_table.get())
             .translate(mid_text.floor())

@@ -94,7 +94,6 @@ pub fn fake_main(hart_id: usize) {
     }
 }
 
-
 // TODO: We will add multi cores support in the future
 #[no_mangle]
 /// the rust entry-point of os
