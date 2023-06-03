@@ -26,6 +26,10 @@ impl FAT32Inode {
         todo!();
         
     }
+
+    pub fn sync_inode(&self) {
+
+    }
 }
 
 

@@ -41,16 +41,10 @@ pub struct BootSector {
 }
 
 impl BootSector {
-
-    pub fn new(src: &[u8; 512]) -> Option<Self> {
+    pub fn new(src: &[u8; 512]) -> Self {
         let mut ret: Self = Self::default();
         ret.load(src);
-        if (ret.BPB_RootEntryCount != 0 || ret.BPB_TotSector16 != 0 || ret.BPB_FATsize16 != 0 || ret.BPB_FSVer != 0) {
-            None
-        }
-        else {
-            Some(ret)
-        }
+        ret
     }
 
     pub fn load(&mut self, src: &[u8; 512]) {
