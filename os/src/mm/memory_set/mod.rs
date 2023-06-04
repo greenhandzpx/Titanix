@@ -695,10 +695,6 @@ impl MemorySet {
         unsafe {
             let page_table = &mut (*self.page_table.get());
             page_table.activate();
-            // let satp = (*self.page_table.get()).token();
-            // // println!("satp {:#x}", satp);
-            // satp::write(satp);
-            // asm!("sfence.vma");
         }
     }
     ///Translate throuth pagetable

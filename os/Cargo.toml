@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "os"
 version = "0.1.0"
@@ -34,3 +36,4 @@ stack_trace = []
 
 [profile.release]
 debug = true
+rustflags = ["-C", "relocation-model=pic"]

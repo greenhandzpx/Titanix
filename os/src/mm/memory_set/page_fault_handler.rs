@@ -35,17 +35,12 @@ pub trait PageFaultHandler: Send + Sync {
     ) -> GeneralRet<()>;
 
     ///
-    fn is_legal(&self, scause: Scause) -> bool {
+    fn is_legal(&self, _scause: Scause) -> bool {
         todo!();
     }
 
     /// Used for cloning in `fork`
     fn box_clone(&self) -> Box<dyn PageFaultHandler>;
-
-    ///
-    fn handle_pte(&self, pte: Option<&mut PageTableEntry>) {
-        todo!();
-    }
 }
 
 /// UStack page fault handler

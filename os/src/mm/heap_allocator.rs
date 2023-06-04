@@ -1,7 +1,7 @@
 //! The global allocator
 use crate::config::mm::KERNEL_HEAP_SIZE;
 use buddy_system_allocator::LockedHeap;
-use log::{debug, info};
+use log::{debug, info, error};
 
 #[global_allocator]
 /// heap allocator instance
@@ -10,7 +10,7 @@ static HEAP_ALLOCATOR: LockedHeap = LockedHeap::empty();
 #[alloc_error_handler]
 /// panic when heap allocation error occurs
 pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
-    println!("heap alloc err!!");
+    error!("heap alloc err!!");
     panic!("Heap allocation error, layout = {:?}", layout);
 }
 /// heap space ([u8; KERNEL_HEAP_SIZE])
