@@ -34,3 +34,8 @@ stack_trace = []
 [profile.release]
 debug = true
 # rustflags = ["-C", "relocation-model=pic"]
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

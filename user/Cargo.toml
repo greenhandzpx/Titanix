@@ -18,3 +18,8 @@ debug = true
 preliminary = []
 # board_qemu = []
 # board_k210 = []
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

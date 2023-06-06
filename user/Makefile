@@ -15,7 +15,7 @@ TEST ?=
 elf: $(APPS)
 ifeq ($(PRELIMINARY), 1)
 	@echo "user: build for preliminary"
-	@cargo build --release --offline --features preliminary
+	@cargo build --release --features preliminary --offline 
 endif
 ifeq ($(PRELIMINARY), 0)
 	@cargo build --release --offline
