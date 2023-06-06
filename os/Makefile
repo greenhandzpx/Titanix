@@ -62,6 +62,7 @@ $(KERNEL_BIN): kernel
 # 	@cp src/linker-$(BOARD).ld src/linker.ld
 # 	@cargo build --release
 # 	@rm src/linker.ld
+kernel-bin: $(KERNEL_BIN)
 
 kernel:
 	@echo "build user and kernel"
