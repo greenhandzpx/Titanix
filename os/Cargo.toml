@@ -10,30 +10,18 @@ edition = "2021"
 
 [dependencies]
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
-# riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
-# lazy_static = "1.4.0"
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
-# lazy_static = { path = "../dependencies/lazy_static.rs", version = "1.4.0", features = ["spin_no_std"] }
-# lazy_static = { path = "../dependencies/lazy-static", features = ["spin_no_std"] }
 buddy_system_allocator = "0.6"
-# buddy_system_allocator = { path = "../dependencies/buddy_system_allocator"}
 bitflags = "1.2.1"
-# bitflags = { path = "../dependencies/bitflags" }
 xmas-elf = "0.7.0"
-# xmas-elf = { path = "../dependencies/xmas-elf" }
 log = "0.4"
-# log = { path = "../dependencies/log" }
-# virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5" }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
-# async-trait = "0.1.53"
 async-task = { path = "../dependencies/async-task", default-features = false }
 easy-fs = { path = "../dependencies/easy-fs" }
-# fatfs temporarily
 fatfs = { path = "../dependencies/rust-fatfs", default-features = false, features = [
     "lfn",
     "alloc",
 ] }
-# futures = "0.3"
 fu740-pac = { path = "../dependencies/fu740-pac" }
 fu740-hal = { path = "../dependencies/fu740-hal" }
 
