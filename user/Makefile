@@ -15,10 +15,10 @@ TEST ?=
 elf: $(APPS)
 ifeq ($(PRELIMINARY), 1)
 	@echo "user: build for preliminary"
-	@cargo build --release --features preliminary
+	@cargo build --release --offline --features preliminary
 endif
 ifeq ($(PRELIMINARY), 0)
-	@cargo build --release
+	@cargo build --release --offline
 endif
 ifeq ($(TEST), 1)
 	@$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc

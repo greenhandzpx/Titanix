@@ -1,22 +1,31 @@
-cargo-features = ["profile-rustflags"]
+# cargo-features = ["profile-rustflags"]
 
 [package]
 name = "os"
 version = "0.1.0"
-authors = ["Yifan Wu <shinbokuow@163.com>"]
+authors = ["Peixin Tsang <893522573@qq.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
+# riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+# lazy_static = "1.4.0"
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
+# lazy_static = { path = "../dependencies/lazy_static.rs", version = "1.4.0", features = ["spin_no_std"] }
+# lazy_static = { path = "../dependencies/lazy-static", features = ["spin_no_std"] }
 buddy_system_allocator = "0.6"
+# buddy_system_allocator = { path = "../dependencies/buddy_system_allocator"}
 bitflags = "1.2.1"
+# bitflags = { path = "../dependencies/bitflags" }
 xmas-elf = "0.7.0"
+# xmas-elf = { path = "../dependencies/xmas-elf" }
 log = "0.4"
-virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5" }
-async-trait = "0.1.53"
+# log = { path = "../dependencies/log" }
+# virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5" }
+virtio-drivers = { path = "../dependencies/virtio-drivers" }
+# async-trait = "0.1.53"
 async-task = { path = "../dependencies/async-task", default-features = false }
 easy-fs = { path = "../dependencies/easy-fs" }
 # fatfs temporarily
@@ -36,4 +45,4 @@ stack_trace = []
 
 [profile.release]
 debug = true
-rustflags = ["-C", "relocation-model=pic"]
+# rustflags = ["-C", "relocation-model=pic"]

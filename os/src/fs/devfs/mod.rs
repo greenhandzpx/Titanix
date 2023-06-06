@@ -6,7 +6,6 @@ use alloc::{
     string::{String, ToString},
     sync::{Arc, Weak},
 };
-use async_trait::async_trait;
 use log::{debug, info};
 
 use crate::utils::error::AsyscallRet;

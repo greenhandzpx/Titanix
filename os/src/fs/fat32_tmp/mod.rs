@@ -3,7 +3,6 @@ use core::cell::UnsafeCell;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::{boxed::Box, vec::Vec};
-use async_trait::async_trait;
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
 use log::{debug, error, info};

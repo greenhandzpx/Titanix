@@ -9,7 +9,6 @@ use crate::{
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc};
-use async_trait::async_trait;
 use log::debug;
 
 pub struct NullInode {

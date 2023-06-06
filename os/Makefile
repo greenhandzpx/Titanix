@@ -47,11 +47,10 @@ build-pre: env $(KERNEL_BIN) fs-img-pre
 build-pre-fat32: env $(KERNEL_BIN) fs-img-pre-fat32
 
 env:
-	export LOG="debug"
-	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
-	rustup component add rust-src
-	rustup component add llvm-tools-preview
+	# (rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
+	# cargo install cargo-binutils
+	# rustup component add rust-src
+	# rustup component add llvm-tools-preview
 
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
@@ -69,7 +68,7 @@ kernel:
 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
 	@echo Platform: $(BOARD)
 	@cp src/linker64.ld src/linker.ld
-	@cargo build --release
+	@cargo build --release --offline
 	@rm src/linker.ld
 
 # preliminary

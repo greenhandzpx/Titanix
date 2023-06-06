@@ -5,7 +5,6 @@ use alloc::{
     string::{String, ToString},
     sync::Arc,
 };
-use async_trait::async_trait;
 use log::{debug, info, warn};
 
 use crate::mm::memory_set::VmArea;
@@ -81,7 +80,7 @@ pub struct TestRootFile {
     metadata: Option<FileMeta>,
 }
 
-#[async_trait]
+// #[async_trait]
 impl File for TestRootFile {
     fn readable(&self) -> bool {
         true

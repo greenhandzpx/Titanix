@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};
-use async_trait::async_trait;
 use log::debug;
 use riscv::register::satp::{self, Satp};
 
@@ -18,7 +17,6 @@ pub struct Pipe {
     buffer: Arc<Mutex<PipeRingBuffer>>,
 }
 
-#[async_trait]
 impl File for Pipe {
     fn readable(&self) -> bool {
         self.readable
