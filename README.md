@@ -63,7 +63,7 @@ make run-fat32
 
 ### 参考：
 - [rCore-Tutorial v3](https://github.com/rcore-os/rCore-Tutorial-Book-v3)
-- [rCore](git@github.com:rcore-os/rCore)
+- [rCore](https://github.com/rcore-os/rCore)
 - [FTL OS](https://gitlab.eduxiji.net/DarkAngelEX/oskernel2022-ftlos/-/tree/master/)
 - [jkxs-OS](https://gitlab.eduxiji.net/dh2zz/oskernel2022/-/tree/main)
 
