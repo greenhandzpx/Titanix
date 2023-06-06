@@ -2,7 +2,7 @@
 !.github/*
 !.vscode/settings.json
 .idea
-Cargo.lock
+# Cargo.lock
 target
 os/src/link_app.S
 os/src/linker.ld
@@ -22,3 +22,5 @@ pushall.sh
 *.img
 objdump/
 tmp/
+kernel-qemu
+sbi-qemu
