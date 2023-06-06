@@ -1,6 +1,6 @@
 use alloc::vec;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct FAT32Timestamp {
     date: u16,
     time: u16,

@@ -178,7 +178,7 @@ impl FATBufferCache {
     }
     
     fn sync_all_buffers(&self) {
-        let mut data_locked = self.data.lock();
+        let data_locked = self.data.lock();
         for buffer in data_locked.iter() {
             buffer.1.lock().sync(Arc::clone(&self.block_device), Arc::clone(&self.info));
         }
@@ -197,8 +197,8 @@ pub struct FATMeta {
 }
 
 pub struct FileAllocTable {
-    block_device: Arc<dyn BlockDevice>,
-    info: Arc<FAT32Info>,
+    pub block_device: Arc<dyn BlockDevice>,
+    pub info: Arc<FAT32Info>,
     fatcache: FATBufferCache,
     fatmeta: Arc<Mutex<FATMeta>>,
 }

@@ -1,101 +1,96 @@
 
-use alloc::sync::Arc;
-
+use alloc::{sync::{Arc, Weak}, vec::Vec};
 use crate::{
-    fs::{inode::{Inode, InodeMode, InodeMeta, InodeMetaInner}, Mutex},
-    driver::{block::{BlockDevice, self}},
+    fs::{inode::{Inode, InodeMode, InodeMeta, InodeMetaInner}, Mutex, fat32_tmp::Fat32File, File, file},
+    driver::{block::{BlockDevice, self, BLOCK_DEVICE}},
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallRet, SyscallErr},
     mm::Page,
 };
 
-use super::{SHORTNAME_LEN, time::FAT32Timestamp, LONGNAME_LEN};
+use super::{SHORTNAME_LEN, time::FAT32Timestamp, LONGNAME_LEN, fat::FileAllocTable, FAT32FileSystemMeta, FAT32Info, file::FAT32File};
 
-/// 这里的 Inode 对应一个文件或者一个目录，
-/// 也就是，对应一个 Cluster开始的链。
-/// 
-/// 
-/// 
-/// 
-pub struct FAT32Inode {
-    block_device: Arc<dyn BlockDevice>,
+
+#[derive(Copy, Clone)]
+pub enum FAT32FileType {
+    Regfile,
+    Directory,
 }
 
-impl FAT32Inode {
-    pub fn new() -> Self {
-        todo!();
-        
-    }
+#[derive(Copy, Clone)]
+pub struct FAT32InodeMeta {
+    short_name: [u8; SHORTNAME_LEN],
+    long_name: [u16; LONGNAME_LEN],
+    attr: u8,
+    crt_time: FAT32Timestamp,
+    acc_time: FAT32Timestamp,
+    wrt_time: FAT32Timestamp,
+}
 
-    pub fn sync_inode(&self) {
-
+impl FAT32InodeMeta {
+    pub fn default() -> Self {
+        Self {
+            short_name: [0; SHORTNAME_LEN],
+            long_name: [0; LONGNAME_LEN],
+            attr: 0,
+            crt_time: FAT32Timestamp::default(),
+            acc_time: FAT32Timestamp::default(),
+            wrt_time: FAT32Timestamp::default(),
+        }
     }
 }
 
-
-
-/*
 pub struct FAT32Inode {
-    meta: InodeMeta,
+    ftype: FAT32FileType,
+    fat: Arc<FileAllocTable>,
+    meta: Mutex<FAT32InodeMeta>,
+    content: Mutex<FAT32File>,
+    father: Option<Weak<FAT32Inode>>,
+    sons: Option<Vec<Arc<FAT32Inode>>>,
 }
 
 impl FAT32Inode {
     pub fn new(
-        parent: Option<Arc<dyn Inode>>,
-        path: &str,
-        mode: InodeMode,
-        data_len: usize
+        fat: Arc<FileAllocTable>,
+        father: Option<Weak<FAT32Inode>>,
+        first_cluster: usize,
+        file_size: usize,
+        file_type: FAT32FileType,
+        meta: FAT32InodeMeta,
     ) -> Self {
         Self {
-            meta: InodeMeta::new(
-                parent,
-                path,
-                mode,
-                data_len
-            )
+            ftype: file_type,
+            fat: Arc::clone(&fat),
+            meta: Mutex::new(meta),
+            content: Mutex::new(FAT32File::new(
+                        Arc::clone(&fat),
+                        first_cluster,
+                        match file_type {
+                            FAT32FileType::Regfile => Some(file_size),
+                            FAT32FileType::Directory => None,
+                        }
+                    )),
+            father,
+            sons: None,
         }
     }
-}
-*/
 
-impl Inode for FAT32Inode {
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
-        todo!()
-    }
-    fn rmdir(&self, name: &str, mode: InodeMode) -> GeneralRet<()> {
-        todo!()
-    }
-    fn mknod(
-        &self,
-        this: Arc<dyn Inode>,
-        pathname: &str,
-        mode: InodeMode,
-        dev_id: usize,
-    ) -> GeneralRet<()> {
-        todo!()
-    }
-    /// Read data from block device
-    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<Arc<Page>> {
-        todo!()
-    }
-    /// Write data to block device
-    fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
-        todo!()
+    pub fn sync_inode(&self) {
+        match self.ftype {
+            FAT32FileType::Directory => {
+                if self.sons.is_some() {
+                    todo!();
+                }
+            }
+            _ => {}
+        }
     }
 
-    fn metadata(&self) -> &InodeMeta {
-        todo!()
-    }
-    fn set_metadata(&mut self, meta: InodeMeta) {
-        todo!()
+    pub fn read(&self, data: &mut [u8], offset: usize) -> usize {
+        self.content.lock().read(data, offset)
     }
 
-    fn load_children(&self, this: Arc<dyn Inode>) {
-        todo!()
+    pub fn write(&self, data: &[u8], offset: usize) -> usize {
+        self.content.lock().write(data, offset)
     }
-
-    fn delete_child(&self, child_name: &str) {
-        todo!()
-    }
-
 }

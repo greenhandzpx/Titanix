@@ -75,7 +75,7 @@ impl FAT32DirEntry {
 
 
 
-        let inode = FAT32Inode::new();
+        let inode = FAT32DirEntry::fuck();
         let info = FAT32FileInfo::new();
         Some(Self {
             block_device: Arc::clone(&block_device),
@@ -83,6 +83,10 @@ impl FAT32DirEntry {
             inode: Arc::new(inode),
             info: Mutex::new(info),
         })
+    }
+
+    pub fn fuck() -> FAT32Inode {
+        todo!();
     }
 
 }

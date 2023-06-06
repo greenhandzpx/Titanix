@@ -2,12 +2,11 @@ use alloc::sync::Arc;
 use log::debug;
 use crate::{
     driver::block::BlockDevice,
-    fs::Inode,
 };
 
 use self::{
     bpb::BootSector,
-    inode::FAT32Inode,
+    inode::{FAT32Inode, FAT32InodeMeta},
     fat32info::FAT32Info,
     fat::FileAllocTable
 };
@@ -21,6 +20,7 @@ mod dentry;
 mod inode;
 mod time;
 mod fat32info;
+mod file;
 
 const SECTOR_SIZE:          usize = 512;
 const SHORTNAME_LEN:        usize = 11;
@@ -37,7 +37,7 @@ const FSI_NOT_AVAILABLE:    u32 = 0xFFFFFFFF;
 
 pub struct FAT32FileSystemMeta {
     info: Arc<FAT32Info>,
-    fat: FileAllocTable,
+    fat: Arc<FileAllocTable>,
     root_inode: Arc<FAT32Inode>,
 }
 
@@ -55,7 +55,7 @@ impl FAT32FileSystem {
         }
     }
 
-    pub fn mount(&mut self, mount_point: &str) -> Option<()> {
+    pub fn mount(&mut self) -> Option<()> {
         if self.meta.is_some() {
             debug!("尝试挂载一个已挂载的FAT32文件系统");
             return None;
@@ -71,9 +71,17 @@ impl FAT32FileSystem {
                 return None;
         }
         let info = Arc::new(FAT32Info::new(raw_bs));
-        let fat = FileAllocTable::new(Arc::clone(&self.block_device), Arc::clone(&info));
-        todo!("create Root Inode");
-
+        let fat = Arc::new(FileAllocTable::new(Arc::clone(&self.block_device), Arc::clone(&info)));
+        let root_inode = Arc::new(
+            FAT32Inode::new(
+                Arc::clone(&fat),
+                None,
+                info.root_cluster_id,
+                0,
+                inode::FAT32FileType::Directory,
+                FAT32InodeMeta::default()));
+        self.meta = Some(FAT32FileSystemMeta { info: Arc::clone(&info), fat, root_inode: Arc::clone(&root_inode) });
+        Some(())
     }
 
     pub fn unmount(&mut self) -> Option<()> {
@@ -90,8 +98,13 @@ impl FAT32FileSystem {
         
     }
 
-    pub fn root_inode(&self) -> Option<Arc<dyn Inode>> {
-        todo!()
+    pub fn root_inode(&self) -> Option<Arc<FAT32Inode>> {
+        if self.meta.is_none() {
+            debug!("FAT32文件系统没有挂载");
+            None
+        } else {
+            Some(Arc::clone(&self.meta.as_ref().unwrap().root_inode))
+        }
     }
 
     pub fn sync_fs(&self) -> Option<()> {
