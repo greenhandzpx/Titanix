@@ -45,3 +45,6 @@
 - 引入线程调度状态机，防止一个线程被多次唤醒时多次加入调度器
 - lazy_static!据说无法在hifive上使用，需要换为lazy cell
 - 目前thread的所有权是由调度future持有
+
+- 需要对inode添加状态标识当前inode的状态，包括INIT，DIRTY，SYNCED
+- 更改getdirent的逻辑，对于fd找到的inode，如果是INIT，需要load_child

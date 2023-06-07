@@ -5,6 +5,7 @@ use core::ptr::copy_nonoverlapping;
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use inode::InodeState;
 use log::{debug, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
@@ -299,6 +300,16 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
     let inode = file.metadata().inner.lock().inode.clone();
     match inode {
         Some(inode) => {
+            let state = inode.metadata().inner.lock().state;
+            match state {
+                InodeState::Init => {
+                    // load children from disk
+                    inode.load_children(inode.clone());
+                }
+                _ => {
+                    // do nothing
+                }
+            }
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
             inode.metadata().inner.lock().st_atim = get_time_spec();

@@ -28,6 +28,7 @@ pub use file_system::FileSystemType;
 pub use file_system::FILE_SYSTEM_MANAGER;
 pub use inode::Inode;
 pub use inode::InodeMode;
+pub use inode::InodeState;
 pub use stdio::Stdin;
 pub use stdio::Stdout;
 pub use uio::*;

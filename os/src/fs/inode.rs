@@ -58,6 +58,17 @@ pub enum InodeMode {
                     // TODO add more(like R / W / X etc)
 }
 
+/// Inode state flags
+#[derive(Clone, Copy)]
+pub enum InodeState {
+    /// init, the inode may related to an inode in disk, but not load data from disk
+    Init = 0x1,
+    /// data already changed but not yet sync
+    Dirty = 0x2,
+    /// already sync
+    Synced = 0x3,
+}
+
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
 
 static INODE_UID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
@@ -210,6 +221,7 @@ pub trait Inode: Send + Sync {
     }
 
     /// Load the children dirs of the current dir
+    /// The state of inode loaded from disk should be synced
     /// TODO: It may be a bad idea to load all children at one time?
     fn load_children(&self, this: Arc<dyn Inode>);
 
@@ -308,6 +320,8 @@ pub struct InodeMetaInner {
     pub page_cache: Option<PageCache>,
     /// data len
     pub data_len: usize,
+    /// inode state
+    pub state: InodeState,
 }
 
 impl InodeMeta {
@@ -346,6 +360,7 @@ impl InodeMeta {
                 hash_name: HashName::hash_name(parent_uid, name),
                 page_cache: None,
                 data_len,
+                state: InodeState::Init,
             }),
         }
     }
