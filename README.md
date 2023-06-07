@@ -20,6 +20,7 @@
 ### 初赛文档
 
 初赛文档见项目根目录下的`初赛文档.pdf`
+<!-- 初赛文档见项目根目录下的[初赛文档.pdf](初赛文档.pdf) -->
 
 ### 代码架构简介
 - bootloader: SBI
@@ -64,9 +65,10 @@ make run-fat32
 - 指导老师：夏文，仇洁婷
 
 ### 参考：
-- [rCore-Tutorial v3](https://github.com/rcore-os/rCore-Tutorial-Book-v3)
-- [rCore](https://github.com/rcore-os/rCore)
 - [FTL OS](https://gitlab.eduxiji.net/DarkAngelEX/oskernel2022-ftlos/-/tree/master/)
+- [rCore-Tutorial v3](https://github.com/rcore-os/rCore-Tutorial-Book-v3)
+- [Linux](https://github.com/torvalds/linux)
+- [rCore](https://github.com/rcore-os/rCore)
 - [jkxs-OS](https://gitlab.eduxiji.net/dh2zz/oskernel2022/-/tree/main)
 
 
