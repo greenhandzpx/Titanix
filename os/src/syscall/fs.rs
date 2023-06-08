@@ -164,8 +164,19 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                     match parent_inode {
                         Some(parent_inode) => match parent_inode.metadata().mode {
                             InodeMode::FileDIR => {
-                                parent_inode.metadata().inner.lock().st_atim = get_time_spec();
-                                parent_inode.metadata().inner.lock().st_mtim = get_time_spec();
+                                let mut inner_lock = parent_inode.metadata().inner.lock();
+                                // change the time
+                                inner_lock.st_atim = get_time_spec();
+                                inner_lock.st_mtim = get_time_spec();
+                                // change state
+                                match inner_lock.state {
+                                    InodeState::Synced => {
+                                        inner_lock.state = InodeState::Dirty;
+                                    }
+                                    _ => {}
+                                }
+                                // TODO: add to dirty list, should add inode to the target fs which is include this inode
+                                drop(inner_lock);
                                 parent_inode.mkdir(
                                     parent_inode.clone(),
                                     &Path::get_name(&absolute_path),
@@ -271,6 +282,8 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
         return Err(SyscallErr::ENOENT);
     }
     let target_fs = target_fs.unwrap();
+    // sync fs
+    target_fs.sync_fs()?;
     let meta = target_fs.metadata();
     let root_inode = meta.root_inode.unwrap();
     let parent = root_inode.metadata().inner.lock().parent.clone();
@@ -301,6 +314,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
     match inode {
         Some(inode) => {
             let state = inode.metadata().inner.lock().state;
+            debug!("inode state: {:?}", state);
             match state {
                 InodeState::Init => {
                     // load children from disk
@@ -312,7 +326,18 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             }
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
-            inode.metadata().inner.lock().st_atim = get_time_spec();
+            let mut inner_lock = inode.metadata().inner.lock();
+            // change access time
+            inner_lock.st_atim = get_time_spec();
+            // change state
+            match inner_lock.state {
+                InodeState::Synced => {
+                    inner_lock.state = InodeState::Dirty;
+                }
+                _ => {}
+            }
+            // TODO: add to fs's dirty list
+            drop(inner_lock);
             let dirents = Dirent::get_dirents(inode);
             let num_bytes = DIRENT_SIZE as usize * dirents.len();
             debug!(
@@ -350,7 +375,15 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     let target_inode = <dyn Inode>::lookup_from_root_tmp(path);
     match target_inode {
         Some(target_inode) => {
-            target_inode.metadata().inner.lock().st_atim = get_time_spec();
+            let mut inner_lock = target_inode.metadata().inner.lock();
+            inner_lock.st_atim = get_time_spec();
+            match inner_lock.state {
+                InodeState::Synced => {
+                    inner_lock.state = InodeState::Dirty;
+                }
+                _ => {}
+            }
+            // TODO: add to fs's dirty list
             if target_inode.metadata().mode == InodeMode::FileDIR {
                 current_process().inner_handler(move |proc| proc.cwd = path.to_string());
                 Ok(0)
@@ -415,11 +448,12 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     // kstat.st_ino = inode_meta.ino as u64;
     kstat.st_ino = 1 as u64;
     kstat.st_mode = inode_meta.mode as u32;
-    kstat.st_size = inode_meta.inner.lock().size as u64;
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
-    kstat.st_atim = inode_meta.inner.lock().st_atim;
-    kstat.st_mtim = inode_meta.inner.lock().st_mtim;
-    kstat.st_ctim = inode_meta.inner.lock().st_ctim;
+    let inner_lock = inode_meta.inner.lock();
+    kstat.st_size = inner_lock.size as u64;
+    kstat.st_atim = inner_lock.st_atim;
+    kstat.st_mtim = inner_lock.st_mtim;
+    kstat.st_ctim = inner_lock.st_ctim;
 
     let kst_ptr = stat_buf as *mut STAT;
     unsafe {
@@ -539,7 +573,15 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
         Some(absolute_path) => {
             debug!("file name {}", absolute_path);
             if let Some(inode) = fs::inode::open_file(&absolute_path, flags) {
-                inode.metadata().inner.lock().st_atim = get_time_spec();
+                let mut inner_lock = inode.metadata().inner.lock();
+                inner_lock.st_atim = get_time_spec();
+                match inner_lock.state {
+                    InodeState::Synced => {
+                        inner_lock.state = InodeState::Dirty;
+                    }
+                    _ => {}
+                }
+                // TODO: add to fs's dirty list
                 let fd = current_process().inner_handler(|proc| {
                     let fd = proc.fd_table.alloc_fd();
                     let file = inode.open(inode.clone(), flags)?;

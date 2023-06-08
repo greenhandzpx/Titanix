@@ -59,7 +59,7 @@ pub enum InodeMode {
 }
 
 /// Inode state flags
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum InodeState {
     /// init, the inode may related to an inode in disk, but not load data from disk
     Init = 0x1,
