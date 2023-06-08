@@ -1,7 +1,4 @@
-use core::f32::consts::E;
-
 use crate::config::signal::SIG_NUM;
-use crate::fs::inode_tmp::open_file;
 use crate::fs::OpenFlags;
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
@@ -13,8 +10,7 @@ use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::{SigAction, SigActionKernel, SigInfo, SigSet, Signal};
-use crate::timer::{get_time_ms, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
-use crate::trap::TrapContext;
+use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::string::c_str_to_string;
@@ -87,15 +83,6 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
         time_val_ptr.write_volatile(time_val);
     }
     Ok(0)
-}
-
-pub fn get_time_spec() -> TimeSpec {
-    let current_time = get_time_ms();
-    let time_spec = TimeSpec {
-        sec: current_time / 1000,
-        nsec: current_time % 1000000 * 1000000,
-    };
-    time_spec
 }
 
 pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> SyscallRet {

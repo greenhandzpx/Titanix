@@ -12,14 +12,14 @@ use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
-    dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
-    Iovec, StatFlags, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, StatFlags, UtsName,
+    DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
-use crate::syscall::process::get_time_spec;
-use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::syscall::{AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::timer::get_time_spec;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
 use crate::utils::string::c_str_to_string;
@@ -171,7 +171,10 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                                 // change state
                                 match inner_lock.state {
                                     InodeState::Synced => {
-                                        inner_lock.state = InodeState::Dirty;
+                                        inner_lock.state = InodeState::DirtyInode;
+                                    }
+                                    InodeState::DirtyData => {
+                                        inner_lock.state = InodeState::DirtyAll;
                                     }
                                     _ => {}
                                 }
@@ -332,7 +335,10 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             // change state
             match inner_lock.state {
                 InodeState::Synced => {
-                    inner_lock.state = InodeState::Dirty;
+                    inner_lock.state = InodeState::DirtyInode;
+                }
+                InodeState::DirtyData => {
+                    inner_lock.state = InodeState::DirtyAll;
                 }
                 _ => {}
             }
@@ -379,7 +385,10 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
             inner_lock.st_atim = get_time_spec();
             match inner_lock.state {
                 InodeState::Synced => {
-                    inner_lock.state = InodeState::Dirty;
+                    inner_lock.state = InodeState::DirtyInode;
+                }
+                InodeState::DirtyData => {
+                    inner_lock.state = InodeState::DirtyAll;
                 }
                 _ => {}
             }
@@ -577,7 +586,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                 inner_lock.st_atim = get_time_spec();
                 match inner_lock.state {
                     InodeState::Synced => {
-                        inner_lock.state = InodeState::Dirty;
+                        inner_lock.state = InodeState::DirtyInode;
                     }
                     _ => {}
                 }
@@ -634,16 +643,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     if !file.writable() {
         return Err(SyscallErr::EPERM);
     }
-
-    // file.meta_data()
-    //     .inode
-    //     .lock()
-    //     .as_ref()
-    //     .unwrap()
-    //     .meta_data()
-    //     .inner
-    //     .lock()
-    //     .st_atime = get_time() as i64;
 
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);

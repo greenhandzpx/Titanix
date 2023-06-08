@@ -65,6 +65,15 @@ fn get_time() -> usize {
 pub fn get_time_ms() -> usize {
     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
 }
+/// get current time as TimeSpec
+pub fn get_time_spec() -> TimeSpec {
+    let current_time = get_time_ms();
+    let time_spec = TimeSpec {
+        sec: current_time / 1000,
+        nsec: current_time % 1000000 * 1000000,
+    };
+    time_spec
+}
 /// set the next timer interrupt
 pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);

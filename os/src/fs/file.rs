@@ -4,10 +4,11 @@ use async_trait::async_trait;
 use crate::{
     config::fs::FILE_PAGE_SIZE,
     mm::memory_set::VmArea,
+    timer::get_time_spec,
     utils::error::{GeneralRet, SyscallRet},
 };
 
-use super::{inode::Inode, Mutex, OpenFlags};
+use super::{inode::Inode, InodeState, Mutex, OpenFlags};
 
 pub struct FileMeta {
     /// path to file, need to be absolute path
@@ -167,6 +168,21 @@ impl File for DefaultFile {
             res += bytes;
             buf_offset = buf_offset_end;
         }
+
+        // change state
+        match inode_meta.state {
+            InodeState::Synced => {
+                inode_meta.state = InodeState::DirtyData;
+            }
+            InodeState::DirtyInode => {
+                inode_meta.state = InodeState::DirtyAll;
+            }
+            _ => {}
+        }
+        // change time
+        inode_meta.st_atim = get_time_spec();
+        inode_meta.st_mtim = inode_meta.st_atim;
+        inode_meta.st_ctim = inode_meta.st_atim;
 
         drop(inode_meta);
         file_meta.pos = file_offset;

@@ -1,28 +1,17 @@
-use core::{
-    cell::SyncUnsafeCell,
-    mem::size_of,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak},
-    vec::Vec,
 };
 use lazy_static::*;
 use log::{debug, warn};
 
 use crate::{
-    driver::block::BlockDevice,
-    mm::{Page, PageCache},
-    timer::{get_time_ms, TimeSpec},
-    utils::{
-        error::{GeneralRet, SyscallRet},
-        hash_table::HashTable,
-        mem::uninit_memory,
-        path::Path,
-    },
+    mm::PageCache,
+    timer::TimeSpec,
+    utils::{error::GeneralRet, hash_table::HashTable, path::Path},
 };
 
 use super::{
@@ -63,10 +52,14 @@ pub enum InodeMode {
 pub enum InodeState {
     /// init, the inode may related to an inode in disk, but not load data from disk
     Init = 0x1,
-    /// data already changed but not yet sync
-    Dirty = 0x2,
+    /// inode dirty, data which is pointed to by inode is not dirty
+    DirtyInode = 0x2,
+    /// data already changed but not yet sync (inode not change)
+    DirtyData = 0x3,
+    /// inode and date changed together
+    DirtyAll = 0x4,
     /// already sync
-    Synced = 0x3,
+    Synced = 0x5,
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
