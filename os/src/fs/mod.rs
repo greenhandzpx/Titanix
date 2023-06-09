@@ -6,7 +6,7 @@ mod file;
 mod file_system;
 mod hash_name;
 pub mod inode;
-pub mod kstat;
+pub mod stat;
 pub mod utsname;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;
@@ -27,6 +27,7 @@ pub use file_system::FileSystemType;
 pub use file_system::FILE_SYSTEM_MANAGER;
 pub use inode::Inode;
 pub use inode::InodeMode;
+pub use inode::InodeState;
 pub use stdio::Stdin;
 pub use stdio::Stdout;
 pub use uio::*;
@@ -47,20 +48,35 @@ pub fn init() {
 }
 
 bitflags! {
-    ///Open file flags
+    /// Open file flags
     pub struct OpenFlags: u32 {
-        ///Read only
+        const APPEND = 1 << 10;
+        const ASYNC = 1 << 13;
+        const DIRECT = 1 << 14;
+        const DSYNC = 1 << 12;
+        const EXCL = 1 << 7;
+        const NOATIME = 1 << 18;
+        const NOCTTY = 1 << 8;
+        const NOFOLLOW = 1 << 17;
+        const PATH = 1 << 21;
+        /// TODO: need to find 1 << 15
+        const TEMP = 1 << 15;
+        /// Read only
         const RDONLY = 0;
-        ///Write only
+        /// Write only
         const WRONLY = 1 << 0;
-        ///Read & Write
+        /// Read & Write
         const RDWR = 1 << 1;
-        ///Allow create
+        /// Allow create
         const CREATE = 1 << 6;
-        ///Clear file and return an empty one
-        const TRUNC = 1 << 10;
-        ///Directory
-        const DIRECTORY = 1 << 21;
+        /// Clear file and return an empty one
+        const TRUNC = 1 << 9;
+        /// Directory
+        const DIRECTORY = 1 << 16;
+        /// Enable the close-on-exec flag for the new file descriptor
+        const CLOEXEC = 1 << 19;
+        /// When possible, the file is opened in nonblocking mode
+        const NONBLOCK = 1 << 11;
     }
 
     /// stat flags

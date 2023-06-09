@@ -26,7 +26,7 @@ pub fn string_to_array(s: String) -> [u8; MAX_NAME_LEN] {
 pub fn string_to_vec(s: String) -> Vec<u8> {
     let mut bytes = s.into_bytes();
     let len = bytes.len();
-    bytes.resize((len + 1), 0u8);
+    bytes.resize(len + 1, 0u8);
     bytes
 }
 
@@ -34,4 +34,15 @@ pub fn str_to_array_65(s: &str) -> [u8; 65] {
     let mut bytes = s.as_bytes().to_vec();
     bytes.resize(65, 0u8);
     bytes.try_into().unwrap()
+}
+
+pub fn array_str_len(s: &[u8]) -> usize {
+    let mut len = 0;
+    for i in 0..s.len() {
+        len += 1;
+        if s[i] == 0 {
+            return len;
+        }
+    }
+    len
 }

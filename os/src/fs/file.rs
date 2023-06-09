@@ -9,7 +9,7 @@ use crate::{
     utils::error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet},
 };
 
-use super::{inode::Inode, Mutex, OpenFlags};
+use super::{inode::Inode, InodeState, Mutex, OpenFlags};
 
 pub struct FileMeta {
     /// path to file, need to be absolute path
@@ -26,6 +26,8 @@ pub struct FileMetaInner {
     /// file offset
     pub pos: usize,
     // TODO: add more like file version
+    /// current read dirent index
+    pub dirent_index: usize,
 }
 
 // #[async_trait]

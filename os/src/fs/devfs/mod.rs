@@ -60,6 +60,7 @@ impl Inode for DevRootInode {
                 inner: Mutex::new(FileMetaInner {
                     inode: Some(this),
                     pos: 0,
+                    dirent_index: 0,
                 }),
             },
         }))
@@ -74,7 +75,7 @@ impl Inode for DevRootInode {
     }
 
     /// Load children like 'sda' 'null' etc
-    fn load_children(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         let mut meta = self.metadata().inner.lock();
         let dev_mgr = self.dev_mgr.dev_map.lock();
         for dev in dev_mgr.iter() {

@@ -7,7 +7,7 @@ use crate::process::thread::{self, exit_and_terminate_all_threads, terminate_giv
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::Signal;
-use crate::timer::{get_time_ms, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
+use crate::timer::{get_time_ms, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME, get_time_spec};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::string::c_str_to_string;
@@ -80,15 +80,6 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
         time_val_ptr.write_volatile(time_val);
     }
     Ok(0)
-}
-
-fn get_time_spec() -> TimeSpec {
-    let current_time = get_time_ms();
-    let time_spec = TimeSpec {
-        sec: current_time / 1000,
-        nsec: current_time % 1000000 * 1000000,
-    };
-    time_spec
 }
 
 pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> SyscallRet {

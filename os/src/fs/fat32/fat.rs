@@ -267,7 +267,6 @@ impl FileAllocTable {
         }
         let free_count = fsinfo_raw.FSI_Free_Count as usize;
         let nxt_free = fsinfo_raw.FSI_Nxt_Free as usize;
-
         let mut ret = Self {
             block_device: Arc::clone(&block_device),
             info: Arc::clone(&info),
@@ -306,7 +305,6 @@ impl FileAllocTable {
     pub fn write_fat(&self, cluster_id: usize, val: u32) -> Option<()> {
         self.fatcache.write_fat(cluster_id, val)
     }
-
     pub fn sync_fat(&self) {
         self.fatcache.sync_all_buffers();
     }

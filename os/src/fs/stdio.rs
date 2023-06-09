@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use alloc::boxed::Box;
-use log::warn;
+use log::{debug, warn};
 
 use crate::{
     process,

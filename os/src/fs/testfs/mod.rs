@@ -39,6 +39,7 @@ impl Inode for TestRootInode {
                 inner: Mutex::new(FileMetaInner {
                     inode: Some(this.clone()),
                     pos: 0,
+                    dirent_index: 0,
                 }),
             }),
         };
@@ -66,7 +67,7 @@ impl Inode for TestRootInode {
     fn set_metadata(&mut self, meta: InodeMeta) {
         self.metadata = Some(meta);
     }
-    fn load_children(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         debug!("try to load children from test root fs");
         // todo!()
     }

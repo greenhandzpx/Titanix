@@ -69,7 +69,6 @@ impl BootSector {
         load!(self.BPB_NumHeads);
         load!(self.BPB_HiddSec);
         load!(self.BPB_TotSector32);
-
         load!(self.BPB_FATsize32);
         load!(self.BPB_ExtFlags);
         load!(self.BPB_FSVer);
@@ -108,7 +107,6 @@ impl BootSector {
         store!(self.BPB_NumHeads);
         store!(self.BPB_HiddSec);
         store!(self.BPB_TotSector32);
-
         store!(self.BPB_FATsize32);
         store!(self.BPB_ExtFlags);
         store!(self.BPB_FSVer);

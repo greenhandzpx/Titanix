@@ -10,7 +10,7 @@ use log::{debug, warn};
 
 use crate::{
     mm::PageCache,
-    timer::get_time_ms,
+    timer::{get_time_ms, TimeSpec},
     utils::{error::GeneralRet, hash_table::HashTable, path::Path},
 };
 
@@ -35,19 +35,34 @@ lazy_static! {
     ///
     pub static ref INODE_CACHE: Mutex<HashTable<usize, Arc<dyn Inode>>> = Mutex::new(HashTable::new());
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum InodeMode {
-    FileSOCK = 0xC, /* socket */
-    FileLNK = 0xA,  /* symbolic link */
-    FileREG = 0x8,  /* regular file */
-    FileBLK = 0x6,  /* block device */
-    FileDIR = 0x4,  /* directory */
-    FileCHR = 0x2,  /* character device */
-    FileFIFO = 0x1, /* FIFO */
-                    // TODO add more(like R / W / X etc)
+    FileSOCK = 0xC000, /* socket */
+    FileLNK = 0xA000,  /* symbolic link */
+    FileREG = 0x8000,  /* regular file */
+    FileBLK = 0x6000,  /* block device */
+    FileDIR = 0x4000,  /* directory */
+    FileCHR = 0x2000,  /* character device */
+    FileFIFO = 0x1000, /* FIFO */
+                       // TODO add more(like R / W / X etc)
 }
 
-// static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
+/// Inode state flags
+#[derive(Clone, Copy, Debug)]
+pub enum InodeState {
+    /// init, the inode may related to an inode in disk, but not load data from disk
+    Init = 0x1,
+    /// inode dirty, data which is pointed to by inode is not dirty
+    DirtyInode = 0x2,
+    /// data already changed but not yet sync (inode not change)
+    DirtyData = 0x3,
+    /// inode and date changed together
+    DirtyAll = 0x4,
+    /// already sync
+    Synced = 0x5,
+}
+
+static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
 
 static INODE_UID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
 
@@ -92,6 +107,7 @@ pub trait Inode: Send + Sync {
             inner: Mutex::new(FileMetaInner {
                 inode: Some(this),
                 pos: 0,
+                dirent_index: 0,
             }),
         };
         let file = DefaultFile::new(file_meta);
@@ -152,23 +168,17 @@ pub trait Inode: Send + Sync {
     ) -> Option<Arc<dyn Inode>> {
         let key = HashName::hash_name(Some(self.metadata().uid), child_name).name_hash as usize;
 
-        self.load_children(this);
+        <dyn Inode>::load_children(this);
         debug!(
             "children size {}",
             self.metadata().inner.lock().children.len()
         );
-        let target_inode = self
-            .metadata()
-            .inner
-            .lock()
-            .children
-            .get(child_name)
-            .cloned();
+
+        let target_inode = INODE_CACHE.lock().get(&key).cloned();
 
         match target_inode {
             Some(target_inode) => {
                 // find the inode which related to this subdentry
-                INODE_CACHE.lock().insert(key, target_inode.clone());
                 Some(target_inode.clone())
             }
             None => {
@@ -199,8 +209,9 @@ pub trait Inode: Send + Sync {
     }
 
     /// Load the children dirs of the current dir
+    /// The state of inode loaded from disk should be synced
     /// TODO: It may be a bad idea to load all children at one time?
-    fn load_children(&self, this: Arc<dyn Inode>);
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>);
 
     /// Delete inode in disk
     /// You should call this function through parent inode.
@@ -209,6 +220,21 @@ pub trait Inode: Send + Sync {
 }
 
 impl dyn Inode {
+    /// Load children and insert them into INODE_CACHE
+    pub fn load_children(parent: Arc<dyn Inode>) {
+        debug!("[load_children] enter");
+        parent.load_children_from_disk(parent.clone());
+        let mut cache_lock = INODE_CACHE.lock();
+        for child in parent.metadata().inner.lock().children.clone() {
+            let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
+            debug!(
+                "[load_children] insert to INODE_CACHE, name: {}",
+                child.1.metadata().name
+            );
+            cache_lock.insert(key, child.1);
+        }
+        debug!("[load_children] leave");
+    }
     /// Look up from root(e.g. "/home/oscomp/workspace")
     pub fn lookup_from_root(
         // file_system: Arc<dyn FileSystem>,
@@ -245,8 +271,12 @@ impl dyn Inode {
         let mut parent = ROOT_FS.metadata().root_inode.clone().unwrap();
 
         for name in path_names {
+            debug!("[lookup_from_root_tmp] name: {}", name);
             match parent.lookup(parent.clone(), name) {
-                Some(p) => parent = p,
+                Some(p) => {
+                    debug!("[lookup_from_root_tmp] inode name: {}", p.metadata().name);
+                    parent = p
+                }
                 None => return None,
             }
         }
@@ -279,11 +309,11 @@ pub struct InodeMetaInner {
     // /// inode' file's size
     // pub size: usize,
     /// last access time, need to flush to disk.
-    pub st_atime: i64,
+    pub st_atim: TimeSpec,
     /// last modification time, need to flush to disk
-    pub st_mtime: i64,
+    pub st_mtim: TimeSpec,
     /// last status change time, need to flush to disk
-    pub st_ctime: i64,
+    pub st_ctim: TimeSpec,
     /// hash name(Note that this doesn't consider the parent uid)
     pub hash_name: HashName,
     /// parent
@@ -296,6 +326,8 @@ pub struct InodeMetaInner {
     pub page_cache: Option<PageCache>,
     /// file content len
     pub data_len: usize,
+    /// inode state
+    pub state: InodeState,
 }
 
 impl InodeMeta {
@@ -315,7 +347,7 @@ impl InodeMeta {
             None => None,
         };
         Self {
-            ino: 0,
+            ino: INODE_NUMBER.fetch_add(1, Ordering::Relaxed),
             data: 0,
             mode,
             rdev: None,
@@ -325,15 +357,16 @@ impl InodeMeta {
             uid: INODE_UID_ALLOCATOR.fetch_add(1, Ordering::Relaxed),
             inner: Mutex::new(InodeMetaInner {
                 // size: 0,
-                st_atime: (get_time_ms() / 1000) as i64,
-                st_mtime: (get_time_ms() / 1000) as i64,
-                st_ctime: (get_time_ms() / 1000) as i64,
+                st_atim: TimeSpec::new(),
+                st_mtim: TimeSpec::new(),
+                st_ctim: TimeSpec::new(),
                 parent,
                 brothers: BTreeMap::new(),
                 children: BTreeMap::new(),
                 hash_name: HashName::hash_name(parent_uid, name),
                 page_cache: None,
                 data_len,
+                state: InodeState::Init,
             }),
         }
     }
@@ -348,7 +381,6 @@ pub enum InodeDevice {
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
     // let inode = <dyn Inode>::lookup_from_root_tmp(name);
     let inode = <dyn Inode>::lookup_from_root_tmp(name);
-    debug!("open file, name: {}", name);
     // inode
     if flags.contains(OpenFlags::CREATE) {
         if inode.is_some() {

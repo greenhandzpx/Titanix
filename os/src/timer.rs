@@ -30,6 +30,17 @@ pub struct TimeSpec {
     pub nsec: usize,
 }
 
+impl TimeSpec {
+    pub fn new() -> Self {
+        // new a time spec with machine time
+        let current_time = get_time_ms();
+        Self {
+            sec: current_time / 1000,
+            nsec: current_time % 1000000 * 1000000,
+        }
+    }
+}
+
 /// Used for clock_gettime
 /// arg_timespec - device_timespec = diff
 pub struct TimeDiff {
@@ -53,6 +64,15 @@ fn get_time() -> usize {
 /// get current time in microseconds
 pub fn get_time_ms() -> usize {
     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
+}
+/// get current time as TimeSpec
+pub fn get_time_spec() -> TimeSpec {
+    let current_time = get_time_ms();
+    let time_spec = TimeSpec {
+        sec: current_time / 1000,
+        nsec: current_time % 1000000 * 1000000,
+    };
+    time_spec
 }
 /// set the next timer interrupt
 pub fn set_next_trigger() {
