@@ -1,28 +1,17 @@
-use core::{
-    cell::SyncUnsafeCell,
-    mem::size_of,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak},
-    vec::Vec,
 };
 use lazy_static::*;
 use log::{debug, warn};
 
 use crate::{
-    driver::block::BlockDevice,
-    mm::{Page, PageCache},
+    mm::PageCache,
     timer::get_time_ms,
-    utils::{
-        error::{GeneralRet, SyscallRet},
-        hash_table::HashTable,
-        mem::uninit_memory,
-        path::Path,
-    },
+    utils::{error::GeneralRet, hash_table::HashTable, path::Path},
 };
 
 use super::{
@@ -58,7 +47,7 @@ pub enum InodeMode {
                     // TODO add more(like R / W / X etc)
 }
 
-static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
+// static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
 
 static INODE_UID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
 
@@ -111,27 +100,27 @@ pub trait Inode: Send + Sync {
 
     /// You should call this function through the parent inode
     /// You should give a relative path
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
-    fn rmdir(&self, name: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
     fn mknod(
         &self,
-        this: Arc<dyn Inode>,
-        pathname: &str,
-        mode: InodeMode,
-        dev_id: usize,
+        _this: Arc<dyn Inode>,
+        _pathname: &str,
+        _mode: InodeMode,
+        _dev_id: usize,
     ) -> GeneralRet<()> {
         todo!()
     }
-    /// Read data from block device
-    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<Arc<Page>> {
+    /// Read data at the given file offset from block device
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> GeneralRet<usize> {
         todo!()
     }
-    /// Write data to block device
-    fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
+    /// Write data to the given file offset in block device
+    fn write(&self, _offset: usize, _buf: &[u8]) -> GeneralRet<usize> {
         todo!()
     }
 
@@ -287,9 +276,8 @@ pub struct InodeMeta {
 }
 
 pub struct InodeMetaInner {
-    // pub offset: usize,
-    /// inode' file's size
-    pub size: usize,
+    // /// inode' file's size
+    // pub size: usize,
     /// last access time, need to flush to disk.
     pub st_atime: i64,
     /// last modification time, need to flush to disk
@@ -306,7 +294,7 @@ pub struct InodeMetaInner {
     pub children: BTreeMap<String, Arc<dyn Inode>>,
     /// page cache of the related file
     pub page_cache: Option<PageCache>,
-    /// data len
+    /// file content len
     pub data_len: usize,
 }
 
@@ -336,7 +324,7 @@ impl InodeMeta {
             name: name.to_string(),
             uid: INODE_UID_ALLOCATOR.fetch_add(1, Ordering::Relaxed),
             inner: Mutex::new(InodeMetaInner {
-                size: 0,
+                // size: 0,
                 st_atime: (get_time_ms() / 1000) as i64,
                 st_mtime: (get_time_ms() / 1000) as i64,
                 st_ctime: (get_time_ms() / 1000) as i64,
@@ -381,7 +369,11 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
                     .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
                     .unwrap();
             }
-            <dyn Inode>::lookup_from_root_tmp(name)
+            let res = <dyn Inode>::lookup_from_root_tmp(name);
+            if let Some(inode) = res.as_ref() {
+                inode.metadata().inner.lock().page_cache = Some(PageCache::new(inode.clone(), 3));
+            }
+            res
         } else {
             warn!("parent dir {} doesn't exist", parent_path);
             return None;

@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use super::{testfs::TestFs, FAT32FileSystem, Inode, Mutex};
+use super::{testfs::TestFs, Inode};
 
 #[derive(Clone)]
 pub enum FileSystemType {

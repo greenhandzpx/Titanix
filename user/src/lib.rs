@@ -58,8 +58,9 @@ pub extern "C" fn _start(argc: usize, argv: usize) -> ! {
             .unwrap(),
         );
     }
-    // println!("argc {}", argc);
-    exit(main(argc, v.as_slice()));
+    let exit_code = main(argc, v.as_slice());
+    // println!("program {} will exit", v[0]);
+    exit(exit_code);
 }
 
 #[linkage = "weak"]

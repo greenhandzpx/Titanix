@@ -1,5 +1,5 @@
 //! File and filesystem-related syscalls
-use core::mem::size_of_val;
+use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
 
@@ -8,27 +8,25 @@ use alloc::sync::Arc;
 use log::{debug, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
-use crate::fs::inode::INODE_CACHE;
 use crate::fs::kstat::{KSTAT, KSTAT_SIZE};
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
-    dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
-    UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, StatFlags, UtsName,
+    DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
-use crate::mm::memory_set::page_fault_handler::MmapPageFaultHandler;
-use crate::mm::memory_set::vm_area::BackupFile;
-use crate::mm::memory_set::{PageFaultHandler, VmArea};
 use crate::mm::user_check::UserCheck;
-use crate::mm::{MapPermission, VirtAddr};
+use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
-use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD};
-use crate::timer::get_time_ms;
-use crate::utils::debug;
+use crate::signal::SigSet;
+use crate::syscall::{AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::timer::{get_time_ms, TimeSpec};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
 use crate::utils::string::c_str_to_string;
 use crate::{fs, stack_trace};
+
+use super::PollFd;
 
 // const FD_STDIN: usize = 0;
 // const FD_STDOUT: usize = 1;
@@ -379,6 +377,11 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_writable_slice(kst as *mut u8, KSTAT_SIZE)?;
+    _fstat(fd, kst)
+}
+
+/// We should give the kstat which has already been checked to _fstat function.
+fn _fstat(fd: usize, kst: usize) -> SyscallRet {
     let mut kstat = KSTAT::new();
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
@@ -407,7 +410,7 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SyscallRet {
     // kstat.st_ino = inode_meta.ino as u64;
     kstat.st_ino = 1 as u64;
     kstat.st_mode = inode_meta.mode as u32;
-    kstat.st_size = inode_meta.inner.lock().size as u64;
+    kstat.st_size = inode_meta.inner.lock().data_len as u64;
     kstat.st_blocks = (kstat.st_size / kstat.st_blsize as u64) as u64;
     kstat.st_atime_sec = inode_meta.inner.lock().st_atime;
     kstat.st_atime_nsec = kstat.st_atime_sec * 10i64.pow(9);
@@ -423,20 +426,107 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_openat(dirfd: usize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
+pub fn sys_newfstatat(dirfd: isize, pathname: *const u8, kst: usize, flags: u32) -> SyscallRet {
+    stack_trace!();
+    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_c_str(pathname)?;
+    UserCheck::new().check_writable_slice(kst as *mut u8, KSTAT_SIZE)?;
+    stack_trace!();
+    let absolute_path: Option<String>;
+    if flags.contains(StatFlags::AT_SYMLINK_NOFOLLOW) {
+        // todo: support symlink?
+        debug!("the pathname represent a symbolic link");
+    }
+    if flags.contains(StatFlags::AT_EMPTY_PATH) {
+        // path is empty
+        // If dirfd is AT_FDCWD, change it to absolute path
+        if dirfd == AT_FDCWD {
+            debug!("[newfstatat] empty path with cwd");
+            let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+            debug!("cwd {}", cwd);
+            absolute_path = Some(cwd);
+        } else {
+            debug!("[newfstatat] empty path with dirfd");
+            return _fstat(dirfd as usize, kst);
+        }
+    } else {
+        if dirfd == AT_FDCWD {
+            debug!("[newfstatat] path with cwd");
+            absolute_path = Path::path_process(pathname);
+        } else {
+            debug!("[newfstatat] path with dirfd");
+            absolute_path = Path::path_with_dirfd(dirfd, pathname);
+        }
+    }
+    debug!("[newfstatat] final absolute path: {:?}", absolute_path);
+
+    let fd = _openat(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
+
+    return _fstat(fd as usize, kst);
+}
+
+pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
+    stack_trace!();
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.readable() {
+        return Err(SyscallErr::EACCES);
+    }
+    match whence {
+        SEEK_SET => {
+            file.seek(offset as usize)?;
+            Ok(offset)
+        }
+        SEEK_CUR => {
+            let pos = file.metadata().inner.lock().pos;
+            let off = pos + offset as usize;
+            file.seek(off)?;
+            Ok(off as isize)
+        }
+        SEEK_END => {
+            let size = file
+                .metadata()
+                .inner
+                .lock()
+                .inode
+                .as_ref()
+                .unwrap()
+                .metadata()
+                .inner
+                .lock()
+                .data_len;
+            let off = size + offset as usize;
+            file.seek(off)?;
+            Ok(off as isize)
+        }
+        _ => Err(SyscallErr::EINVAL),
+    }
+}
+
+pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
     stack_trace!();
 
     let absolute_path: Option<String>;
-    if dirfd as isize == AT_FDCWD {
+    if dirfd == AT_FDCWD {
         debug!("path with cwd");
         absolute_path = Path::path_process(filename_addr);
     } else {
         debug!("path with dirfd");
-        absolute_path = Path::path_with_dirfd(dirfd as isize, filename_addr);
+        absolute_path = Path::path_with_dirfd(dirfd, filename_addr);
     }
 
+    _openat(absolute_path, flags)
+}
+
+/// We should give the absolute path (Or None) to _openat function.
+fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
     stack_trace!();
-    // TODO: support standard sys_openat(we now only support `sys_open`)
+    debug!(
+        "[_openat] absolute path: {:?}, flags: {}",
+        absolute_path, flags
+    );
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     match absolute_path {
         Some(absolute_path) => {
@@ -466,67 +556,10 @@ pub fn sys_openat(dirfd: usize, filename_addr: *const u8, flags: u32, _mode: u32
                 Err(SyscallErr::EACCES)
             }
         }
-        None => Err(SyscallErr::ENOENT),
-    }
-
-    // _openat(dirfd, filename_addr, flags, _mode)
-    // let filename = c_str_to_string(filename_addr);
-    // let mut filename = String::from(&filename);
-    // debug!("file name {}", filename);
-    // if filename.starts_with("./") {
-    //     filename.remove(0);
-    //     filename.remove(0);
-    // } else if filename == "." {
-    //     return _openat(dirfd, filename_addr, flags, _mode);
-    // }
-    // if let Some(inode) = fs::fat32_tmp::open_file(
-    //     &filename,
-    //     OpenFlags::from_bits(flags).unwrap(),
-    // ) {
-    //     let fd = current_process().inner_handler(|proc| {
-    //         let fd = proc.fd_table.alloc_fd();
-    //         proc.fd_table.put(fd, inode);
-    //         fd
-    //     });
-    //     Ok(fd as isize)
-    // } else {
-    //     debug!("file {} doesn't exist", filename);
-    //     Err(SyscallErr::EACCES)
-    // }
-}
-
-// vfs version
-pub fn _openat(dirfd: usize, filename: *const u8, flags: u32, _mode: u32) -> SyscallRet {
-    stack_trace!();
-    // TODO: support standard sys_openat(we now only support `sys_open`)
-    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    let filename = Path::path_process(filename);
-    // if dirfd as isize != AT_FDCWD {
-    //     if current_process().inner_handler(|proc| {
-    //         if let Some(file) = proc.fd_table.get_ref(dirfd) {
-    //             file.metadata().
-    //         }
-    //     })
-    // }
-    match filename {
-        Some(filename) => {
-            debug!("file name {}", filename);
-            if let Some(inode) = fs::inode::open_file(&filename, flags) {
-                inode.metadata().inner.lock().st_atime = (get_time_ms() / 1000) as i64;
-                let fd = current_process().inner_handler(|proc| {
-                    let fd = proc.fd_table.alloc_fd();
-                    let file = inode.open(inode.clone(), flags)?;
-                    debug!("[openat]: fd {}", fd);
-                    proc.fd_table.put(fd, file);
-                    Ok(fd)
-                })?;
-                Ok(fd as isize)
-            } else {
-                debug!("file {} doesn't exist", filename);
-                Err(SyscallErr::EACCES)
-            }
+        None => {
+            debug!("cannot find the file, absolute_path is none");
+            Err(SyscallErr::ENOENT)
         }
-        None => Err(SyscallErr::ENOENT),
     }
 }
 
@@ -566,7 +599,47 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
+    // debug!("[sys_write]: start to write file, fd {}", fd);
     file.write(buf).await
+}
+
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
+    stack_trace!();
+    debug!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.writable() {
+        return Err(SyscallErr::EPERM);
+    }
+
+    stack_trace!();
+    let mut ret: usize = 0;
+    let iovec_size = core::mem::size_of::<Iovec>();
+
+    let _sum_guard = SumGuard::new();
+
+    for i in 0..iovcnt {
+        debug!("write the {} buf", i + 1);
+        // current iovec pointer
+        let current = iov.add(iovec_size * i);
+        debug!("current iov: {}", current);
+        UserCheck::new().check_readable_slice(current as *const u8, iovec_size)?;
+        debug!("pass readable check");
+        let iov_base = unsafe { &*(current as *const Iovec) }.iov_base;
+        debug!("get iov_base: {}", iov_base);
+        let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
+        debug!("get iov_len: {}", iov_len);
+        ret += iov_len;
+        UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
+        let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
+        let fw_ret = file.write(buf).await;
+        // if error, return
+        if fw_ret.is_err() {
+            return fw_ret;
+        }
+    }
+    Ok(ret as isize)
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -616,68 +689,111 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     Ok(0)
 }
 
-/// Note that we just ignore the `addr`
-pub fn sys_mmap(
-    _addr: *const u8,
-    length: usize,
-    prot: i32,
-    flags: i32,
-    fd: usize,
-    offset: usize,
-) -> SyscallRet {
+pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_mmap]: start... len {}, fd {}", length, fd);
-    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
-    let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
-    if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        todo!("Handle anonymous mmap")
-    } else {
-        current_process().inner_handler(|proc| {
-            let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+    debug!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
+    // TODO
+    Ok(0)
+}
 
-            // let mut buf: [u8; 36] = [0; 36];
-            // file.seek(0)?;
-            // file.sync_read(&mut buf)?;
-
-            let mut map_permission = MapPermission::from_bits(0).unwrap();
-            if prot.contains(MmapProt::PROT_READ) {
-                map_permission |= MapPermission::R;
-            }
-            if prot.contains(MmapProt::PROT_WRITE) {
-                map_permission |= MapPermission::W;
-            }
-            if prot.contains(MmapProt::PROT_EXEC) {
-                map_permission |= MapPermission::X;
-            }
-            let mut vma = proc
-                .memory_set
-                .find_unused_area(length, map_permission)
-                .ok_or(SyscallErr::ENOMEM)?;
-            vma.mmap_flags = Some(flags);
-            let handler = MmapPageFaultHandler {};
-            vma.handler = Some(handler.box_clone());
-            vma.backup_file = Some(BackupFile {
-                offset,
-                file: file.clone()
-                    // .metadata()
-                    // .inner
-                    // .lock()
-                    // .inode
-                    // .as_ref()
-                    // .cloned()
-                    // .unwrap(),
-            });
-            let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_set.insert_area(vma);
-
-            debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
-            Ok(start_va.0 as isize)
-        })
-        // let vm_area = VmArea::new()
+bitflags! {
+    pub struct PollEvents: u16 {
+        const POLLIN = 1 << 0;
+        const POLLPRI = 1 << 1;
+        const POLLOUT = 1 << 2;
+        const POLLERR = 1 << 3;
+        const POLLHUP = 1 << 4;
+        const POLLNVAL = 1 << 5;
     }
 }
 
-pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
-    Ok(0)
-    // todo!()
+pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+
+    stack_trace!();
+    UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
+    let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
+
+    let start_ms = get_time_ms();
+    let infinite_timeout: bool;
+    let timeout: usize;
+    if timeout_ptr == 0 {
+        debug!("[sys_ppoll]: infinite timeout");
+        infinite_timeout = true;
+        timeout = 0;
+    } else {
+        infinite_timeout = false;
+        stack_trace!();
+        UserCheck::new()
+            .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+        let timeout_delta = unsafe { *(timeout_ptr as *const TimeSpec) };
+        // if timeout_delta < 0 {
+        //     warn!("invalid timeout");
+        //     return Err(SyscallErr::EINVAL);
+        // }
+        timeout = timeout_delta.sec * 1000 + timeout_delta.nsec / 1000000;
+    }
+    let expire_time = start_ms + timeout;
+
+    if sigmask != 0 {
+        stack_trace!();
+        UserCheck::new()
+            .check_readable_slice(sigmask as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe { *(sigmask as *const usize) };
+        current_process().inner_handler(|proc| {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+            } else {
+                warn!("invalid set arg");
+            }
+        });
+    }
+
+    loop {
+        // TODO: how to avoid user modify the address?
+        let mut cnt = 0;
+        for i in 0..nfds {
+            let current_fd = &mut fds[i];
+            debug!("[sys_ppoll]: poll fd {}", current_fd.fd);
+            if let Some(file) =
+                current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
+            {
+                if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
+                    current_fd.revents = 0;
+                    if events.contains(PollEvents::POLLIN) {
+                        // file.read()
+                        if file.pollin()? {
+                            current_fd.revents |= PollEvents::POLLIN.bits() as i16;
+                            cnt += 1;
+                            continue;
+                        }
+                    }
+                    if events.contains(PollEvents::POLLOUT) {
+                        // file.read()
+                        if file.pollout()? {
+                            current_fd.revents |= PollEvents::POLLOUT.bits() as i16;
+                            cnt += 1;
+                            continue;
+                        }
+                    }
+                } else {
+                    warn!("Invalid events: {:#x}", current_fd.events);
+                    // TODO: not sure
+                    return Err(SyscallErr::EINVAL);
+                }
+            } else {
+                debug!("No such file for fd {}", current_fd.fd);
+                continue;
+            }
+        }
+        if cnt > 0 {
+            return Ok(cnt as isize);
+        } else if !infinite_timeout && get_time_ms() >= expire_time {
+            debug!("[sys_ppoll]: timeout!");
+            return Ok(0);
+        } else {
+            thread::yield_now().await;
+        }
+    }
 }

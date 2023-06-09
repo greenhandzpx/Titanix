@@ -1,25 +1,18 @@
-use core::cell::UnsafeCell;
-
-use alloc::{
-    boxed::Box,
-    sync::{Arc, Weak},
-};
-use log::debug;
+use alloc::{boxed::Box, sync::Arc};
+use log::{debug, info};
 use riscv::register::scause::Scause;
 
 use crate::{
-    mm::{
-        frame_alloc, page_table::PTEFlags, FrameTracker, PageTable, PageTableEntry, PhysPageNum,
-        VirtAddr, MapPermission,
-    },
+    fs::OpenFlags,
+    mm::{frame_alloc, page_table::PTEFlags, PageTable, VirtAddr},
     processor::current_process,
     sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallErr}, fs::OpenFlags, syscall::MmapFlags, config::mm::PAGE_SIZE,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::VmArea;
 
-type Mutex<T> = SpinNoIrqLock<T>;
+// type Mutex<T> = SpinNoIrqLock<T>;
 
 /// General page fault handler
 pub trait PageFaultHandler: Send + Sync {
@@ -32,17 +25,12 @@ pub trait PageFaultHandler: Send + Sync {
     ) -> GeneralRet<()>;
 
     ///
-    fn is_legal(&self, scause: Scause) -> bool {
+    fn is_legal(&self, _scause: Scause) -> bool {
         todo!();
     }
 
     /// Used for cloning in `fork`
     fn box_clone(&self) -> Box<dyn PageFaultHandler>;
-
-    ///
-    fn handle_pte(&self, pte: Option<&mut PageTableEntry>) {
-        todo!();
-    }
 }
 
 /// UStack page fault handler
@@ -94,7 +82,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         vma: &VmArea,
         page_table: &mut PageTable,
     ) -> GeneralRet<()> {
-
         debug!("handle sbrk page fault");
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
@@ -105,7 +92,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
         Ok(())
-
     }
 
     fn box_clone(&self) -> Box<dyn PageFaultHandler> {
@@ -118,7 +104,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
 pub struct MmapPageFaultHandler {}
 
 impl PageFaultHandler for MmapPageFaultHandler {
-
     // tmp version
     fn handle_page_fault(
         &self,
@@ -134,13 +119,11 @@ impl PageFaultHandler for MmapPageFaultHandler {
         let open_flags: OpenFlags = vma.map_perm.into();
         // let file = inode.file.open(inode.file.clone(), open_flags)?;
         debug!("mmap backup file name {}", file.metadata().path);
-        let data_frames = unsafe {
-            &mut (*vma.data_frames.get())
-        };
+        let data_frames = unsafe { &mut (*vma.data_frames.get()) };
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
         data_frames.0.insert(va.floor(), Arc::new(frame));
-        let bytes_array = ppn.bytes_array(); 
+        let bytes_array = ppn.bytes_array();
         file.seek(offset)?;
         file.sync_read(bytes_array)?;
 
@@ -195,7 +178,7 @@ impl PageFaultHandler for ForkPageFaultHandler {
         vma: &VmArea,
         page_table: &mut PageTable,
     ) -> GeneralRet<()> {
-        debug!("handle fork page fault(cow)");
+        debug!("handle fork page fault(cow), va {:#x}", va.0);
         // panic!();
         let data_frames = unsafe { &mut *vma.data_frames.get() };
         let vpn = va.floor();
@@ -212,6 +195,25 @@ impl PageFaultHandler for ForkPageFaultHandler {
             // modify pte
             let mut pte_flags = pte.flags() | PTEFlags::W;
             pte_flags.remove(PTEFlags::COW);
+
+            // // Else
+            // // we should allocate new frame and decrease
+            // // old frame's ref cnt
+            // let new_frame = frame_alloc().unwrap();
+            // // copy old frame's data to the new frame
+            // new_frame
+            //     .ppn
+            //     .bytes_array()
+            //     .copy_from_slice(&old_frame.ppn.bytes_array());
+            // // modify page table
+            // page_table.unmap(vpn);
+            // page_table.map(vpn, new_frame.ppn, pte_flags);
+            // page_table.activate();
+            // // decrease old frame's ref cnt
+            // debug!("ph frame ref cnt {}", Arc::strong_count(old_frame));
+            // data_frames.0.remove(&vpn);
+            // data_frames.0.insert(vpn, Arc::new(new_frame));
+
             // Note that we must hold the process_inner's lock now
             // so it is safe for us to check the ref count.
             if Arc::strong_count(old_frame) == 1 {
@@ -246,6 +248,7 @@ impl PageFaultHandler for ForkPageFaultHandler {
         } else {
             // the page still not allocated (maybe because of lazy alloc(e.g. ustack))
             // we should allocate new frame
+            info!("no such frame in cow, va {:#x}", va.0);
             let new_frame = frame_alloc().unwrap();
             let mut pte_flags = PTEFlags::from_bits(vma.map_perm.bits()).unwrap() | PTEFlags::W;
             pte_flags.remove(PTEFlags::COW);

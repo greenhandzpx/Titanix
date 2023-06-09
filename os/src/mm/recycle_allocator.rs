@@ -8,9 +8,9 @@ pub struct RecycleAllocator {
 
 impl RecycleAllocator {
     ///Create an empty `RecycleAllocator`
-    pub fn new() -> Self {
+    pub fn new(init_val: usize) -> Self {
         RecycleAllocator {
-            current: 0,
+            current: init_val,
             // TODO: use heap to replace vec
             recycled: Vec::new(),
         }

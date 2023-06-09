@@ -35,7 +35,7 @@ TEST ?=
 
 # Qemu opts
 ifndef CPUS
-CPUS := 1
+CPUS := 2
 endif
 
 
@@ -47,21 +47,29 @@ build-pre: env $(KERNEL_BIN) fs-img-pre
 build-pre-fat32: env $(KERNEL_BIN) fs-img-pre-fat32
 
 env:
-	export LOG="debug"
-	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
-	rustup component add rust-src
-	rustup component add llvm-tools-preview
+	# (rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
+	# cargo install cargo-binutils
+	# rustup component add rust-src
+	# rustup component add llvm-tools-preview
 
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
+
+# kernel:
+# 	@echo "build user and kernel"
+# 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
+# 	@echo Platform: $(BOARD)
+# 	@cp src/linker-$(BOARD).ld src/linker.ld
+# 	@cargo build --release
+# 	@rm src/linker.ld
+kernel-bin: $(KERNEL_BIN)
 
 kernel:
 	@echo "build user and kernel"
 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
 	@echo Platform: $(BOARD)
-	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build --release
+	@cp src/linker64.ld src/linker.ld
+	@cargo build --release --offline
 	@rm src/linker.ld
 
 # preliminary
@@ -157,16 +165,18 @@ debug: build-pre
 		tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 
-gdbserver: build
+gdbserver: build-pre-fat32
 	@qemu-system-riscv64 \
-	-machine virt \
-	-nographic \
-	-bios default \
-	-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
-	-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
-	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-	-smp $(CPUS) \
-	-s -S
+		-machine virt \
+		-nographic \
+		-smp $(CPUS) \
+		-bios $(BOOTLOADER) \
+		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+        -drive file=$(FS_IMG_FAT32),if=none,format=raw,id=x0 \
+        -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0  \
+		-s -S
+
+
 
 gdbclient:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'

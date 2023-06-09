@@ -1,13 +1,11 @@
 use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};
-use async_trait::async_trait;
 use log::debug;
-use riscv::register::satp::{self, Satp};
 
 use crate::process;
 use crate::processor::SumGuard;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::utils::error::SyscallRet;
+use crate::utils::error::AsyscallRet;
 
 use super::file::{File, FileMeta};
 
@@ -18,7 +16,6 @@ pub struct Pipe {
     buffer: Arc<Mutex<PipeRingBuffer>>,
 }
 
-#[async_trait]
 impl File for Pipe {
     fn readable(&self) -> bool {
         self.readable
@@ -32,84 +29,88 @@ impl File for Pipe {
         todo!()
     }
 
-    async fn read(&self, buf: &mut [u8]) -> SyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         assert!(self.readable());
-        // debug!("start to pipe read {} bytes", buf.len());
-        let _sum_guard = SumGuard::new();
-        let want_to_read = buf.len();
-        let mut buf_iter = buf.into_iter();
-        let mut already_read = 0usize;
-        loop {
-            if let Some(ret) = self.inner_handler(|ring_buffer| {
-                let loop_read = ring_buffer.available_read();
-                if loop_read == 0 {
-                    if ring_buffer.all_write_ends_closed() {
-                        // all of the buffer's write ends have
-                        // been closed, then just end reading
-                        return Some(already_read);
+        Box::pin(async move {
+            // debug!("start to pipe read {} bytes", buf.len());
+            let _sum_guard = SumGuard::new();
+            let want_to_read = buf.len();
+            let mut buf_iter = buf.into_iter();
+            let mut already_read = 0usize;
+            loop {
+                if let Some(ret) = self.inner_handler(|ring_buffer| {
+                    let loop_read = ring_buffer.available_read();
+                    if loop_read == 0 {
+                        if ring_buffer.all_write_ends_closed() {
+                            // all of the buffer's write ends have
+                            // been closed, then just end reading
+                            return Some(already_read);
+                        }
+                        return None;
+                    }
+                    for _ in 0..loop_read {
+                        if let Some(byte_ref) = buf_iter.next() {
+                            *byte_ref = ring_buffer.read_byte();
+                            already_read += 1;
+                            if already_read == want_to_read {
+                                return Some(want_to_read);
+                            }
+                        } else {
+                            // TODO: Some error happened?
+                            return Some(already_read);
+                        }
                     }
                     return None;
+                }) {
+                    // debug!("read {} bytes over", ret);
+                    return Ok(ret as isize);
+                } else {
+                    process::yield_now().await;
                 }
-                for _ in 0..loop_read {
-                    if let Some(byte_ref) = buf_iter.next() {
-                        *byte_ref = ring_buffer.read_byte();
-                        already_read += 1;
-                        if already_read == want_to_read {
-                            return Some(want_to_read);
-                        }
-                    } else {
-                        // TODO: Some error happened?
-                        return Some(already_read);
-                    }
-                }
-                return None;
-            }) {
-                // debug!("read {} bytes over", ret);
-                return Ok(ret as isize);
-            } else {
-                process::yield_now().await;
             }
-        }
+        })
     }
 
-    async fn write(&self, buf: &[u8]) -> SyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         assert!(self.writable());
         debug!("start to pipe write {} bytes", buf.len());
-        // debug!("satp(1) {:#x}", satp::read().bits());
-        let _sum_guard = SumGuard::new();
-        let want_to_write = buf.len();
-        let mut buf_iter = buf.into_iter();
-        let mut already_write = 0usize;
-        loop {
-            if let Some(ret) = self.inner_handler(|ring_buffer| {
-                let loop_write = ring_buffer.available_write();
-                if loop_write == 0 {
-                    return None;
-                    // drop(ring_buffer);
-                    // suspend_current_and_run_next();
-                    // continue;
-                }
-                // write at most loop_write bytes
-                for _ in 0..loop_write {
-                    if let Some(byte_ref) = buf_iter.next() {
-                        ring_buffer.write_byte(*byte_ref);
-                        already_write += 1;
-                        if already_write == want_to_write {
-                            return Some(want_to_write);
-                        }
-                    } else {
-                        return Some(already_write);
+        Box::pin(async move {
+            // debug!("satp(1) {:#x}", satp::read().bits());
+            let _sum_guard = SumGuard::new();
+            let want_to_write = buf.len();
+            let mut buf_iter = buf.into_iter();
+            let mut already_write = 0usize;
+            loop {
+                if let Some(ret) = self.inner_handler(|ring_buffer| {
+                    let loop_write = ring_buffer.available_write();
+                    if loop_write == 0 {
+                        return None;
+                        // drop(ring_buffer);
+                        // suspend_current_and_run_next();
+                        // continue;
                     }
+                    // write at most loop_write bytes
+                    for _ in 0..loop_write {
+                        if let Some(byte_ref) = buf_iter.next() {
+                            ring_buffer.write_byte(*byte_ref);
+                            already_write += 1;
+                            if already_write == want_to_write {
+                                return Some(want_to_write);
+                            }
+                        } else {
+                            return Some(already_write);
+                        }
+                    }
+                    return None;
+                }) {
+                    debug!("pipe write {} bytes over", ret);
+                    return Ok(ret as isize);
+                } else {
+                    debug!("no available write slots");
+                    process::yield_now().await;
                 }
-                return None;
-            }) {
-                debug!("pipe write {} bytes over", ret);
-                return Ok(ret as isize);
-            } else {
-                debug!("no available write slots");
-                process::yield_now().await;
             }
-        }
+        })
     }
 }
 

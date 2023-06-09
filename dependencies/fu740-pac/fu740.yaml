@@ -1,0 +1,427 @@
+_svd: "fu740.svd"
+
+_modify:
+  name: Freedom U740-C000
+  width: 64
+  sifive_ccache0_0:
+    name: CCACHE
+    description: L2 Cache Controller
+  riscv_clint0_0:
+    name: CLINT
+    description: Core-Local Interruptor
+  sifive_gpio0_0:
+    name: GPIO
+    description: General Purpose Input/Output Controller
+  sifive_i2c0_0:
+    name: I2C0
+    description: Inter-Integrated Circuit (I2C) Master Interface
+  sifive_i2c0_1:
+    name: I2C1
+  riscv_plic0_0:
+    name: PLIC
+    description: Platform-Level Interrupt Controller
+  sifive_pwm0_0:
+    name: PWM0
+    description: Pulse Width Modulator
+  sifive_pwm0_1:
+    name: PWM1
+  sifive_uart0_0:
+    name: UART0
+    description: Universal Asynchronous Receiver/Transmitter
+  sifive_uart0_1:
+    name: UART1
+  sifive_spi0_0:
+    name: SPI0
+    description: Serial Peripheral Interface
+  sifive_spi0_1:
+    name: SPI1
+  sifive_spi0_2:
+    name: SPI2
+  sifive_test0_0:
+    name: TEST
+    description: Test Status
+
+_derive:
+  I2C1: I2C0
+  PWM1: PWM0
+  UART1: UART0
+  SPI1: SPI0
+  SPI2: SPI0
+
+_add:
+  MSEL:
+    description: MSEL pin state
+    baseAddress: 0x1000
+    registers:
+      MSEL:
+        description: MSEL pin state
+        addressOffset: 0x0
+        access: read-only
+
+  PRCI:
+    description: Power Reset Clocking Interrupt block
+    baseAddress: 0x10000000
+    addressBlock:
+      offset: 0x0
+      size: 0x1000
+      usage: "PRCI registers"
+    registers:
+      hfxosccfg:
+        description: Crystal Oscillator Configuration and Status register
+        addressOffset: 0x0
+        fields:
+          hfxoscen:
+            description: Crystal Oscillator Enable
+            bitOffset: 30
+            bitWidth: 1
+          hfxoscrdy:
+            description: Crystal Oscillator Ready
+            bitOffset: 31
+            bitWidth: 1
+            access: read-only
+      core_pllcfg:
+        description: PLL Configuration and Status register
+        addressOffset: 0x4
+        fields:
+          pllr:
+            description: PLL R Value
+            bitOffset: 0
+            bitWidth: 6
+          pllf:
+            description: PLL F Value
+            bitOffset: 6
+            bitWidth: 9
+          pllq:
+            description: PLL Q Value
+            bitOffset: 15
+            bitWidth: 3
+          pllrange:
+            description: PLL Range Value
+            bitOffset: 18
+            bitWidth: 3
+          pllbypass:
+            description: PLL Bypass
+            bitOffset: 24
+            bitWidth: 1
+          pllfsebypass:
+            description: PLL FSE Bypass
+            bitOffset: 25
+            bitWidth: 1
+          plllock:
+            description: PLL Lock
+            bitOffset: 31
+            bitWidth: 1
+            access: read-only
+      core_plloutdiv:
+        description: PLL Final Divide Configuration register
+        addressOffset: 0x8
+      ddr_pllcfg:
+        description: PLL Configuration and Status register
+        addressOffset: 0xc
+        fields:
+          pllr:
+            description: PLL R Value
+            bitOffset: 0
+            bitWidth: 6
+          pllf:
+            description: PLL F Value
+            bitOffset: 6
+            bitWidth: 9
+          pllq:
+            description: PLL Q Value
+            bitOffset: 15
+            bitWidth: 3
+          pllrange:
+            description: PLL Range Value
+            bitOffset: 18
+            bitWidth: 3
+          pllbypass:
+            description: PLL Bypass
+            bitOffset: 24
+            bitWidth: 1
+          pllfsebypass:
+            description: PLL FSE Bypass
+            bitOffset: 25
+            bitWidth: 1
+          plllock:
+            description: PLL Lock
+            bitOffset: 31
+            bitWidth: 1
+            access: read-only
+      ddr_plloutdiv:
+        description: PLL Final Divide Configuration register
+        addressOffset: 0x10
+        fields:
+          pllcke:
+            description: PLL Output Clock Enable
+            bitOffset: 31
+            bitWidth: 1
+      gemgxl_pllcfg:
+        description: PLL Configuration and Status register
+        addressOffset: 0x1c
+        fields:
+          pllr:
+            description: PLL R Value
+            bitOffset: 0
+            bitWidth: 6
+          pllf:
+            description: PLL F Value
+            bitOffset: 6
+            bitWidth: 9
+          pllq:
+            description: PLL Q Value
+            bitOffset: 15
+            bitWidth: 3
+          pllrange:
+            description: PLL Range Value
+            bitOffset: 18
+            bitWidth: 3
+          pllbypass:
+            description: PLL Bypass
+            bitOffset: 24
+            bitWidth: 1
+          pllfsebypass:
+            description: PLL FSE Bypass
+            bitOffset: 25
+            bitWidth: 1
+          plllock:
+            description: PLL Lock
+            bitOffset: 31
+            bitWidth: 1
+            access: read-only
+      gemgxl_plloutdiv:
+        description: PLL Final Divide Configuration register
+        addressOffset: 0x20
+        fields:
+          pllcke:
+            description: PLL Output Clock Enable
+            bitOffset: 31
+            bitWidth: 1
+      core_clk_sel_reg:
+        description: Core clock source register
+        addressOffset: 0x24
+        fields:
+          source:
+            description: Core clock source
+            bitOffset: 0
+            bitWidth: 1
+      devices_reset_n:
+        description: Software controlled resets
+        addressOffset: 0x28
+        resetValue: 0x00000000
+        fields:
+          ddrctrl_reset_n:
+            description: Active-Low ddrctrl reset
+            bitOffset: 0
+            bitWidth: 1
+          ddraxi_reset_n:
+            description: Active-Low ddraxi reset
+            bitOffset: 1
+            bitWidth: 1
+          ddrahb_reset_n:
+            description: Active-Low ddrahb reset
+            bitOffset: 2
+            bitWidth: 1
+          ddrphy_reset_n:
+            description: Active-Low ddrphy reset
+            bitOffset: 3
+            bitWidth: 1
+          pcieaux_reset_n:
+            description: Active-Low pcieaux reset
+            bitOffset: 4
+            bitWidth: 1
+          gemgxl_reset_n:
+            description: Active-Low gemgxl reset
+            bitOffset: 5
+            bitWidth: 1
+          reserved:
+            description: Reserved
+            bitOffset: 6
+            bitWidth: 1
+      clk_mux_status:
+        description: Current selection of each clock mux
+        addressOffset: 0x2c
+        access: read-only
+        fields:
+          coreclkpllsel:
+            description: Current setting of coreclkpllsel mux
+            bitOffset: 0
+            bitWidth: 1
+          tlclksel:
+            description: Current setting of tlclksel mux
+            bitOffset: 1
+            bitWidth: 1
+          rtcxsel:
+            description: Current setting of rtcxsel mux
+            bitOffset: 2
+            bitWidth: 1
+          ddrctrlclksel:
+            description: Current setting of ddrctrlclksel mux
+            bitOffset: 3
+            bitWidth: 1
+          ddrphyclksel:
+            description: Current setting of ddrphyclksel mux
+            bitOffset: 4
+            bitWidth: 1
+          reserved0:
+            description: Current setting of reserved0 mux
+            bitOffset: 5
+            bitWidth: 1
+          gemgxlclksel:
+            description: Current setting of gemgxlclksel mux
+            bitOffset: 6
+            bitWidth: 1
+          mainmemclksel:
+            description: Current setting of mainmemclksel mux
+            bitOffset: 7
+            bitWidth: 1
+      dvfs_core_pllcfg:
+        description: PLL Configuration and Status register
+        addressOffset: 0x38
+        fields:
+          pllr:
+            description: PLL R Value
+            bitOffset: 0
+            bitWidth: 6
+          pllf:
+            description: PLL F Value
+            bitOffset: 6
+            bitWidth: 9
+          pllq:
+            description: PLL Q Value
+            bitOffset: 15
+            bitWidth: 3
+          pllrange:
+            description: PLL Range Value
+            bitOffset: 18
+            bitWidth: 3
+          pllbypass:
+            description: PLL Bypass
+            bitOffset: 24
+            bitWidth: 1
+          pllfsebypass:
+            description: PLL FSE Bypass
+            bitOffset: 25
+            bitWidth: 1
+          plllock:
+            description: PLL Lock
+            bitOffset: 31
+            bitWidth: 1
+            access: read-only
+      dvfs_core_plloutdiv:
+        description: PLL Final Divide Configuration register
+        addressOffset: 0x3c
+        fields:
+          pllcke:
+            description: PLL Output Clock Enable
+            bitOffset: 31
+            bitWidth: 1
+      corepllsel:
+        description: Clock select register
+        addressOffset: 0x40
+        fields:
+          source:
+            description: core_pll mux clock select
+            bitOffset: 0
+            bitWidth: 1
+      hfpclk_pllcfg:
+        description: PLL Configuration and Status register
+        addressOffset: 0x50
+        fields:
+          pllr:
+            description: PLL R Value
+            bitOffset: 0
+            bitWidth: 6
+          pllf:
+            description: PLL F Value
+            bitOffset: 6
+            bitWidth: 9
+          pllq:
+            description: PLL Q Value
+            bitOffset: 15
+            bitWidth: 3
+          pllrange:
+            description: PLL Range Value
+            bitOffset: 18
+            bitWidth: 3
+          pllbypass:
+            description: PLL Bypass
+            bitOffset: 24
+            bitWidth: 1
+          pllfsebypass:
+            description: PLL FSE Bypass
+            bitOffset: 25
+            bitWidth: 1
+          plllock:
+            description: PLL Lock
+            bitOffset: 31
+            bitWidth: 1
+            access: read-only
+      hfpclk_plloutdiv:
+        description: PLL Final Divide Configuration register
+        addressOffset: 0x54
+        fields:
+          pllcke:
+            description: PLL Output Clock Enable
+            bitOffset: 31
+            bitWidth: 1
+      hfpclkpllsel:
+        description: Periphery clock source register
+        addressOffset: 0x58
+        fields:
+          source:
+            description: hfpclk clock source
+            bitOffset: 0
+            bitWidth: 1
+      hfpclk_div_reg:
+        description: HFPCLK PLL divider register
+        addressOffset: 0x5c
+      prci_plls:
+        description: PLL presence register
+        addressOffset: 0xe0
+        access: read-only
+        fields:
+          cltxpll:
+            description: Indicates presence of cltxpll
+            bitOffset: 0
+            bitWidth: 1
+          gemgxlpll:
+            description: Indicates presence of gemgxlpll
+            bitOffset: 1
+            bitWidth: 1
+          ddrpll:
+            description: Indicates presence of ddrpll
+            bitOffset: 2
+            bitWidth: 1
+          hfpclkpll:
+            description: Indicates presence of hfpclkpll
+            bitOffset: 3
+            bitWidth: 1
+          dvfscorepll:
+            description: Indicates presence of dvfscorepll
+            bitOffset: 4
+            bitWidth: 1
+          corepll:
+            description: Indicates presence of corepll
+            bitOffset: 5
+            bitWidth: 1
+      procmoncfg:
+        addressOffset: 0xf0
+        fields:
+          core_clock:
+            bitOffset: 24
+            bitWidth: 1
+
+PRCI:
+  core_clk_sel_reg:
+    source:
+      pll_mux: [0, "Select core_pll mux output"]
+      hfclk: [1, "Select hfclk clock"]
+  corepllsel:
+    source:
+      corepll: [0, "Select corepll output"]
+      dvfscorepll: [1, "Select dvfscorepll output"]
+  hfpclkpllsel:
+    source:
+      hfpclkpll: [ 0, "Select hfpclkpll output" ]
+      hfclk: [ 1, "Select hfclk clock" ]

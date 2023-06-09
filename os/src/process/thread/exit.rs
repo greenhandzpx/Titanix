@@ -1,6 +1,9 @@
-use crate::{process::INITPROC, processor::current_process, stack_trace};
-use alloc::sync::Arc;
-use log::debug;
+use crate::{
+    mm::user_check::UserCheck, process::INITPROC, processor::current_process, signal::Signal,
+    stack_trace,
+};
+use alloc::{sync::Arc, vec::Vec};
+use log::{debug, error, info, warn};
 
 use super::Thread;
 
@@ -8,9 +11,16 @@ use super::Thread;
 pub fn handle_exit(thread: &Arc<Thread>) {
     stack_trace!();
     debug!("thread {} handle exit", thread.tid());
+    if thread.process.pid() == 0 {
+        panic!("initproc die!!!");
+    }
     // Thread resource(i.e. tid, ustack) will be
     // released when the thread is destructed automatically
 
+    // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
+    let inner = unsafe { &mut (*thread.inner.get()) };
+    debug!("clear tid address");
+    inner.tid_addr.take();
     // We should visit the process inner exclusively
     // since different harts may arrive here at the
     // same time
@@ -18,12 +28,17 @@ pub fn handle_exit(thread: &Arc<Thread>) {
 
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
-        // # SAFETY:
-        // it is impossibe for the case like one thread is dead
-        // but hasn't been removed from its process's `threads` member
-        // since one thread must be removed from `threads` first and then
-        // die
-        if unsafe { (*t.as_ptr()).tid.0 == thread.tid.0 } {
+        // // # SAFETY:
+        // // it is impossibe for the case like one thread is dead
+        // // but hasn't been removed from its process's `threads` member
+        // // since one thread must be removed from `threads` first and then
+        // // die
+        // if unsafe { (*t.as_ptr()).tid.0 == thread.tid.0 } {
+        //     idx = Some(i);
+        //     break;
+        // }
+        // TODO: not sure whether it is safe to unwrap here
+        if t.upgrade().unwrap().tid.0 == thread.tid.0 {
             idx = Some(i);
             break;
         }
@@ -47,6 +62,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // Final exited thread should:
     // 1. mark the process as zombie
     // 2. handle the process's children migration
+    // 3. send signal to parent process
     debug!(
         "final thread {} terminated, process become zombie",
         thread.tid()
@@ -66,56 +82,88 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     }
     // TODO: Maybe we don't need to clear here?()
     process_inner.children.clear();
+    let parent_prcess = {
+        if let Some(parent_process) = process_inner.parent.as_ref() {
+            parent_process.upgrade().unwrap()
+        } else {
+            panic!("initproc will die");
+        }
+    };
+    // In order to avoid dead lock
+    drop(process_inner);
+    debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
+    parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(Signal::SIGCHLD))
     // todo!("Handle thread exit")
 }
 
 /// Exit and terminate all threads of the current process.
 /// Note that the caller cannot hold the process inner's lock
 pub fn exit_and_terminate_all_threads(exit_code: i8) {
-    current_process().inner_handler(|proc| {
+    debug!("exit and terminate all threads, exit code {}", exit_code);
+    let threads = current_process().inner_handler(|proc| {
+        let mut threads: Vec<Arc<Thread>> = Vec::new();
         proc.exit_code = exit_code;
         proc.is_zombie = true;
+        // current_process().set_zombie();
         for thread in proc.threads.iter_mut() {
-            unsafe { (*thread.as_ptr()).terminate() }
+            threads.push(thread.upgrade().unwrap());
+            // unsafe { (*thread.as_ptr()).terminate() }
         }
+        threads
         // proc.threads.clear();
     });
+    for thread in threads {
+        thread.terminate();
+    }
 }
 
 /// Terminate all threads of the current process except main thread(i.e. idx = 0).
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_all_threads_except_main() {
-    current_process().inner_handler(|proc| {
+    let threads = current_process().inner_handler(|proc| {
+        let mut threads: Vec<Arc<Thread>> = Vec::new();
         for (i, thread) in proc.threads.iter_mut().enumerate() {
             if i == 0 {
                 continue;
             }
-            unsafe { (*thread.as_ptr()).terminate() }
+            threads.push(thread.upgrade().unwrap());
+            // unsafe { (*thread.as_ptr()).terminate() }
         }
-        // let len = proc.threads.len();
-        // for _ in 0..len - 1 {
-        //     proc.threads.pop();
-        // }
+        threads
     });
+    for thread in threads {
+        thread.terminate();
+    }
 }
 
 /// Terminate the given thread
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_given_thread(tid: usize, exit_code: i8) {
-    current_process().inner_handler(|proc| {
+    if let Some(thread) = current_process().inner_handler(|proc| {
         proc.exit_code = exit_code;
         // let mut idx: Option<usize> = None;
         for (_, thread) in proc.threads.iter_mut().enumerate() {
-            let t = unsafe { &mut *(thread.as_ptr() as *mut Thread) };
-            if t.tid() == tid {
-                debug!("terminate given tid {}", tid);
-                t.terminate();
-                // idx = Some(i);
-                break;
+            // let t = unsafe { &mut *(thread.as_ptr() as *mut Thread) };
+            if let Some(t) = thread.upgrade() {
+                if t.tid() == tid {
+                    return Some(t);
+                    // // idx = Some(i);
+                    // break;
+                }
+            } else {
+                panic!(
+                    "Weak thread pointer is invalid in process {}",
+                    current_process().pid()
+                );
+                // return None;
             }
         }
+        return None;
         // if let Some(idx) = idx {
         //     proc.threads.remove(idx);
         // }
-    });
+    }) {
+        debug!("terminate given tid {}", tid);
+        thread.terminate();
+    }
 }

@@ -72,6 +72,7 @@ impl Path {
         if Self::judge_is_relative(path) {
             debug!("It is a relative path");
             let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+            debug!("cwd {}", cwd);
             absolute_path = Self::change_relative_to_absolute(path, &cwd);
         } else {
             debug!("It is a absolute path");
@@ -89,6 +90,7 @@ impl Path {
                 match wd_inode {
                     Some(wd_inode) => {
                         let wd = wd_inode.metadata().path.clone();
+                        debug!("wd: {}", wd);
                         Self::change_relative_to_absolute(path, &wd)
                     }
                     None => None,

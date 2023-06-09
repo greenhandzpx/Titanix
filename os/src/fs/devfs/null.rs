@@ -1,13 +1,14 @@
+use core::pin::Pin;
+
 use crate::{
     fs::{
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
         File, Inode, Mutex, OpenFlags,
     },
-    utils::error::{GeneralRet, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc};
-use async_trait::async_trait;
 use log::debug;
 
 pub struct NullInode {
@@ -56,7 +57,7 @@ pub struct NullFile {
     meta: FileMeta,
 }
 
-#[async_trait]
+// #[async_trait]
 impl File for NullFile {
     fn readable(&self) -> bool {
         true
@@ -67,12 +68,12 @@ impl File for NullFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-    async fn read(&self, buf: &mut [u8]) -> SyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         debug!("read /dev/null");
-        Ok(0)
+        Box::pin(async move { Ok(0) })
     }
-    async fn write(&self, buf: &[u8]) -> SyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         debug!("write /dev/null");
-        Ok(buf.len() as isize)
+        Box::pin(async move { Ok(0) })
     }
 }

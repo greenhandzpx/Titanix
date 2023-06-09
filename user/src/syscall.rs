@@ -22,6 +22,7 @@ const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_SIGACTION: usize = 134;
+const SYSCALL_RT_SIGPROCMASK: usize = 135;
 const SYSCALL_SIGRETURN: usize = 139;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GET_TIME: usize = 169;

@@ -10,11 +10,11 @@ pub mod kstat;
 pub mod utsname;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;
-pub mod inode_tmp;
 pub mod pipe;
 mod procfs;
 mod stdio;
 mod testfs;
+mod uio;
 
 // pub use dentry::Dentry;
 pub use dirent::Dirent;
@@ -29,6 +29,7 @@ pub use inode::Inode;
 pub use inode::InodeMode;
 pub use stdio::Stdin;
 pub use stdio::Stdout;
+pub use uio::*;
 pub use utsname::UtsName;
 pub use utsname::UTSNAME_SIZE;
 
@@ -61,6 +62,13 @@ bitflags! {
         ///Directory
         const DIRECTORY = 1 << 21;
     }
+
+    /// stat flags
+    pub struct StatFlags: u32 {
+        const AT_EMPTY_PATH = 1 << 0;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_SYMLINK_NOFOLLOW = 1 << 8;
+    }
 }
 
 impl OpenFlags {
@@ -80,7 +88,7 @@ impl OpenFlags {
 impl From<MapPermission> for OpenFlags {
     fn from(perm: MapPermission) -> Self {
         let mut res = OpenFlags::from_bits(0).unwrap();
-        if perm.contains(MapPermission::R) && perm.contains(MapPermission::W){
+        if perm.contains(MapPermission::R) && perm.contains(MapPermission::W) {
             res |= OpenFlags::RDWR;
         } else if perm.contains(MapPermission::R) {
             res |= OpenFlags::RDONLY;

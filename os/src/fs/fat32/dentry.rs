@@ -38,7 +38,6 @@ const LDIR_NAME_LEN: usize = LDIR_NAME1_LEN + LDIR_NAME2_LEN + LDIR_NAME3_LEN;
 macro_rules! dir_attr { ($buf: expr) => { $buf[11] }; }
 
 
-
 pub struct FAT32DirEntry {
 
 }

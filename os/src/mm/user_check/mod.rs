@@ -7,6 +7,7 @@ use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
     process::thread::exit_and_terminate_all_threads,
     processor::{current_process, local_hart, SumGuard},
+    stack_trace,
     trap::trap_from_kernel,
     utils::error::{GeneralRet, SyscallErr},
 };
@@ -80,6 +81,7 @@ impl UserCheck {
     /// Check wether the given user c string is legal or not.
     pub fn check_c_str(&self, c_str: *const u8) -> GeneralRet<()> {
         debug!("[kernel] check c str");
+        stack_trace!();
         let start_addr: VirtAddr = VirtAddr::from(c_str as usize).floor().into();
         let mut va = start_addr;
         let mut first = true;
@@ -154,7 +156,7 @@ impl UserCheck {
                 Ok(())
             }
             Err(_) => {
-                error!(
+                warn!(
                     "[kernel] [user check](scause:{}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
                     scause,
                     va.0,

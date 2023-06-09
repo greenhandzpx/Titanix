@@ -1,7 +1,13 @@
 //! Implementation of [`FrameAllocator`] which
 //! controls all the frames in the operating system.
 use super::{PhysAddr, PhysPageNum};
-use crate::{config::board::MEMORY_END, sync::mutex::SpinNoIrqLock};
+use crate::{
+    config::{
+        board::MEMORY_END,
+        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+    },
+    sync::mutex::SpinNoIrqLock,
+};
 // use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
@@ -104,8 +110,12 @@ pub fn init_frame_allocator() {
         fn ekernel();
     }
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(ekernel as usize).ceil(),
+        PhysAddr::from(ekernel as usize - (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).ceil(),
         PhysAddr::from(MEMORY_END).floor(),
+    );
+    info!(
+        "frame allocator init finshed, start {:#x}, end {:#x}",
+        ekernel as usize, MEMORY_END
     );
 }
 /// allocate a frame
