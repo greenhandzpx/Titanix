@@ -1,28 +1,17 @@
-use core::{
-    cell::SyncUnsafeCell,
-    mem::size_of,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak},
-    vec::Vec,
 };
 use lazy_static::*;
 use log::{debug, warn};
 
 use crate::{
-    driver::block::BlockDevice,
-    mm::{Page, PageCache},
+    mm::PageCache,
     timer::get_time_ms,
-    utils::{
-        error::{GeneralRet, SyscallRet},
-        hash_table::HashTable,
-        mem::uninit_memory,
-        path::Path,
-    },
+    utils::{error::GeneralRet, hash_table::HashTable, path::Path},
 };
 
 use super::{
@@ -58,7 +47,7 @@ pub enum InodeMode {
                     // TODO add more(like R / W / X etc)
 }
 
-static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
+// static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
 
 static INODE_UID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
 
@@ -111,27 +100,27 @@ pub trait Inode: Send + Sync {
 
     /// You should call this function through the parent inode
     /// You should give a relative path
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
-    fn rmdir(&self, name: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
     fn mknod(
         &self,
-        this: Arc<dyn Inode>,
-        pathname: &str,
-        mode: InodeMode,
-        dev_id: usize,
+        _this: Arc<dyn Inode>,
+        _pathname: &str,
+        _mode: InodeMode,
+        _dev_id: usize,
     ) -> GeneralRet<()> {
         todo!()
     }
     /// Read data at the given file offset from block device
-    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> GeneralRet<usize> {
         todo!()
     }
     /// Write data to the given file offset in block device
-    fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
+    fn write(&self, _offset: usize, _buf: &[u8]) -> GeneralRet<usize> {
         todo!()
     }
 

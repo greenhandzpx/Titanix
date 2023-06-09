@@ -1,39 +1,37 @@
+use crate::driver::block::BlockDevice;
 use alloc::sync::Arc;
 use log::debug;
-use crate::{
-    driver::block::BlockDevice,
-};
 
 use self::{
     bpb::BootSector,
-    inode::{FAT32Inode, FAT32InodeMeta},
+    fat::FileAllocTable,
     fat32info::FAT32Info,
-    fat::FileAllocTable
+    inode::{FAT32Inode, FAT32InodeMeta},
 };
 
 mod bpb;
-mod disk_dentry;
-mod fsinfo;
-mod util;
-mod fat;
 mod dentry;
-mod inode;
-mod time;
+mod disk_dentry;
+mod fat;
 mod fat32info;
 mod file;
+mod fsinfo;
+mod inode;
+mod time;
+mod util;
 
-const SECTOR_SIZE:          usize = 512;
-const SHORTNAME_LEN:        usize = 11;
-const LONGNAME_LEN:         usize = 255;
-const BOOT_SECTOR_ID:       usize = 0;
-const FATENTRY_PER_SECTOR:  usize = 128;
-const FAT_CACHE_SIZE:       usize = 16;
-const FSI_LEADSIG:          u32 = 0x41615252;
-const FSI_STRUCSIG:         u32 = 0x61417272;
-const FSI_TRAILSIG:         u32 = 0xAA550000;
-const FSI_RESERVED1_SIZE:   usize = 480;
-const FSI_RESERVED2_SIZE:   usize = 12;
-const FSI_NOT_AVAILABLE:    u32 = 0xFFFFFFFF;
+const SECTOR_SIZE: usize = 512;
+const SHORTNAME_LEN: usize = 11;
+const LONGNAME_LEN: usize = 255;
+const BOOT_SECTOR_ID: usize = 0;
+const FATENTRY_PER_SECTOR: usize = 128;
+const FAT_CACHE_SIZE: usize = 16;
+const FSI_LEADSIG: u32 = 0x41615252;
+const FSI_STRUCSIG: u32 = 0x61417272;
+const FSI_TRAILSIG: u32 = 0xAA550000;
+const FSI_RESERVED1_SIZE: usize = 480;
+const FSI_RESERVED2_SIZE: usize = 12;
+const FSI_NOT_AVAILABLE: u32 = 0xFFFFFFFF;
 
 pub struct FAT32FileSystemMeta {
     info: Arc<FAT32Info>,
@@ -61,26 +59,35 @@ impl FAT32FileSystem {
             return None;
         }
         let mut bs_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
-        self.block_device.read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
+        self.block_device
+            .read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
         let raw_bs: BootSector = BootSector::new(&bs_data);
         if raw_bs.BPB_BytesPerSector as usize != SECTOR_SIZE
             || raw_bs.BPB_RootEntryCount != 0
             || raw_bs.BPB_TotSector16 != 0
             || raw_bs.BPB_FATsize16 != 0
-            || raw_bs.BPB_FSVer != 0 {
-                return None;
+            || raw_bs.BPB_FSVer != 0
+        {
+            return None;
         }
         let info = Arc::new(FAT32Info::new(raw_bs));
-        let fat = Arc::new(FileAllocTable::new(Arc::clone(&self.block_device), Arc::clone(&info)));
-        let root_inode = Arc::new(
-            FAT32Inode::new(
-                Arc::clone(&fat),
-                None,
-                info.root_cluster_id,
-                0,
-                inode::FAT32FileType::Directory,
-                FAT32InodeMeta::default()));
-        self.meta = Some(FAT32FileSystemMeta { info: Arc::clone(&info), fat, root_inode: Arc::clone(&root_inode) });
+        let fat = Arc::new(FileAllocTable::new(
+            Arc::clone(&self.block_device),
+            Arc::clone(&info),
+        ));
+        let root_inode = Arc::new(FAT32Inode::new(
+            Arc::clone(&fat),
+            None,
+            info.root_cluster_id,
+            0,
+            inode::FAT32FileType::Directory,
+            FAT32InodeMeta::default(),
+        ));
+        self.meta = Some(FAT32FileSystemMeta {
+            info: Arc::clone(&info),
+            fat,
+            root_inode: Arc::clone(&root_inode),
+        });
         Some(())
     }
 
@@ -95,7 +102,6 @@ impl FAT32FileSystem {
             debug!("卸载失败了！");
             None
         }
-        
     }
 
     pub fn root_inode(&self) -> Option<Arc<FAT32Inode>> {
@@ -117,5 +123,4 @@ impl FAT32FileSystem {
             Some(())
         }
     }
-
 }

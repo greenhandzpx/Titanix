@@ -10,7 +10,6 @@ pub mod kstat;
 pub mod utsname;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;
-pub mod inode_tmp;
 pub mod pipe;
 mod procfs;
 mod stdio;

@@ -1,8 +1,7 @@
 use alloc::{
     sync::{Arc, Weak},
-    vec::Vec,
 };
-use log::info;
+use log::{info, trace};
 
 use crate::{config::mm::PAGE_SIZE_BITS, fs::Inode, utils::error::GeneralRet};
 
@@ -20,9 +19,9 @@ pub struct PageCache {
 
 impl PageCache {
     /// Create a new page cache
-    pub fn new(inode: &Arc<dyn Inode>, level_num: usize) -> Self {
+    pub fn new(inode: Arc<dyn Inode>, level_num: usize) -> Self {
         Self {
-            inode: Some(Arc::downgrade(inode)),
+            inode: Some(Arc::downgrade(&inode)),
             pages: RadixTree::new(level_num),
         }
     }
@@ -36,6 +35,7 @@ impl PageCache {
     }
     /// Get a page according to the given file offset
     pub fn get_page(&mut self, offset: usize) -> GeneralRet<Arc<Page>> {
+        trace!("[PageCache]: get page at file offset {:#x}", offset);
         if let Some(page) = self.lookup(offset) {
             Ok(page)
         } else {

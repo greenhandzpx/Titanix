@@ -1,28 +1,18 @@
-use core::cell::UnsafeCell;
-
-use alloc::{
-    boxed::Box,
-    sync::{Arc, Weak},
-};
+use alloc::{boxed::Box, sync::Arc};
 use log::{debug, info};
 use riscv::register::scause::Scause;
 
 use crate::{
-    config::mm::PAGE_SIZE,
     fs::OpenFlags,
-    mm::{
-        frame_alloc, page_table::PTEFlags, FrameTracker, MapPermission, PageTable, PageTableEntry,
-        PhysPageNum, VirtAddr,
-    },
+    mm::{frame_alloc, page_table::PTEFlags, PageTable, VirtAddr},
     processor::current_process,
     sync::mutex::SpinNoIrqLock,
-    syscall::MmapFlags,
     utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::VmArea;
 
-type Mutex<T> = SpinNoIrqLock<T>;
+// type Mutex<T> = SpinNoIrqLock<T>;
 
 /// General page fault handler
 pub trait PageFaultHandler: Send + Sync {

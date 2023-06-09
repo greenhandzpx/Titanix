@@ -1,4 +1,6 @@
-use crate::fs::fat32::{FSI_LEADSIG, FSI_STRUCSIG, FSI_TRAILSIG, FSI_RESERVED1_SIZE, FSI_RESERVED2_SIZE};
+use crate::fs::fat32::{
+    FSI_LEADSIG, FSI_RESERVED1_SIZE, FSI_RESERVED2_SIZE, FSI_STRUCSIG, FSI_TRAILSIG,
+};
 
 use super::util::*;
 #[allow(non_snake_case)]
@@ -22,10 +24,10 @@ impl FSInfo {
 
     pub fn load(&mut self, src: &[u8; 512]) {
         let mut offset: usize = 0;
-        macro_rules ! load {
+        macro_rules! load {
             ($v: expr) => {
                 load_fn(&mut $v, src, &mut offset);
-            }
+            };
         }
         load!(self.FSI_LeadSig);
         offset += FSI_RESERVED1_SIZE;
@@ -35,13 +37,13 @@ impl FSInfo {
         offset += FSI_RESERVED2_SIZE;
         load!(self.FSI_TrailSig);
     }
-    
-    pub fn store(&mut self, dest: &mut[u8; 512]) {
+
+    pub fn store(&mut self, dest: &mut [u8; 512]) {
         let mut offset: usize = 0;
-        macro_rules ! store {
+        macro_rules! store {
             ($v: expr) => {
                 store_fn(&$v, dest, &mut offset);
-            }
+            };
         }
         store!(FSI_LEADSIG);
         offset += FSI_RESERVED1_SIZE;

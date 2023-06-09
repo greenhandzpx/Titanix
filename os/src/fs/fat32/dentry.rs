@@ -1,25 +1,23 @@
+use alloc::{sync::Arc, vec::Vec};
 
-use alloc::{
-    sync::Arc,
-    vec::Vec,
-};
-
-use log::{error, warn, debug, info};
+use log::{debug, error, info, warn};
 
 use crate::{
-    fs::{inode::{Inode, InodeMode, InodeMeta, InodeMetaInner}, Mutex,},
-    driver::{block::{BlockDevice, self}},
-    sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallRet, SyscallErr, self},
+    driver::block::{self, BlockDevice},
+    fs::{
+        inode::{Inode, InodeMeta, InodeMetaInner, InodeMode},
+        Mutex,
+    },
     mm::Page,
+    sync::mutex::SpinNoIrqLock,
+    utils::error::{self, GeneralRet, SyscallErr, SyscallRet},
 };
 
 use super::{
-    SHORTNAME_LEN,
-    time::FAT32Timestamp,
-    LONGNAME_LEN,
+    disk_dentry::{DiskDirEntry, DiskLongDirEntry},
     inode::FAT32Inode,
-    disk_dentry::{DiskLongDirEntry, DiskDirEntry},
+    time::FAT32Timestamp,
+    LONGNAME_LEN, SHORTNAME_LEN,
 };
 
 const ATTR_READ_ONLY: u8 = 0x01;
@@ -41,7 +39,6 @@ pub struct FAT32DirEntry {
     inode: Arc<FAT32Inode>,
     info: Mutex<FAT32FileInfo>,
 }
-
 
 pub struct FAT32FileInfo {
     short_name: [u8; SHORTNAME_LEN],
@@ -69,11 +66,7 @@ impl FAT32DirEntry {
     ) -> Option<Self> {
         let data: &[u8] = &dentry_data[*data_ptr..(*data_ptr + DENTRY_SIZE)];
         *data_ptr += DENTRY_SIZE;
-        if data[0] == 0x00 {
-
-        }
-
-
+        if data[0] == 0x00 {}
 
         let inode = FAT32DirEntry::fuck();
         let info = FAT32FileInfo::new();
@@ -88,12 +81,9 @@ impl FAT32DirEntry {
     pub fn fuck() -> FAT32Inode {
         todo!();
     }
-
 }
 
-pub struct DentryReader {
-
-}
+pub struct DentryReader {}
 
 impl DentryReader {
     fn read_data(&self, data: &mut [u8]) -> Option<()> {
@@ -110,9 +100,15 @@ pub fn resolve_dentry(dentry_reader: DentryReader) -> Vec<FAT32Inode> {
     let mut nxt_longdir_id = 0; // next longdir id
     let mut chksum: u8 = 0;
     while dentry_reader.read_data(&mut data).is_some() {
-        if data[0] == 0x00 { break; }
-        if data[0] == 0xE5 { continue; }
-        if data[0] == 0x05 { data[0] = 0xE5; }
+        if data[0] == 0x00 {
+            break;
+        }
+        if data[0] == 0xE5 {
+            continue;
+        }
+        if data[0] == 0x05 {
+            data[0] = 0xE5;
+        }
         if data[ATTR_ADDR] == ATTR_LONG_NAME {
             let processed_data = DiskLongDirEntry::new(&data);
             let mut id = processed_data.LDIR_Ord;
@@ -125,17 +121,28 @@ pub fn resolve_dentry(dentry_reader: DentryReader) -> Vec<FAT32Inode> {
                     error!("we expect not first long dir, but meet with first long dir");
                 }
                 if nxt_longdir_id != id {
-                    error!("we expect long dir id {}, but meet with id {}", nxt_longdir_id, id);
+                    error!(
+                        "we expect long dir id {}, but meet with id {}",
+                        nxt_longdir_id, id
+                    );
                 }
             } else {
                 if first_longdir == false {
-                    error!("we expect first long dir or short dir, but meet with not first long dir");
+                    error!(
+                        "we expect first long dir or short dir, but meet with not first long dir"
+                    );
                 }
             }
             let mut name_part: [u16; 13] = [0; 13];
-            for i in 0..5 { name_part[i] = processed_data.LDIR_Name1[i]; }
-            for i in 5..11 { name_part[i] = processed_data.LDIR_Name2[i - 5]; }
-            for i in 11..13 { name_part[i] = processed_data.LDIR_Name3[i - 11]; }
+            for i in 0..5 {
+                name_part[i] = processed_data.LDIR_Name1[i];
+            }
+            for i in 5..11 {
+                name_part[i] = processed_data.LDIR_Name2[i - 5];
+            }
+            for i in 11..13 {
+                name_part[i] = processed_data.LDIR_Name3[i - 11];
+            }
             if id == 1 {
                 nxt_longdir = false;
                 nxt_shortdir = true;
@@ -148,7 +155,10 @@ pub fn resolve_dentry(dentry_reader: DentryReader) -> Vec<FAT32Inode> {
                 chksum = processed_data.LDIR_Chksum;
             } else {
                 if chksum != processed_data.LDIR_Chksum {
-                    error!("LDIR chksum is not consistent!, {} != {}", chksum, processed_data.LDIR_Chksum);
+                    error!(
+                        "LDIR chksum is not consistent!, {} != {}",
+                        chksum, processed_data.LDIR_Chksum
+                    );
                 }
             }
         } else {

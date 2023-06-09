@@ -1,5 +1,5 @@
 use alloc::{sync::Arc, vec, vec::Vec};
-use log::debug;
+use log::{debug, trace};
 
 use crate::{config::fs::RADIX_TREE_MAP_SHIFT, sync::mutex::SpinNoIrqLock};
 
@@ -81,7 +81,7 @@ impl<T: Clone> RadixTree<T> {
             let mut children = parent.children.lock();
             if children[*index].is_none() {
                 if i == indice.len() - 1 {
-                    debug!("[Radix tree]: insert a new leaf, key: {:#x}", key);
+                    trace!("[Radix tree]: insert a new leaf, key: {:#x}", key);
                     children[*index] = Some(RadixTreeNode::LeafNode(RadixTreeLeafNode {
                         key,
                         data: value,
@@ -100,7 +100,7 @@ impl<T: Clone> RadixTree<T> {
                     parent = node;
                 }
                 RadixTreeNode::LeafNode(_) => {
-                    debug!(
+                    trace!(
                         "[Radix tree]: replace old leaf with a new one, key: {:#x}",
                         key
                     );

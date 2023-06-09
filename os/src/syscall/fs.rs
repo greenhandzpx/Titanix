@@ -11,15 +11,15 @@ use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::kstat::{KSTAT, KSTAT_SIZE};
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
-    dirent, inode, Dirent, FAT32FileSystem, File, FileSystem, FileSystemType, Inode, InodeMode,
-    Iovec, StatFlags, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, StatFlags, UtsName,
+    DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
 use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
-use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::syscall::{AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::{get_time_ms, TimeSpec};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;

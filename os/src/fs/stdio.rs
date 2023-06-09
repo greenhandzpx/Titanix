@@ -1,14 +1,14 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use alloc::boxed::Box;
-use log::{debug, warn};
+use log::warn;
 
 use crate::{
     process,
     processor::SumGuard,
     sbi::console_getchar,
     sync::mutex::SpinNoIrqLock,
-    utils::error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
 use super::file::{File, FileMeta};

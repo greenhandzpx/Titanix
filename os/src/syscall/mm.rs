@@ -1,7 +1,7 @@
 use log::debug;
 
 use crate::{
-    config::{fs::FILE_PAGE_SIZE, mm::PAGE_SIZE},
+    config::mm::PAGE_SIZE,
     mm::{
         memory_set::{
             page_fault_handler::{MmapPageFaultHandler, SBrkPageFaultHandler},

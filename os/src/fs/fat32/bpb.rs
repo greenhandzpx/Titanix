@@ -5,39 +5,39 @@ use super::util::*;
 // Boot Sector with BPB, load from Sector 0
 pub struct BootSector {
     // Boot
-    pub BS_jmpBoot: [u8; 3],             // ignore.
-    pub BS_OEMName: [u8; 8],             // usually "MSWIN4.1"
-    
+    pub BS_jmpBoot: [u8; 3], // ignore.
+    pub BS_OEMName: [u8; 8], // usually "MSWIN4.1"
+
     // essential BPB
-    pub BPB_BytesPerSector: u16,         // must 512, ..., 4096. usually 512
-    pub BPB_SectorPerCluster: u8,        // must 1,2,4,...,128.
-    pub BPB_ReservedSectorCount: u16,    // usually 32 for FAT32
-    pub BPB_NumFATs: u8,                 // usually 2 for FAT32
-    pub BPB_RootEntryCount: u16,         // must 0 for FAT32
-    pub BPB_TotSector16: u16,            // must 0 for FAT32
-    pub BPB_Media: u8,                   // usually 0xF8, ignore.
-    pub BPB_FATsize16: u16,              // must 0 for FAT32
-    pub BPB_SectorPerTrack: u16,         // use for int 0x13, ignore.
-    pub BPB_NumHeads: u16,               // use for int 0x13, ignore.
-    pub BPB_HiddSec: u32,                // Hideden Sector Count, ignore.
-    pub BPB_TotSector32: u32,            // Total Sector count.
+    pub BPB_BytesPerSector: u16,      // must 512, ..., 4096. usually 512
+    pub BPB_SectorPerCluster: u8,     // must 1,2,4,...,128.
+    pub BPB_ReservedSectorCount: u16, // usually 32 for FAT32
+    pub BPB_NumFATs: u8,              // usually 2 for FAT32
+    pub BPB_RootEntryCount: u16,      // must 0 for FAT32
+    pub BPB_TotSector16: u16,         // must 0 for FAT32
+    pub BPB_Media: u8,                // usually 0xF8, ignore.
+    pub BPB_FATsize16: u16,           // must 0 for FAT32
+    pub BPB_SectorPerTrack: u16,      // use for int 0x13, ignore.
+    pub BPB_NumHeads: u16,            // use for int 0x13, ignore.
+    pub BPB_HiddSec: u32,             // Hideden Sector Count, ignore.
+    pub BPB_TotSector32: u32,         // Total Sector count.
 
     // BPB For FAT32
-    pub BPB_FATsize32: u32,              // FAT Sector count.
-    pub BPB_ExtFlags: u16,               // usually 0
-    pub BPB_FSVer: u16,                  // must 0 in current version
-    pub BPB_RootCluster: u32,            // Root Cluster id, usally 2
-    pub BPB_FSInfo: u16,                 // FSINFO Sector id, usually 1
-    pub BPB_BkBootSec: u16,              // Backup Sector id, usually 6
-    pub BPB_Reserved: [u8; 12],          // 0
-    pub BPB_DrvNum: u8,                  // use for 0x13, 0x80
-    pub BPB_Reserved1: u8,               // 0
-    pub BPB_BootSig: u8,                 // 0x29
-    pub BPB_VolID: u32,                  // xjb Generator
+    pub BPB_FATsize32: u32,     // FAT Sector count.
+    pub BPB_ExtFlags: u16,      // usually 0
+    pub BPB_FSVer: u16,         // must 0 in current version
+    pub BPB_RootCluster: u32,   // Root Cluster id, usally 2
+    pub BPB_FSInfo: u16,        // FSINFO Sector id, usually 1
+    pub BPB_BkBootSec: u16,     // Backup Sector id, usually 6
+    pub BPB_Reserved: [u8; 12], // 0
+    pub BPB_DrvNum: u8,         // use for 0x13, 0x80
+    pub BPB_Reserved1: u8,      // 0
+    pub BPB_BootSig: u8,        // 0x29
+    pub BPB_VolID: u32,         // xjb Generator
 
     // BS(end)
-    pub BS_VolLabel: [u8; 11],             // 11*0x30
-    pub BS_FileSysType: [u8; 8],         // FAT32 0x30*3
+    pub BS_VolLabel: [u8; 11],   // 11*0x30
+    pub BS_FileSysType: [u8; 8], // FAT32 0x30*3
 }
 
 impl BootSector {
@@ -49,10 +49,10 @@ impl BootSector {
 
     pub fn load(&mut self, src: &[u8; 512]) {
         let mut offset: usize = 0;
-        macro_rules ! load {
+        macro_rules! load {
             ($v: expr) => {
                 load_fn(&mut $v, src, &mut offset);
-            }
+            };
         }
         load!(self.BS_jmpBoot);
         load!(self.BS_OEMName);
@@ -69,7 +69,7 @@ impl BootSector {
         load!(self.BPB_NumHeads);
         load!(self.BPB_HiddSec);
         load!(self.BPB_TotSector32);
-        
+
         load!(self.BPB_FATsize32);
         load!(self.BPB_ExtFlags);
         load!(self.BPB_FSVer);
@@ -85,13 +85,13 @@ impl BootSector {
         load!(self.BS_VolLabel);
         load!(self.BS_FileSysType);
     }
-    
-    pub fn store(&mut self, dest: &mut[u8; 512]) {
+
+    pub fn store(&mut self, dest: &mut [u8; 512]) {
         let mut offset: usize = 0;
-        macro_rules ! store {
+        macro_rules! store {
             ($v: expr) => {
                 store_fn(&$v, dest, &mut offset);
-            }
+            };
         }
         store!(self.BS_jmpBoot);
         store!(self.BS_OEMName);
@@ -108,7 +108,7 @@ impl BootSector {
         store!(self.BPB_NumHeads);
         store!(self.BPB_HiddSec);
         store!(self.BPB_TotSector32);
-        
+
         store!(self.BPB_FATsize32);
         store!(self.BPB_ExtFlags);
         store!(self.BPB_FSVer);

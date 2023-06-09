@@ -1,13 +1,16 @@
 use core::cell::UnsafeCell;
+use core::panic;
 
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::{boxed::Box, vec::Vec};
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
+use crate::fs::file::DefaultFile;
 use crate::fs::inode::INODE_CACHE;
+use crate::mm::PageCache;
 use crate::utils::error::{self, AsyscallRet, SyscallErr};
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
@@ -129,10 +132,10 @@ impl Inode for Fat32RootInode {
                 inode_mode,
                 data_len as usize,
             );
-            meta_inner.children.insert(
-                dentry.as_ref().unwrap().file_name(),
-                Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta))),
-            );
+            let file_name = dentry.as_ref().unwrap().file_name();
+            let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
+            child.metadata().inner.lock().page_cache = Some(PageCache::new(child.clone(), 3));
+            meta_inner.children.insert(file_name, child);
         }
     }
 
@@ -232,7 +235,6 @@ impl Fat32Inode {
 impl Inode for Fat32Inode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         debug!("[Fat32Inode]: open: name: {}", self.dentry.file_name());
-        let (readable, writable) = flags.read_write();
         let file_meta = FileMeta {
             // TODO: not sure whether this file_name() is absolute path or not
             path: self.dentry.file_name(),
@@ -242,23 +244,25 @@ impl Inode for Fat32Inode {
                 pos: 0,
             }),
         };
-        if self.dentry.is_dir() {
-            Ok(Arc::new(Fat32File::new(
-                Fat32NodeType::Dir(self.dentry.to_dir()),
-                Some(file_meta),
-                readable,
-                writable,
-            )))
-        } else if self.dentry.is_file() {
-            Ok(Arc::new(Fat32File::new(
-                Fat32NodeType::File(self.dentry.to_file()),
-                Some(file_meta),
-                readable,
-                writable,
-            )))
-        } else {
-            Err(SyscallErr::EBADF)
-        }
+        Ok(Arc::new(DefaultFile::new(file_meta)))
+        // let (readable, writable) = flags.read_write();
+        // if self.dentry.is_dir() {
+        //     Ok(Arc::new(Fat32File::new(
+        //         Fat32NodeType::Dir(self.dentry.to_dir()),
+        //         Some(file_meta),
+        //         readable,
+        //         writable,
+        //     )))
+        // } else if self.dentry.is_file() {
+        //     Ok(Arc::new(Fat32File::new(
+        //         Fat32NodeType::File(self.dentry.to_file()),
+        //         Some(file_meta),
+        //         readable,
+        //         writable,
+        //     )))
+        // } else {
+        //     Err(SyscallErr::EBADF)
+        // }
     }
 
     fn metadata(&self) -> &InodeMeta {
@@ -292,10 +296,10 @@ impl Inode for Fat32Inode {
                 inode_mode,
                 data_len as usize,
             );
-            meta_inner.children.insert(
-                dentry.as_ref().unwrap().file_name(),
-                Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta))),
-            );
+            let file_name = dentry.as_ref().unwrap().file_name();
+            let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
+            child.metadata().inner.lock().page_cache = Some(PageCache::new(child.clone(), 3));
+            meta_inner.children.insert(file_name, child);
         }
     }
 
@@ -343,6 +347,38 @@ impl Inode for Fat32Inode {
             .children
             .insert(new_inode.metadata().name.clone(), new_inode);
         Ok(())
+    }
+
+    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
+        if self.dentry.is_dir() {
+            return Err(SyscallErr::EISDIR);
+        }
+        let mut file = self.dentry.to_file();
+        if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
+            return Err(SyscallErr::EINVAL);
+        }
+        if let Some(bytes) = file.read(buf).ok() {
+            return Ok(bytes);
+        } else {
+            warn!("fatfs read file failed!");
+            return Err(SyscallErr::EINVAL);
+        }
+    }
+
+    fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
+        if self.dentry.is_dir() {
+            return Err(SyscallErr::EISDIR);
+        }
+        let mut file = self.dentry.to_file();
+        if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
+            return Err(SyscallErr::EINVAL);
+        }
+        if let Some(bytes) = file.write(buf).ok() {
+            return Ok(bytes);
+        } else {
+            warn!("fatfs write file failed!");
+            return Err(SyscallErr::EINVAL);
+        }
     }
 }
 
@@ -491,7 +527,7 @@ impl File for Fat32File {
         let _sum_guard = SumGuard::new();
         let mut inner = self.inner.lock();
         let bytes = match &mut inner.node {
-            Fat32NodeType::Dir(dir) => panic!(),
+            Fat32NodeType::Dir(_) => panic!(),
             Fat32NodeType::File(file) => {
                 let res = file.write(buf);
                 debug!(
@@ -554,74 +590,6 @@ pub fn list_apps_fat32() {
     }
     info!("/************************************/");
 }
-
-///Open file with flags
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
-    stack_trace!();
-    // TODO support different kinds of files dispatching
-    // (e.g. /dev/sda, /proc/1234, /usr/bin)
-    debug!("[open_file] name: {}", name);
-
-    let (readable, writable) = flags.read_write();
-    let root_dir = ROOT_FS.fat_fs.root_dir();
-    if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = root_dir.open_file(name).ok() {
-            Some(Arc::new(Fat32File::new(
-                Fat32NodeType::File(inode),
-                None,
-                readable,
-                writable,
-            )))
-        } else {
-            debug!("create file {}", name);
-            Some(Arc::new(Fat32File::new(
-                Fat32NodeType::File(root_dir.create_file(name).unwrap()),
-                None,
-                readable,
-                writable,
-            )))
-        }
-    } else {
-        if let Some(inode) = root_dir.open_file(name).ok() {
-            Some(Arc::new(Fat32File::new(
-                Fat32NodeType::File(inode),
-                None,
-                readable,
-                writable,
-            )))
-        } else {
-            None
-        }
-    }
-}
-
-// pub fn open_dir(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
-//     // TODO support different kinds of files dispatching
-//     // (e.g. /dev/sda, /proc/1234, /usr/bin)
-
-//     // stack_trace!();
-//     let (readable, writable) = flags.read_write();
-//     if flags.contains(OpenFlags::CREATE) {
-//         if let Some(inode) = ROOT_INODE.find(name) {
-//             // clear size
-//             inode.clear();
-//             Some(Arc::new(OSInode::new(readable, writable, inode)))
-//         } else {
-//             // create file
-//             ROOT_INODE
-//                 .create(name)
-//                 .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
-//         }
-//     } else {
-//         debug!("name: {}", name);
-//         ROOT_INODE.find(name).map(|inode| {
-//             if flags.contains(OpenFlags::TRUNC) {
-//                 inode.clear();
-//             }
-//             Arc::new(OSInode::new(readable, writable, inode))
-//         })
-//     }
-// }
 
 pub fn init() -> GeneralRet<()> {
     info!("start to init fatfs...");

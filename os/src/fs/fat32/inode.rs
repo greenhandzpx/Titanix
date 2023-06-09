@@ -1,15 +1,24 @@
-
-use alloc::{sync::{Arc, Weak}, vec::Vec};
 use crate::{
-    fs::{inode::{Inode, InodeMode, InodeMeta, InodeMetaInner}, Mutex, fat32_tmp::Fat32File, File, file},
-    driver::{block::{BlockDevice, self, BLOCK_DEVICE}},
-    sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallRet, SyscallErr},
+    driver::block::{self, BlockDevice, BLOCK_DEVICE},
+    fs::{
+        fat32_tmp::Fat32File,
+        file,
+        inode::{Inode, InodeMeta, InodeMetaInner, InodeMode},
+        File, Mutex,
+    },
     mm::Page,
+    sync::mutex::SpinNoIrqLock,
+    utils::error::{GeneralRet, SyscallErr, SyscallRet},
+};
+use alloc::{
+    sync::{Arc, Weak},
+    vec::Vec,
 };
 
-use super::{SHORTNAME_LEN, time::FAT32Timestamp, LONGNAME_LEN, fat::FileAllocTable, FAT32FileSystemMeta, FAT32Info, file::FAT32File};
-
+use super::{
+    fat::FileAllocTable, file::FAT32File, time::FAT32Timestamp, FAT32FileSystemMeta, FAT32Info,
+    LONGNAME_LEN, SHORTNAME_LEN,
+};
 
 #[derive(Copy, Clone)]
 pub enum FAT32FileType {
@@ -63,13 +72,13 @@ impl FAT32Inode {
             fat: Arc::clone(&fat),
             meta: Mutex::new(meta),
             content: Mutex::new(FAT32File::new(
-                        Arc::clone(&fat),
-                        first_cluster,
-                        match file_type {
-                            FAT32FileType::Regfile => Some(file_size),
-                            FAT32FileType::Directory => None,
-                        }
-                    )),
+                Arc::clone(&fat),
+                first_cluster,
+                match file_type {
+                    FAT32FileType::Regfile => Some(file_size),
+                    FAT32FileType::Directory => None,
+                },
+            )),
             father,
             sons: None,
         }
