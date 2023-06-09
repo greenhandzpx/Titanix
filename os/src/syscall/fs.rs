@@ -410,7 +410,7 @@ fn _fstat(fd: usize, kst: usize) -> SyscallRet {
     // kstat.st_ino = inode_meta.ino as u64;
     kstat.st_ino = 1 as u64;
     kstat.st_mode = inode_meta.mode as u32;
-    kstat.st_size = inode_meta.inner.lock().size as u64;
+    kstat.st_size = inode_meta.inner.lock().data_len as u64;
     kstat.st_blocks = (kstat.st_size / kstat.st_blsize as u64) as u64;
     kstat.st_atime_sec = inode_meta.inner.lock().st_atime;
     kstat.st_atime_nsec = kstat.st_atime_sec * 10i64.pow(9);
@@ -599,6 +599,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
+    // debug!("[sys_write]: start to write file, fd {}", fd);
     file.write(buf).await
 }
 

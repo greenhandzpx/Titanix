@@ -1,7 +1,6 @@
 use crate::{
     driver::block::{self, BlockDevice, BLOCK_DEVICE},
     fs::{
-        fat32_tmp::Fat32File,
         file,
         inode::{Inode, InodeMeta, InodeMetaInner, InodeMode},
         File, Mutex,

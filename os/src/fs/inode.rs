@@ -276,9 +276,8 @@ pub struct InodeMeta {
 }
 
 pub struct InodeMetaInner {
-    // pub offset: usize,
-    /// inode' file's size
-    pub size: usize,
+    // /// inode' file's size
+    // pub size: usize,
     /// last access time, need to flush to disk.
     pub st_atime: i64,
     /// last modification time, need to flush to disk
@@ -295,7 +294,7 @@ pub struct InodeMetaInner {
     pub children: BTreeMap<String, Arc<dyn Inode>>,
     /// page cache of the related file
     pub page_cache: Option<PageCache>,
-    /// data len
+    /// file content len
     pub data_len: usize,
 }
 
@@ -325,7 +324,7 @@ impl InodeMeta {
             name: name.to_string(),
             uid: INODE_UID_ALLOCATOR.fetch_add(1, Ordering::Relaxed),
             inner: Mutex::new(InodeMetaInner {
-                size: 0,
+                // size: 0,
                 st_atime: (get_time_ms() / 1000) as i64,
                 st_mtime: (get_time_ms() / 1000) as i64,
                 st_ctime: (get_time_ms() / 1000) as i64,
@@ -370,7 +369,11 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
                     .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
                     .unwrap();
             }
-            <dyn Inode>::lookup_from_root_tmp(name)
+            let res = <dyn Inode>::lookup_from_root_tmp(name);
+            if let Some(inode) = res.as_ref() {
+                inode.metadata().inner.lock().page_cache = Some(PageCache::new(inode.clone(), 3));
+            }
+            res
         } else {
             warn!("parent dir {} doesn't exist", parent_path);
             return None;

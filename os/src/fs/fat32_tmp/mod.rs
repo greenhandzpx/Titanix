@@ -95,12 +95,7 @@ impl Inode for Fat32RootInode {
                 pos: 0,
             }),
         };
-        Ok(Arc::new(Fat32File::new(
-            Fat32NodeType::Dir(self.fs.fat_fs.root_dir()),
-            Some(file_meta),
-            readable,
-            writable,
-        )))
+        Ok(Arc::new(DefaultFile::new(file_meta)))
     }
 
     fn metadata(&self) -> &InodeMeta {
@@ -213,10 +208,10 @@ impl Inode for Fat32RootInode {
     }
 }
 
-pub enum Fat32NodeType {
-    Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
-    File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
-}
+// pub enum Fat32NodeType {
+//     Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+//     File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+// }
 
 pub struct Fat32Inode {
     dentry: DirEntry<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>,
@@ -245,24 +240,6 @@ impl Inode for Fat32Inode {
             }),
         };
         Ok(Arc::new(DefaultFile::new(file_meta)))
-        // let (readable, writable) = flags.read_write();
-        // if self.dentry.is_dir() {
-        //     Ok(Arc::new(Fat32File::new(
-        //         Fat32NodeType::Dir(self.dentry.to_dir()),
-        //         Some(file_meta),
-        //         readable,
-        //         writable,
-        //     )))
-        // } else if self.dentry.is_file() {
-        //     Ok(Arc::new(Fat32File::new(
-        //         Fat32NodeType::File(self.dentry.to_file()),
-        //         Some(file_meta),
-        //         readable,
-        //         writable,
-        //     )))
-        // } else {
-        //     Err(SyscallErr::EBADF)
-        // }
     }
 
     fn metadata(&self) -> &InodeMeta {
@@ -382,195 +359,6 @@ impl Inode for Fat32Inode {
     }
 }
 
-pub struct Fat32File {
-    readable: bool,
-    writable: bool,
-    inner: Mutex<Fat32FileInner>,
-    meta: Option<FileMeta>,
-}
-
-struct Fat32FileInner {
-    offset: usize,
-    node: Fat32NodeType,
-}
-
-unsafe impl Send for Fat32File {}
-unsafe impl Sync for Fat32File {}
-
-impl Fat32File {
-    pub fn new(
-        node: Fat32NodeType,
-        meta: Option<FileMeta>,
-        readable: bool,
-        writable: bool,
-    ) -> Self {
-        Self {
-            readable,
-            writable,
-            meta,
-            inner: Mutex::new(Fat32FileInner { offset: 0, node }),
-        }
-    }
-
-    /// Read all data inside a inode into vector
-    pub fn read_all(&self) -> Vec<u8> {
-        let mut inner = self.inner.lock();
-        let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::new();
-        loop {
-            let len = match &mut inner.node {
-                Fat32NodeType::Dir(_) => panic!(),
-                Fat32NodeType::File(file) => file.read(&mut buffer).unwrap(),
-            };
-            if len == 0 {
-                break;
-            }
-            inner.offset += len;
-            v.extend_from_slice(&buffer[..len]);
-        }
-        v
-    }
-}
-
-// #[async_trait]
-impl File for Fat32File {
-    fn readable(&self) -> bool {
-        self.readable
-    }
-
-    fn writable(&self) -> bool {
-        self.writable
-    }
-
-    fn metadata(&self) -> &FileMeta {
-        self.meta.as_ref().unwrap()
-    }
-
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        Box::pin(async move {
-            // let mut inner = self.inner.lock();
-            let mut total_read_size = 0usize;
-            let _sum_guard = SumGuard::new();
-            let mut inner = self.inner.lock();
-            let bytes = match &mut inner.node {
-                Fat32NodeType::Dir(dir) => panic!(),
-                Fat32NodeType::File(file) => file.read(buf),
-            };
-            total_read_size += bytes.unwrap();
-            inner.offset += total_read_size;
-            debug!("read size {}", total_read_size);
-            Ok(total_read_size as isize)
-        })
-    }
-
-    fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
-        // let mut inner = self.inner.lock();
-        let mut total_read_size = 0usize;
-        let _sum_guard = SumGuard::new();
-        let mut inner = self.inner.lock();
-        let bytes = match &mut inner.node {
-            Fat32NodeType::Dir(dir) => panic!(),
-            Fat32NodeType::File(file) => {
-                let res = file.read(buf);
-                debug!(
-                    "[sync_read]: pos: {:#x}",
-                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
-                );
-                res
-            }
-        };
-        total_read_size += bytes.unwrap();
-        inner.offset += total_read_size;
-        debug!(
-            "[sync_read]: read size {}, buf len {}",
-            total_read_size,
-            buf.len()
-        );
-        Ok(total_read_size as isize)
-    }
-
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
-        Box::pin(async move {
-            let mut total_write_size = 0usize;
-            let _sum_guard = SumGuard::new();
-            let mut inner = self.inner.lock();
-            let bytes = match &mut inner.node {
-                Fat32NodeType::Dir(dir) => panic!(),
-                Fat32NodeType::File(file) => {
-                    let res = file.write(buf);
-                    debug!(
-                        "[write]: pos: {:#x}",
-                        file.seek(fatfs::SeekFrom::Current(0)).unwrap()
-                    );
-                    res
-                }
-            };
-            total_write_size += bytes.unwrap();
-            inner.offset += total_write_size;
-            self.metadata()
-                .inner
-                .lock()
-                .inode
-                .as_ref()
-                .unwrap()
-                .metadata()
-                .inner
-                .lock()
-                .size += total_write_size;
-            debug!("[write]: write size {}", total_write_size);
-            Ok(total_write_size as isize)
-        })
-    }
-
-    fn sync_write(&self, buf: &[u8]) -> SyscallRet {
-        let mut total_write_size = 0usize;
-        let _sum_guard = SumGuard::new();
-        let mut inner = self.inner.lock();
-        let bytes = match &mut inner.node {
-            Fat32NodeType::Dir(_) => panic!(),
-            Fat32NodeType::File(file) => {
-                let res = file.write(buf);
-                debug!(
-                    "[sync_write]: pos: {:#x}",
-                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
-                );
-                res
-            }
-        };
-        total_write_size += bytes.unwrap();
-        inner.offset += total_write_size;
-        self.metadata()
-            .inner
-            .lock()
-            .inode
-            .as_ref()
-            .unwrap()
-            .metadata()
-            .inner
-            .lock()
-            .size += total_write_size;
-        debug!("[sync_write]: write size {}", total_write_size);
-        Ok(total_write_size as isize)
-    }
-    fn seek(&self, offset: usize) -> SyscallRet {
-        let mut inner = self.inner.lock();
-        match &mut inner.node {
-            Fat32NodeType::Dir(dir) => panic!(),
-            Fat32NodeType::File(file) => {
-                debug!(
-                    "[seek]: before pos: {:#x}",
-                    file.seek(fatfs::SeekFrom::Current(0)).unwrap()
-                );
-                if let Some(pos) = file.seek(fatfs::SeekFrom::Start(offset as u64)).ok() {
-                    debug!("[seek]: after pos: {:#x}(offset:{})", pos, offset);
-                    Ok(pos as isize)
-                } else {
-                    Err(SyscallErr::EINVAL)
-                }
-            }
-        }
-    }
-}
 
 lazy_static! {
     pub static ref ROOT_FS: Fat32FileSystem = {

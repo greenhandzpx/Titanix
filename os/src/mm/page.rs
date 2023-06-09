@@ -1,11 +1,9 @@
 use alloc::{
-    sync::{Arc, Weak},
-    vec::Vec,
+    sync::{Weak},
 };
 
 use crate::{
-    config::{board::BLOCK_SIZE, fs::FILE_PAGE_SIZE, mm::PAGE_SIZE},
-    driver::Buffer,
+    config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallErr},
@@ -25,9 +23,9 @@ pub struct PageInner {
     /// Start offset of this page at its related file
     pub file_offset: Option<usize>,
     /// Data
-    pub data: [u8; FILE_PAGE_SIZE],
+    pub data: [u8; PAGE_SIZE],
     /// Data block state
-    data_states: [DataState; FILE_PAGE_SIZE / BLOCK_SIZE],
+    data_states: [DataState; PAGE_SIZE / BLOCK_SIZE],
     /// Inode that this page related to
     inode: Option<Weak<dyn Inode>>,
 }
@@ -86,7 +84,7 @@ impl Page {
     /// Read this page.
     /// `offset`: page offset
     pub fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
-        if offset >= FILE_PAGE_SIZE {
+        if offset >= PAGE_SIZE {
             Err(SyscallErr::E2BIG)
         } else {
             let mut inner = self.inner.lock();
@@ -102,7 +100,7 @@ impl Page {
     /// Write this page.
     /// `offset`: page offset
     pub fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
-        if offset >= FILE_PAGE_SIZE {
+        if offset >= PAGE_SIZE {
             Err(SyscallErr::E2BIG)
         } else {
             let mut inner = self.inner.lock();
