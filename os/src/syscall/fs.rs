@@ -454,8 +454,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
         kstat.st_dev = 12138;
     }
     // TODO: pre
-    // kstat.st_ino = inode_meta.ino as u64;
-    kstat.st_ino = 1 as u64;
+    kstat.st_ino = inode_meta.ino as u64;
     kstat.st_mode = inode_meta.mode as u32;
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
     let inner_lock = inode_meta.inner.lock();
@@ -680,6 +679,8 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         ret += iov_len;
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
+        let buf_str = unsafe { core::str::from_utf8_unchecked(buf) };
+        debug!("[writev] buf: {:?}", buf_str);
         let fw_ret = file.write(buf).await;
         // if error, return
         if fw_ret.is_err() {

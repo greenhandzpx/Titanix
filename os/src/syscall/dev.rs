@@ -1,10 +1,11 @@
-use crate::utils::error::SyscallRet;
+use log::debug;
+
+use crate::utils::error::{SyscallErr, SyscallRet};
 
 pub fn sys_ioctl(fd: usize, request: isize, arg: usize) -> SyscallRet {
-    if arg == 0 {
-        // TODO: doesn't have arg
-    } else {
-        // TODO: has arg
+    debug!("fd: {}, request: {}, arg:{}", fd, request, arg);
+    match fd {
+        0 | 1 | 2 => Ok(0),
+        _ => Err(SyscallErr::ENOTTY),
     }
-    Ok(0)
 }

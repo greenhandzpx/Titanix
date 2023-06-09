@@ -31,10 +31,14 @@ impl Dirent {
         let child = inode_meta.inner.lock().children.clone();
         let mut dirents: Vec<Dirent> = Vec::new();
         for value in child.values() {
-            debug!("d_name should be: {}", value.metadata().name.clone());
+            debug!(
+                "d_name should be: {}, d_ino is: {}",
+                value.metadata().name.clone(),
+                value.metadata().ino
+            );
             let dirent = Dirent {
                 d_ino: value.metadata().ino,
-                d_off: 0,
+                d_off: DIRENT_SIZE as usize,
                 d_reclen: DIRENT_SIZE,
                 d_type: value.metadata().mode as u8,
                 d_name: string_to_array(value.metadata().name.clone()),

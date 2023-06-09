@@ -334,7 +334,7 @@ impl InodeMeta {
             None => None,
         };
         Self {
-            ino: 0,
+            ino: INODE_NUMBER.fetch_add(1, Ordering::Relaxed),
             data: 0,
             mode,
             rdev: None,
