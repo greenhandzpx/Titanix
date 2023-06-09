@@ -11,9 +11,9 @@ pub trait Hashable {
 impl Hashable for String {
     // http://www.cse.yorku.ca/~oz/hash.html
     fn hash(&self) -> usize {
-        let mut result: usize = 5381;
+        let mut result: usize = 1004535809;
         for c in self.bytes() {
-            result = ((result << 5).wrapping_add(result)).wrapping_add(c.into());
+            result = c as usize + (result << 6) + (result << 16) - result;
         }
         result
     }
@@ -81,7 +81,6 @@ where
         }
 
         *self = new_self;
-        trace!("[hash_table] leave extend");
     }
 
     pub fn insert(&mut self, key: Key, new_value: Value) {
@@ -134,8 +133,6 @@ where
 
             index = (index + 1) % self.cells.len();
         }
-
-        trace!("[hash_table] leave get_index");
 
         if self.cells[index].value.is_some() && self.cells[index].key == *key {
             Some(index)

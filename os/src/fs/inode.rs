@@ -274,8 +274,12 @@ impl dyn Inode {
         let mut parent = ROOT_FS.metadata().root_inode.clone().unwrap();
 
         for name in path_names {
+            debug!("[lookup_from_root_tmp] name: {}", name);
             match parent.lookup(parent.clone(), name) {
-                Some(p) => parent = p,
+                Some(p) => {
+                    debug!("[lookup_from_root_tmp] inode name: {}", p.metadata().name);
+                    parent = p
+                }
                 None => return None,
             }
         }
@@ -381,7 +385,6 @@ pub enum InodeDevice {
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
     // let inode = <dyn Inode>::lookup_from_root_tmp(name);
     let inode = <dyn Inode>::lookup_from_root_tmp(name);
-    debug!("open file, name: {}", name);
     // inode
     if flags.contains(OpenFlags::CREATE) {
         if inode.is_some() {

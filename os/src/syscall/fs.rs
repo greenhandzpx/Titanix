@@ -589,7 +589,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     match absolute_path {
         Some(absolute_path) => {
-            debug!("file name {}", absolute_path);
+            debug!("[_openat] file name {}", absolute_path);
             if let Some(inode) = fs::inode::open_file(&absolute_path, flags) {
                 stack_trace!();
                 let mut inner_lock = inode.metadata().inner.lock();
@@ -600,7 +600,11 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                     }
                     _ => {}
                 }
-                debug!("[_openat] inode ino: {}", inode.metadata().ino);
+                debug!(
+                    "[_openat] inode ino: {}, name: {}",
+                    inode.metadata().ino,
+                    inode.metadata().name
+                );
                 // TODO: add to fs's dirty list
                 let fd = current_process().inner_handler(|proc| {
                     let fd = proc.fd_table.alloc_fd();
