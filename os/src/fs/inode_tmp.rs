@@ -1,14 +1,16 @@
 /// This mod is just temporarily used
 use super::file::{File, FileMeta};
 use crate::{
-    driver::BLOCK_DEVICE, processor::SumGuard, stack_trace, sync::mutex::SpinNoIrqLock,
-    utils::error::SyscallRet,
+    driver::BLOCK_DEVICE,
+    processor::SumGuard,
+    stack_trace,
+    sync::mutex::SpinNoIrqLock,
+    utils::error::{AsyscallRet, SyscallRet},
 };
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use async_trait::async_trait;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
@@ -129,7 +131,7 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -140,37 +142,41 @@ impl File for OSInode {
     fn metadata(&self) -> &FileMeta {
         todo!()
     }
-    async fn read(&self, buf: &mut [u8]) -> SyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         // TODO: change into async read
-        let mut inner = self.inner.lock();
-        let mut total_read_size = 0usize;
-        let _sum_guard = SumGuard::new();
-        total_read_size = inner.inode.read_at(inner.offset, buf);
-        inner.offset += total_read_size;
+        Box::pin(async move {
+            let mut inner = self.inner.lock();
+            let mut total_read_size = 0usize;
+            let _sum_guard = SumGuard::new();
+            total_read_size = inner.inode.read_at(inner.offset, buf);
+            inner.offset += total_read_size;
 
-        debug!("read size {}", total_read_size);
-        // for slice in buf.iter_mut() {
-        //     let read_size = inner.inode.read_at(inner.offset, *slice);
-        //     if read_size == 0 {
-        //         break;
-        //     }
-        //     inner.offset += read_size;
-        //     total_read_size += read_size;
-        // }
-        Ok(total_read_size as isize)
+            debug!("read size {}", total_read_size);
+            // for slice in buf.iter_mut() {
+            //     let read_size = inner.inode.read_at(inner.offset, *slice);
+            //     if read_size == 0 {
+            //         break;
+            //     }
+            //     inner.offset += read_size;
+            //     total_read_size += read_size;
+            // }
+            Ok(total_read_size as isize)
+        })
     }
-    async fn write(&self, buf: &[u8]) -> SyscallRet {
-        // TODO: change into async write
-        let mut inner = self.inner.lock();
-        let mut total_write_size = 0usize;
-        let _sum_guard = SumGuard::new();
-        total_write_size = inner.inode.write_at(inner.offset, buf);
-        // for slice in buf.buffers.iter() {
-        //     let write_size = inner.inode.write_at(inner.offset, *slice);
-        //     assert_eq!(write_size, slice.len());
-        //     inner.offset += write_size;
-        //     total_write_size += write_size;
-        // }
-        Ok(total_write_size as isize)
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+        Box::pin(async move {
+            // TODO: change into async write
+            let mut inner = self.inner.lock();
+            let mut total_write_size = 0usize;
+            let _sum_guard = SumGuard::new();
+            total_write_size = inner.inode.write_at(inner.offset, buf);
+            // for slice in buf.buffers.iter() {
+            //     let write_size = inner.inode.write_at(inner.offset, *slice);
+            //     assert_eq!(write_size, slice.len());
+            //     inner.offset += write_size;
+            //     total_write_size += write_size;
+            // }
+            Ok(total_write_size as isize)
+        })
     }
 }

@@ -74,40 +74,7 @@ impl ProcessArguments {
     }
 }
 
-const PRELIMINARY_TESTS_2: [&str; 31] = [
-    "getdents",
-    "brk",
-    "chdir",
-    "clone",
-    "close",
-    "dup2",
-    "dup",
-    "sleep",
-    "execve",
-    "exit",
-    "fork",
-    "fstat",
-    "getcwd",
-    "getpid",
-    "getppid",
-    "gettimeofday",
-    "mkdir_",
-    // "mmap",
-    "mount",
-    "open",
-    "pipe",
-    "read",
-    "times",
-    "umount",
-    "uname",
-    "unlink",
-    "wait",
-    "waitpid",
-    "write",
-    "yield",
-    "munmap",
-    "openat",
-];
+
 
 const PRELIMINARY_TESTS: [&str; 32] = [
     "getdents",

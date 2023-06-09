@@ -1,12 +1,8 @@
-DOCKER_NAME ?= rcore-tutorial-v3
-.PHONY: docker build_docker
-	
-docker:
-	docker run --rm -it -v ${PWD}:/mnt -w /mnt ${DOCKER_NAME} bash
-
-build_docker: 
-	docker build -t ${DOCKER_NAME} .
-
-fmt:
-	cd os ; cargo fmt;  cd ..
-
+all:
+	@rm -rf os/.cargo
+	@cp -r os/cargo-submit os/.cargo
+	@rm -rf user/.cargo
+	@cp -r user/cargo-submit user/.cargo
+	@cp bootloader/rustsbi-qemu.bin sbi-qemu
+	@cd os && make kernel-bin
+	@cp os/target/riscv64gc-unknown-none-elf/release/os.bin kernel-qemu

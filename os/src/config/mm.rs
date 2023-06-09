@@ -12,9 +12,11 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 0xc;
 
 pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
+
 /// When directly map: vpn = ppn + kernel direct offset
 // pub const KERNEL_DIRECT_OFFSET: usize = 0x7f_00000;
-pub const KERNEL_DIRECT_OFFSET: usize = 0x0;
+pub const KERNEL_DIRECT_OFFSET: usize = 0xffff_ffc0_0000_0;
+// pub const KERNEL_DIRECT_OFFSET: usize = 0x0;
 
 pub const USER_SPACE_SIZE: usize = 0x80000000;
 

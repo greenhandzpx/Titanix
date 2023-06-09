@@ -2,7 +2,7 @@
 !.github/*
 !.vscode/settings.json
 .idea
-# Cargo.lock
+Cargo.lock
 target
 os/src/link_app.S
 os/src/linker.ld
@@ -17,10 +17,12 @@ easy-fs/Cargo.lock
 easy-fs/target/*
 easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
-# fat32-fs/Cargo.lock
-# fat32-fuse/Cargo.lock
+fat32-fs/Cargo.lock
+fat32-fuse/Cargo.lock
 tools/
 pushall.sh
 *.img
 objdump/
 tmp/
+kernel-qemu
+sbi-qemu

@@ -1,4 +1,5 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use crate::config::mm::KERNEL_DIRECT_OFFSET;
 // use crate::config::MMIO;
 use crate::driver::block::MMIO_VIRT;
 
@@ -6,11 +7,11 @@ use super::{
     frame_alloc, FrameTracker, MapPermission, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum,
     KERNEL_SPACE,
 };
-use alloc::vec;
 use alloc::vec::Vec;
+use alloc::{string::String, vec};
 use bitflags::*;
 use core::arch::asm;
-use log::error;
+use log::{error, info};
 use riscv::register::satp;
 
 bitflags! {
@@ -130,20 +131,13 @@ impl PageTable {
                 .get())
             .root_ppn
         };
-        // map kernel space
-        let kernel_start_vpn = VirtAddr::from(skernel as usize).floor();
+
+        // Map kernel space
+        // Note that we just need shallow copy here
+        let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
         let level_1_index = kernel_start_vpn.indexes()[0];
         frame.ppn.pte_array()[level_1_index..]
             .copy_from_slice(&global_root_ppn.pte_array()[level_1_index..]);
-
-        // map MMIO
-        // TODO: optimize
-        let start_mmio_1_index = VirtAddr::from(MMIO_VIRT[0].0).floor().indexes()[0];
-        let end_mmio_1_index = VirtAddr::from(MMIO_VIRT[0].0 + MMIO_VIRT[0].1)
-            .ceil()
-            .indexes()[0];
-        frame.ppn.pte_array()[start_mmio_1_index..=end_mmio_1_index]
-            .copy_from_slice(&global_root_ppn.pte_array()[start_mmio_1_index..=end_mmio_1_index]);
 
         // the new pagetable only owns the ownership of its own root ppn
         PageTable {
@@ -162,10 +156,34 @@ impl PageTable {
 
     /// Switch to this pagetable
     pub fn activate(&self) {
+        // self.dump();
         let satp = self.token();
         unsafe {
             satp::write(satp);
             asm!("sfence.vma");
+        }
+    }
+
+    /// Dump page table
+    pub fn dump(&self) {
+        info!("----- Dump page table -----");
+        self._dump(self.root_ppn, 0);
+    }
+
+    fn _dump(&self, ppn: PhysPageNum, level: usize) {
+        if level >= 3 {
+            return;
+        }
+        for k in 0..512 {
+            let pte = ppn.pte_array()[k];
+            if pte.is_valid() {
+                let mut prefix = String::from("");
+                for _ in 0..level {
+                    prefix += "-";
+                }
+                info!("{} ppn {:#x}, flags {:?}", prefix, pte.ppn().0, pte.flags());
+                self._dump(pte.ppn(), level + 1);
+            }
         }
     }
 

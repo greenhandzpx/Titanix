@@ -32,6 +32,7 @@ pub mod user_check;
 pub use address::VPNRange;
 pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
+use log::info;
 pub use memory_set::remap_test;
 pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
 pub use page::Page;
@@ -52,5 +53,6 @@ pub fn init() {
             .expect("KERNEL SPACE not init yet")
             .activate();
     }
+    info!("KERNEL SPACE init finished");
     // KERNEL_SPACE.exclusive_access().activate();
 }

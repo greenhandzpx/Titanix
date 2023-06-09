@@ -73,6 +73,7 @@ impl Hart {
     pub fn set_stack(&mut self, kstack: usize) {
         self.kstack_bottom = kstack;
     }
+
     /// Change thread(task) context,
     /// Now only change page table temporarily
     pub fn push_task(&mut self, task: &mut LocalContext) {

@@ -157,7 +157,7 @@ pub struct FileSystemMeta {
     pub root_inode: Option<Arc<dyn Inode>>,
     // pub inner: Mutex<FileSystemMetaInner>,
     /// flag of the filesystem whether mount
-    mnt_flags: bool,
+    pub mnt_flags: bool,
     /// list of dirty inodes
     pub s_dirty: Vec<Arc<dyn Inode>>,
 }

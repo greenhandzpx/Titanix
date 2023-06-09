@@ -118,7 +118,7 @@ pub fn add_initproc() {
 
 use self::thread::TidHandle;
 
-///
+/// Process control block inner
 pub struct ProcessInner {
     /// Whether this process is a zombie process
     pub is_zombie: bool,
