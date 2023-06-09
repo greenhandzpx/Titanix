@@ -90,6 +90,7 @@ impl Inode for Fat32RootInode {
             inner: Mutex::new(FileMetaInner {
                 inode: Some(this),
                 pos: 0,
+                dirent_index: 0,
             }),
         };
         Ok(Arc::new(Fat32File::new(
@@ -108,7 +109,7 @@ impl Inode for Fat32RootInode {
         self.meta = Some(meta);
     }
 
-    fn load_children(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         debug!("[Fat32RootInode]: load children");
         let mut meta_inner = self.meta.as_ref().unwrap().inner.lock();
         for dentry in self.fs.fat_fs.root_dir().iter() {
@@ -240,6 +241,7 @@ impl Inode for Fat32Inode {
             inner: Mutex::new(FileMetaInner {
                 inode: Some(this),
                 pos: 0,
+                dirent_index: 0,
             }),
         };
         if self.dentry.is_dir() {
@@ -269,7 +271,7 @@ impl Inode for Fat32Inode {
         self.meta = Some(meta);
     }
 
-    fn load_children(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         if self.dentry.is_file() {
             panic!("Cannot load a file's children");
         }

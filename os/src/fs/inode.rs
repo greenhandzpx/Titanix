@@ -1,4 +1,7 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{
+    hash::Hash,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use alloc::{
     collections::BTreeMap,
@@ -11,7 +14,7 @@ use log::{debug, warn};
 use crate::{
     mm::PageCache,
     timer::TimeSpec,
-    utils::{error::GeneralRet, hash_table::HashTable, path::Path},
+    utils::{debug, error::GeneralRet, hash_table::HashTable, path::Path},
 };
 
 use super::{
@@ -35,16 +38,16 @@ lazy_static! {
     ///
     pub static ref INODE_CACHE: Mutex<HashTable<usize, Arc<dyn Inode>>> = Mutex::new(HashTable::new());
 }
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum InodeMode {
-    FileSOCK = 0xC, /* socket */
-    FileLNK = 0xA,  /* symbolic link */
-    FileREG = 0x8,  /* regular file */
-    FileBLK = 0x6,  /* block device */
-    FileDIR = 0x4,  /* directory */
-    FileCHR = 0x2,  /* character device */
-    FileFIFO = 0x1, /* FIFO */
-                    // TODO add more(like R / W / X etc)
+    FileSOCK = 0xC000, /* socket */
+    FileLNK = 0xA000,  /* symbolic link */
+    FileREG = 0x8000,  /* regular file */
+    FileBLK = 0x6000,  /* block device */
+    FileDIR = 0x4000,  /* directory */
+    FileCHR = 0x2000,  /* character device */
+    FileFIFO = 0x1000, /* FIFO */
+                       // TODO add more(like R / W / X etc)
 }
 
 /// Inode state flags
@@ -107,6 +110,7 @@ pub trait Inode: Send + Sync {
             inner: Mutex::new(FileMetaInner {
                 inode: Some(this),
                 pos: 0,
+                dirent_index: 0,
             }),
         };
         let file = DefaultFile::new(file_meta);
@@ -167,23 +171,17 @@ pub trait Inode: Send + Sync {
     ) -> Option<Arc<dyn Inode>> {
         let key = HashName::hash_name(Some(self.metadata().uid), child_name).name_hash as usize;
 
-        self.load_children(this);
+        <dyn Inode>::load_children(this);
         debug!(
             "children size {}",
             self.metadata().inner.lock().children.len()
         );
-        let target_inode = self
-            .metadata()
-            .inner
-            .lock()
-            .children
-            .get(child_name)
-            .cloned();
+
+        let target_inode = INODE_CACHE.lock().get(&key).cloned();
 
         match target_inode {
             Some(target_inode) => {
                 // find the inode which related to this subdentry
-                INODE_CACHE.lock().insert(key, target_inode.clone());
                 Some(target_inode.clone())
             }
             None => {
@@ -216,7 +214,7 @@ pub trait Inode: Send + Sync {
     /// Load the children dirs of the current dir
     /// The state of inode loaded from disk should be synced
     /// TODO: It may be a bad idea to load all children at one time?
-    fn load_children(&self, this: Arc<dyn Inode>);
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>);
 
     /// Delete inode in disk
     /// You should call this function through parent inode.
@@ -225,6 +223,21 @@ pub trait Inode: Send + Sync {
 }
 
 impl dyn Inode {
+    /// Load children and insert them into INODE_CACHE
+    pub fn load_children(parent: Arc<dyn Inode>) {
+        debug!("[load_children] enter");
+        parent.load_children_from_disk(parent.clone());
+        let mut cache_lock = INODE_CACHE.lock();
+        for child in parent.metadata().inner.lock().children.clone() {
+            let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
+            debug!(
+                "[load_children] insert to INODE_CACHE, name: {}",
+                child.1.metadata().name
+            );
+            cache_lock.insert(key, child.1);
+        }
+        debug!("[load_children] leave");
+    }
     /// Look up from root(e.g. "/home/oscomp/workspace")
     pub fn lookup_from_root(
         // file_system: Arc<dyn FileSystem>,

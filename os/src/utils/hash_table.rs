@@ -1,5 +1,8 @@
+use core::hash::Hash;
+
 use alloc::vec;
 use alloc::{string::String, vec::Vec};
+use log::trace;
 
 pub trait Hashable {
     fn hash(&self) -> usize;
@@ -51,16 +54,25 @@ where
             ],
             taken_count: 0,
         };
-        // debug!("hash table capacity {}", ret.cells.len());
+        trace!("[hash_table] hash table capacity {}", ret.cells.len());
         ret
     }
 
     pub fn extend(&mut self) {
+        trace!("[hash_table] enter extend");
         assert!(self.cells.len() > 0);
         let mut new_self = Self {
-            cells: Vec::with_capacity(self.cells.len() * 2 + 1),
+            cells: vec![
+                HashCell {
+                    key: Key::default(),
+                    value: None,
+                };
+                self.cells.len() * 2 + 1
+            ],
             taken_count: 0,
         };
+
+        trace!("extend capacity to {}", new_self.cells.len());
 
         for cell in self.cells.iter() {
             if cell.value.is_some() {
@@ -69,9 +81,11 @@ where
         }
 
         *self = new_self;
+        trace!("[hash_table] leave extend");
     }
 
     pub fn insert(&mut self, key: Key, new_value: Value) {
+        trace!("[hash_table] enter insert");
         if let Some(old_value) = self.get_mut(&key) {
             *old_value = new_value;
         } else {
@@ -82,6 +96,8 @@ where
 
             let mut index = key.hash() % self.cells.len();
 
+            trace!("index: {}", index);
+
             while self.cells[index].value.is_some() {
                 index = (index + 1) % self.cells.len();
             }
@@ -90,15 +106,22 @@ where
             self.cells[index].value = Some(new_value);
             self.taken_count += 1;
         }
+        trace!("[hash_table] leave insert");
     }
 
     pub fn delete(&mut self, key: Key) {
+        trace!("[hash_table] enter delete, key: {}", key.hash());
         if let Some(index) = self.get_index(&key) {
             self.cells[index].value.take();
         }
     }
 
     fn get_index(&self, key: &Key) -> Option<usize> {
+        trace!(
+            "[hash_table] enter get_index key:{}, len:{}",
+            key.hash(),
+            self.cells.len()
+        );
         let mut index = key.hash() % self.cells.len();
         for _ in 0..self.cells.len() {
             if !self.cells[index].value.is_some() {
@@ -112,6 +135,8 @@ where
             index = (index + 1) % self.cells.len();
         }
 
+        trace!("[hash_table] leave get_index");
+
         if self.cells[index].value.is_some() && self.cells[index].key == *key {
             Some(index)
         } else {
@@ -121,6 +146,7 @@ where
 
     #[allow(dead_code)]
     pub fn get(&self, key: &Key) -> Option<&Value> {
+        trace!("[hash_table] enter get key: {}", key.hash());
         if let Some(index) = self.get_index(key) {
             self.cells[index].value.as_ref()
             // Some(&self.cells[index].value)
@@ -130,6 +156,7 @@ where
     }
 
     pub fn get_mut(&mut self, key: &Key) -> Option<&mut Value> {
+        trace!("[hash_table] enter get_mut key: {}", key.hash());
         if let Some(index) = self.get_index(key) {
             self.cells[index].value.as_mut()
             // Some(&mut self.cells[index].value)

@@ -24,6 +24,8 @@ pub struct FileMetaInner {
     /// file offset
     pub pos: usize,
     // TODO: add more like file version
+    /// current read dirent index
+    pub dirent_index: usize,
 }
 
 // #[async_trait]

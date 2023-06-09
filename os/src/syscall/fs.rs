@@ -9,6 +9,7 @@ use inode::InodeState;
 use log::{debug, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
+use crate::fs::dirent::MAX_NAME_LEN;
 use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
@@ -25,7 +26,7 @@ use crate::timer::get_time_spec;
 use crate::timer::{get_time_ms, TimeSpec};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::Path;
-use crate::utils::string::c_str_to_string;
+use crate::utils::string::{array_str_len, c_str_to_string};
 use crate::{fs, stack_trace};
 
 use super::PollFd;
@@ -318,20 +319,26 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    let inode = file.metadata().inner.lock().inode.clone();
+    let file_inner = file.metadata().inner.lock();
+    let inode = file_inner.inode.clone();
+    let dirent_index = file_inner.dirent_index;
+    drop(file_inner);
+
     match inode {
         Some(inode) => {
             let state = inode.metadata().inner.lock().state;
-            debug!("inode state: {:?}", state);
+            debug!("[getdents] inode state: {:?}", state);
             match state {
                 InodeState::Init => {
                     // load children from disk
-                    inode.load_children(inode.clone());
+                    <dyn Inode>::load_children(inode.clone());
+                    inode.metadata().inner.lock().state = InodeState::Synced;
                 }
                 _ => {
                     // do nothing
                 }
             }
+
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
             let mut inner_lock = inode.metadata().inner.lock();
@@ -349,29 +356,25 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             }
             // TODO: add to fs's dirty list
             drop(inner_lock);
-            let dirents = Dirent::get_dirents(inode);
-            let num_bytes = DIRENT_SIZE as usize * dirents.len();
-            debug!(
-                "count: {}, num_bytes: {}, dirents len: {}",
-                count,
-                num_bytes,
-                dirents.len(),
-            );
-            // TODO: Actually, we should check the size of the dirp, but it is too small, so we don't check to pass the test.
-            if count < num_bytes {
-                Err(SyscallErr::EINVAL)
-            } else {
-                let mut dirp_ptr = dirp as *mut Dirent;
-                for dirent in dirents {
-                    debug!("dirent: {:?}", dirent);
-                    stack_trace!();
-                    unsafe {
-                        copy_nonoverlapping(&dirent as *const Dirent, dirp_ptr, 1);
-                        dirp_ptr = dirp_ptr.offset(1);
-                    }
+
+            let dirents = Dirent::get_dirents(inode, dirent_index);
+            let mut num_bytes = 0;
+            let mut dirp_ptr = dirp;
+            for dirent in dirents.iter() {
+                stack_trace!();
+                num_bytes += dirent.d_reclen as usize;
+                if num_bytes > count {
+                    debug!("[getdents] user buf size too small");
+                    return Err(SyscallErr::EINVAL);
                 }
-                Ok(num_bytes as isize)
+                unsafe {
+                    copy_nonoverlapping(&*dirent as *const Dirent, dirp_ptr as *mut Dirent, 1);
+                    dirp_ptr += dirent.d_reclen as usize;
+                }
             }
+            file.metadata().inner.lock().dirent_index += dirents.len();
+
+            Ok(num_bytes as isize)
         }
         None => Err(SyscallErr::ENOTDIR),
     }
@@ -461,6 +464,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     // TODO: pre
     kstat.st_ino = inode_meta.ino as u64;
     kstat.st_mode = inode_meta.mode as u32;
+    debug!("[_fstat] inode mode: {:?}", inode_meta.mode);
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
     let inner_lock = inode_meta.inner.lock();
     kstat.st_size = inner_lock.size as u64;
@@ -482,6 +486,7 @@ pub fn sys_newfstatat(
     flags: u32,
 ) -> SyscallRet {
     stack_trace!();
+    debug!("[newfstatat] drifd:{}, flags:{}", dirfd, flags);
     let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(pathname)?;
@@ -586,6 +591,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
         Some(absolute_path) => {
             debug!("file name {}", absolute_path);
             if let Some(inode) = fs::inode::open_file(&absolute_path, flags) {
+                stack_trace!();
                 let mut inner_lock = inode.metadata().inner.lock();
                 inner_lock.st_atim = get_time_spec();
                 match inner_lock.state {
@@ -594,6 +600,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                     }
                     _ => {}
                 }
+                debug!("[_openat] inode ino: {}", inode.metadata().ino);
                 // TODO: add to fs's dirty list
                 let fd = current_process().inner_handler(|proc| {
                     let fd = proc.fd_table.alloc_fd();
@@ -612,6 +619,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                     proc.fd_table.put(fd, file);
                     Ok(fd)
                 })?;
+                debug!("[_openat] find fd: {}", fd);
                 Ok(fd as isize)
             } else {
                 debug!("file {} doesn't exist", absolute_path);

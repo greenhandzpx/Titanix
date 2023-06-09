@@ -25,6 +25,7 @@ impl Inode for ZeroInode {
                 inner: Mutex::new(FileMetaInner {
                     inode: Some(this),
                     pos: 0,
+                    dirent_index: 0,
                 }),
             },
         }))
@@ -35,7 +36,7 @@ impl Inode for ZeroInode {
     fn metadata(&self) -> &InodeMeta {
         &self.metadata.as_ref().unwrap()
     }
-    fn load_children(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         panic!("Unsupported operation load_children")
     }
     fn delete_child(&self, child_name: &str) {
