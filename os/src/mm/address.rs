@@ -60,10 +60,14 @@ impl Debug for PhysPageNum {
 
 impl From<usize> for KernelAddr {
     fn from(v: usize) -> Self {
-        Self (v) 
+        Self(v)
     }
 }
-
+impl From<PhysAddr> for KernelAddr {
+    fn from(pa: PhysAddr) -> Self {
+        Self(pa.0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS))
+    }
+}
 
 impl From<KernelAddr> for PhysAddr {
     fn from(ka: KernelAddr) -> Self {
@@ -219,13 +223,13 @@ impl PhysPageNum {
     ///Get `PageTableEntry` on `PhysPageNum`
     pub fn pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
-        let kernel_pa = pa.0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
+        let kernel_pa = KernelAddr::from(pa).0;
         unsafe { core::slice::from_raw_parts_mut(kernel_pa as *mut PageTableEntry, 512) }
     }
     ///
     pub fn bytes_array(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
-        let kernel_pa = pa.0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
+        let kernel_pa = KernelAddr::from(pa).0;
         unsafe { core::slice::from_raw_parts_mut(kernel_pa as *mut u8, 4096) }
     }
     // ///

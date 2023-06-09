@@ -1,7 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 use crate::config::mm::KERNEL_DIRECT_OFFSET;
 // use crate::config::MMIO;
-use crate::driver::block::MMIO_VIRT;
+// use crate::driver::block::MMIO_VIRT;
 
 use super::{
     frame_alloc, FrameTracker, MapPermission, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum,
@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 use alloc::{string::String, vec};
 use bitflags::*;
 use core::arch::asm;
-use log::{error, info, debug};
+use log::{error, info};
 use riscv::register::satp;
 
 bitflags! {
@@ -105,9 +105,9 @@ pub struct PageTable {
     frames: Vec<FrameTracker>,
 }
 
-extern "C" {
-    fn skernel();
-}
+// extern "C" {
+//     fn skernel();
+// }
 
 /// Assume that it won't oom when creating/mapping.
 impl PageTable {

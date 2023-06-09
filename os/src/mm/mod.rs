@@ -30,7 +30,7 @@ pub mod user_check;
 
 // use address::StepByOne;
 pub use address::VPNRange;
-pub use address::{PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+pub use address::{KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 use log::info;
 pub use memory_set::remap_test;
@@ -41,7 +41,6 @@ pub use page_cache::PageCache;
 pub use page_table::PageTable;
 pub use page_table::PageTableEntry;
 pub use recycle_allocator::RecycleAllocator;
-
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {

@@ -1,10 +1,11 @@
-use alloc::{boxed::Box, sync::Arc, string::String};
-use log::{debug, info};
+use alloc::{boxed::Box, sync::Arc};
+use log::{debug, info, trace};
 use riscv::register::scause::Scause;
 
 use crate::{
-    fs::OpenFlags,
-    mm::{frame_alloc, page_table::PTEFlags, PageTable, VirtAddr, PhysPageNum, address::KernelAddr},
+    mm::{
+        address::KernelAddr, frame_alloc, page_table::PTEFlags, PageTable, PhysPageNum, VirtAddr,
+    },
     processor::current_process,
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallErr},
@@ -104,7 +105,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
 pub struct MmapPageFaultHandler {}
 
 impl PageFaultHandler for MmapPageFaultHandler {
-
     // // tmp version
     // fn handle_page_fault(
     //     &self,
@@ -167,7 +167,11 @@ impl PageFaultHandler for MmapPageFaultHandler {
         let phy_page_num = PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr() as usize));
         // let content = String::from_utf8(page.inner.lock().data.to_vec());
         // debug!("file page content {:?}", content);
-        debug!("phy page num {:#x}, kernel addr {:#x}", phy_page_num.0, page.bytes_array_ptr() as usize);
+        trace!(
+            "phy page num {:#x}, kernel addr {:#x}",
+            phy_page_num.0,
+            page.bytes_array_ptr() as usize
+        );
         page_table.map(va.floor(), phy_page_num, pte_flags);
         page_table.activate();
         Ok(())

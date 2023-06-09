@@ -2,9 +2,11 @@ use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use log::debug;
 
 use crate::{
-    config::{mm::PAGE_SIZE},
+    config::mm::PAGE_SIZE,
     mm::memory_set::VmArea,
-    utils::error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet}, stack_trace, processor::SumGuard,
+    processor::SumGuard,
+    stack_trace,
+    utils::error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet},
 };
 
 use super::{inode::Inode, Mutex, OpenFlags};
@@ -161,7 +163,11 @@ impl File for DefaultFile {
 
             drop(inode_meta);
             file_meta.pos = file_offset;
-            debug!("[DefaultFile::write]: write {} bytes, buf len {}", res, buf.len());
+            debug!(
+                "[DefaultFile::write]: write {} bytes, buf len {}",
+                res,
+                buf.len()
+            );
             Ok(res as isize)
         })
     }

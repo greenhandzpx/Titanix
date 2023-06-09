@@ -1,6 +1,4 @@
-use alloc::{
-    sync::{Arc, Weak},
-};
+use alloc::sync::{Arc, Weak};
 use log::{info, trace};
 
 use crate::{config::mm::PAGE_SIZE_BITS, fs::Inode, utils::error::GeneralRet};

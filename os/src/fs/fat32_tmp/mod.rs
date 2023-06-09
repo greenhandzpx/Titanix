@@ -359,7 +359,6 @@ impl Inode for Fat32Inode {
     }
 }
 
-
 lazy_static! {
     pub static ref ROOT_FS: Fat32FileSystem = {
         debug!("ROOT_FS: start to init...");

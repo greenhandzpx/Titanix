@@ -1,12 +1,10 @@
-use alloc::{
-    sync::{Weak},
-};
+use alloc::sync::Weak;
 use log::trace;
 
 use crate::{
-    mm,
-    config::{board::BLOCK_SIZE, mm::{PAGE_SIZE}},
+    config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
+    mm,
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallErr},
 };
@@ -105,7 +103,10 @@ impl Page {
     /// Write this page.
     /// `offset`: page offset
     pub fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
-        trace!("[Page::write]: page addr {:#x}", self as *const Self as  usize);
+        trace!(
+            "[Page::write]: page addr {:#x}",
+            self as *const Self as usize
+        );
         if offset >= PAGE_SIZE {
             Err(SyscallErr::E2BIG)
         } else {
@@ -127,18 +128,20 @@ impl Page {
 
     /// Load all buffers
     pub fn load_all_buffers(&self) -> GeneralRet<()> {
-        trace!("[Page::write]: page addr {:#x}", self as *const Self as  usize);
+        trace!(
+            "[Page::write]: page addr {:#x}",
+            self as *const Self as usize
+        );
         let mut inner = self.inner.lock();
         let len = PAGE_SIZE;
         inner.load_buffer_if_needed(0, len)?;
         Ok(())
     }
 
-    /// Get the raw pointer of this page 
+    /// Get the raw pointer of this page
     pub fn bytes_array_ptr(&self) -> *const u8 {
         self.inner.lock().data_frame.ppn.bytes_array().as_ptr()
     }
-
 }
 
 impl PageInner {
@@ -148,7 +151,11 @@ impl PageInner {
 
         for idx in start_buffer_idx..end_buffer_idx {
             if self.data_states[idx] == DataState::Outdated {
-                trace!("outdated block, idx {}, start_page_off {:#x}", idx, start_off);
+                trace!(
+                    "outdated block, idx {}, start_page_off {:#x}",
+                    idx,
+                    start_off
+                );
                 let page_offset = idx * BLOCK_SIZE;
                 let file_offset = page_offset + self.file_offset.unwrap();
                 self.inode.as_ref().unwrap().upgrade().unwrap().read(
@@ -174,7 +181,11 @@ impl PageInner {
                     file_offset,
                     &mut self.data_frame.ppn.bytes_array()[page_offset..page_offset + BLOCK_SIZE],
                 )?;
-                trace!("outdated block, idx {}, start_page_off {:#x}", idx, start_off);
+                trace!(
+                    "outdated block, idx {}, start_page_off {:#x}",
+                    idx,
+                    start_off
+                );
                 self.data_states[idx] = DataState::Coherent;
             }
             if self.data_states[idx] != DataState::Dirty {
