@@ -22,6 +22,14 @@ impl FAT32File {
         }
     }
 
+    pub fn first_cluster(&self) -> u32 {
+        if self.clusters.is_empty() == false {
+            self.clusters[0] as u32
+        } else {
+            0
+        }
+    }
+
     fn get_clusters(&mut self) {
         if self.clusters.is_empty() == false {
             loop {
@@ -104,7 +112,10 @@ impl FAT32File {
     pub fn write(&mut self, data: &[u8], offset: usize) -> usize {
         self.get_clusters();
         let st = min(offset, self.size.unwrap());
-        let ed = min(offset + data.len(), self.size.unwrap());
+        let ed = offset + data.len();
+        if self.size.unwrap() < ed {
+            self.modify_size((ed - self.size.unwrap()) as isize);
+        }
         let ret = ed - st;
         let st_cluster = st / (self.fat.info.sector_per_cluster * SECTOR_SIZE);
         let ed_cluster = (ed + self.fat.info.sector_per_cluster * SECTOR_SIZE - 1) / (self.fat.info.sector_per_cluster * SECTOR_SIZE);

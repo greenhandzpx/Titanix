@@ -2,9 +2,9 @@ use alloc::vec;
 
 #[derive(Copy, Clone, Default)]
 pub struct FAT32Timestamp {
-    date: u16,
-    time: u16,
-    tenms: u8,
+    pub date: u16,
+    pub time: u16,
+    pub tenms: u8,
 }
 
 const MILLISEC_PER_SEC: i64 = 1000;

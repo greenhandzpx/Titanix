@@ -24,7 +24,8 @@ mod file;
 
 const SECTOR_SIZE:          usize = 512;
 const SHORTNAME_LEN:        usize = 11;
-const LONGNAME_LEN:         usize = 255;
+const SHORTNAME_MAX_LEN:    usize = 12;
+const LONGNAME_MAX_LEN:     usize = 256;
 const BOOT_SECTOR_ID:       usize = 0;
 const FATENTRY_PER_SECTOR:  usize = 128;
 const FAT_CACHE_SIZE:       usize = 16;

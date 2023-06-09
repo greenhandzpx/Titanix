@@ -1,5 +1,5 @@
 
-use alloc::{sync::{Arc, Weak}, vec::Vec};
+use alloc::{sync::{Arc, Weak}, vec::Vec, collections::BTreeMap, string::String};
 use crate::{
     fs::{inode::{Inode, InodeMode, InodeMeta, InodeMetaInner}, Mutex, fat32_tmp::Fat32File, File, file},
     driver::{block::{BlockDevice, self, BLOCK_DEVICE}},
@@ -8,7 +8,7 @@ use crate::{
     mm::Page,
 };
 
-use super::{SHORTNAME_LEN, time::FAT32Timestamp, LONGNAME_LEN, fat::FileAllocTable, FAT32FileSystemMeta, FAT32Info, file::FAT32File};
+use super::{time::FAT32Timestamp, fat::FileAllocTable, FAT32FileSystemMeta, FAT32Info, file::FAT32File, SHORTNAME_MAX_LEN, LONGNAME_MAX_LEN, dentry::FAT32DirEntry};
 
 
 #[derive(Copy, Clone)]
@@ -19,19 +19,19 @@ pub enum FAT32FileType {
 
 #[derive(Copy, Clone)]
 pub struct FAT32InodeMeta {
-    short_name: [u8; SHORTNAME_LEN],
-    long_name: [u16; LONGNAME_LEN],
-    attr: u8,
-    crt_time: FAT32Timestamp,
-    acc_time: FAT32Timestamp,
-    wrt_time: FAT32Timestamp,
+    pub short_name: [u8; SHORTNAME_MAX_LEN],
+    pub long_name: [u8; LONGNAME_MAX_LEN],
+    pub attr: u8,
+    pub crt_time: FAT32Timestamp,
+    pub acc_time: FAT32Timestamp,
+    pub wrt_time: FAT32Timestamp,
 }
 
 impl FAT32InodeMeta {
     pub fn default() -> Self {
         Self {
-            short_name: [0; SHORTNAME_LEN],
-            long_name: [0; LONGNAME_LEN],
+            short_name: [0; SHORTNAME_MAX_LEN],
+            long_name: [0; LONGNAME_MAX_LEN],
             attr: 0,
             crt_time: FAT32Timestamp::default(),
             acc_time: FAT32Timestamp::default(),
@@ -40,13 +40,15 @@ impl FAT32InodeMeta {
     }
 }
 
+
 pub struct FAT32Inode {
-    ftype: FAT32FileType,
-    fat: Arc<FileAllocTable>,
-    meta: Mutex<FAT32InodeMeta>,
-    content: Mutex<FAT32File>,
-    father: Option<Weak<FAT32Inode>>,
-    sons: Option<Vec<Arc<FAT32Inode>>>,
+    pub ftype: FAT32FileType,
+    pub fat: Arc<FileAllocTable>,
+    pub meta: Mutex<FAT32InodeMeta>,
+    pub content: Mutex<FAT32File>,
+    pub father: Option<Weak<FAT32Inode>>,
+    pub child: Mutex<Vec<Arc<FAT32Inode>>>,
+    pub child_loaded: Mutex<bool>,
 }
 
 impl FAT32Inode {
@@ -71,18 +73,43 @@ impl FAT32Inode {
                         }
                     )),
             father,
-            sons: None,
+            child: Mutex::new(Vec::new()),
+            child_loaded: Mutex::new(false),
         }
     }
 
-    pub fn sync_inode(&self) {
+    pub fn load_inode(&self, arc_self: Arc<Self>) -> Option<()> {
         match self.ftype {
+            FAT32FileType::Regfile => None,
             FAT32FileType::Directory => {
-                if self.sons.is_some() {
-                    todo!();
+                let mut loaded = self.child_loaded.lock();
+                if *loaded {
+                    None
+                } else {
+                    let mut content_locked = self.content.lock();
+                    let mut child_locked = self.child.lock();
+                    FAT32DirEntry::read_dentry(arc_self, &mut content_locked, &mut child_locked);
+                    *loaded = true;
+                    Some(())
                 }
             }
-            _ => {}
+        }
+    }
+
+    pub fn sync_inode(&self) -> Option<()> {
+        match self.ftype {
+            FAT32FileType::Regfile => None,
+            FAT32FileType::Directory => {
+                let mut loaded = self.child_loaded.lock();
+                if *loaded {
+                    let mut content_locked = self.content.lock();
+                    let mut child_locked = self.child.lock();
+                    FAT32DirEntry::write_dentry(&mut content_locked, &mut child_locked);
+                    Some(())
+                } else {
+                    None
+                }
+            }
         }
     }
 
