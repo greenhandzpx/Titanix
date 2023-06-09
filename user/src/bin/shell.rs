@@ -142,8 +142,8 @@ pub fn main() -> i32 {
     let mut line: String = String::new();
 
     // #[cfg(feature = "preliminary")]
-    preliminary_test();
-    exit(0);
+    // preliminary_test();
+    // exit(0);
 
     print!("{}", LINE_START);
     loop {
