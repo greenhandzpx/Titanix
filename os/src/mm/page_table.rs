@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 use alloc::{string::String, vec};
 use bitflags::*;
 use core::arch::asm;
-use log::{error, info};
+use log::{error, info, debug};
 use riscv::register::satp;
 
 bitflags! {

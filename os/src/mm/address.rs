@@ -14,6 +14,10 @@ const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
+/// kernel address
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct KernelAddr(pub usize);
+
 /// physical address
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
@@ -54,6 +58,19 @@ impl Debug for PhysPageNum {
 /// T -> usize: T.0
 /// usize -> T: usize.into()
 
+impl From<usize> for KernelAddr {
+    fn from(v: usize) -> Self {
+        Self (v) 
+    }
+}
+
+
+impl From<KernelAddr> for PhysAddr {
+    fn from(ka: KernelAddr) -> Self {
+        Self(ka.0 - (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS))
+    }
+}
+
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << PA_WIDTH_SV39) - 1))
@@ -68,6 +85,12 @@ impl From<usize> for PhysPageNum {
         let tmp = (v as isize >> PPN_WIDTH_SV39) as isize;
         assert!(tmp == 0 || tmp == -1);
         Self(v)
+    }
+}
+impl From<KernelAddr> for PhysPageNum {
+    fn from(ka: KernelAddr) -> Self {
+        let pa = PhysAddr::from(ka);
+        pa.floor()
     }
 }
 impl From<usize> for VirtAddr {
