@@ -17,6 +17,8 @@ easy-fs/Cargo.lock
 easy-fs/target/*
 easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
+fat32-fs/Cargo.lock
+fat32-fuse/Cargo.lock
 tools/
 pushall.sh
 *.img
