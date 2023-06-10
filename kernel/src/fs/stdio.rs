@@ -66,7 +66,6 @@ impl File for Stdin {
                         process::yield_now().await;
                         continue;
                     } else {
-                        warn!("have char from stdin: {}", c);
                         break;
                     }
                 }
