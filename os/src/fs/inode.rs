@@ -6,7 +6,7 @@ use alloc::{
     sync::{Arc, Weak},
 };
 use lazy_static::*;
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 use crate::{
     mm::PageCache,
@@ -223,15 +223,26 @@ impl dyn Inode {
     /// Load children and insert them into INODE_CACHE
     pub fn load_children(parent: Arc<dyn Inode>) {
         debug!("[load_children] enter");
-        parent.load_children_from_disk(parent.clone());
-        let mut cache_lock = INODE_CACHE.lock();
-        for child in parent.metadata().inner.lock().children.clone() {
-            let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
-            debug!(
-                "[load_children] insert to INODE_CACHE, name: {}",
-                child.1.metadata().name
-            );
-            cache_lock.insert(key, child.1);
+        let state = parent.metadata().inner.lock().state;
+        debug!("[load_children] inode state: {:?}", state);
+        match state {
+            InodeState::Init => {
+                // load children from disk
+                parent.load_children_from_disk(parent.clone());
+                parent.metadata().inner.lock().state = InodeState::Synced;
+                let mut cache_lock = INODE_CACHE.lock();
+                for child in parent.metadata().inner.lock().children.clone() {
+                    let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
+                    debug!(
+                        "[load_children] insert to INODE_CACHE, name: {}",
+                        child.1.metadata().name
+                    );
+                    cache_lock.insert(key, child.1);
+                }
+            }
+            _ => {
+                // do nothing
+            }
         }
         debug!("[load_children] leave");
     }
@@ -281,6 +292,13 @@ impl dyn Inode {
             }
         }
         Some(parent)
+    }
+
+    pub fn create_page_cache_if_needed(this: Arc<dyn Inode>) {
+        let mut meta_locked = this.metadata().inner.lock();
+        if meta_locked.page_cache.is_none() {
+            meta_locked.page_cache = Some(PageCache::new(this.clone(), 3));
+        }
     }
 }
 
@@ -403,7 +421,7 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
             }
             let res = <dyn Inode>::lookup_from_root_tmp(name);
             if let Some(inode) = res.as_ref() {
-                inode.metadata().inner.lock().page_cache = Some(PageCache::new(inode.clone(), 3));
+                <dyn Inode>::create_page_cache_if_needed(inode.clone());
             }
             res
         } else {

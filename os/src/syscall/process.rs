@@ -1,5 +1,5 @@
 use crate::fs::inode::open_file;
-use crate::fs::OpenFlags;
+use crate::fs::{print_dir_tree, OpenFlags};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -7,7 +7,7 @@ use crate::process::thread::{self, exit_and_terminate_all_threads, terminate_giv
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::Signal;
-use crate::timer::{get_time_ms, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME, get_time_spec};
+use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::string::c_str_to_string;
@@ -335,6 +335,8 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     UserCheck::new().check_c_str(path)?;
     let path = c_str_to_string(path);
     debug!("sys exec {}", path);
+    // print_dir_tree();
+
     if path == "shell" {
         if let Some(elf_data) = get_app_data_by_name("shell") {
             current_process().exec(elf_data, args_vec, envs_vec)
@@ -360,13 +362,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         //     Err(SyscallErr::EACCES)
         // }
     }
-    // if let Some(data) = get_app_data_by_name(&path) {
-    //     let process = current_process();
-    //     // TODO: pass the cmd args here
-    //     process.exec(data, args_vec)
-    // } else {
-    //     Err(SyscallErr::EACCES)
-    // }
 }
 
 /// If there is not a child process whose pid is same as given, return -1.

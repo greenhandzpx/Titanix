@@ -130,7 +130,7 @@ impl Inode for Fat32RootInode {
             );
             let file_name = dentry.as_ref().unwrap().file_name();
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
-            child.metadata().inner.lock().page_cache = Some(PageCache::new(child.clone(), 3));
+            <dyn Inode>::create_page_cache_if_needed(child.clone());
             meta_inner.children.insert(file_name, child);
         }
     }
@@ -219,11 +219,18 @@ pub struct Fat32Inode {
     meta: Option<InodeMeta>,
 }
 
+impl Drop for Fat32Inode {
+    fn drop(&mut self) {
+        // error!("destruct a fat32 inode, name {}", self.metadata().name);
+    }
+}
+
 impl Fat32Inode {
     pub fn new(
         dentry: DirEntry<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>,
         meta: Option<InodeMeta>,
     ) -> Self {
+        // error!("construct a fat32 inode");
         Self { dentry, meta }
     }
 }
@@ -277,7 +284,7 @@ impl Inode for Fat32Inode {
             );
             let file_name = dentry.as_ref().unwrap().file_name();
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
-            child.metadata().inner.lock().page_cache = Some(PageCache::new(child.clone(), 3));
+            <dyn Inode>::create_page_cache_if_needed(child.clone());
             meta_inner.children.insert(file_name, child);
         }
     }
@@ -398,4 +405,99 @@ pub fn init() -> GeneralRet<()> {
     info!("init fatfs success");
 
     Ok(())
+}
+
+pub enum Fat32NodeType {
+    Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+    File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+}
+
+pub struct Fat32File {
+    readable: bool,
+    writable: bool,
+    inner: Mutex<Fat32FileInner>,
+    meta: Option<FileMeta>,
+}
+
+struct Fat32FileInner {
+    offset: usize,
+    node: Fat32NodeType,
+}
+
+unsafe impl Send for Fat32File {}
+unsafe impl Sync for Fat32File {}
+
+impl Fat32File {
+    pub fn new(
+        node: Fat32NodeType,
+        meta: Option<FileMeta>,
+        readable: bool,
+        writable: bool,
+    ) -> Self {
+        Self {
+            readable,
+            writable,
+            meta,
+            inner: Mutex::new(Fat32FileInner { offset: 0, node }),
+        }
+    }
+
+    /// Read all data inside a inode into vector
+    pub fn read_all(&self) -> Vec<u8> {
+        let mut inner = self.inner.lock();
+        let mut buffer = [0u8; 512];
+        let mut v: Vec<u8> = Vec::new();
+        loop {
+            let len = match &mut inner.node {
+                Fat32NodeType::Dir(_) => panic!(),
+                Fat32NodeType::File(file) => file.read(&mut buffer).unwrap(),
+            };
+            if len == 0 {
+                break;
+            }
+            inner.offset += len;
+            v.extend_from_slice(&buffer[..len]);
+        }
+        v
+    }
+}
+
+///Open file with flags
+pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
+    stack_trace!();
+    // TODO support different kinds of files dispatching
+    // (e.g. /dev/sda, /proc/1234, /usr/bin)
+    debug!("[open_file] name: {}", name);
+
+    let (readable, writable) = flags.read_write();
+    let root_dir = ROOT_FS.fat_fs.root_dir();
+    if flags.contains(OpenFlags::CREATE) {
+        if let Some(inode) = root_dir.open_file(name).ok() {
+            Some(Arc::new(Fat32File::new(
+                Fat32NodeType::File(inode),
+                None,
+                readable,
+                writable,
+            )))
+        } else {
+            debug!("create file {}", name);
+            Some(Arc::new(Fat32File::new(
+                Fat32NodeType::File(root_dir.create_file(name).unwrap()),
+                None,
+                readable,
+                writable,
+            )))
+        }
+    } else {
+        if let Some(inode) = root_dir.open_file(name).ok() {
+            Some(Arc::new(Fat32File::new(
+                Fat32NodeType::File(inode),
+                None,
+                readable,
+                writable,
+            )))
+        } else {
+            None
+        }
+    }
 }

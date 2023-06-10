@@ -16,6 +16,7 @@ mod stdio;
 mod testfs;
 mod uio;
 
+use alloc::sync::Arc;
 // pub use dentry::Dentry;
 pub use dirent::Dirent;
 pub use dirent::DIRENT_SIZE;
@@ -28,12 +29,14 @@ pub use file_system::FILE_SYSTEM_MANAGER;
 pub use inode::Inode;
 pub use inode::InodeMode;
 pub use inode::InodeState;
+use log::info;
 pub use stdio::Stdin;
 pub use stdio::Stdout;
 pub use uio::*;
 pub use utsname::UtsName;
 pub use utsname::UTSNAME_SIZE;
 
+use crate::fs::fat32_tmp::ROOT_FS;
 use crate::mm::MapPermission;
 use crate::sync::mutex::SpinNoIrqLock;
 
@@ -112,5 +115,22 @@ impl From<MapPermission> for OpenFlags {
             res |= OpenFlags::WRONLY;
         }
         res
+    }
+}
+
+pub fn print_dir_tree() {
+    info!("------------ dir tree: ------------");
+    let parent = ROOT_FS.metadata().root_inode.clone().unwrap();
+    print_dir_recursively(parent, 1);
+}
+
+fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
+    let children = inode.metadata().inner.lock().children.clone();
+    for child in children {
+        for _ in 0..level {
+            print!("-");
+        }
+        println!("{}", child.0);
+        print_dir_recursively(child.1, level + 1);
     }
 }

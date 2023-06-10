@@ -328,16 +328,17 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
         Some(inode) => {
             let state = inode.metadata().inner.lock().state;
             debug!("[getdents] inode state: {:?}", state);
-            match state {
-                InodeState::Init => {
-                    // load children from disk
-                    <dyn Inode>::load_children(inode.clone());
-                    inode.metadata().inner.lock().state = InodeState::Synced;
-                }
-                _ => {
-                    // do nothing
-                }
-            }
+
+            // load children from disk
+            <dyn Inode>::load_children(inode.clone());
+            // match state {
+            //     InodeState::Init => {
+            //         inode.metadata().inner.lock().state = InodeState::Synced;
+            //     }
+            //     _ => {
+            //         // do nothing
+            //     }
+            // }
 
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
