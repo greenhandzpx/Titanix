@@ -664,7 +664,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
-    // debug!("[sys_write]: start to write file, fd {}", fd);
+    // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
     file.write(buf).await
 }
 

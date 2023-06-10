@@ -8,7 +8,7 @@ use user_lib::{console::getchar, execve, fork, getpid, wait, yield_};
 
 #[no_mangle]
 fn main() -> i32 {
-    println!("initproc!!");
+    // println!("initproc!!");
     if fork() == 0 {
         // println!("exec user shell");
         // let c = getchar();

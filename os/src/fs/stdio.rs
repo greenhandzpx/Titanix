@@ -50,26 +50,27 @@ impl File for Stdin {
         // assert_eq!(buf.len(), 1, "Only support len = 1 in sys_read!");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
-            let mut c: usize;
+            let mut c: u8;
             let mut cnt = 0;
             loop {
                 loop {
                     let self_buf = self.buf.load(Ordering::Acquire);
                     if self_buf != 0 {
                         self.buf.store(0, Ordering::Release);
-                        c = self_buf as usize;
+                        c = self_buf;
                         break;
                     }
                     c = console_getchar();
                     // suspend_current_and_run_next();
-                    if c == 0 {
+                    if c as i8 == -1 {
                         process::yield_now().await;
                         continue;
                     } else {
+                        warn!("have char from stdin: {}", c);
                         break;
                     }
                 }
-                let ch = c as u8;
+                let ch = c;
                 buf[cnt] = ch;
                 cnt += 1;
                 // debug!("stdin read a char {}, cnt {}, buf len {}", ch, cnt, buf.len());

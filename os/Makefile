@@ -121,6 +121,18 @@ run-inner: build
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 
 
 
+# run-inner-fat32: build-fat32
+# 	@echo "start to run kernel in qemu..."
+# 	@echo $(KERNEL_BIN)
+# 	@qemu-system-riscv64 \
+# 		-machine virt \
+# 		-nographic \
+# 		-smp $(CPUS) \
+# 		-bios $(BOOTLOADER) \
+# 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+#         -drive file=$(FS_IMG_FAT32),if=none,format=raw,id=x0 \
+#         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 
+
 run-inner-fat32: build-fat32
 	@echo "start to run kernel in qemu..."
 	@echo $(KERNEL_BIN)
@@ -128,11 +140,10 @@ run-inner-fat32: build-fat32
 		-machine virt \
 		-nographic \
 		-smp $(CPUS) \
-		-bios $(BOOTLOADER) \
-		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+		-kernel $(KERNEL_BIN) \
+ 		-bios $(BOOTLOADER) \
         -drive file=$(FS_IMG_FAT32),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 
-
 
 debug: build-pre
 	@tmux new-session -d \
