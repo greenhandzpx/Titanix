@@ -1,7 +1,4 @@
-use core::{
-    hash::Hash,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
     collections::BTreeMap,
@@ -9,12 +6,12 @@ use alloc::{
     sync::{Arc, Weak},
 };
 use lazy_static::*;
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 use crate::{
     mm::PageCache,
-    timer::TimeSpec,
-    utils::{debug, error::GeneralRet, hash_table::HashTable, path::Path},
+    timer::{get_time_ms, TimeSpec},
+    utils::{error::GeneralRet, hash_table::HashTable, path::Path},
 };
 
 use super::{
@@ -119,27 +116,27 @@ pub trait Inode: Send + Sync {
 
     /// You should call this function through the parent inode
     /// You should give a relative path
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
-    fn rmdir(&self, name: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
     fn mknod(
         &self,
-        this: Arc<dyn Inode>,
-        pathname: &str,
-        mode: InodeMode,
-        dev_id: usize,
+        _this: Arc<dyn Inode>,
+        _pathname: &str,
+        _mode: InodeMode,
+        _dev_id: usize,
     ) -> GeneralRet<()> {
         todo!()
     }
     /// Read data at the given file offset from block device
-    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> GeneralRet<usize> {
         todo!()
     }
     /// Write data to the given file offset in block device
-    fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
+    fn write(&self, _offset: usize, _buf: &[u8]) -> GeneralRet<usize> {
         todo!()
     }
 
@@ -226,15 +223,26 @@ impl dyn Inode {
     /// Load children and insert them into INODE_CACHE
     pub fn load_children(parent: Arc<dyn Inode>) {
         debug!("[load_children] enter");
-        parent.load_children_from_disk(parent.clone());
-        let mut cache_lock = INODE_CACHE.lock();
-        for child in parent.metadata().inner.lock().children.clone() {
-            let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
-            debug!(
-                "[load_children] insert to INODE_CACHE, name: {}",
-                child.1.metadata().name
-            );
-            cache_lock.insert(key, child.1);
+        let state = parent.metadata().inner.lock().state;
+        debug!("[load_children] inode state: {:?}", state);
+        match state {
+            InodeState::Init => {
+                // load children from disk
+                parent.load_children_from_disk(parent.clone());
+                parent.metadata().inner.lock().state = InodeState::Synced;
+                let mut cache_lock = INODE_CACHE.lock();
+                for child in parent.metadata().inner.lock().children.clone() {
+                    let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
+                    debug!(
+                        "[load_children] insert to INODE_CACHE, name: {}",
+                        child.1.metadata().name
+                    );
+                    cache_lock.insert(key, child.1);
+                }
+            }
+            _ => {
+                // do nothing
+            }
         }
         debug!("[load_children] leave");
     }
@@ -285,6 +293,13 @@ impl dyn Inode {
         }
         Some(parent)
     }
+
+    pub fn create_page_cache_if_needed(this: Arc<dyn Inode>) {
+        let mut meta_locked = this.metadata().inner.lock();
+        if meta_locked.page_cache.is_none() {
+            meta_locked.page_cache = Some(PageCache::new(this.clone(), 3));
+        }
+    }
 }
 
 pub struct InodeMeta {
@@ -309,9 +324,8 @@ pub struct InodeMeta {
 }
 
 pub struct InodeMetaInner {
-    // pub offset: usize,
-    /// inode' file's size
-    pub size: usize,
+    // /// inode' file's size
+    // pub size: usize,
     /// last access time, need to flush to disk.
     pub st_atim: TimeSpec,
     /// last modification time, need to flush to disk
@@ -328,7 +342,7 @@ pub struct InodeMetaInner {
     pub children: BTreeMap<String, Arc<dyn Inode>>,
     /// page cache of the related file
     pub page_cache: Option<PageCache>,
-    /// data len
+    /// file content len
     pub data_len: usize,
     /// inode state
     pub state: InodeState,
@@ -360,7 +374,7 @@ impl InodeMeta {
             name: name.to_string(),
             uid: INODE_UID_ALLOCATOR.fetch_add(1, Ordering::Relaxed),
             inner: Mutex::new(InodeMetaInner {
-                size: 0,
+                // size: 0,
                 st_atim: TimeSpec::new(),
                 st_mtim: TimeSpec::new(),
                 st_ctim: TimeSpec::new(),
@@ -405,7 +419,11 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
                     .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
                     .unwrap();
             }
-            <dyn Inode>::lookup_from_root_tmp(name)
+            let res = <dyn Inode>::lookup_from_root_tmp(name);
+            if let Some(inode) = res.as_ref() {
+                <dyn Inode>::create_page_cache_if_needed(inode.clone());
+            }
+            res
         } else {
             warn!("parent dir {} doesn't exist", parent_path);
             return None;

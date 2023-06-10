@@ -26,3 +26,4 @@ objdump/
 tmp/
 kernel-qemu
 sbi-qemu
+*.log

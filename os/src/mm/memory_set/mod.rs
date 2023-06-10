@@ -1,13 +1,11 @@
-use core::{arch::asm, cell::SyncUnsafeCell};
+use core::cell::SyncUnsafeCell;
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec, vec::Vec};
-use log::{debug, error, info, trace, warn};
-use riscv::register::{satp, scause::Scause};
+use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
+use log::{debug, error, info, warn};
 
 use crate::{
     config::{
         board::MEMORY_END,
-        board::MMIO,
         mm::PAGE_SIZE,
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
@@ -24,8 +22,7 @@ pub use self::{
 };
 
 use super::{
-    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, PhysAddr, VirtAddr,
-    VirtPageNum,
+    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, VirtAddr, VirtPageNum,
 };
 
 ///

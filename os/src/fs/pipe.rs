@@ -1,12 +1,11 @@
 use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};
 use log::debug;
-use riscv::register::satp::{self, Satp};
 
 use crate::process;
 use crate::processor::SumGuard;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::utils::error::{AsyscallRet, SyscallRet};
+use crate::utils::error::AsyscallRet;
 
 use super::file::{File, FileMeta};
 

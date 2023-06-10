@@ -328,16 +328,17 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
         Some(inode) => {
             let state = inode.metadata().inner.lock().state;
             debug!("[getdents] inode state: {:?}", state);
-            match state {
-                InodeState::Init => {
-                    // load children from disk
-                    <dyn Inode>::load_children(inode.clone());
-                    inode.metadata().inner.lock().state = InodeState::Synced;
-                }
-                _ => {
-                    // do nothing
-                }
-            }
+
+            // load children from disk
+            <dyn Inode>::load_children(inode.clone());
+            // match state {
+            //     InodeState::Init => {
+            //         inode.metadata().inner.lock().state = InodeState::Synced;
+            //     }
+            //     _ => {
+            //         // do nothing
+            //     }
+            // }
 
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
@@ -467,7 +468,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     debug!("[_fstat] inode mode: {:?}", inode_meta.mode);
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
     let inner_lock = inode_meta.inner.lock();
-    kstat.st_size = inner_lock.size as u64;
+    kstat.st_size = inner_lock.data_len as u64;
     kstat.st_atim = inner_lock.st_atim;
     kstat.st_mtim = inner_lock.st_mtim;
     kstat.st_ctim = inner_lock.st_ctim;
@@ -663,6 +664,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
+    // debug!("[sys_write]: start to write file, fd {}", fd);
     file.write(buf).await
 }
 

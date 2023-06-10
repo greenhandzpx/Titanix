@@ -1,4 +1,5 @@
-use crate::fs::OpenFlags;
+use crate::fs::inode::open_file;
+use crate::fs::{print_dir_tree, OpenFlags};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -13,7 +14,7 @@ use crate::utils::string::c_str_to_string;
 use crate::{fs, process, stack_trace};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 
 use super::{TimeSpec, TimeVal, Tms};
 
@@ -334,6 +335,8 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     UserCheck::new().check_c_str(path)?;
     let path = c_str_to_string(path);
     debug!("sys exec {}", path);
+    // print_dir_tree();
+
     if path == "shell" {
         if let Some(elf_data) = get_app_data_by_name("shell") {
             current_process().exec(elf_data, args_vec, envs_vec)
@@ -342,21 +345,23 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             Err(SyscallErr::EACCES)
         }
     } else {
-        if let Some(app_inode) = fs::fat32_tmp::open_file(&path, OpenFlags::RDONLY) {
-            let elf_data = app_inode.read_all();
+        if let Some(app_inode) = open_file(&path, OpenFlags::RDONLY) {
+            let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
+            trace!("try to read all data in file {}", path);
+            let elf_data = app_file.sync_read_all()?;
             current_process().exec(&elf_data, args_vec, envs_vec)
         } else {
             warn!("[sys_exec] Cannot find this elf file {}", path);
             Err(SyscallErr::EACCES)
         }
+        // if let Some(app_inode) = fs::fat32_tmp::open_file(&path, OpenFlags::RDONLY) {
+        //     let elf_data = app_inode.read_all();
+        //     current_process().exec(&elf_data, args_vec, envs_vec)
+        // } else {
+        //     warn!("[sys_exec] Cannot find this elf file {}", path);
+        //     Err(SyscallErr::EACCES)
+        // }
     }
-    // if let Some(data) = get_app_data_by_name(&path) {
-    //     let process = current_process();
-    //     // TODO: pass the cmd args here
-    //     process.exec(data, args_vec)
-    // } else {
-    //     Err(SyscallErr::EACCES)
-    // }
 }
 
 /// If there is not a child process whose pid is same as given, return -1.

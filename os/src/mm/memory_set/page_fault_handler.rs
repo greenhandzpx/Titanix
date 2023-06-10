@@ -1,28 +1,19 @@
-use core::cell::UnsafeCell;
-
-use alloc::{
-    boxed::Box,
-    sync::{Arc, Weak},
-};
-use log::{debug, info};
+use alloc::{boxed::Box, sync::Arc};
+use log::{debug, info, trace};
 use riscv::register::scause::Scause;
 
 use crate::{
-    config::mm::PAGE_SIZE,
-    fs::OpenFlags,
     mm::{
-        frame_alloc, page_table::PTEFlags, FrameTracker, MapPermission, PageTable, PageTableEntry,
-        PhysPageNum, VirtAddr,
+        address::KernelAddr, frame_alloc, page_table::PTEFlags, PageTable, PhysPageNum, VirtAddr,
     },
     processor::current_process,
     sync::mutex::SpinNoIrqLock,
-    syscall::MmapFlags,
     utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::VmArea;
 
-type Mutex<T> = SpinNoIrqLock<T>;
+// type Mutex<T> = SpinNoIrqLock<T>;
 
 /// General page fault handler
 pub trait PageFaultHandler: Send + Sync {
@@ -114,37 +105,7 @@ impl PageFaultHandler for SBrkPageFaultHandler {
 pub struct MmapPageFaultHandler {}
 
 impl PageFaultHandler for MmapPageFaultHandler {
-    // tmp version
-    fn handle_page_fault(
-        &self,
-        va: VirtAddr,
-        vma: &VmArea,
-        page_table: &mut PageTable,
-    ) -> GeneralRet<()> {
-        debug!("handle mmap page fault");
-        let backup_file = vma.backup_file.as_ref().ok_or(SyscallErr::ENODEV)?;
-        let file = backup_file.file.clone();
-        let offset = backup_file.offset + (va.0 - VirtAddr::from(vma.start_vpn()).0);
-        debug!("mmap offset {}", offset);
-        let open_flags: OpenFlags = vma.map_perm.into();
-        // let file = inode.file.open(inode.file.clone(), open_flags)?;
-        debug!("mmap backup file name {}", file.metadata().path);
-        let data_frames = unsafe { &mut (*vma.data_frames.get()) };
-        let frame = frame_alloc().unwrap();
-        let ppn = frame.ppn;
-        data_frames.0.insert(va.floor(), Arc::new(frame));
-        let bytes_array = ppn.bytes_array();
-        file.seek(offset)?;
-        file.sync_read(bytes_array)?;
-
-        let mut pte_flags = vma.map_perm.into();
-        pte_flags |= PTEFlags::U;
-        page_table.map(va.floor(), ppn, pte_flags);
-        page_table.activate();
-        Ok(())
-    }
-
-    // page cache version
+    // // tmp version
     // fn handle_page_fault(
     //     &self,
     //     va: VirtAddr,
@@ -152,25 +113,69 @@ impl PageFaultHandler for MmapPageFaultHandler {
     //     page_table: &mut PageTable,
     // ) -> GeneralRet<()> {
     //     debug!("handle mmap page fault");
-    //     let inode = vma.backup_file.as_ref().ok_or(SyscallErr::ENODEV)?;
-    //     let offset = inode.offset + (va.0 - vma.start_vpn().0);
-    //     let page = inode
-    //         .file
-    //         .metadata()
-    //         .inner
-    //         .lock()
-    //         .page_cache
-    //         .as_mut()
-    //         .unwrap()
-    //         .get_page(offset)?;
-    //     page.load_all_buffers()?;
+    //     let backup_file = vma.backup_file.as_ref().ok_or(SyscallErr::ENODEV)?;
+    //     let file = backup_file.file.clone();
+    //     let offset = backup_file.offset + (va.0 - VirtAddr::from(vma.start_vpn()).0);
+    //     debug!("mmap offset {}", offset);
+    //     let open_flags: OpenFlags = vma.map_perm.into();
+    //     // let file = inode.file.open(inode.file.clone(), open_flags)?;
+    //     debug!("mmap backup file name {}", file.metadata().path);
+    //     let data_frames = unsafe { &mut (*vma.data_frames.get()) };
+    //     let frame = frame_alloc().unwrap();
+    //     let ppn = frame.ppn;
+    //     data_frames.0.insert(va.floor(), Arc::new(frame));
+    //     let bytes_array = ppn.bytes_array();
+    //     file.seek(offset)?;
+    //     file.sync_read(bytes_array)?;
+
     //     let mut pte_flags = vma.map_perm.into();
     //     pte_flags |= PTEFlags::U;
-    //     let phy_page_num = PhysPageNum::from(page.inner.lock().data.as_ptr() as usize);
-    //     page_table.map(va.floor(), phy_page_num, pte_flags);
+    //     debug!("ppn {:#x}", ppn.0);
+    //     page_table.map(va.floor(), ppn, pte_flags);
     //     page_table.activate();
     //     Ok(())
     // }
+
+    // page cache version
+    fn handle_page_fault(
+        &self,
+        va: VirtAddr,
+        vma: &VmArea,
+        page_table: &mut PageTable,
+    ) -> GeneralRet<()> {
+        let inode = vma.backup_file.as_ref().ok_or(SyscallErr::ENODEV)?;
+        let offset = inode.offset + (va.0 - VirtAddr::from(vma.start_vpn()).0);
+        debug!("handle mmap page fault, offset {:#x}", offset);
+        let page = inode
+            .file
+            .metadata()
+            .inner
+            .lock()
+            .inode
+            .as_ref()
+            .unwrap()
+            .metadata()
+            .inner
+            .lock()
+            .page_cache
+            .as_mut()
+            .unwrap()
+            .get_page(offset)?;
+        page.load_all_buffers()?;
+        let mut pte_flags = vma.map_perm.into();
+        pte_flags |= PTEFlags::U;
+        let phy_page_num = PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr() as usize));
+        // let content = String::from_utf8(page.inner.lock().data.to_vec());
+        // debug!("file page content {:?}", content);
+        trace!(
+            "phy page num {:#x}, kernel addr {:#x}",
+            phy_page_num.0,
+            page.bytes_array_ptr() as usize
+        );
+        page_table.map(va.floor(), phy_page_num, pte_flags);
+        page_table.activate();
+        Ok(())
+    }
 
     fn box_clone(&self) -> Box<dyn PageFaultHandler> {
         Box::new(self.clone())

@@ -2,8 +2,8 @@ use super::BlockDevice;
 use crate::config::mm::PAGE_SIZE_BITS;
 use crate::config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE};
 use crate::mm::{
-    frame_alloc, frame_dealloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr,
-    KERNEL_SPACE,
+    frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PhysAddr, PhysPageNum, StepByOne,
+    VirtAddr, KERNEL_SPACE,
 };
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::vec::Vec;
@@ -111,7 +111,7 @@ impl Hal for VirtioHal {
 
     fn phys_to_virt(addr: usize) -> usize {
         debug!("phy2virt: addr {:#x}", addr);
-        addr + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)
+        KernelAddr::from(PhysAddr::from(addr)).0
         // addr
         // todo!()
     }

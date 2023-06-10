@@ -8,7 +8,7 @@ use crate::{
     processor::SumGuard,
     sbi::console_getchar,
     sync::mutex::SpinNoIrqLock,
-    utils::error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
 use super::file::{File, FileMeta};

@@ -1,9 +1,11 @@
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use log::debug;
 
 use crate::{
-    config::fs::FILE_PAGE_SIZE,
+    config::mm::PAGE_SIZE,
     mm::memory_set::VmArea,
-    timer::get_time_spec,
+    processor::SumGuard,
+    stack_trace,
     utils::error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet},
 };
 
@@ -56,6 +58,13 @@ pub trait File: Send + Sync {
     fn seek(&self, offset: usize) -> SyscallRet {
         todo!()
     }
+
+    /// Read all data from this file synchronously
+    /// TODO: add async version
+    fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {
+        todo!()
+    }
+
     // TODO: not sure the args
     fn mmap(&self) -> GeneralRet<VmArea> {
         todo!()
@@ -98,64 +107,33 @@ impl File for DefaultFile {
         &self.metadata
     }
 
+    fn seek(&self, offset: usize) -> SyscallRet {
+        self.metadata.inner.lock().pos = offset;
+        Ok(offset as isize)
+    }
+
     /// For default file, data must be read from page cache first
+    /// TODO: change to real async
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        Box::pin(async move {
-            let mut file_meta = self.metadata().inner.lock();
-            let mut inode_meta = file_meta.inode.as_ref().unwrap().metadata().inner.lock();
-
-            // Calculate buf end according to inode meta
-            // TODO now calculate buf end at first, which may need modifying
-            // beacuse buf end may be changed by other thread
-            let mut buf_end = inode_meta.data_len - file_meta.pos;
-            if buf_end > buf.len() {
-                buf_end = buf.len();
-            }
-
-            let mut buf_offset = 0;
-            let mut res = 0;
-            let mut file_offset = file_meta.pos;
-
-            while buf_offset < buf_end {
-                // Get the page from page cache
-                let page = inode_meta
-                    .page_cache
-                    .as_mut()
-                    .unwrap()
-                    .get_page(file_meta.pos)?;
-
-                // Read this page
-                let page_offset = file_offset % FILE_PAGE_SIZE;
-                let mut buf_offset_end = buf_offset + (FILE_PAGE_SIZE - page_offset);
-                if buf_offset_end > buf_end {
-                    buf_offset_end = buf_end;
-                }
-
-                let bytes = page.read(page_offset, &mut buf[buf_offset..buf_offset_end])?;
-                file_offset += bytes;
-                res += bytes;
-                buf_offset = buf_offset_end;
-            }
-
-            drop(inode_meta);
-            file_meta.pos = file_offset;
-            Ok(res as isize)
-        })
+        Box::pin(async move { self.sync_read(buf) })
     }
 
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         Box::pin(async move {
+            stack_trace!();
+            let _sum_guard = SumGuard::new();
             let mut file_meta = self.metadata().inner.lock();
             let mut inode_meta = file_meta.inode.as_ref().unwrap().metadata().inner.lock();
 
             // Calculate buf end according to inode meta
             // TODO now calculate buf end at first, which may need modifying
             // beacuse buf end may change by other thread
-            let mut buf_end = inode_meta.data_len - file_meta.pos;
-            if buf_end > buf.len() {
-                buf_end = buf.len();
-            }
+            // let mut buf_end = inode_meta.data_len - file_meta.pos;
+            // if buf_end > buf.len() {
+            //     buf_end = buf.len();
+            // }
+            let buf_end = buf.len();
 
             let mut buf_offset = 0;
             let mut res = 0;
@@ -167,11 +145,11 @@ impl File for DefaultFile {
                     .page_cache
                     .as_mut()
                     .unwrap()
-                    .get_page(file_meta.pos)?;
+                    .get_page(file_offset)?;
 
                 // Read this page
-                let page_offset = file_offset % FILE_PAGE_SIZE;
-                let mut buf_offset_end = buf_offset + (FILE_PAGE_SIZE - page_offset);
+                let page_offset = file_offset % PAGE_SIZE;
+                let mut buf_offset_end = buf_offset + (PAGE_SIZE - page_offset);
                 if buf_offset_end > buf_end {
                     buf_offset_end = buf_end;
                 }
@@ -179,27 +157,78 @@ impl File for DefaultFile {
                 let bytes = page.write(page_offset, &buf[buf_offset..buf_offset_end])?;
                 file_offset += bytes;
                 res += bytes;
-                buf_offset = buf_offset_end;
-            }
-
-            // change state
-            match inode_meta.state {
-                InodeState::Synced => {
-                    inode_meta.state = InodeState::DirtyData;
+                buf_offset += bytes;
+                if file_offset > inode_meta.data_len {
+                    inode_meta.data_len = file_offset;
                 }
-                InodeState::DirtyInode => {
-                    inode_meta.state = InodeState::DirtyAll;
-                }
-                _ => {}
             }
-            // change time
-            inode_meta.st_atim = get_time_spec();
-            inode_meta.st_mtim = inode_meta.st_atim;
-            inode_meta.st_ctim = inode_meta.st_atim;
 
             drop(inode_meta);
             file_meta.pos = file_offset;
+            debug!(
+                "[DefaultFile::write]: write {} bytes, buf len {}",
+                res,
+                buf.len()
+            );
             Ok(res as isize)
         })
+    }
+
+    fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
+        let _sum_guard = SumGuard::new();
+        let mut file_meta = self.metadata().inner.lock();
+        let mut inode_meta = file_meta.inode.as_ref().unwrap().metadata().inner.lock();
+
+        // Calculate buf end according to inode meta
+        // TODO now calculate buf end at first, which may need modifying
+        // beacuse buf end may be changed by other thread
+        let mut buf_end = inode_meta.data_len - file_meta.pos;
+        if buf_end > buf.len() {
+            buf_end = buf.len();
+        }
+
+        let mut buf_offset = 0;
+        let mut res = 0;
+        let mut file_offset = file_meta.pos;
+
+        while buf_offset < buf_end {
+            // Get the page from page cache
+            let page = inode_meta
+                .page_cache
+                .as_mut()
+                .unwrap()
+                .get_page(file_offset)?;
+
+            // Read this page
+            let page_offset = file_offset % PAGE_SIZE;
+            let mut buf_offset_end = buf_offset + (PAGE_SIZE - page_offset);
+            if buf_offset_end > buf_end {
+                buf_offset_end = buf_end;
+            }
+
+            let bytes = page.read(page_offset, &mut buf[buf_offset..buf_offset_end])?;
+            file_offset += bytes;
+            res += bytes;
+            buf_offset += bytes;
+        }
+
+        drop(inode_meta);
+        file_meta.pos = file_offset;
+        debug!("[DefaultFile::read]: read {} bytes", res);
+        Ok(res as isize)
+    }
+
+    fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {
+        // let mut inner = self.inner.lock();
+        let mut buffer = [0u8; 512];
+        let mut v: Vec<u8> = Vec::new();
+        loop {
+            let len = self.sync_read(&mut buffer)?;
+            if len == 0 {
+                break;
+            }
+            v.extend_from_slice(&buffer[..len as usize]);
+        }
+        Ok(v)
     }
 }

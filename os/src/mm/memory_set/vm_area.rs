@@ -1,10 +1,10 @@
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
 use core::cell::UnsafeCell;
-use log::{debug, warn};
+use log::warn;
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
-    fs::{File, Inode},
+    fs::File,
     mm::{
         address::{StepByOne, VPNRange},
         frame_alloc,
@@ -16,7 +16,7 @@ use crate::{
     utils::error::{GeneralRet, SyscallErr},
 };
 
-use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType, MemorySet};
+use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType};
 
 ///
 pub struct FrameManager(pub BTreeMap<VirtPageNum, Arc<FrameTracker>>);

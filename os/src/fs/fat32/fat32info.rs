@@ -18,7 +18,8 @@ impl FAT32Info {
     pub fn new(bs: BootSector) -> Self {
         let start_sector = (bs.BPB_ReservedSectorCount as usize)
             + (bs.BPB_NumFATs as usize) * (bs.BPB_FATsize32 as usize);
-        let cluster_count = (bs.BPB_TotSector32 as usize - start_sector) / (bs.BPB_SectorPerCluster as usize);
+        let cluster_count =
+            (bs.BPB_TotSector32 as usize - start_sector) / (bs.BPB_SectorPerCluster as usize);
         Self {
             bk_bootsector_id: bs.BPB_BkBootSec as usize,
             fsinfo_sector_id: bs.BPB_FSInfo as usize,

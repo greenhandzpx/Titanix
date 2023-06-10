@@ -18,8 +18,6 @@ pub struct DiskDirEntry {
     pub DIR_FileSize: u32,
 }
 
-
-
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, Default)]
 pub struct DiskLongDirEntry {
@@ -33,15 +31,14 @@ pub struct DiskLongDirEntry {
     pub LDIR_Name3: [u16; 2],
 }
 
-
 impl DiskDirEntry {
     /// Initialize a BPB
     pub fn load(&mut self, src: &[u8]) {
         let mut offset: usize = 0;
-        macro_rules ! load {
+        macro_rules! load {
             ($v: expr) => {
                 load_fn(&mut $v, src, &mut offset);
-            }
+            };
         }
         load!(self.DIR_Name);
         load!(self.DIR_Attr);
@@ -56,13 +53,13 @@ impl DiskDirEntry {
         load!(self.DIR_FstClusLO);
         load!(self.DIR_FileSize);
     }
-    
-    pub fn store(&mut self, dest: &mut[u8]) {
+
+    pub fn store(&mut self, dest: &mut [u8]) {
         let mut offset: usize = 0;
-        macro_rules ! store {
+        macro_rules! store {
             ($v: expr) => {
                 store_fn(&$v, dest, &mut offset);
-            }
+            };
         }
         store!(self.DIR_Name);
         store!(self.DIR_Attr);
@@ -89,10 +86,10 @@ impl DiskLongDirEntry {
     /// Initialize a BPB
     pub fn load(&mut self, src: &[u8]) {
         let mut offset: usize = 0;
-        macro_rules ! load {
+        macro_rules! load {
             ($v: expr) => {
                 load_fn(&mut $v, src, &mut offset);
-            }
+            };
         }
         load!(self.LDIR_Ord);
         load!(self.LDIR_Name1);
@@ -103,13 +100,13 @@ impl DiskLongDirEntry {
         load!(self.LDIR_FstClusLO);
         load!(self.LDIR_Name3);
     }
-    
-    pub fn store(&mut self, dest: &mut[u8]) {
+
+    pub fn store(&mut self, dest: &mut [u8]) {
         let mut offset: usize = 0;
-        macro_rules ! store {
+        macro_rules! store {
             ($v: expr) => {
                 store_fn(&$v, dest, &mut offset);
-            }
+            };
         }
         store!(self.LDIR_Ord);
         store!(self.LDIR_Name1);
@@ -126,4 +123,3 @@ impl DiskLongDirEntry {
         ret
     }
 }
-
