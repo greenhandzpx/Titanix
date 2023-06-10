@@ -4,7 +4,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use log::debug;
+use log::{debug, warn};
 
 use crate::{
     processor::{
@@ -74,6 +74,7 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         // let this = self.get_mut();
         let hart = processor::local_hart();
         hart.push_task(&mut this.task_ctx);
+        // warn!("poll new task");
         // hart.push_task(&mut self.task_ctx);
 
         // run the `threadloop`

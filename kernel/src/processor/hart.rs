@@ -77,9 +77,6 @@ impl Hart {
     /// Change thread(task) context,
     /// Now only change page table temporarily
     pub fn push_task(&mut self, task: &mut LocalContext) {
-        // println!("push user task");
-        // let dummy = self.local_ctx.as_mut();
-        stack_trace!();
         let new_env = task.env(&mut self.spare_env_ctx);
         let old_env = self.local_ctx.env(&mut self.spare_env_ctx);
         EnvContext::env_change(new_env, old_env);
@@ -87,7 +84,7 @@ impl Hart {
             || task.task_ctx().thread.process.pid()
                 != self.local_ctx.task_ctx().thread.process.pid()
         {
-            stack_trace!();
+            // stack_trace!();
             assert!(!task.is_idle());
             // Only flush tlb when switching process
             unsafe {

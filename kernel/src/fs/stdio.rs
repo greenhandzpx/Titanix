@@ -61,10 +61,11 @@ impl File for Stdin {
                         break;
                     }
                     c = console_getchar();
+                    debug!("stdin read a char {}", c);
                     // suspend_current_and_run_next();
                     if c as i8 == -1 {
                         process::yield_now().await;
-                        continue;
+                        // continue;
                     } else {
                         break;
                     }
@@ -72,7 +73,6 @@ impl File for Stdin {
                 let ch = c;
                 buf[cnt] = ch;
                 cnt += 1;
-                // debug!("stdin read a char {}, cnt {}, buf len {}", ch, cnt, buf.len());
                 if cnt == buf.len() {
                     break;
                 }

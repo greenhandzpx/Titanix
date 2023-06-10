@@ -81,7 +81,7 @@ fs-img: $(APPS)
 	@mkdir -p  $(FS_IMG_FAT32_PREFIX)
 	@rm -rf $(FS_IMG_FAT32)
 	@dd if=/dev/zero of=$(FS_IMG_FAT32) bs=512 count=147456
-	@cd ../fat32-fuse && cargo run --release  -- -f $(FS_IMG_FAT32) -s ../user/src/bin/ -t ../preliminary/ -e ../user/target/riscv64gc-unknown-none-elf/release/
+	@cd ../fat32-fuse && cargo run --release  -- -f $(FS_IMG_FAT32) -s ../user/src/bin/ -t ../testcases/preliminary/ -e ../user/target/riscv64gc-unknown-none-elf/release/
 	@echo "finish pack fs-img"
 
 
