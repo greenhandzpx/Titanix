@@ -980,7 +980,7 @@ impl Builder {
         // is remapping the special state IDs.
         let remap = &index_to_state_id;
         let old = nnfa.special();
-        let mut new = &mut nfa.special;
+        let new = &mut nfa.special;
         new.max_special_id = remap[old.max_special_id];
         new.max_match_id = remap[old.max_match_id];
         new.start_unanchored_id = remap[old.start_unanchored_id];
@@ -1074,8 +1074,6 @@ fn u32_len(ntrans: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // This test demonstrates a SWAR technique I tried in the sparse transition
     // code inside of 'next_state'. Namely, sparse transitions work by
     // iterating over u32 chunks, with each chunk containing up to 4 classes
@@ -1090,8 +1088,14 @@ mod tests {
     // Anyway, this code was a little tricky to write, so I converted it to a
     // test in case someone figures out how to use it more effectively than
     // I could.
+    //
+    // (This also only works on little endian. So big endian would need to be
+    // accounted for if we ever decided to use this I think.)
+    #[cfg(target_endian = "little")]
     #[test]
     fn swar() {
+        use super::*;
+
         fn has_zero_byte(x: u32) -> u32 {
             const LO_U32: u32 = 0x01010101;
             const HI_U32: u32 = 0x80808080;
