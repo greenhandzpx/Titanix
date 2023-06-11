@@ -63,6 +63,6 @@ jobs:
           qemu-system-riscv64 --version
 
       - name: Run usertests
-        run: cd os && make run TEST=1
+        run: cd os && make run 
         timeout-minutes: 10
       

@@ -1,5 +1,5 @@
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
-use log::debug;
+use log::{debug, trace};
 
 use crate::{
     config::mm::PAGE_SIZE,
@@ -165,7 +165,7 @@ impl File for DefaultFile {
 
             drop(inode_meta);
             file_meta.pos = file_offset;
-            debug!(
+            trace!(
                 "[DefaultFile::write]: write {} bytes, buf len {}",
                 res,
                 buf.len()
@@ -214,13 +214,13 @@ impl File for DefaultFile {
 
         drop(inode_meta);
         file_meta.pos = file_offset;
-        debug!("[DefaultFile::read]: read {} bytes", res);
+        trace!("[DefaultFile::read]: read {} bytes", res);
         Ok(res as isize)
     }
 
     fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {
         // let mut inner = self.inner.lock();
-        let mut buffer = [0u8; 512];
+        let mut buffer = [0u8; PAGE_SIZE];
         let mut v: Vec<u8> = Vec::new();
         loop {
             let len = self.sync_read(&mut buffer)?;

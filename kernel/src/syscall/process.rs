@@ -375,7 +375,6 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
     // }
     loop {
-        stack_trace!();
         let (found_pid, exit_code) = process.inner_handler(move |proc| {
             // find a child process
             if !proc
@@ -396,7 +395,6 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 return Err(SyscallErr::ECHILD);
             }
 
-            stack_trace!();
             let idx = proc
                 .children
                 .iter()
@@ -404,7 +402,6 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 .find(|(_, p)| p.is_zombie() && (pid == -1 || pid as usize == p.pid()))
                 .map(|(idx, _)| idx);
             if let Some(idx) = idx {
-                stack_trace!();
                 // the child has become zombie
                 let child = proc.children.remove(idx);
 
@@ -417,26 +414,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 // get child's exit code
                 let exit_code = child.exit_code();
                 debug!("waitpid: found pid {} exit code {}", found_pid, exit_code);
-                // info!("waitpid: found pid {} exit code {}", found_pid, exit_code);
-                // if exit_status_addr != 0 {
-                //     UserCheck::new()
-                //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
-                //     let _sum_guard = SumGuard::new();
-                //     let exit_status_ptr = exit_status_addr as *mut i32;
-                //     // debug!("waitpid: write pid to exit_status_ptr before");
-                //     info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
-                //     unsafe {
-                //         exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
-                //         // debug!(
-                //         //     "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
-                //         //     (*exit_status_ptr & 0xff00) >> 8
-                //         // );
-                //         info!(
-                //             "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
-                //             (*exit_status_ptr & 0xff00) >> 8
-                //         );
-                //     }
-                // }
+
                 Ok((found_pid as isize, exit_code as i32))
             } else {
                 // the child still alive

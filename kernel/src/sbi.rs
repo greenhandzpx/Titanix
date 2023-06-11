@@ -45,8 +45,8 @@ pub fn console_putchar(c: usize) {
     sbi_call(SBI_CONSOLE_PUTCHAR, c, 0, 0);
 }
 /// use sbi call to getchar from console (qemu uart handler)
-pub fn console_getchar() -> usize {
-    sbi_call(SBI_CONSOLE_GETCHAR, 0, 0, 0)
+pub fn console_getchar() -> u8 {
+    sbi_call(SBI_CONSOLE_GETCHAR, 0, 0, 0) as u8
 }
 /// use sbi call to shutdown the kernel
 pub fn shutdown() -> ! {

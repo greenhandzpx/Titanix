@@ -162,10 +162,7 @@ impl Inode for Fat32RootInode {
             return None;
         };
         let new_dentry = func();
-        let mut new_inode = Fat32Inode {
-            dentry: new_dentry.unwrap(),
-            meta: None,
-        };
+        let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
         let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
@@ -192,10 +189,7 @@ impl Inode for Fat32RootInode {
             return None;
         };
         let new_dentry = func();
-        let mut new_inode = Fat32Inode {
-            dentry: new_dentry.unwrap(),
-            meta: None,
-        };
+        let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
         let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
@@ -209,14 +203,15 @@ impl Inode for Fat32RootInode {
     }
 }
 
-// pub enum Fat32NodeType {
-//     Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
-//     File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
-// }
+pub enum Fat32NodeType {
+    Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+    File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+}
 
 pub struct Fat32Inode {
     dentry: DirEntry<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>,
     meta: Option<InodeMeta>,
+    node: UnsafeCell<Fat32NodeType>,
 }
 
 impl Drop for Fat32Inode {
@@ -231,7 +226,20 @@ impl Fat32Inode {
         meta: Option<InodeMeta>,
     ) -> Self {
         // error!("construct a fat32 inode");
-        Self { dentry, meta }
+        let node = {
+            if dentry.is_file() {
+                Fat32NodeType::File(dentry.to_file())
+            } else if dentry.is_dir() {
+                Fat32NodeType::Dir(dentry.to_dir())
+            } else {
+                panic!()
+            }
+        };
+        Self {
+            dentry,
+            meta,
+            node: UnsafeCell::new(node),
+        }
     }
 }
 
@@ -319,10 +327,7 @@ impl Inode for Fat32Inode {
             return None;
         };
         let new_dentry = func();
-        let mut new_inode = Fat32Inode {
-            dentry: new_dentry.unwrap(),
-            meta: None,
-        };
+        let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
         let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
@@ -336,34 +341,38 @@ impl Inode for Fat32Inode {
     }
 
     fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
-        if self.dentry.is_dir() {
-            return Err(SyscallErr::EISDIR);
-        }
-        let mut file = self.dentry.to_file();
-        if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
-            return Err(SyscallErr::EINVAL);
-        }
-        if let Some(bytes) = file.read(buf).ok() {
-            return Ok(bytes);
-        } else {
-            warn!("fatfs read file failed!");
-            return Err(SyscallErr::EINVAL);
+        let node = unsafe { &mut *(self.node.get()) };
+        match node {
+            Fat32NodeType::Dir(_) => return Err(SyscallErr::EISDIR),
+            Fat32NodeType::File(ref mut file) => {
+                if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
+                    return Err(SyscallErr::EINVAL);
+                }
+                if let Some(bytes) = file.read(buf).ok() {
+                    return Ok(bytes);
+                } else {
+                    warn!("fatfs read file failed!");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
         }
     }
 
     fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
-        if self.dentry.is_dir() {
-            return Err(SyscallErr::EISDIR);
-        }
-        let mut file = self.dentry.to_file();
-        if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
-            return Err(SyscallErr::EINVAL);
-        }
-        if let Some(bytes) = file.write(buf).ok() {
-            return Ok(bytes);
-        } else {
-            warn!("fatfs write file failed!");
-            return Err(SyscallErr::EINVAL);
+        let node = unsafe { &mut *(self.node.get()) };
+        match node {
+            Fat32NodeType::Dir(_) => return Err(SyscallErr::EISDIR),
+            Fat32NodeType::File(ref mut file) => {
+                if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
+                    return Err(SyscallErr::EINVAL);
+                }
+                if let Some(bytes) = file.write(buf).ok() {
+                    return Ok(bytes);
+                } else {
+                    warn!("fatfs write file failed!");
+                    return Err(SyscallErr::EINVAL);
+                }
+            }
         }
     }
 }
@@ -407,97 +416,97 @@ pub fn init() -> GeneralRet<()> {
     Ok(())
 }
 
-pub enum Fat32NodeType {
-    Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
-    File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
-}
+// pub enum Fat32NodeType {
+//     Dir(fatfs::Dir<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+//     File(fatfs::File<'static, IoDevice, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter>),
+// }
 
-pub struct Fat32File {
-    readable: bool,
-    writable: bool,
-    inner: Mutex<Fat32FileInner>,
-    meta: Option<FileMeta>,
-}
+// pub struct Fat32File {
+//     readable: bool,
+//     writable: bool,
+//     inner: Mutex<Fat32FileInner>,
+//     meta: Option<FileMeta>,
+// }
 
-struct Fat32FileInner {
-    offset: usize,
-    node: Fat32NodeType,
-}
+// struct Fat32FileInner {
+//     offset: usize,
+//     node: Fat32NodeType,
+// }
 
-unsafe impl Send for Fat32File {}
-unsafe impl Sync for Fat32File {}
+// unsafe impl Send for Fat32File {}
+// unsafe impl Sync for Fat32File {}
 
-impl Fat32File {
-    pub fn new(
-        node: Fat32NodeType,
-        meta: Option<FileMeta>,
-        readable: bool,
-        writable: bool,
-    ) -> Self {
-        Self {
-            readable,
-            writable,
-            meta,
-            inner: Mutex::new(Fat32FileInner { offset: 0, node }),
-        }
-    }
+// impl Fat32File {
+//     pub fn new(
+//         node: Fat32NodeType,
+//         meta: Option<FileMeta>,
+//         readable: bool,
+//         writable: bool,
+//     ) -> Self {
+//         Self {
+//             readable,
+//             writable,
+//             meta,
+//             inner: Mutex::new(Fat32FileInner { offset: 0, node }),
+//         }
+//     }
 
-    /// Read all data inside a inode into vector
-    pub fn read_all(&self) -> Vec<u8> {
-        let mut inner = self.inner.lock();
-        let mut buffer = [0u8; 512];
-        let mut v: Vec<u8> = Vec::new();
-        loop {
-            let len = match &mut inner.node {
-                Fat32NodeType::Dir(_) => panic!(),
-                Fat32NodeType::File(file) => file.read(&mut buffer).unwrap(),
-            };
-            if len == 0 {
-                break;
-            }
-            inner.offset += len;
-            v.extend_from_slice(&buffer[..len]);
-        }
-        v
-    }
-}
+//     /// Read all data inside a inode into vector
+//     pub fn read_all(&self) -> Vec<u8> {
+//         let mut inner = self.inner.lock();
+//         let mut buffer = [0u8; 512];
+//         let mut v: Vec<u8> = Vec::new();
+//         loop {
+//             let len = match &mut inner.node {
+//                 Fat32NodeType::Dir(_) => panic!(),
+//                 Fat32NodeType::File(file) => file.read(&mut buffer).unwrap(),
+//             };
+//             if len == 0 {
+//                 break;
+//             }
+//             inner.offset += len;
+//             v.extend_from_slice(&buffer[..len]);
+//         }
+//         v
+//     }
+// }
 
-///Open file with flags
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
-    stack_trace!();
-    // TODO support different kinds of files dispatching
-    // (e.g. /dev/sda, /proc/1234, /usr/bin)
-    debug!("[open_file] name: {}", name);
+// ///Open file with flags
+// pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
+//     stack_trace!();
+//     // TODO support different kinds of files dispatching
+//     // (e.g. /dev/sda, /proc/1234, /usr/bin)
+//     debug!("[open_file] name: {}", name);
 
-    let (readable, writable) = flags.read_write();
-    let root_dir = ROOT_FS.fat_fs.root_dir();
-    if flags.contains(OpenFlags::CREATE) {
-        if let Some(inode) = root_dir.open_file(name).ok() {
-            Some(Arc::new(Fat32File::new(
-                Fat32NodeType::File(inode),
-                None,
-                readable,
-                writable,
-            )))
-        } else {
-            debug!("create file {}", name);
-            Some(Arc::new(Fat32File::new(
-                Fat32NodeType::File(root_dir.create_file(name).unwrap()),
-                None,
-                readable,
-                writable,
-            )))
-        }
-    } else {
-        if let Some(inode) = root_dir.open_file(name).ok() {
-            Some(Arc::new(Fat32File::new(
-                Fat32NodeType::File(inode),
-                None,
-                readable,
-                writable,
-            )))
-        } else {
-            None
-        }
-    }
-}
+//     let (readable, writable) = flags.read_write();
+//     let root_dir = ROOT_FS.fat_fs.root_dir();
+//     if flags.contains(OpenFlags::CREATE) {
+//         if let Some(inode) = root_dir.open_file(name).ok() {
+//             Some(Arc::new(Fat32File::new(
+//                 Fat32NodeType::File(inode),
+//                 None,
+//                 readable,
+//                 writable,
+//             )))
+//         } else {
+//             debug!("create file {}", name);
+//             Some(Arc::new(Fat32File::new(
+//                 Fat32NodeType::File(root_dir.create_file(name).unwrap()),
+//                 None,
+//                 readable,
+//                 writable,
+//             )))
+//         }
+//     } else {
+//         if let Some(inode) = root_dir.open_file(name).ok() {
+//             Some(Arc::new(Fat32File::new(
+//                 Fat32NodeType::File(inode),
+//                 None,
+//                 readable,
+//                 writable,
+//             )))
+//         } else {
+//             None
+//         }
+//     }
+// }
