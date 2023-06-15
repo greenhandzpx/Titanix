@@ -109,10 +109,7 @@ pub trait FileSystem: Send + Sync {
         // root_inode.init(parent, mount_point)?;
         let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
 
-        let root_inode = {
-            INODE_CACHE.lock().insert(key, root_inode.clone());
-            INODE_CACHE.lock().get(&key).unwrap().clone()
-        };
+        INODE_CACHE.lock().insert(key, root_inode.clone());
 
         let meta = FileSystemMeta {
             ftype,

@@ -189,31 +189,38 @@ pub fn init() -> GeneralRet<()> {
 
     let dev_fs = Arc::new(dev_fs);
 
+    let dev_root_inode = dev_fs.metadata().root_inode.as_ref().cloned().unwrap();
+
+    let dev_name = "vda2";
+    let dev_path = "/dev/".to_string() + dev_name;
     dev_fs.dev_mgr.dev_map.lock().insert(
-        "vda2".to_string(),
+        dev_name.to_string(),
         DevWrapper {
             dev_id: dev_fs
                 .dev_mgr
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-            inode: Arc::new(BlockDeviceInode::new()),
+            inode: Arc::new(BlockDeviceInode::new(dev_root_inode.clone(), &dev_path)),
             // dev: Some(Arc::new(BlockDeviceImpl::new())),
             dev: None,
         },
     );
-    debug!("insert vda2");
+    debug!("insert {} finished", dev_name);
+
+    let dev_name = "zero";
+    let dev_path = "/dev/".to_string() + dev_name;
     dev_fs.dev_mgr.dev_map.lock().insert(
-        "zero".to_string(),
+        dev_name.to_string(),
         DevWrapper {
             dev_id: dev_fs
                 .dev_mgr
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-            inode: Arc::new(ZeroInode::new()),
+            inode: Arc::new(ZeroInode::new(dev_root_inode.clone(), &dev_path)),
             dev: None,
         },
     );
-    debug!("insert zero");
+    debug!("insert {} finished", dev_name);
 
     FILE_SYSTEM_MANAGER
         .fs_mgr

@@ -11,10 +11,10 @@
 
 mod exit;
 mod schedule;
+#[allow(clippy::module_inception)]
+mod thread_loop;
 mod thread_resource;
 mod thread_state;
-#[allow(clippy::module_inception)]
-mod threadloop;
 mod tid;
 
 use self::thread_state::{ThreadState, ThreadStateAtomic};
@@ -31,7 +31,7 @@ pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
 };
 
-use threadloop::threadloop;
+use thread_loop::threadloop;
 pub use tid::{TidAddress, TidHandle};
 
 // pub use task::TaskControlBlock;

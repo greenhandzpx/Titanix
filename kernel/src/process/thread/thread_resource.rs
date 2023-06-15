@@ -1,9 +1,9 @@
-use alloc::boxed::Box;
+use alloc::{boxed::Box, sync::Arc};
 use log::{debug, info};
 
 use crate::{
     config::{mm::PAGE_SIZE, mm::USER_STACK_SIZE},
-    mm::{memory_set::UStackPageFaultHandler, MapPermission, VirtAddr},
+    mm::{memory_space::UStackPageFaultHandler, MapPermission, VirtAddr},
 };
 
 use super::Thread;
@@ -50,7 +50,7 @@ impl Thread {
                 ustack_bottom.into(),
                 (ustack_bottom + USER_STACK_SIZE).into(),
                 MapPermission::R | MapPermission::W | MapPermission::U,
-                Some(Box::new(UStackPageFaultHandler {})),
+                Some(Arc::new(UStackPageFaultHandler {})),
             );
             proc.memory_set.activate();
         });

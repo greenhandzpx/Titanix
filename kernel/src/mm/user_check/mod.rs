@@ -146,7 +146,10 @@ impl UserCheck {
     fn handle_page_fault(&self, va: &mut VirtAddr, scause: usize) -> GeneralRet<()> {
         match current_process().inner_handler(|proc| proc.memory_set.handle_page_fault(*va, scause))
         {
-            Ok(()) => {
+            Ok(handler) => {
+                if handler.is_some() {
+                    panic!()
+                }
                 debug!(
                     "[kernel] [proc {}]handle legal page fault, addr {:#x}",
                     current_process().pid(),

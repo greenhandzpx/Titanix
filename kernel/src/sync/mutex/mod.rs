@@ -11,7 +11,7 @@
 
 use riscv::register::sstatus;
 
-use self::{spin_mutex::SpinMutex, sleep_mutex::SleepMutex};
+use self::{sleep_mutex::SleepMutex, spin_mutex::SpinMutex};
 
 /// SleepMutex
 pub mod sleep_mutex;

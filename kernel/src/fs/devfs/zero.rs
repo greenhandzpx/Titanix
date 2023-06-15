@@ -11,7 +11,7 @@ use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
 
 pub struct ZeroInode {
-    metadata: Option<InodeMeta>,
+    metadata: InodeMeta,
     // dev_fs: SyncUnsafeCell<Option<Arc<DevFs>>>,
 }
 
@@ -31,10 +31,10 @@ impl Inode for ZeroInode {
         }))
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
-        self.metadata = Some(meta);
+        self.metadata = meta;
     }
     fn metadata(&self) -> &InodeMeta {
-        &self.metadata.as_ref().unwrap()
+        &self.metadata
     }
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         panic!("Unsupported operation load_children")
@@ -45,11 +45,9 @@ impl Inode for ZeroInode {
 }
 
 impl ZeroInode {
-    pub fn new() -> Self {
-        Self {
-            metadata: None,
-            // dev_fs: SyncUnsafeCell::new(None),
-        }
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0);
+        Self { metadata }
     }
 }
 

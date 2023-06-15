@@ -19,7 +19,7 @@ mod address;
 mod frame_allocator;
 pub mod heap_allocator;
 ///
-pub mod memory_set;
+pub mod memory_space;
 mod page;
 mod page_cache;
 mod page_table;
@@ -33,8 +33,8 @@ pub use address::VPNRange;
 pub use address::{KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 use log::info;
-pub use memory_set::remap_test;
-pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
+pub use memory_space::remap_test;
+pub use memory_space::{MapPermission, MemorySpace, KERNEL_SPACE};
 pub use page::Page;
 pub use page_cache::page_cache_test;
 pub use page_cache::PageCache;
@@ -46,7 +46,7 @@ pub use recycle_allocator::RecycleAllocator;
 pub fn init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
-    memory_set::init_kernel_space();
+    memory_space::init_kernel_space();
     unsafe {
         KERNEL_SPACE
             .as_ref()

@@ -13,7 +13,7 @@
 //! to [`syscall()`].
 mod context;
 
-use crate::mm::VirtAddr;
+use crate::mm::{memory_space, VirtAddr};
 use crate::process::thread::exit_and_terminate_all_threads;
 use crate::processor::{current_process, current_trap_cx, local_hart};
 use crate::signal::check_signal_for_current_process;
@@ -108,10 +108,7 @@ pub async fn trap_handler() {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            match current_process().inner_handler(|proc| {
-                let va = VirtAddr::from(stval);
-                proc.memory_set.handle_page_fault(va, scause.bits())
-            }) {
+            match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
                 Ok(()) => {
                     debug!(
                         "[kernel] [proc {}]handle legal page fault, addr {:#x}, instruction {:#x}",

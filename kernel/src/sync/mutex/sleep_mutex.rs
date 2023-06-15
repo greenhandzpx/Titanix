@@ -1,23 +1,27 @@
-use core::{cell::{UnsafeCell, SyncUnsafeCell}, task::{Waker, Context, Poll}, ops::{Deref, DerefMut}, pin::Pin, future::Future, sync::atomic::{AtomicBool, Ordering}};
-
+use core::{
+    cell::{SyncUnsafeCell, UnsafeCell},
+    future::Future,
+    ops::{Deref, DerefMut},
+    pin::Pin,
+    sync::atomic::{AtomicBool, Ordering},
+    task::{Context, Poll, Waker},
+};
 
 use crate::utils::async_tools;
 
-use super::{MutexSupport, spin_mutex::SpinMutex};
-use alloc::sync::Arc;
-use intrusive_collections::{LinkedList, LinkedListLink, intrusive_adapter};
+use super::{spin_mutex::SpinMutex, MutexSupport};
+use alloc::{collections::VecDeque, sync::Arc};
+// use intrusive_collections::{LinkedList, LinkedListLink, intrusive_adapter};
 
-
-intrusive_adapter!(
-    SMQueueAdapter = Arc<GrantInfo>: GrantInfo { link: LinkedListLink }
-);
+// intrusive_adapter!(
+//     SMQueueAdapter = Arc<GrantInfo>: GrantInfo { link: LinkedListLink }
+// );
 
 struct MutexInner {
-    locked: bool, 
-    // queue: 
-    queue: LinkedList<SMQueueAdapter>,
+    locked: bool,
+    // queue: LinkedList<SMQueueAdapter>,
+    queue: VecDeque<Arc<GrantInfo>>,
 }
-
 
 /// SleepMutex can step over `await`
 pub struct SleepMutex<T: ?Sized, S: MutexSupport> {
@@ -25,12 +29,17 @@ pub struct SleepMutex<T: ?Sized, S: MutexSupport> {
     data: UnsafeCell<T>,            // actual data
 }
 
+unsafe impl<T: ?Sized + Send, S: MutexSupport> Send for SleepMutex<T, S> {}
+unsafe impl<T: ?Sized + Send, S: MutexSupport> Sync for SleepMutex<T, S> {}
 
 impl<'a, T, S: MutexSupport> SleepMutex<T, S> {
     /// Construct a SleepMutex
     pub fn new(user_data: T) -> Self {
         SleepMutex {
-            lock: SpinMutex::new(MutexInner { locked: false, queue: LinkedList::new(SMQueueAdapter::new())}),
+            lock: SpinMutex::new(MutexInner {
+                locked: false,
+                queue: VecDeque::new(),
+            }),
             // _marker: PhantomData,
             data: UnsafeCell::new(user_data),
             // debug_cnt: UnsafeCell::new(0),
@@ -47,12 +56,11 @@ impl<T: ?Sized + Send, S: MutexSupport> SleepMutex<T, S> {
     }
 }
 
-
 struct GrantInfo {
     inner: SyncUnsafeCell<(AtomicBool, Option<Waker>)>,
     // granted: bool,
     // waker: Option<Waker>,
-    link: LinkedListLink,
+    // link: LinkedListLink,
 }
 
 struct SleepMutexFuture<'a, T: ?Sized, S: MutexSupport> {
@@ -69,7 +77,7 @@ impl<'a, T: ?Sized, S: MutexSupport> SleepMutexFuture<'a, T, S> {
                 inner: SyncUnsafeCell::new((AtomicBool::new(false), None)),
                 // granted: false,
                 // waker: None,
-                link: LinkedListLink::new(),
+                // link: LinkedListLink::new(),
             }),
         }
     }
@@ -80,21 +88,24 @@ impl<'a, T: ?Sized, S: MutexSupport> SleepMutexFuture<'a, T, S> {
         if !inner.locked {
             // The sleep lock is not yet locked, just granted.
             inner.locked = true;
-            unsafe {&mut *this.grant.inner.get()}.0.store(true, Ordering::Release);
+            unsafe { &mut *this.grant.inner.get() }
+                .0
+                .store(true, Ordering::Release);
         } else {
-            unsafe {&mut *this.grant.inner.get()}.1 = Some(async_tools::take_waker().await);
+            unsafe { &mut *this.grant.inner.get() }.1 = Some(async_tools::take_waker().await);
             inner.queue.push_back(this.grant.clone());
         }
         unsafe { Pin::new_unchecked(this) }
     }
-
 }
 
 impl<'a, T: ?Sized, S: MutexSupport> Future for SleepMutexFuture<'a, T, S> {
     type Output = SleepMutexGuard<'a, T, S>;
     #[inline(always)]
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let granted = unsafe { & *self.grant.inner.get() }.0.load(Ordering::Acquire);
+        let granted = unsafe { &*self.grant.inner.get() }
+            .0
+            .load(Ordering::Acquire);
         match granted {
             false => Poll::Pending,
             true => Poll::Ready(SleepMutexGuard { mutex: self.mutex }),
@@ -132,7 +143,7 @@ impl<'a, T: ?Sized, S: MutexSupport> Drop for SleepMutexGuard<'a, T, S> {
         let waiter = match inner.queue.pop_front() {
             None => {
                 // The wait queue is empty
-                inner.locked = false; 
+                inner.locked = false;
                 return;
             }
             Some(waiter) => waiter,
@@ -140,12 +151,9 @@ impl<'a, T: ?Sized, S: MutexSupport> Drop for SleepMutexGuard<'a, T, S> {
         drop(inner);
         // Waker should be fetched before we make the grant_inner.0 true
         // since it will be invalid after that.
-        let grant_inner = unsafe { 
-            &mut *waiter.inner.get()
-        };
+        let grant_inner = unsafe { &mut *waiter.inner.get() };
         let waker = grant_inner.1.take().unwrap();
         grant_inner.0.store(true, Ordering::Release);
         waker.wake();
     }
 }
-

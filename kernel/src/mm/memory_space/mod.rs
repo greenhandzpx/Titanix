@@ -1,6 +1,6 @@
 use core::cell::SyncUnsafeCell;
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, warn};
 
 use crate::{
@@ -12,6 +12,7 @@ use crate::{
     driver::block::MMIO_VIRT,
     mm::memory_space::page_fault_handler::SBrkPageFaultHandler,
     process::aux::*,
+    processor::current_process,
     stack_trace,
     utils::error::{GeneralRet, SyscallErr},
 };
@@ -174,8 +175,13 @@ impl MemorySpace {
         }
     }
 
-    /// Handle page fault
-    pub fn handle_page_fault(&mut self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    /// Handle page fault synchronously.
+    /// Return Some(handler) if async handle should be invoked.
+    pub fn handle_page_fault(
+        &mut self,
+        va: VirtAddr,
+        _scause: usize,
+    ) -> GeneralRet<Option<Arc<dyn PageFaultHandler>>> {
         // There are serveral kinds of page faults:
         // 1. mmap area
         // 2. sbrk area
@@ -207,7 +213,7 @@ impl MemorySpace {
     }
 
     /// Insert vm area lazily
-    pub fn insert_area(&mut self, mut vma: VmArea) {
+    pub fn insert_area(&mut self, vma: VmArea) {
         self.push_lazily(vma, None);
     }
 
@@ -231,7 +237,7 @@ impl MemorySpace {
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-        handler: Option<Box<dyn PageFaultHandler>>,
+        handler: Option<Arc<dyn PageFaultHandler>>,
     ) {
         self.push_lazily(
             VmArea::new(start_va, end_va, MapType::Framed, permission, handler, None),
@@ -567,7 +573,7 @@ impl MemorySpace {
             heap_start_va.into(),
             MapType::Framed,
             map_perm,
-            Some(Box::new(SBrkPageFaultHandler {})),
+            Some(Arc::new(SBrkPageFaultHandler {})),
             None,
         );
         memory_set.push(heap_vma, 0, None);
@@ -646,7 +652,7 @@ impl MemorySpace {
             {
                 area.map_perm |= MapPermission::COW;
                 area.map_perm.remove(MapPermission::W);
-                area.handler = Some(Box::new(ForkPageFaultHandler {}));
+                area.handler = Some(Arc::new(ForkPageFaultHandler {}));
             }
         }
 
@@ -813,4 +819,16 @@ pub fn remap_test() {
             .executable(),);
     }
     info!("remap_test passed!");
+}
+
+/// Handle different kinds of page fault
+pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    if let Some(handler) =
+        current_process().inner_handler(|proc| proc.memory_set.handle_page_fault(va, scause))?
+    {
+        debug!("handle pagefault asynchronously, va: {:#x}", va.0);
+        handler.handle_page_fault_async(va, current_process()).await
+    } else {
+        Ok(())
+    }
 }

@@ -14,7 +14,7 @@ use log::{debug, info};
 
 use crate::{
     process::thread::exit::handle_exit,
-    processor::{current_task},
+    processor::current_task,
     stack_trace,
     trap::{self, TrapContext},
 };

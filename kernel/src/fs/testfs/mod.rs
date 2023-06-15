@@ -7,7 +7,7 @@ use alloc::{
 };
 use log::{debug, info, warn};
 
-use crate::mm::memory_set::VmArea;
+use crate::mm::memory_space::VmArea;
 use crate::utils::error::AsyscallRet;
 use crate::{
     fs::file_system::FILE_SYSTEM_MANAGER,

@@ -12,7 +12,7 @@ pub struct BlockDeviceFile {
 }
 
 pub struct BlockDeviceInode {
-    metadata: Option<InodeMeta>,
+    metadata: InodeMeta,
     dev_fs: Option<Arc<DevFs>>,
 }
 
@@ -21,11 +21,11 @@ impl Inode for BlockDeviceInode {
         todo!()
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
-        self.metadata = Some(meta);
+        self.metadata = meta;
     }
 
     fn metadata(&self) -> &InodeMeta {
-        &self.metadata.as_ref().unwrap()
+        &self.metadata
     }
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         panic!("Unsupported operation")
@@ -36,9 +36,10 @@ impl Inode for BlockDeviceInode {
 }
 
 impl BlockDeviceInode {
-    pub fn new() -> Self {
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0);
         Self {
-            metadata: None,
+            metadata,
             dev_fs: None,
         }
     }

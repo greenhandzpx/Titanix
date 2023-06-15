@@ -1,13 +1,13 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
-KERNEL_ELF := target/$(TARGET)/$(MODE)/os
+KERNEL_ELF := target/$(TARGET)/$(MODE)/kernel
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 # FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 FS_IMG_FAT32_PREFIX := ../fat32-src
 FS_IMG_FAT32 := $(FS_IMG_FAT32_PREFIX)/fat32.img
-PRELIMINARY = 1
+PRELIMINARY = 0
 
 # BOARD
 BOARD := qemu

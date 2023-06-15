@@ -1,5 +1,5 @@
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
-use core::cell::UnsafeCell;
+use alloc::{collections::BTreeMap, sync::Arc};
+use core::cell::SyncUnsafeCell;
 use log::warn;
 
 use crate::{
@@ -29,6 +29,7 @@ impl FrameManager {
 }
 
 /// Backup file struct
+#[derive(Clone)]
 pub struct BackupFile {
     /// Offset of the related file
     pub offset: usize,
@@ -48,7 +49,7 @@ pub struct VmArea {
     pub vpn_range: VPNRange,
     /// We don't need to use lock because we've locked the process
     /// inner every time we handle page fault
-    pub data_frames: UnsafeCell<FrameManager>,
+    pub data_frames: SyncUnsafeCell<FrameManager>,
     /// Map type
     pub map_type: MapType,
     /// Map permission
@@ -56,7 +57,7 @@ pub struct VmArea {
     /// Mmap flags
     pub mmap_flags: Option<MmapFlags>,
     /// Page fault handler that is invoked when page fault
-    pub handler: Option<Box<dyn PageFaultHandler>>,
+    pub handler: Option<Arc<dyn PageFaultHandler>>,
     /// Backup file(only used for mmap)
     pub backup_file: Option<BackupFile>,
 }
@@ -68,7 +69,7 @@ impl VmArea {
         end_va: VirtAddr,
         map_type: MapType,
         map_perm: MapPermission,
-        handler: Option<Box<dyn PageFaultHandler>>,
+        handler: Option<Arc<dyn PageFaultHandler>>,
         backup_file: Option<BackupFile>,
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
@@ -79,7 +80,7 @@ impl VmArea {
         // println!("end vpn {:#x}", end_vpn.0);
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
-            data_frames: UnsafeCell::new(FrameManager::new()),
+            data_frames: SyncUnsafeCell::new(FrameManager::new()),
             map_type,
             map_perm,
             mmap_flags: None,
@@ -91,7 +92,7 @@ impl VmArea {
     pub fn from_another(another: &Self) -> Self {
         let mut ret = Self {
             vpn_range: VPNRange::new(another.vpn_range.start(), another.vpn_range.end()),
-            data_frames: UnsafeCell::new(FrameManager::new()),
+            data_frames: SyncUnsafeCell::new(FrameManager::new()),
             map_type: another.map_type,
             map_perm: another.map_perm,
             mmap_flags: None,
@@ -99,7 +100,7 @@ impl VmArea {
             backup_file: None,
         };
         if another.handler.is_some() {
-            ret.handler = Some(another.handler.as_ref().unwrap().box_clone());
+            ret.handler = Some(another.handler.as_ref().unwrap().arc_clone());
         }
         ret
     }
@@ -114,9 +115,17 @@ impl VmArea {
         self.vpn_range.end()
     }
     ///
-    pub fn handle_page_fault(&self, va: VirtAddr, page_table: &mut PageTable) -> GeneralRet<()> {
+    pub fn handle_page_fault(
+        &self,
+        va: VirtAddr,
+        page_table: &mut PageTable,
+    ) -> GeneralRet<Option<Arc<dyn PageFaultHandler>>> {
         if let Some(handler) = self.handler.as_ref() {
-            handler.handle_page_fault(va, self, page_table)
+            if !handler.handle_page_fault(va, self, page_table)? {
+                Ok(self.handler.as_ref().cloned())
+            } else {
+                Ok(None)
+            }
         } else {
             warn!("No page fault handler for va {:#x}", va.0);
             Err(SyscallErr::EFAULT)

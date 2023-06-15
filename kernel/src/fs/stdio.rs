@@ -61,7 +61,7 @@ impl File for Stdin {
                         break;
                     }
                     c = console_getchar();
-                    debug!("stdin read a char {}", c);
+                    // debug!("stdin read a char {}", c);
                     // suspend_current_and_run_next();
                     if c as i8 == -1 {
                         process::yield_now().await;
@@ -99,7 +99,7 @@ impl File for Stdin {
         }
         let _sum_guard = SumGuard::new();
         let c = console_getchar();
-        if c == 0 {
+        if c as i8 == -1 {
             return Ok(false);
         } else {
             self.buf.store(c as u8, Ordering::Release);

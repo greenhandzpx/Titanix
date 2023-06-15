@@ -147,7 +147,6 @@ pub fn rust_main(hart_id: usize) {
             // println!("after initproc!");
         });
 
-
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);
 

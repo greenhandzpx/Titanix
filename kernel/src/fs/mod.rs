@@ -118,6 +118,7 @@ impl From<MapPermission> for OpenFlags {
     }
 }
 
+#[allow(unused)]
 pub fn print_dir_tree() {
     info!("------------ dir tree: ------------");
     let parent = ROOT_FS.metadata().root_inode.clone().unwrap();

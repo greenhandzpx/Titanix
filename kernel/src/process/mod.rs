@@ -5,7 +5,7 @@
 ///
 pub mod thread;
 
-use log::{debug, info, warn};
+use log::debug;
 pub use thread::yield_now;
 
 /// Aux header
@@ -19,7 +19,7 @@ use crate::{
     config::{mm::USER_STACK_SIZE, process::CLONE_STACK_SIZE},
     fs::FdTable,
     loader::get_app_data_by_name,
-    mm::{user_check::UserCheck, MemorySet, RecycleAllocator},
+    mm::{user_check::UserCheck, MemorySpace, RecycleAllocator},
     process::{
         aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
         thread::terminate_all_threads_except_main,
@@ -123,7 +123,7 @@ pub struct ProcessInner {
     /// Whether this process is a zombie process
     pub is_zombie: bool,
     /// The process's address space
-    pub memory_set: MemorySet,
+    pub memory_set: MemorySpace,
     /// Parent process
     pub parent: Option<Weak<Process>>,
     /// Children processes
@@ -233,7 +233,7 @@ impl Drop for Process {
 impl Process {
     /// Create a new process
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
-        let (memory_set, user_sp_base, entry_point, auxv) = MemorySet::from_elf(elf_data);
+        let (memory_set, user_sp_base, entry_point, auxv) = MemorySpace::from_elf(elf_data);
         // let debug_pa = memory_set.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
         // println!("entry pa {:#x}", debug_pa);
         // Alloc a pid
@@ -291,7 +291,7 @@ impl Process {
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
         debug!("exec pid {}", current_process().pid());
         stack_trace!();
-        let (memory_set, ustack_base, entry_point, mut auxs) = MemorySet::from_elf(elf_data);
+        let (memory_set, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
         let task_ptr: *const Thread = self.inner_handler(|proc| {
             assert_eq!(proc.thread_count(), 1);
             // memory_set with elf program headers/trampoline/trap context/user stack
@@ -542,8 +542,8 @@ impl Process {
             );
             // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
             // here we just copy on write
-            let memory_set = MemorySet::from_existed_user_lazily(&mut parent_inner.memory_set);
-            // let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+            let memory_set = MemorySpace::from_existed_user_lazily(&mut parent_inner.memory_set);
+            // let memory_set = MemorySpace::from_existed_user(&parent_inner.memory_set);
 
             // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);

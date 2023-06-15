@@ -55,7 +55,7 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
         }
     }
 
-    /// Note that the locked data cannot step over `await`, 
+    /// Note that the locked data cannot step over `await`,
     /// i.e. cannot be sent between thread.
     #[inline(always)]
     pub fn lock(&self) -> impl DerefMut<Target = T> + '_ {
@@ -78,7 +78,7 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
 
     /// # SAFETY
     /// This is highly unsafe.
-    /// You should ensure that context switch won't happen during 
+    /// You should ensure that context switch won't happen during
     /// the locked data's lifetime.
     #[inline(always)]
     pub unsafe fn sent_lock(&self) -> impl DerefMut<Target = T> + '_ {
