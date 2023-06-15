@@ -15,6 +15,7 @@ buddy_system_allocator = "0.6"
 bitflags = "1.2.1"
 xmas-elf = "0.7.0"
 log = "0.4"
+intrusive-collections = {version = "0.9", features = [ "nightly"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
 async-task = { path = "../dependencies/async-task", default-features = false }
 easy-fs = { path = "../dependencies/easy-fs" }

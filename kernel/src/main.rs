@@ -15,6 +15,7 @@
 // #![test_runner(crate::test_runner)]
 
 extern crate alloc;
+// extern crate intrusive_collections;
 
 #[macro_use]
 extern crate bitflags;
@@ -145,6 +146,7 @@ pub fn rust_main(hart_id: usize) {
             // process::scan_prilimary_tests();
             // println!("after initproc!");
         });
+
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);
