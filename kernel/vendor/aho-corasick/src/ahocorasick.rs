@@ -1975,7 +1975,6 @@ impl AhoCorasick {
     /// configurations:
     ///
     /// ```
-    /// # if !cfg!(target_pointer_width = "64") { return; }
     /// use aho_corasick::{AhoCorasick, AhoCorasickKind, MatchKind};
     ///
     /// let ac = AhoCorasick::builder()

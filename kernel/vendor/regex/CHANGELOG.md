@@ -1,57 +1,3 @@
-1.8.4 (2023-06-05)
-==================
-This is a patch release that fixes a bug where `(?-u:\B)` was allowed in
-Unicode regexes, despite the fact that the current matching engines can report
-match offsets between the code units of a single UTF-8 encoded codepoint. That
-in turn means that match offsets that split a codepoint could be reported,
-which in turn results in panicking when one uses them to slice a `&str`.
-
-This bug occurred in the transition to `regex 1.8` because the underlying
-syntactical error that prevented this regex from compiling was intentionally
-removed. That's because `(?-u:\B)` will be permitted in Unicode regexes in
-`regex 1.9`, but the matching engines will guarantee to never report match
-offsets that split a codepoint. When the underlying syntactical error was
-removed, no code was added to ensure that `(?-u:\B)` didn't compile in the
-`regex 1.8` transition release. This release, `regex 1.8.4`, adds that code
-such that `Regex::new(r"(?-u:\B)")` returns to the `regex <1.8` behavior of
-not compiling. (A `bytes::Regex` can still of course compile it.)
-
-Bug fixes:
-
-* [BUG #1006](https://github.com/rust-lang/regex/issues/1006):
-Fix a bug where `(?-u:\B)` was allowed in Unicode regexes, and in turn could
-lead to match offsets that split a codepoint in `&str`.
-
-
-1.8.3 (2023-05-25)
-==================
-This is a patch release that fixes a bug where the regex would report a
-match at every position even when it shouldn't. This could occur in a very
-small subset of regexes, usually an alternation of simple literals that
-have particular properties. (See the issue linked below for a more precise
-description.)
-
-Bug fixes:
-
-* [BUG #999](https://github.com/rust-lang/regex/issues/999):
-Fix a bug where a match at every position is erroneously reported.
-
-
-1.8.2 (2023-05-22)
-==================
-This is a patch release that fixes a bug where regex compilation could panic
-in debug mode for regexes with large counted repetitions. For example,
-`a{2147483516}{2147483416}{5}` resulted in an integer overflow that wrapped
-in release mode but panicking in debug mode. Despite the unintended wrapping
-arithmetic in release mode, it didn't cause any other logical bugs since the
-errant code was for new analysis that wasn't used yet.
-
-Bug fixes:
-
-* [BUG #995](https://github.com/rust-lang/regex/issues/995):
-Fix a bug where regex compilation with large counted repetitions could panic.
-
-
 1.8.1 (2023-04-21)
 ==================
 This is a patch release that fixes a bug where a regex match could be reported
@@ -71,11 +17,11 @@ optimizations and lead to a false positive match.
 This is a sizeable release that will be soon followed by another sizeable
 release. Both of them will combined close over 40 existing issues and PRs.
 
-This first release, despite its size, essentially represents preparatory work
+This first release, despite its size, essentially represent preparatory work
 for the second release, which will be even bigger. Namely, this release:
 
 * Increases the MSRV to Rust 1.60.0, which was released about 1 year ago.
-* Upgrades its dependency on `aho-corasick` to the recently released 1.0
+* Upgrades its dependency on `aho-corasick` to the recently release 1.0
 version.
 * Upgrades its dependency on `regex-syntax` to the simultaneously released
 `0.7` version. The changes to `regex-syntax` principally revolve around a

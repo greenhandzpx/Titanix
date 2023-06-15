@@ -1,7 +1,9 @@
 //! Structured keys.
 
 use std::borrow::Borrow;
+use std::cmp;
 use std::fmt;
+use std::hash;
 
 /// A type that can be converted into a [`Key`](struct.Key.html).
 pub trait ToKey {
@@ -31,9 +33,7 @@ impl ToKey for str {
 }
 
 /// A key in a structured key-value pair.
-// These impls must only be based on the as_str() representation of the key
-// If a new field (such as an optional index) is added to the key they must not affect comparison
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone)]
 pub struct Key<'k> {
     key: &'k str,
 }
@@ -41,24 +41,53 @@ pub struct Key<'k> {
 impl<'k> Key<'k> {
     /// Get a key from a borrowed string.
     pub fn from_str(key: &'k str) -> Self {
-        Key { key }
+        Key { key: key }
     }
 
     /// Get a borrowed string from this key.
     pub fn as_str(&self) -> &str {
         self.key
     }
+}
 
-    /// Try get a string borrowed for the `'k` lifetime from this key.
-    pub fn to_borrowed_str(&self) -> Option<&'k str> {
-        // NOTE: This API leaves room for keys to be owned
-        Some(self.key)
+impl<'k> fmt::Debug for Key<'k> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.key.fmt(f)
     }
 }
 
 impl<'k> fmt::Display for Key<'k> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.key.fmt(f)
+    }
+}
+
+impl<'k> hash::Hash for Key<'k> {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: hash::Hasher,
+    {
+        self.as_str().hash(state)
+    }
+}
+
+impl<'k, 'ko> PartialEq<Key<'ko>> for Key<'k> {
+    fn eq(&self, other: &Key<'ko>) -> bool {
+        self.as_str().eq(other.as_str())
+    }
+}
+
+impl<'k> Eq for Key<'k> {}
+
+impl<'k, 'ko> PartialOrd<Key<'ko>> for Key<'k> {
+    fn partial_cmp(&self, other: &Key<'ko>) -> Option<cmp::Ordering> {
+        self.as_str().partial_cmp(other.as_str())
+    }
+}
+
+impl<'k> Ord for Key<'k> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.as_str().cmp(other.as_str())
     }
 }
 
@@ -104,25 +133,11 @@ mod sval_support {
     use super::*;
 
     extern crate sval;
-    extern crate sval_ref;
 
-    use self::sval::Value;
-    use self::sval_ref::ValueRef;
+    use self::sval::value::{self, Value};
 
     impl<'a> Value for Key<'a> {
-        fn stream<'sval, S: sval::Stream<'sval> + ?Sized>(
-            &'sval self,
-            stream: &mut S,
-        ) -> sval::Result {
-            self.key.stream(stream)
-        }
-    }
-
-    impl<'a> ValueRef<'a> for Key<'a> {
-        fn stream_ref<S: self::sval::Stream<'a> + ?Sized>(
-            &self,
-            stream: &mut S,
-        ) -> self::sval::Result {
+        fn stream(&self, stream: &mut value::Stream) -> value::Result {
             self.key.stream(stream)
         }
     }
