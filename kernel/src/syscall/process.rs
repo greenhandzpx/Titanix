@@ -364,8 +364,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
 }
 
-/// If there is not a child process whose pid is same as given, return -1.
-/// Else if there is a child process but it is still running, return -2.
 pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     stack_trace!();
     let process = current_process();
@@ -382,7 +380,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 .iter()
                 .any(|p| pid == -1 || pid as usize == p.pid())
             {
-                if pid == -1 && proc.children.len() == 0 {
+                if pid == -1 && proc.children.len() == 0 && current_process().pid() == 1 {
                     // system exit, since no children is alive
                     return Ok((-3, 0));
                 }

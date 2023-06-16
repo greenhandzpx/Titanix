@@ -1,4 +1,4 @@
-use core::{arch::asm, };
+use core::arch::asm;
 
 use alloc::sync::Arc;
 use log::info;
@@ -8,7 +8,8 @@ use crate::{
     config::{mm::PAGE_SIZE, processor::HART_NUM},
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
-    stack_trace, utils::cell::SyncUnsafeCell,
+    stack_trace,
+    utils::cell::SyncUnsafeCell,
 };
 
 use super::context::{EnvContext, KernelTaskContext, LocalContext};

@@ -1,18 +1,12 @@
-use alloc::{
-    boxed::Box,
-    sync::{Arc, Weak},
-};
-use log::trace;
+use alloc::sync::Weak;
+use log::{trace, warn};
 
 use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
     mm,
     sync::mutex::SleepLock,
-    utils::{
-        cell::SyncUnsafeCell,
-        error::{GeneralRet, SyscallErr},
-    },
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::{FrameTracker, MapPermission};
@@ -70,7 +64,16 @@ impl PageBuilder {
         self.is_file_page = true;
         self
     }
+    pub fn file_info(mut self, file_info: &FilePageInfo) -> Self {
+        self.offset = Some(file_info.file_offset);
+        self.inode = Some(file_info.inode.clone());
+        self.is_file_page = true;
+        self
+    }
     pub fn permission(mut self, permission: MapPermission) -> Self {
+        // if permission.bits() == 0 {
+        //     warn!("permission None: {:?}", permission);
+        // }
         self.permission = permission;
         self
     }

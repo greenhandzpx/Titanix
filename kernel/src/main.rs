@@ -47,7 +47,8 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering}, time::Duration,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
 };
 
 use log::{info, warn};
@@ -56,8 +57,10 @@ use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
+    process::thread,
     processor::{hart, HARTS},
-    sbi::hart_start, process::thread, timer::ksleep,
+    sbi::hart_start,
+    timer::ksleep,
 };
 
 global_asm!(include_str!("entry.S"));
@@ -154,7 +157,6 @@ pub fn rust_main(hart_id: usize) {
         //         warn!("I'm awake!! hhh just ignore me");
         //     }
         // });
-
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);

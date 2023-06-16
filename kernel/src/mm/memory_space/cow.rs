@@ -1,9 +1,12 @@
 use alloc::sync::Arc;
 use log::trace;
 
-use crate::{utils::{cell::SyncUnsafeCell, error::GeneralRet}, mm::{PageTable, page_table::PTEFlags, VirtAddr}};
+use crate::{
+    mm::{page_table::PTEFlags, PageTable, VirtAddr},
+    utils::{cell::SyncUnsafeCell, error::GeneralRet},
+};
 
-use super::{vm_area::PageManager, PageFaultHandler, CowPageFaultHandler, VmArea};
+use super::{vm_area::PageManager, CowPageFaultHandler, PageFaultHandler, VmArea};
 
 pub struct CowPageManager {
     pub page_mgr: SyncUnsafeCell<PageManager>,
@@ -22,11 +25,17 @@ impl CowPageManager {
         // TODO: optimize: only need to map the leaf page
         let page_mgr = SyncUnsafeCell::new(another.page_mgr.get_unchecked_mut().clone());
         for (vpn, page) in another.page_mgr.get_unchecked_mut().0.iter() {
-            trace!("[CowPageManager::from_another]: map vpn {:#x}, ppn {:#x}", vpn.0, page.data_frame.ppn.0);
+            trace!(
+                "[CowPageManager::from_another]: map vpn {:#x}, ppn {:#x}",
+                vpn.0,
+                page.data_frame.ppn.0
+            );
             let mut pte_flags: PTEFlags = page.permission.into();
             pte_flags |= PTEFlags::COW | PTEFlags::U;
             pte_flags.remove(PTEFlags::W);
-            page_table.get_unchecked_mut().map(*vpn, page.data_frame.ppn, pte_flags);
+            page_table
+                .get_unchecked_mut()
+                .map(*vpn, page.data_frame.ppn, pte_flags);
         }
         // page_table.get_unchecked_mut().activate();
         Self {
@@ -46,5 +55,4 @@ impl CowPageManager {
         //     Ok(None)
         // }
     }
-
 }

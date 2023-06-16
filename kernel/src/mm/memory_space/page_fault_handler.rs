@@ -1,11 +1,11 @@
 use alloc::{boxed::Box, string::String, sync::Arc};
-use log::{debug,  trace, warn};
+use log::{debug, info, trace, warn};
 use riscv::register::scause::Scause;
 
 use crate::{
     mm::{
-        address::KernelAddr, frame_alloc, page::PageBuilder, page_table::PTEFlags, 
-        PhysPageNum, VirtAddr, MapPermission,
+        address::KernelAddr, frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission,
+        PhysPageNum, VirtAddr,
     },
     process::Process,
     processor::current_process,
@@ -180,12 +180,11 @@ impl PageFaultHandler for MmapPageFaultHandler {
     fn handle_page_fault_async(
         &self,
         va: VirtAddr,
-        process: &'static Arc<Process>, 
-                                        // page_table: &mut PageTable,
+        process: &'static Arc<Process>,
     ) -> AgeneralRet<()> {
         Box::pin(async move {
             debug!("handle mmap page fault asynchronously");
-            let (inode, mut map_perm, start_vpn) = process.inner_handler(|proc| {
+            let (inode, map_perm, start_vpn) = process.inner_handler(|proc| {
                 let vma = proc
                     .memory_space
                     .find_vm_area_by_vpn(va.floor())
@@ -220,21 +219,41 @@ impl PageFaultHandler for MmapPageFaultHandler {
             page.load_all_buffers().await?;
             // let mut pte_flags = vma.map_perm.into();
             let pte_flags: PTEFlags = PTEFlags::from(map_perm) | PTEFlags::U;
-            let phy_page_num = PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr() as usize));
             trace!(
                 "file page content {:?}",
                 String::from_utf8(page.bytes_array().to_vec())
             );
-            trace!(
-                "phy page num {:#x}, kernel addr {:#x}",
-                phy_page_num.0,
-                page.bytes_array_ptr() as usize
+
+            let page = match pte_flags.contains(PTEFlags::W) {
+                true => {
+                    // Copy on write
+                    let frame = frame_alloc().unwrap();
+                    frame.ppn.bytes_array().copy_from_slice(&page.bytes_array());
+                    let file_info = page.file_info.as_ref().unwrap().lock().await;
+                    Arc::new(
+                        PageBuilder::new()
+                            .permission(map_perm)
+                            .file_info(&file_info)
+                            .build(),
+                    )
+                }
+                false => page,
+            };
+
+            info!(
+                "[MmapPageFaultHandler]: va {:#x}, ppn {:#x}, map perm {:?}",
+                va.0, page.data_frame.ppn.0, map_perm
             );
 
             process.inner_handler(|proc| {
                 let page_table = unsafe { &mut *proc.memory_space.page_table.get() };
-                page_table.map(va.floor(), phy_page_num, pte_flags);
+                page_table.map(va.floor(), page.data_frame.ppn, pte_flags);
                 page_table.activate();
+                let vma = proc.memory_space.find_vm_area_by_vpn(va.floor()).unwrap();
+                vma.data_frames
+                    .get_unchecked_mut()
+                    .0
+                    .insert(va.floor(), page);
             });
             Ok(())
         })
@@ -265,11 +284,17 @@ impl PageFaultHandler for CowPageFaultHandler {
             // the page has correlated physical frame
             debug_assert!(pte.flags().contains(PTEFlags::COW));
             debug_assert!(!pte.flags().contains(PTEFlags::W));
-            let shared_page = memory_space.cow_pages.page_mgr.get_unchecked_mut().0.get(&va.floor()).unwrap();
+            let shared_page = memory_space
+                .cow_pages
+                .page_mgr
+                .get_unchecked_mut()
+                .0
+                .get(&va.floor())
+                .unwrap();
 
             if !shared_page.permission.contains(MapPermission::W) {
                 warn!("pagefault illegal although cow since map perm doesn't contain W, va {:#x}, ppn {:#x}, map perm {:?}, pte flags {:?}", va.0, pte.ppn().0, shared_page.permission, pte.flags());
-                return Err(SyscallErr::EFAULT)
+                return Err(SyscallErr::EFAULT);
             }
 
             // modify pte
@@ -291,7 +316,13 @@ impl PageFaultHandler for CowPageFaultHandler {
                     // allocating new frame
                     pte.set_flags(pte_flags);
                     page_table.activate();
-                    memory_space.cow_pages.page_mgr.get_unchecked_mut().0.remove(&vpn).unwrap()
+                    memory_space
+                        .cow_pages
+                        .page_mgr
+                        .get_unchecked_mut()
+                        .0
+                        .remove(&vpn)
+                        .unwrap()
                 }
                 _ => {
                     // Else
@@ -308,7 +339,12 @@ impl PageFaultHandler for CowPageFaultHandler {
                     page_table.map(vpn, new_frame.ppn, pte_flags);
                     page_table.activate();
                     // decrease old frame's ref cnt
-                    memory_space.cow_pages.page_mgr.get_unchecked_mut().0.remove(&vpn);
+                    memory_space
+                        .cow_pages
+                        .page_mgr
+                        .get_unchecked_mut()
+                        .0
+                        .remove(&vpn);
                     Arc::new(
                         PageBuilder::new()
                             .permission(shared_page.permission)
@@ -320,7 +356,6 @@ impl PageFaultHandler for CowPageFaultHandler {
             let old_vma = memory_space.find_vm_area_by_vpn(vpn).unwrap();
             let data_frames = old_vma.data_frames.get_unchecked_mut();
             data_frames.0.insert(vpn, page);
-
         } else {
             panic!();
             // // the page still not allocated (maybe because of lazy alloc(e.g. ustack))

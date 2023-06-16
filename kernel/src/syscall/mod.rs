@@ -84,6 +84,7 @@ use sync::*;
 
 use crate::{
     fs::Iovec,
+    mm::MapPermission,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
     timer::*,
@@ -223,6 +224,22 @@ bitflags! {
         const PROT_WRITE = 1 << 1;
         /// Executable
         const PROT_EXEC = 1 << 2;
+    }
+}
+
+impl From<MmapProt> for MapPermission {
+    fn from(prot: MmapProt) -> Self {
+        let mut map_permission = MapPermission::from_bits(0).unwrap();
+        if prot.contains(MmapProt::PROT_READ) {
+            map_permission |= MapPermission::R;
+        }
+        if prot.contains(MmapProt::PROT_WRITE) {
+            map_permission |= MapPermission::W;
+        }
+        if prot.contains(MmapProt::PROT_EXEC) {
+            map_permission |= MapPermission::X;
+        }
+        map_permission
     }
 }
 
