@@ -164,9 +164,9 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        INODE_CACHE.lock().insert(key, new_inode.clone());
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
@@ -191,9 +191,9 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        INODE_CACHE.lock().insert(key, new_inode.clone());
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
@@ -329,9 +329,9 @@ impl Inode for Fat32Inode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        INODE_CACHE.lock().insert(key, new_inode.clone());
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()

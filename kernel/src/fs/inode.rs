@@ -1,10 +1,14 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{
+    hash::Hash,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak},
 };
+use hashbrown::{HashMap, HashSet};
 use lazy_static::*;
 use log::{debug, info, warn};
 
@@ -63,8 +67,6 @@ pub enum InodeState {
 }
 
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
-
-static INODE_UID_ALLOCATOR: AtomicUsize = AtomicUsize::new(1);
 
 pub trait Inode: Send + Sync {
     fn init(
@@ -144,8 +146,7 @@ pub trait Inode: Send + Sync {
     fn set_metadata(&mut self, meta: InodeMeta);
 
     fn lookup(&self, this: Arc<dyn Inode>, name: &str) -> Option<Arc<dyn Inode>> {
-        let key = HashName::hash_name(Some(self.metadata().uid), name).name_hash as usize;
-        let value = INODE_CACHE.lock().get(&key).cloned();
+        let value = this.metadata().inner.lock().children.get(name).cloned();
         match value {
             Some(value) => Some(value.clone()),
             None => {
@@ -160,51 +161,99 @@ pub trait Inode: Send + Sync {
                 }
             }
         }
+        // let key = HashName::hash_name(Some(self.metadata().uid), name).name_hash as usize;
+        // let value = INODE_CACHE.lock().get(&key).cloned();
+        // match value {
+        //     Some(value) => Some(value.clone()),
+        //     None => {
+        //         debug!(
+        //             "cannot find child dentry, name: {}, try to find in inode",
+        //             name
+        //         );
+        //         let target_inode = self.try_find_and_insert_inode(this, name);
+        //         match target_inode {
+        //             Some(target_inode) => Some(target_inode.clone()),
+        //             None => None,
+        //         }
+        //     }
+        // }
     }
     fn try_find_and_insert_inode(
         &self,
         this: Arc<dyn Inode>,
         child_name: &str,
     ) -> Option<Arc<dyn Inode>> {
-        let key = HashName::hash_name(Some(self.metadata().uid), child_name).name_hash as usize;
-
-        <dyn Inode>::load_children(this);
+        <dyn Inode>::load_children(this.clone());
         debug!(
             "children size {}",
             self.metadata().inner.lock().children.len()
         );
 
-        let target_inode = INODE_CACHE.lock().get(&key).cloned();
+        let target_inode = this
+            .metadata()
+            .inner
+            .lock()
+            .children
+            .get(child_name)
+            .cloned();
 
         match target_inode {
             Some(target_inode) => {
                 // find the inode which related to this subdentry
-                Some(target_inode.clone())
+                Some(target_inode)
             }
             None => {
                 debug!("Cannot find {} in children", child_name);
                 None
             }
         }
+
+        // let key = HashName::hash_name(Some(self.metadata().uid), child_name).name_hash as usize;
+
+        // <dyn Inode>::load_children(this);
+        // debug!(
+        //     "children size {}",
+        //     self.metadata().inner.lock().children.len()
+        // );
+
+        // let target_inode = INODE_CACHE.lock().get(&key).cloned();
+
+        // match target_inode {
+        //     Some(target_inode) => {
+        //         // find the inode which related to this subdentry
+        //         Some(target_inode.clone())
+        //     }
+        //     None => {
+        //         debug!("Cannot find {} in children", child_name);
+        //         None
+        //     }
+        // }
     }
     /// unlink() system call will call this function.
     /// This function will delete the inode in inode cache and call delete() function to delete inode in disk.
     fn unlink(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
-        let key = child.metadata().inner.lock().hash_name.name_hash as usize;
-        debug!("Try to delete child in INODE_CACHE");
-        INODE_CACHE.lock().delete(key);
-        let child_name = child.metadata().name.clone();
-        self.metadata().inner.lock().children.remove(&child_name);
-        self.delete_child(&child_name);
+        let key = child.metadata().name.clone();
+        debug!("Try to delete child in children");
+        self.metadata().inner.lock().children.remove(&key);
+        self.delete_child(&key);
+        // let key = child.metadata().inner.lock().hash_name.name_hash as usize;
+        // debug!("Try to delete child in INODE_CACHE");
+        // INODE_CACHE.lock().delete(key);
+        // let child_name = child.metadata().name.clone();
+        // self.metadata().inner.lock().children.remove(&child_name);
+        // self.delete_child(&child_name);
         Ok(0)
     }
-    /// This function will delete the inode in inode cache.
+    /// This function will delete the inode in cache (which means delete inode in parent's children list).
     fn remove_child(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
-        let key = child.metadata().inner.lock().hash_name.name_hash as usize;
-        debug!("Try to delete child in INODE_CACHE");
-        INODE_CACHE.lock().delete(key);
-        let child_name = child.metadata().name.clone();
-        self.metadata().inner.lock().children.remove(&child_name);
+        let key = child.metadata().name.clone();
+        debug!("Try to delete child in children");
+        self.metadata().inner.lock().children.remove(&key);
+        // let key = child.metadata().inner.lock().hash_name.name_hash as usize;
+        // debug!("Try to delete child in INODE_CACHE");
+        // INODE_CACHE.lock().delete(key);
+        // let child_name = child.metadata().name.clone();
+        // self.metadata().inner.lock().children.remove(&child_name);
         Ok(0)
     }
 
@@ -230,15 +279,15 @@ impl dyn Inode {
                 // load children from disk
                 parent.load_children_from_disk(parent.clone());
                 parent.metadata().inner.lock().state = InodeState::Synced;
-                let mut cache_lock = INODE_CACHE.lock();
-                for child in parent.metadata().inner.lock().children.clone() {
-                    let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
-                    debug!(
-                        "[load_children] insert to INODE_CACHE, name: {}",
-                        child.1.metadata().name
-                    );
-                    cache_lock.insert(key, child.1);
-                }
+                // let mut cache_lock = INODE_CACHE.lock();
+                // for child in parent.metadata().inner.lock().children.clone() {
+                //     let key = child.1.metadata().inner.lock().hash_name.name_hash as usize;
+                //     debug!(
+                //         "[load_children] insert to INODE_CACHE, name: {}",
+                //         child.1.metadata().name
+                //     );
+                //     cache_lock.insert(key, child.1);
+                // }
             }
             _ => {
                 // do nothing
@@ -318,8 +367,6 @@ pub struct InodeMeta {
     pub path: String,
     /// name which doesn't have slash
     pub name: String,
-    /// a inode's unique id
-    pub uid: usize,
     pub inner: Mutex<InodeMetaInner>,
 }
 
@@ -332,14 +379,10 @@ pub struct InodeMetaInner {
     pub st_mtim: TimeSpec,
     /// last status change time, need to flush to disk
     pub st_ctim: TimeSpec,
-    /// hash name(Note that this doesn't consider the parent uid)
-    pub hash_name: HashName,
     /// parent
     pub parent: Option<Weak<dyn Inode>>,
-    /// brother list
-    pub brothers: BTreeMap<String, Weak<dyn Inode>>,
     /// children list
-    pub children: BTreeMap<String, Arc<dyn Inode>>,
+    pub children: HashMap<String, Arc<dyn Inode>>,
     /// page cache of the related file
     pub page_cache: Option<PageCache>,
     /// file content len
@@ -356,10 +399,6 @@ impl InodeMeta {
         data_len: usize,
     ) -> Self {
         let name = Path::get_name(path);
-        let parent_uid = match parent.as_ref() {
-            Some(parent) => Some(parent.metadata().uid),
-            None => None,
-        };
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),
             None => None,
@@ -372,16 +411,13 @@ impl InodeMeta {
             device: None,
             path: path.to_string(),
             name: name.to_string(),
-            uid: INODE_UID_ALLOCATOR.fetch_add(1, Ordering::Relaxed),
             inner: Mutex::new(InodeMetaInner {
                 // size: 0,
                 st_atim: TimeSpec::new(),
                 st_mtim: TimeSpec::new(),
                 st_ctim: TimeSpec::new(),
                 parent,
-                brothers: BTreeMap::new(),
-                children: BTreeMap::new(),
-                hash_name: HashName::hash_name(parent_uid, name),
+                children: HashMap::new(),
                 page_cache: None,
                 data_len,
                 state: InodeState::Init,
