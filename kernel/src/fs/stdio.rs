@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicU8, Ordering};
-
+use lazy_static::*;
 use alloc::boxed::Box;
 use log::{debug, warn};
 
@@ -7,7 +7,7 @@ use crate::{
     process,
     processor::SumGuard,
     sbi::console_getchar,
-    sync::mutex::SpinNoIrqLock,
+    sync::mutex::{SleepLock, SpinNoIrqLock},
     utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
@@ -110,7 +110,9 @@ impl File for Stdin {
 
 const PRINT_LOCKED: bool = true;
 
-static PRINT_MUTEX: SpinNoIrqLock<bool> = SpinNoIrqLock::new(false);
+lazy_static! {
+    static ref PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
+}
 
 // #[async_trait]
 
@@ -138,7 +140,7 @@ impl File for Stdout {
             let _sum_guard = SumGuard::new();
             // let buff = unsafe { core::slice::from_raw_parts(buf, len) };
             if PRINT_LOCKED {
-                let _locked = PRINT_MUTEX.lock();
+                let _locked = PRINT_MUTEX.lock().await;
                 print!("{}", core::str::from_utf8(buf).unwrap());
             } else {
                 print!("{}", core::str::from_utf8(buf).unwrap());

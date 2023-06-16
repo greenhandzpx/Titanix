@@ -24,7 +24,7 @@ use crate::{process, syscall::syscall};
 // use crate::process::{
 //     current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, self,
 // };
-use crate::timer::set_next_trigger;
+use crate::timer::{set_next_trigger, handle_timeout_events};
 use core::arch::global_asm;
 use log::{debug, error, info, warn};
 use riscv::register::{
@@ -169,6 +169,7 @@ pub async fn trap_handler() {
             // debug!("sstatus {:#x}", sstatus::read().bits());
             // debug!("timer interrrupt");
             set_next_trigger();
+            handle_timeout_events();
             process::yield_now().await
             // suspend_current_and_run_next();
         }
