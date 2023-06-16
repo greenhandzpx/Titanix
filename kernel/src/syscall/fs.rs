@@ -6,7 +6,7 @@ use core::ptr::copy_nonoverlapping;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use inode::InodeState;
-use log::{debug, warn};
+use log::{debug, trace, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::dirent::MAX_NAME_LEN;
@@ -670,7 +670,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    debug!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
+    trace!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -685,21 +685,21 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
 
     for i in 0..iovcnt {
-        debug!("write the {} buf", i + 1);
+        trace!("write the {} buf", i + 1);
         // current iovec pointer
         let current = iov.add(iovec_size * i);
-        debug!("current iov: {}", current);
+        trace!("current iov: {}", current);
         UserCheck::new().check_readable_slice(current as *const u8, iovec_size)?;
-        debug!("pass readable check");
+        trace!("pass readable check");
         let iov_base = unsafe { &*(current as *const Iovec) }.iov_base;
-        debug!("get iov_base: {}", iov_base);
+        trace!("get iov_base: {}", iov_base);
         let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
-        debug!("get iov_len: {}", iov_len);
+        trace!("get iov_len: {}", iov_len);
         ret += iov_len;
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
         let buf_str = unsafe { core::str::from_utf8_unchecked(buf) };
-        debug!("[writev] buf: {:?}", buf_str);
+        trace!("[writev] buf: {:?}", buf_str);
         let fw_ret = file.write(buf).await;
         // if error, return
         if fw_ret.is_err() {
@@ -822,7 +822,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
         let mut cnt = 0;
         for i in 0..nfds {
             let current_fd = &mut fds[i];
-            debug!("[sys_ppoll]: poll fd {}", current_fd.fd);
+            trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
             if let Some(file) =
                 current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
             {

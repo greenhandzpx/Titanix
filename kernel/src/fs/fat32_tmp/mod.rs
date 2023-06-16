@@ -6,16 +6,13 @@ use alloc::sync::Arc;
 use alloc::{boxed::Box, vec::Vec};
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 
 use crate::fs::file::DefaultFile;
 use crate::fs::inode::INODE_CACHE;
-use crate::mm::PageCache;
-use crate::utils::error::{self, AsyscallRet, SyscallErr};
+use crate::utils::error::{self, AgeneralRet, AsyscallRet, SyscallErr};
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
-    processor::SumGuard,
-    stack_trace,
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallRet},
 };
@@ -309,7 +306,7 @@ impl Inode for Fat32Inode {
         this: Arc<dyn Inode>,
         pathname: &str,
         mode: InodeMode,
-        dev_id: usize,
+        _dev_id: usize,
     ) -> GeneralRet<()> {
         debug!("fatfs mknod: {}", pathname);
 
@@ -340,40 +337,45 @@ impl Inode for Fat32Inode {
         Ok(())
     }
 
-    fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
-        let node = unsafe { &mut *(self.node.get()) };
-        match node {
-            Fat32NodeType::Dir(_) => return Err(SyscallErr::EISDIR),
-            Fat32NodeType::File(ref mut file) => {
-                if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
-                    return Err(SyscallErr::EINVAL);
-                }
-                if let Some(bytes) = file.read(buf).ok() {
-                    return Ok(bytes);
-                } else {
-                    warn!("fatfs read file failed!");
-                    return Err(SyscallErr::EINVAL);
+    fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AgeneralRet<usize> {
+        Box::pin(async move {
+            let node = unsafe { &mut *(self.node.get()) };
+            match node {
+                Fat32NodeType::Dir(_) => return Err(SyscallErr::EISDIR),
+                Fat32NodeType::File(ref mut file) => {
+                    if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
+                        return Err(SyscallErr::EINVAL);
+                    }
+                    trace!("[Fat32Inode::read]: offset: {:#x}", offset);
+                    if let Some(bytes) = file.read(buf).ok() {
+                        return Ok(bytes);
+                    } else {
+                        warn!("fatfs read file failed!");
+                        return Err(SyscallErr::EINVAL);
+                    }
                 }
             }
-        }
+        })
     }
 
-    fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
-        let node = unsafe { &mut *(self.node.get()) };
-        match node {
-            Fat32NodeType::Dir(_) => return Err(SyscallErr::EISDIR),
-            Fat32NodeType::File(ref mut file) => {
-                if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
-                    return Err(SyscallErr::EINVAL);
-                }
-                if let Some(bytes) = file.write(buf).ok() {
-                    return Ok(bytes);
-                } else {
-                    warn!("fatfs write file failed!");
-                    return Err(SyscallErr::EINVAL);
+    fn write<'a>(&'a self, offset: usize, buf: &'a [u8]) -> AgeneralRet<usize> {
+        Box::pin(async move {
+            let node = unsafe { &mut *(self.node.get()) };
+            match node {
+                Fat32NodeType::Dir(_) => return Err(SyscallErr::EISDIR),
+                Fat32NodeType::File(ref mut file) => {
+                    if file.seek(fatfs::SeekFrom::Start(offset as u64)).is_err() {
+                        return Err(SyscallErr::EINVAL);
+                    }
+                    if let Some(bytes) = file.write(buf).ok() {
+                        return Ok(bytes);
+                    } else {
+                        warn!("fatfs write file failed!");
+                        return Err(SyscallErr::EINVAL);
+                    }
                 }
             }
-        }
+        })
     }
 }
 

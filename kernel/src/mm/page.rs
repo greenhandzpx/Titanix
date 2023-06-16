@@ -5,13 +5,13 @@ use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
     mm,
-    sync::mutex::SpinNoIrqLock,
+    sync::mutex::SleepLock,
     utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::FrameTracker;
 
-type Mutex<T> = SpinNoIrqLock<T>;
+type Mutex<T> = SleepLock<T>;
 
 /// Note that the process will visit one page through `Arc`
 /// which maintains the ref cnt, so we can decide whether
@@ -86,23 +86,23 @@ impl Page {
 
     /// Read this page.
     /// `offset`: page offset
-    pub fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
+    pub async fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {
         if offset >= PAGE_SIZE {
             Err(SyscallErr::E2BIG)
         } else {
-            let mut inner = self.inner.lock();
+            let mut inner = self.inner.lock().await;
             let mut end = offset + buf.len();
             if end > PAGE_SIZE {
                 end = PAGE_SIZE;
             }
-            inner.load_buffer_if_needed(offset, end)?;
+            inner.load_buffer_if_needed(offset, end).await?;
             buf.copy_from_slice(&inner.data_frame.ppn.bytes_array()[offset..end]);
             Ok(end - offset)
         }
     }
     /// Write this page.
     /// `offset`: page offset
-    pub fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
+    pub async fn write(&self, offset: usize, buf: &[u8]) -> GeneralRet<usize> {
         trace!(
             "[Page::write]: page addr {:#x}",
             self as *const Self as usize
@@ -110,12 +110,17 @@ impl Page {
         if offset >= PAGE_SIZE {
             Err(SyscallErr::E2BIG)
         } else {
-            let mut inner = self.inner.lock();
+            // let mut inner = self.inner.lock();
             let mut end = offset + buf.len();
             if end > PAGE_SIZE {
                 end = PAGE_SIZE;
             }
-            inner.mark_buffer_dirty_if_needed(offset, end)?;
+            self.inner
+                .lock()
+                .await
+                .mark_buffer_dirty_if_needed(offset, end)
+                .await?;
+            let inner = self.inner.lock().await;
             inner.data_frame.ppn.bytes_array()[offset..end].copy_from_slice(buf);
             Ok(end - offset)
         }
@@ -127,25 +132,40 @@ impl Page {
     }
 
     /// Load all buffers
-    pub fn load_all_buffers(&self) -> GeneralRet<()> {
+    pub async fn load_all_buffers(&self) -> GeneralRet<()> {
         trace!(
-            "[Page::write]: page addr {:#x}",
-            self as *const Self as usize
+            "[Page::load_all_buffers]: page addr {:#x}",
+            self.bytes_array_ptr().await as usize
         );
-        let mut inner = self.inner.lock();
+        // let mut inner = self.inner.lock();
         let len = PAGE_SIZE;
-        inner.load_buffer_if_needed(0, len)?;
+        self.inner
+            .lock()
+            .await
+            .load_buffer_if_needed(0, len)
+            .await?;
         Ok(())
     }
 
     /// Get the raw pointer of this page
-    pub fn bytes_array_ptr(&self) -> *const u8 {
-        self.inner.lock().data_frame.ppn.bytes_array().as_ptr()
+    pub async fn bytes_array_ptr(&self) -> *const u8 {
+        self.inner
+            .lock()
+            .await
+            .data_frame
+            .ppn
+            .bytes_array()
+            .as_ptr()
+    }
+
+    /// Get the bytes array of this page
+    pub async fn bytes_array(&self) -> &'static [u8] {
+        self.inner.lock().await.data_frame.ppn.bytes_array()
     }
 }
 
 impl PageInner {
-    fn load_buffer_if_needed(&mut self, start_off: usize, end_off: usize) -> GeneralRet<()> {
+    async fn load_buffer_if_needed(&mut self, start_off: usize, end_off: usize) -> GeneralRet<()> {
         let start_buffer_idx = start_off / BLOCK_SIZE;
         let end_buffer_idx = (end_off - 1 + BLOCK_SIZE) / BLOCK_SIZE;
 
@@ -158,17 +178,28 @@ impl PageInner {
                 );
                 let page_offset = idx * BLOCK_SIZE;
                 let file_offset = page_offset + self.file_offset.unwrap();
-                self.inode.as_ref().unwrap().upgrade().unwrap().read(
-                    file_offset,
-                    &mut self.data_frame.ppn.bytes_array()[page_offset..page_offset + BLOCK_SIZE],
-                )?;
+                self.inode
+                    .as_ref()
+                    .unwrap()
+                    .upgrade()
+                    .unwrap()
+                    .read(
+                        file_offset,
+                        &mut self.data_frame.ppn.bytes_array()
+                            [page_offset..page_offset + BLOCK_SIZE],
+                    )
+                    .await?;
                 self.data_states[idx] = DataState::Coherent;
             }
         }
         Ok(())
     }
 
-    fn mark_buffer_dirty_if_needed(&mut self, start_off: usize, end_off: usize) -> GeneralRet<()> {
+    async fn mark_buffer_dirty_if_needed(
+        &mut self,
+        start_off: usize,
+        end_off: usize,
+    ) -> GeneralRet<()> {
         let start_buffer_idx = start_off / BLOCK_SIZE;
         let end_buffer_idx = (end_off - 1 + BLOCK_SIZE) / BLOCK_SIZE;
         trace!("start {}, end {}", start_buffer_idx, end_buffer_idx);
@@ -177,10 +208,17 @@ impl PageInner {
             if self.data_states[idx] == DataState::Outdated {
                 let page_offset = idx * BLOCK_SIZE;
                 let file_offset = page_offset + self.file_offset.unwrap();
-                self.inode.as_ref().unwrap().upgrade().unwrap().read(
-                    file_offset,
-                    &mut self.data_frame.ppn.bytes_array()[page_offset..page_offset + BLOCK_SIZE],
-                )?;
+                self.inode
+                    .as_ref()
+                    .unwrap()
+                    .upgrade()
+                    .unwrap()
+                    .read(
+                        file_offset,
+                        &mut self.data_frame.ppn.bytes_array()
+                            [page_offset..page_offset + BLOCK_SIZE],
+                    )
+                    .await?;
                 trace!(
                     "outdated block, idx {}, start_page_off {:#x}",
                     idx,

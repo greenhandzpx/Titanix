@@ -3,7 +3,7 @@
 /// Get the total number of applications.
 use alloc::vec::Vec;
 use lazy_static::*;
-use log::info;
+use log::{info, warn};
 ///get app number
 pub fn get_num_app() -> usize {
     extern "C" {
@@ -56,16 +56,9 @@ lazy_static! {
 #[allow(unused)]
 ///get app data from name
 pub fn get_app_data_by_name(name: &str) -> Option<&'static [u8]> {
+    // warn!("app name {}", name);
     let num_app = get_num_app();
     (0..num_app)
         .find(|&i| APP_NAMES[i] == name)
         .map(get_app_data)
-}
-///list all apps
-pub fn list_apps() {
-    info!("/**** Loaders' APPS ****");
-    for app in APP_NAMES.iter() {
-        println!("{}", app);
-    }
-    info!("**************/");
 }

@@ -1,7 +1,7 @@
 # cargo-features = ["profile-rustflags"]
 
 [package]
-name = "os"
+name = "kernel"
 version = "0.1.0"
 authors = ["Peixin Tsang <893522573@qq.com>"]
 edition = "2021"
@@ -9,13 +9,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
 buddy_system_allocator = "0.6"
 bitflags = "1.2.1"
 xmas-elf = "0.7.0"
 log = "0.4"
 hashbrown = "0.14"
+intrusive-collections = { version = "0.9", features = ["nightly"] }
+riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
 async-task = { path = "../dependencies/async-task", default-features = false }
 easy-fs = { path = "../dependencies/easy-fs" }

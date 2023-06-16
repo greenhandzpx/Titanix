@@ -15,6 +15,7 @@
 // #![test_runner(crate::test_runner)]
 
 extern crate alloc;
+// extern crate intrusive_collections;
 
 #[macro_use]
 extern crate bitflags;
@@ -45,17 +46,17 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{self, AtomicBool, Ordering},
+    sync::atomic::{self, AtomicBool, Ordering}, time::Duration,
 };
 
-use log::info;
+use log::{info, warn};
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     processor::{hart, HARTS},
-    sbi::hart_start,
+    sbi::hart_start, process::thread, timer::ksleep,
 };
 
 global_asm!(include_str!("entry.S"));
@@ -140,11 +141,19 @@ pub fn rust_main(hart_id: usize) {
 
         mm::page_cache_test();
 
-        process::thread::spawn_kernel_thread(async move {
+        thread::spawn_kernel_thread(async move {
             process::add_initproc();
             // process::scan_prilimary_tests();
             // println!("after initproc!");
         });
+
+        thread::spawn_kernel_thread(async move {
+            loop {
+                ksleep(Duration::new(5, 0)).await;
+                warn!("I'm awake!!");
+            }
+        });
+
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);
@@ -171,7 +180,7 @@ pub fn rust_main(hart_id: usize) {
         }
         info!("[kernel] ---------- hart {} started ---------- ", hart_id);
 
-        return;
+        // return;
     }
 
     loop {

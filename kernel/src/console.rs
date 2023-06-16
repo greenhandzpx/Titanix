@@ -1,12 +1,16 @@
 //! SBI console driver, for text output
-use crate::{sbi::console_putchar, sync::mutex::SpinNoIrqLock};
+use crate::{sbi::console_putchar, sync::mutex::{SpinNoIrqLock, SleepLock}};
 use core::fmt::{self, Write};
+use lazy_static::*;
 
 struct Stdout;
 
 const PRINT_LOCKED: bool = true;
 
-static PRINT_MUTEX: SpinNoIrqLock<()> = SpinNoIrqLock::new(());
+lazy_static!{
+    static ref PRINT_MUTEX: SpinNoIrqLock<()> = SpinNoIrqLock::new(());
+
+}
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -17,7 +21,7 @@ impl Write for Stdout {
     }
 }
 
-pub fn print(args: fmt::Arguments) {
+pub fn print(args: fmt::Arguments<'_>) {
     if PRINT_LOCKED {
         let _locked = PRINT_MUTEX.lock();
         Stdout.write_fmt(args).unwrap();

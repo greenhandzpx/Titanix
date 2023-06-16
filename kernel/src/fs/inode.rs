@@ -15,7 +15,11 @@ use log::{debug, info, warn};
 use crate::{
     mm::PageCache,
     timer::{get_time_ms, TimeSpec},
-    utils::{error::GeneralRet, hash_table::HashTable, path::Path},
+    utils::{
+        error::{AgeneralRet, GeneralRet},
+        hash_table::HashTable,
+        path::Path,
+    },
 };
 
 use super::{
@@ -134,11 +138,11 @@ pub trait Inode: Send + Sync {
         todo!()
     }
     /// Read data at the given file offset from block device
-    fn read(&self, _offset: usize, _buf: &mut [u8]) -> GeneralRet<usize> {
+    fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AgeneralRet<usize> {
         todo!()
     }
     /// Write data to the given file offset in block device
-    fn write(&self, _offset: usize, _buf: &[u8]) -> GeneralRet<usize> {
+    fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AgeneralRet<usize> {
         todo!()
     }
 
@@ -257,12 +261,12 @@ pub trait Inode: Send + Sync {
         Ok(0)
     }
 
-    /// Load the children dirs of the current dir
+    /// Load the children dirs of the current dir.
     /// The state of inode loaded from disk should be synced
     /// TODO: It may be a bad idea to load all children at one time?
     fn load_children_from_disk(&self, this: Arc<dyn Inode>);
 
-    /// Delete inode in disk
+    /// Delete inode in disk.
     /// You should call this function through parent inode.
     /// TODO: This function should be implemented by actual filesystem.
     fn delete_child(&self, child_name: &str);
@@ -346,7 +350,7 @@ impl dyn Inode {
     pub fn create_page_cache_if_needed(this: Arc<dyn Inode>) {
         let mut meta_locked = this.metadata().inner.lock();
         if meta_locked.page_cache.is_none() {
-            meta_locked.page_cache = Some(PageCache::new(this.clone(), 3));
+            meta_locked.page_cache = Some(Arc::new(PageCache::new(this.clone(), 3)));
         }
     }
 }
@@ -370,6 +374,12 @@ pub struct InodeMeta {
     pub inner: Mutex<InodeMetaInner>,
 }
 
+impl InodeMeta {
+    pub fn inner_get<T>(&self, f: impl FnOnce(&mut InodeMetaInner) -> T) -> T {
+        f(&mut self.inner.lock())
+    }
+}
+
 pub struct InodeMetaInner {
     // /// inode' file's size
     // pub size: usize,
@@ -384,7 +394,7 @@ pub struct InodeMetaInner {
     /// children list
     pub children: HashMap<String, Arc<dyn Inode>>,
     /// page cache of the related file
-    pub page_cache: Option<PageCache>,
+    pub page_cache: Option<Arc<PageCache>>,
     /// file content len
     pub data_len: usize,
     /// inode state

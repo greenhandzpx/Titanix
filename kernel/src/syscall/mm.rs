@@ -3,7 +3,7 @@ use log::debug;
 use crate::{
     config::mm::PAGE_SIZE,
     mm::{
-        memory_set::{
+        memory_space::{
             page_fault_handler::{MmapPageFaultHandler, SBrkPageFaultHandler},
             vm_area::BackupFile,
             PageFaultHandler,
@@ -52,7 +52,7 @@ pub fn sys_mmap(
                 .ok_or(SyscallErr::ENOMEM)?;
             vma.mmap_flags = Some(flags);
             let handler = SBrkPageFaultHandler {};
-            vma.handler = Some(handler.box_clone());
+            vma.handler = Some(handler.arc_clone());
             let start_va: VirtAddr = vma.start_vpn().into();
             proc.memory_set.insert_area(vma);
 
@@ -72,7 +72,7 @@ pub fn sys_mmap(
                 .ok_or(SyscallErr::ENOMEM)?;
             vma.mmap_flags = Some(flags);
             let handler = MmapPageFaultHandler {};
-            vma.handler = Some(handler.box_clone());
+            vma.handler = Some(handler.arc_clone());
             vma.backup_file = Some(BackupFile {
                 offset,
                 file: file.clone(), // .metadata()

@@ -1,6 +1,6 @@
 use core::cell::SyncUnsafeCell;
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, warn};
 
 use crate::{
@@ -10,8 +10,9 @@ use crate::{
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
     driver::block::MMIO_VIRT,
-    mm::memory_set::page_fault_handler::SBrkPageFaultHandler,
+    mm::memory_space::page_fault_handler::SBrkPageFaultHandler,
     process::aux::*,
+    processor::current_process,
     stack_trace,
     utils::error::{GeneralRet, SyscallErr},
 };
@@ -49,26 +50,26 @@ extern "C" {
 // }
 
 /// Kernel Space for all processes
-pub static mut KERNEL_SPACE: Option<MemorySet> = None;
+pub static mut KERNEL_SPACE: Option<MemorySpace> = None;
 
 ///
 pub fn init_kernel_space() {
     info!("start to init kernel space...");
     unsafe {
-        KERNEL_SPACE = Some(MemorySet::new_kernel());
+        KERNEL_SPACE = Some(MemorySpace::new_kernel());
     }
 }
 // lazy_static! {
 //     /// a memory set instance through lazy_static! managing kernel space
-//     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
-//         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
+//     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySpace>> =
+//         Arc::new(unsafe { UPSafeCell::new(MemorySpace::new_kernel()) });
 // }
 
 /// Heap range
 pub type HeapRange = SimpleRange<VirtAddr>;
 
 /// memory set structure, controls virtual-memory space
-pub struct MemorySet {
+pub struct MemorySpace {
     /// we should ensure modifying page table exclusively(e.g. through process_inner's lock)
     /// TODO: optimization: decrease the lock granularity when handling page fault
     pub page_table: Arc<SyncUnsafeCell<PageTable>>,
@@ -78,8 +79,8 @@ pub struct MemorySet {
     pub heap_range: Option<HeapRange>,
 }
 
-impl MemorySet {
-    ///Create an empty `MemorySet`
+impl MemorySpace {
+    ///Create an empty `MemorySpace`
     pub fn new_bare() -> Self {
         Self {
             page_table: Arc::new(SyncUnsafeCell::new(PageTable::new())),
@@ -88,7 +89,7 @@ impl MemorySet {
         }
     }
 
-    ///Create an empty `MemorySet` but owns the global kernel mapping
+    ///Create an empty `MemorySpace` but owns the global kernel mapping
     pub fn new_from_global() -> Self {
         let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
         // TODO: optimize:
@@ -174,8 +175,13 @@ impl MemorySet {
         }
     }
 
-    /// Handle page fault
-    pub fn handle_page_fault(&mut self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    /// Handle page fault synchronously.
+    /// Return Some(handler) if async handle should be invoked.
+    pub fn handle_page_fault(
+        &mut self,
+        va: VirtAddr,
+        _scause: usize,
+    ) -> GeneralRet<Option<Arc<dyn PageFaultHandler>>> {
         // There are serveral kinds of page faults:
         // 1. mmap area
         // 2. sbrk area
@@ -207,7 +213,7 @@ impl MemorySet {
     }
 
     /// Insert vm area lazily
-    pub fn insert_area(&mut self, mut vma: VmArea) {
+    pub fn insert_area(&mut self, vma: VmArea) {
         self.push_lazily(vma, None);
     }
 
@@ -231,7 +237,7 @@ impl MemorySet {
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-        handler: Option<Box<dyn PageFaultHandler>>,
+        handler: Option<Arc<dyn PageFaultHandler>>,
     ) {
         self.push_lazily(
             VmArea::new(start_va, end_va, MapType::Framed, permission, handler, None),
@@ -567,7 +573,7 @@ impl MemorySet {
             heap_start_va.into(),
             MapType::Framed,
             map_perm,
-            Some(Box::new(SBrkPageFaultHandler {})),
+            Some(Arc::new(SBrkPageFaultHandler {})),
             None,
         );
         memory_set.push(heap_vma, 0, None);
@@ -604,7 +610,7 @@ impl MemorySet {
             auxv,
         )
     }
-    ///Clone a same `MemorySet`
+    ///Clone a same `MemorySpace`
     pub fn from_existed_user(user_space: &Self) -> Self {
         // let mut memory_set = Self::new_bare();
         let mut memory_set = Self::new_from_global();
@@ -632,7 +638,7 @@ impl MemorySet {
         }
         memory_set
     }
-    ///Clone a same `MemorySet`
+    ///Clone a same `MemorySpace`
     pub fn from_existed_user_lazily(user_space: &mut Self) -> Self {
         // let mut memory_set = Self::new_bare();
         let mut memory_set = Self::new_from_global();
@@ -646,7 +652,7 @@ impl MemorySet {
             {
                 area.map_perm |= MapPermission::COW;
                 area.map_perm.remove(MapPermission::W);
-                area.handler = Some(Box::new(ForkPageFaultHandler {}));
+                area.handler = Some(Arc::new(ForkPageFaultHandler {}));
             }
         }
 
@@ -813,4 +819,16 @@ pub fn remap_test() {
             .executable(),);
     }
     info!("remap_test passed!");
+}
+
+/// Handle different kinds of page fault
+pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    if let Some(handler) =
+        current_process().inner_handler(|proc| proc.memory_set.handle_page_fault(va, scause))?
+    {
+        debug!("handle pagefault asynchronously, va: {:#x}", va.0);
+        handler.handle_page_fault_async(va, current_process()).await
+    } else {
+        Ok(())
+    }
 }

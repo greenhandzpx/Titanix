@@ -1,18 +1,22 @@
 use alloc::sync::{Arc, Weak};
-use log::{info, trace};
+use log::trace;
 
-use crate::{config::mm::PAGE_SIZE_BITS, fs::Inode, utils::error::GeneralRet};
+use crate::{
+    config::mm::PAGE_SIZE_BITS, fs::Inode, sync::mutex::SpinNoIrqLock, utils::error::GeneralRet,
+};
 
 use super::{
     page::{Page, PageBuilder},
     radix_tree::RadixTree,
 };
 
+type Mutex<T> = SpinNoIrqLock<T>;
+
 /// i.e. linux's `address_space`
 /// TODO: add lru policy?
 pub struct PageCache {
     inode: Option<Weak<dyn Inode>>,
-    pages: RadixTree<Arc<Page>>,
+    pages: Mutex<RadixTree<Arc<Page>>>,
 }
 
 impl PageCache {
@@ -20,19 +24,21 @@ impl PageCache {
     pub fn new(inode: Arc<dyn Inode>, level_num: usize) -> Self {
         Self {
             inode: Some(Arc::downgrade(&inode)),
-            pages: RadixTree::new(level_num),
+            pages: Mutex::new(RadixTree::new(level_num)),
         }
     }
     /// Lookup a page according to the given file offset
     pub fn lookup(&self, offset: usize) -> Option<Arc<Page>> {
-        self.pages.lookup(offset >> PAGE_SIZE_BITS)
+        self.pages.lock().lookup(offset >> PAGE_SIZE_BITS)
     }
     /// Insert a new page
-    pub fn insert(&mut self, offset: usize, page: Page) {
-        self.pages.insert(offset >> PAGE_SIZE_BITS, Arc::new(page))
+    pub fn insert(&self, offset: usize, page: Page) {
+        self.pages
+            .lock()
+            .insert(offset >> PAGE_SIZE_BITS, Arc::new(page))
     }
     /// Get a page according to the given file offset
-    pub fn get_page(&mut self, offset: usize) -> GeneralRet<Arc<Page>> {
+    pub fn get_page(&self, offset: usize) -> GeneralRet<Arc<Page>> {
         trace!("[PageCache]: get page at file offset {:#x}", offset);
         if let Some(page) = self.lookup(offset) {
             Ok(page)
@@ -44,7 +50,9 @@ impl PageCache {
                     .inode(self.inode.clone().unwrap())
                     .build(),
             );
-            self.pages.insert(offset >> PAGE_SIZE_BITS, page.clone());
+            self.pages
+                .lock()
+                .insert(offset >> PAGE_SIZE_BITS, page.clone());
             Ok(page)
         }
     }

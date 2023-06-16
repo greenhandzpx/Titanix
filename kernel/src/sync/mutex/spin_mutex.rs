@@ -7,6 +7,8 @@ use core::{
 
 // use riscv::register::sstatus;
 
+use crate::utils::async_tools::SendWrapper;
+
 use super::MutexSupport;
 
 struct MutexGuard<'a, T: ?Sized, S: MutexSupport> {
@@ -52,15 +54,12 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
             }
         }
     }
-    /// lock
+
+    /// Note that the locked data cannot step over `await`,
+    /// i.e. cannot be sent between thread.
     #[inline(always)]
     pub fn lock(&self) -> impl DerefMut<Target = T> + '_ {
         let support_guard = S::before_lock();
-        // unsafe {
-        //     (*self.debug_cnt.get()) += 1;
-        //     println!("debug cnt addr {:#x}", self.debug_cnt.get() as usize);
-        //     println!("debug cnt {}", (*self.debug_cnt.get()));
-        // }
         loop {
             self.wait_unlock();
             if self
@@ -76,13 +75,16 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
             support_guard,
         }
     }
-}
 
-// impl<'a, T: ?Sized, S: MutexSupport> Drop for SpinMutex<T, S> {
-//     fn drop(&mut self) {
-//         println!("spin mutex dieeeeeeeeeeeeeeeeee");
-//     }
-// }
+    /// # SAFETY
+    /// This is highly unsafe.
+    /// You should ensure that context switch won't happen during
+    /// the locked data's lifetime.
+    #[inline(always)]
+    pub unsafe fn sent_lock(&self) -> impl DerefMut<Target = T> + '_ {
+        SendWrapper::new(self.lock())
+    }
+}
 
 impl<'a, T: ?Sized, S: MutexSupport> Deref for MutexGuard<'a, T, S> {
     type Target = T;
