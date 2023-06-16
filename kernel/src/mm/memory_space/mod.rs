@@ -18,12 +18,12 @@ use crate::{
 };
 
 pub use self::{
-    page_fault_handler::{ForkPageFaultHandler, PageFaultHandler, UStackPageFaultHandler},
+    page_fault_handler::{CowPageFaultHandler, PageFaultHandler, UStackPageFaultHandler},
     vm_area::VmArea,
 };
 
 use super::{
-    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, VirtAddr, VirtPageNum,
+    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, VirtAddr, VirtPageNum, Page,
 };
 
 ///
@@ -68,6 +68,22 @@ pub fn init_kernel_space() {
 /// Heap range
 pub type HeapRange = SimpleRange<VirtAddr>;
 
+
+struct CowPageManager {
+    pages: BTreeMap<VirtPageNum, Page>,
+    page_table: Arc<SyncUnsafeCell<PageTable>>,
+}
+
+impl CowPageManager {
+    pub fn new(page_table: Arc<SyncUnsafeCell<PageTable>>) -> Self {
+        Self {
+            pages: BTreeMap::new(),
+            page_table
+        }
+    }
+}
+
+
 /// memory set structure, controls virtual-memory space
 pub struct MemorySpace {
     /// we should ensure modifying page table exclusively(e.g. through process_inner's lock)
@@ -75,6 +91,8 @@ pub struct MemorySpace {
     pub page_table: Arc<SyncUnsafeCell<PageTable>>,
     /// start vpn -> vm_area
     areas: BTreeMap<VirtPageNum, VmArea>,
+    /// Cow page manager
+    cow_pages: CowPageManager,
     /// heap range
     pub heap_range: Option<HeapRange>,
 }
@@ -82,10 +100,12 @@ pub struct MemorySpace {
 impl MemorySpace {
     ///Create an empty `MemorySpace`
     pub fn new_bare() -> Self {
+        let page_table = Arc::new(SyncUnsafeCell::new(PageTable::new()));
         Self {
-            page_table: Arc::new(SyncUnsafeCell::new(PageTable::new())),
+            page_table: page_table.clone(),
             areas: BTreeMap::new(),
             heap_range: None,
+            cow_pages: CowPageManager::new(page_table),
         }
     }
 
@@ -104,10 +124,12 @@ impl MemorySpace {
                 new_page_table.map(vpn, ppn, pte_flags);
             }
         }
+        let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
-            page_table: Arc::new(SyncUnsafeCell::new(new_page_table)),
+            page_table: page_table.clone(),
             areas: BTreeMap::new(),
             heap_range: None,
+            cow_pages: CowPageManager::new(page_table),
         }
         // Self {
         //     page_table: Arc::new(SyncUnsafeCell::new(PageTable::from_global())),
@@ -129,7 +151,7 @@ impl MemorySpace {
                 return None;
             }
             debug!(
-                "vpn {:#x} map area start {:#x} end {:#x}",
+                "[find_vm_area_by_vpn]: vpn {:#x} map area start {:#x} end {:#x}",
                 vpn.0,
                 vm_area.start_vpn().0,
                 vm_area.end_vpn().0
@@ -652,14 +674,13 @@ impl MemorySpace {
             {
                 area.map_perm |= MapPermission::COW;
                 area.map_perm.remove(MapPermission::W);
-                area.handler = Some(Arc::new(ForkPageFaultHandler {}));
+                area.handler = Some(Arc::new(CowPageFaultHandler {}));
             }
         }
 
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.iter() {
             let mut new_area = VmArea::from_another(area);
-            // memory_set.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {
                 // SAFETY: we've locked the process inner before calling this function
@@ -674,15 +695,7 @@ impl MemorySpace {
                         assert!(pte.flags().contains(PTEFlags::COW));
                         assert!(!pte.flags().contains(PTEFlags::W));
                     }
-                    // new_area
-                    //     .data_frames
-                    //     .get_mut()
-                    //     .0
-                    //     .insert(vpn, ph_frame.clone());
                     let _dst_ppn = new_area.map_one_lazily(new_pagetable, vpn, ph_frame);
-                    // dst_ppn
-                    //     .get_bytes_array()
-                    //     .copy_from_slice(src_ppn.get_bytes_array());
                 } else {
                     debug!("no ppn for vpn {:#x}", vpn.0);
                 }

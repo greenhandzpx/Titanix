@@ -1,16 +1,4 @@
 //! Trap handling functionality
-//!
-//! For rCore, we have a single trap entry point, namely `__alltraps`. At
-//! initialization in [`init()`], we set the `stvec` CSR to point to it.
-//!
-//! All traps go through `__alltraps`, which is defined in `trap.S`. The
-//! assembly language code does just enough work restore the kernel space
-//! context, ensuring that Rust code safely runs, and transfers control to
-//! [`trap_handler()`].
-//!
-//! It then calls different functionality based on what exactly the exception
-//! was. For example, timer interrupts trigger task preemption, and syscalls go
-//! to [`syscall()`].
 mod context;
 
 use crate::mm::{memory_space, VirtAddr};
@@ -24,9 +12,9 @@ use crate::{process, syscall::syscall};
 // use crate::process::{
 //     current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, self,
 // };
-use crate::timer::{set_next_trigger, handle_timeout_events};
+use crate::timer::{handle_timeout_events, set_next_trigger};
 use core::arch::global_asm;
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
@@ -76,7 +64,6 @@ pub async fn trap_handler() {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
-            let old_user_x17 = cx.user_x[17];
             // get system call return value
             let result = syscall(
                 cx.user_x[17],
@@ -93,9 +80,6 @@ pub async fn trap_handler() {
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
             stack_trace!();
-            // if old_user_x17 == 220 {
-            //     info!("sys_clone sepc {:#x}", cx.sepc);
-            // }
             cx.user_x[10] = match result {
                 Ok(ret) => ret as usize,
                 Err(err) => -(err as isize) as usize,
@@ -108,11 +92,16 @@ pub async fn trap_handler() {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
+            debug!(
+                "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
+                stval,
+                current_trap_cx().sepc,
+                scause.cause()
+            );
             match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
                 Ok(()) => {
                     debug!(
-                        "[kernel] [proc {}]handle legal page fault, addr {:#x}, instruction {:#x}",
-                        current_process().pid(),
+                        "[kernel] handle legal page fault, addr {:#x}, instruction {:#x}",
                         stval,
                         current_trap_cx().sepc
                     );
@@ -165,13 +154,9 @@ pub async fn trap_handler() {
             // todo!("Exit current process when encounting illegal instruction");
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // debug!("time interrupt, pid {}", current_process().pid());
-            // debug!("sstatus {:#x}", sstatus::read().bits());
-            // debug!("timer interrrupt");
             set_next_trigger();
             handle_timeout_events();
             process::yield_now().await
-            // suspend_current_and_run_next();
         }
         _ => {
             panic!(
@@ -185,31 +170,6 @@ pub async fn trap_handler() {
     // TODO: modify trap ret
     // trap_return();
 }
-
-/// #[no_mangle]
-/// set the new addr of __restore asm function in TRAMPOLINE page,
-/// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
-/// finally, jump to new addr of __restore asm function
-// pub fn trap_return() -> ! {
-//     set_user_trap_entry();
-//     let trap_cx_ptr = TRAP_CONTEXT;
-//     let user_satp = current_user_token();
-//     extern "C" {
-//         fn __alltraps();
-//         fn __restore();
-//     }
-//     let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
-//     unsafe {
-//         asm!(
-//             "fence.i",
-//             "jr {restore_va}",
-//             restore_va = in(reg) restore_va,
-//             in("a0") trap_cx_ptr,
-//             in("a1") user_satp,
-//             options(noreturn)
-//         );
-//     }
-// }
 
 #[no_mangle]
 /// Back to user mode.
@@ -232,21 +192,31 @@ pub fn trap_return(trap_context: &mut TrapContext) {
 
 #[no_mangle]
 /// Unimplement: traps/interrupts/exceptions from kernel mode
-/// Todo: Chapter 9: I/O device
-pub fn trap_from_kernel() -> ! {
-    error!(
-        "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it. pid: {}",
-        scause::read().cause(),
-        scause::read().bits(),
-        stval::read(),
-        current_trap_cx().sepc,
-        current_process().pid()
-    );
-    panic!(
-        "a trap {:?} from kernel! stval {:#x}",
-        scause::read().cause(),
-        stval::read()
-    );
+pub async fn trap_from_kernel() {
+    // #[cfg(feature = "kernel_timer_interrupt")]
+    let scause = scause::read();
+    match scause.cause() {
+        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            set_next_trigger();
+            handle_timeout_events();
+            process::yield_now().await;
+        }
+        _ => {
+            error!(
+                "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it. pid: {}",
+                scause::read().cause(),
+                scause::read().bits(),
+                stval::read(),
+                current_trap_cx().sepc,
+                current_process().pid()
+            );
+            panic!(
+                "a trap {:?} from kernel! stval {:#x}",
+                scause::read().cause(),
+                stval::read()
+            );
+        }
+    }
 }
 
 pub use context::TrapContext;

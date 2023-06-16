@@ -46,6 +46,7 @@ impl PageCache {
             // TODO add evict policy
             let page = Arc::new(
                 PageBuilder::new()
+                    .is_file_page()
                     .offset(offset)
                     .inode(self.inode.clone().unwrap())
                     .build(),

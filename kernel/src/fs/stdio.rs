@@ -43,11 +43,6 @@ impl File for Stdin {
     }
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        // // TODO: add read buf whose len is longer than 1
-        // // Urgent!! Since async trait will allocate heap memory every
-        // // time this function is invoked, we should decrease the times
-        // // of invocation
-        // assert_eq!(buf.len(), 1, "Only support len = 1 in sys_read!");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
             let mut c: u8;
@@ -62,10 +57,8 @@ impl File for Stdin {
                     }
                     c = console_getchar();
                     // debug!("stdin read a char {}", c);
-                    // suspend_current_and_run_next();
                     if c as i8 == -1 {
                         process::yield_now().await;
-                        // continue;
                     } else {
                         break;
                     }
@@ -80,11 +73,6 @@ impl File for Stdin {
             Ok(buf.len() as isize)
         })
 
-        // unsafe {
-
-        //     let buf = buf as *mut u8;
-        //     buf.write_volatile(ch);
-        // }
     }
 
     fn write(&self, _: &[u8]) -> AsyscallRet {

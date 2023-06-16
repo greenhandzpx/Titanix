@@ -1,5 +1,5 @@
 use alloc::{boxed::Box, string::String, sync::Arc};
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use riscv::register::scause::Scause;
 
 use crate::{
@@ -56,14 +56,14 @@ impl PageFaultHandler for UStackPageFaultHandler {
         page_table: &mut PageTable,
     ) -> GeneralRet<bool> {
         // Box::pin(async move {
-        debug!("handle ustack page fault");
+        debug!("handle ustack page fault, va {:#x}", va.0);
         // area.map_one(page_table, VirtPageNum::from(va));
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
         let data_frames = unsafe { &mut *vma.data_frames.get() };
         data_frames.0.insert(vpn, Arc::new(frame));
-        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::U;
+        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::X | PTEFlags::U;
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
         Ok(true)
@@ -96,13 +96,16 @@ impl PageFaultHandler for SBrkPageFaultHandler {
     ) -> GeneralRet<bool> {
         // todo!()
         // Box::pin(async move {
-        debug!("handle sbrk page fault");
+        debug!("handle sbrk page fault, va {:#x}", va.0);
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
         let data_frames = unsafe { &mut *vma.data_frames.get() };
+        if let Some(frame) = data_frames.0.get(&vpn) {
+            warn!("[sbrk page fault handler]: already exist phyiscal frame {:#x} for va {:#x}, pte flags {:?}", frame.ppn.0, va.0, page_table.find_pte(va.floor()).unwrap().flags());
+        }
         data_frames.0.insert(vpn, Arc::new(frame));
-        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::U;
+        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::X | PTEFlags::U;
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
         Ok(true)
@@ -153,11 +156,11 @@ impl PageFaultHandler for MmapPageFaultHandler {
     // page cache version
     fn handle_page_fault(
         &self,
-        _va: VirtAddr,
+        va: VirtAddr,
         _vma: &VmArea,
         _page_table: &mut PageTable,
     ) -> GeneralRet<bool> {
-        debug!("handle mmap page fault");
+        debug!("handle mmap page fault, va {:#x}", va.0);
         Ok(false)
         // Box::pin(async move {
         // })
@@ -207,7 +210,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             // let mut pte_flags = vma.map_perm.into();
             pte_flags |= PTEFlags::U;
             let phy_page_num =
-                PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr().await as usize));
+                PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr() as usize));
             trace!(
                 "file page content {:?}",
                 String::from_utf8(page.bytes_array().await.to_vec())
@@ -215,7 +218,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             trace!(
                 "phy page num {:#x}, kernel addr {:#x}",
                 phy_page_num.0,
-                page.bytes_array_ptr().await as usize
+                page.bytes_array_ptr() as usize
             );
 
             process.inner_handler(|proc| {
@@ -234,9 +237,9 @@ impl PageFaultHandler for MmapPageFaultHandler {
 
 ///
 #[derive(Clone)]
-pub struct ForkPageFaultHandler {}
+pub struct CowPageFaultHandler {}
 
-impl PageFaultHandler for ForkPageFaultHandler {
+impl PageFaultHandler for CowPageFaultHandler {
     fn handle_page_fault(
         &self,
         va: VirtAddr,
