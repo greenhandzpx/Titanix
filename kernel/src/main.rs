@@ -11,6 +11,7 @@
 #![feature(sync_unsafe_cell)]
 #![feature(linked_list_remove)]
 #![feature(core_intrinsics)]
+#![feature(const_mut_refs)]
 // #![feature(custom_test_frameworks)]
 // #![test_runner(crate::test_runner)]
 

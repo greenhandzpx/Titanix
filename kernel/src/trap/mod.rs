@@ -192,15 +192,15 @@ pub fn trap_return(trap_context: &mut TrapContext) {
 
 #[no_mangle]
 /// Unimplement: traps/interrupts/exceptions from kernel mode
-pub async fn trap_from_kernel() {
+pub fn trap_from_kernel() {
     // #[cfg(feature = "kernel_timer_interrupt")]
     let scause = scause::read();
     match scause.cause() {
-        Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            set_next_trigger();
-            handle_timeout_events();
-            process::yield_now().await;
-        }
+        // Trap::Interrupt(Interrupt::SupervisorTimer) => {
+        //     set_next_trigger();
+        //     handle_timeout_events();
+        //     process::yield_now().await;
+        // }
         _ => {
             error!(
                 "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it. pid: {}",

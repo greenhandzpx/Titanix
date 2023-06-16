@@ -52,6 +52,7 @@ pub struct PageBuilder {
     permission: MapPermission,
     offset: Option<usize>,
     inode: Option<Weak<dyn Inode>>,
+    physical_frame: Option<FrameTracker>,
     is_file_page: bool,
 }
 
@@ -60,6 +61,7 @@ impl PageBuilder {
         Self {
             offset: None,
             inode: None,
+            physical_frame: None,
             permission: MapPermission::from_bits(0).unwrap(),
             is_file_page: false,
         }
@@ -80,10 +82,18 @@ impl PageBuilder {
         self.inode = Some(inode);
         self
     }
-    pub fn build(self) -> Page {
+    pub fn physical_frame(mut self, frame: FrameTracker) -> Self {
+        self.physical_frame = Some(frame);
+        self
+    }
+    pub fn build(mut self) -> Page {
+        let frame = match self.physical_frame {
+            None => mm::frame_alloc().unwrap(),
+            Some(_) => self.physical_frame.take().unwrap(),
+        };
         Page {
             permission: self.permission,
-            data_frame: mm::frame_alloc().unwrap(),
+            data_frame: frame,
             file_info: match self.is_file_page {
                 true => Some(Mutex::new(FilePageInfo {
                     file_offset: self.offset.unwrap(),
@@ -167,7 +177,7 @@ impl Page {
     }
 
     /// Get the bytes array of this page
-    pub async fn bytes_array(&self) -> &'static [u8] {
+    pub fn bytes_array(&self) -> &'static [u8] {
         self.data_frame.ppn.bytes_array()
     }
 

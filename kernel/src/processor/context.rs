@@ -1,9 +1,7 @@
-use core::cell::SyncUnsafeCell;
-
 use alloc::{boxed::Box, sync::Arc};
 use riscv::register::sstatus;
 
-use crate::{mm::PageTable, process::thread::Thread, utils::debug::stack_tracker::StackTracker};
+use crate::{mm::PageTable, process::thread::Thread, utils::{debug::stack_tracker::StackTracker, cell::SyncUnsafeCell}};
 
 pub enum LocalContext {
     /// There is no user task now(i.e. kernel thread is running)

@@ -9,10 +9,13 @@ use crate::{
     processor::{current_process, local_hart, SumGuard},
     stack_trace,
     trap::trap_from_kernel,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::{
+        async_tools::block_on,
+        error::{GeneralRet, SyscallErr},
+    },
 };
 
-use super::VirtAddr;
+use super::{memory_space, VirtAddr};
 
 global_asm!(include_str!("check.S"));
 ///
@@ -56,7 +59,7 @@ impl UserCheck {
         // debug!("[proc {}] check read sva {:#x} eva {:#x}", current_process().pid(), buf_start.0, buf_end.0);
         while va < buf_end {
             if let Some(scause) = self.try_read_u8(va.into()) {
-                self.handle_page_fault(&mut va, scause)?;
+                block_on(self.handle_page_fault(&mut va, scause))?
             }
             va.0 += PAGE_SIZE;
         }
@@ -71,7 +74,7 @@ impl UserCheck {
         let mut va = buf_start;
         while va < buf_end {
             if let Some(scause) = self.try_write_u8(va.into()) {
-                self.handle_page_fault(&mut va, scause)?
+                block_on(self.handle_page_fault(&mut va, scause))?
             }
             va.0 += PAGE_SIZE;
         }
@@ -87,7 +90,7 @@ impl UserCheck {
         let mut first = true;
         loop {
             if let Some(scause) = self.try_read_u8(va.into()) {
-                self.handle_page_fault(&mut va, scause)?
+                block_on(self.handle_page_fault(&mut va, scause))?
             }
             if first {
                 if self.check_c_str_end(VirtAddr::from(c_str as usize)) {
@@ -135,7 +138,7 @@ impl UserCheck {
     }
 
     fn try_write_u8(&self, user_addr: usize) -> Option<usize> {
-        let (a0, scause) = unsafe { __try_write_user_u8(user_addr) };
+        let (a0, _scause) = unsafe { __try_write_user_u8(user_addr) };
         match a0 {
             0 => None,
             // TODO: optimize
@@ -143,42 +146,44 @@ impl UserCheck {
         }
     }
 
-    fn handle_page_fault(&self, va: &mut VirtAddr, scause: usize) -> GeneralRet<()> {
-        match current_process().inner_handler(|proc| proc.memory_set.handle_page_fault(*va, scause))
-        {
-            Ok(handler) => {
-                if handler.is_some() {
-                    panic!()
-                }
-                debug!(
-                    "[kernel] [proc {}]handle legal page fault, addr {:#x}",
-                    current_process().pid(),
-                    va.0
-                );
-                va.0 += PAGE_SIZE;
-                Ok(())
-            }
-            Err(_) => {
-                warn!(
-                    "[kernel] [user check](scause:{}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
-                    scause,
-                    va.0,
-                    current_process().pid()
-                );
-                warn!("backtrace:");
-                local_hart()
-                    .env()
-                    .stack_tracker
-                    .as_ref()
-                    .unwrap()
-                    .print_stacks();
-                exit_and_terminate_all_threads(-2);
-                // current_process().inner_handler(|proc| {
-                //     proc.exit_code = -2;
-                //     proc.is_zombie = true;
-                // });
-                return Err(SyscallErr::EFAULT);
-            }
-        }
+    async fn handle_page_fault(&self, va: &mut VirtAddr, scause: usize) -> GeneralRet<()> {
+        memory_space::handle_page_fault(*va, scause).await
+        // match current_process()
+        //     .inner_handler(|proc| proc.memory_space.page_fault_handler(*va, scause))
+        // {
+        //     Ok(handler) => {
+        //         if handler.0.handle_page_fault(va, memory_space, vma) {
+        //             panic!()
+        //         }
+        //         debug!(
+        //             "[kernel] [proc {}]handle legal page fault, addr {:#x}",
+        //             current_process().pid(),
+        //             va.0
+        //         );
+        //         va.0 += PAGE_SIZE;
+        //         Ok(())
+        //     }
+        //     Err(_) => {
+        //         warn!(
+        //             "[kernel] [user check](scause:{}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
+        //             scause,
+        //             va.0,
+        //             current_process().pid()
+        //         );
+        //         warn!("backtrace:");
+        //         local_hart()
+        //             .env()
+        //             .stack_tracker
+        //             .as_ref()
+        //             .unwrap()
+        //             .print_stacks();
+        //         exit_and_terminate_all_threads(-2);
+        //         // current_process().inner_handler(|proc| {
+        //         //     proc.exit_code = -2;
+        //         //     proc.is_zombie = true;
+        //         // });
+        //         return Err(SyscallErr::EFAULT);
+        //     }
+        // }
     }
 }

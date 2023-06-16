@@ -145,7 +145,7 @@ impl File for DefaultFile {
 
             while buf_offset < buf_end {
                 // Get the page from page cache
-                let page = page_cache.get_page(file_offset)?;
+                let page = page_cache.get_page(file_offset, None)?;
 
                 // Read this page
                 let page_offset = file_offset % PAGE_SIZE;
@@ -201,7 +201,7 @@ impl File for DefaultFile {
 
             while buf_offset < buf_end {
                 // Get the page from page cache
-                let page = page_cache.get_page(file_offset)?;
+                let page = page_cache.get_page(file_offset, None)?;
 
                 // Read this page
                 let page_offset = file_offset % PAGE_SIZE;

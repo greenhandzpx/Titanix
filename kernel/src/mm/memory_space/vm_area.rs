@@ -1,5 +1,4 @@
 use alloc::{collections::BTreeMap, sync::Arc};
-use core::cell::SyncUnsafeCell;
 use log::warn;
 
 use crate::{
@@ -8,20 +7,25 @@ use crate::{
     mm::{
         address::{StepByOne, VPNRange},
         frame_alloc,
+        page::PageBuilder,
         page_table::PTEFlags,
-        FrameTracker, PageTable, PhysPageNum, VirtAddr, VirtPageNum,
+        Page, PageTable, PhysPageNum, VirtAddr, VirtPageNum,
     },
     stack_trace,
     syscall::MmapFlags,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::{
+        cell::SyncUnsafeCell,
+        error::{GeneralRet, SyscallErr},
+    },
 };
 
 use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType};
 
 ///
-pub struct FrameManager(pub BTreeMap<VirtPageNum, Arc<FrameTracker>>);
+#[derive(Clone)]
+pub struct PageManager(pub BTreeMap<VirtPageNum, Arc<Page>>);
 
-impl FrameManager {
+impl PageManager {
     ///
     pub fn new() -> Self {
         Self(BTreeMap::new())
@@ -39,17 +43,13 @@ pub struct BackupFile {
     pub file: Arc<dyn File>,
 }
 
-struct VmAreaBuilder {
-    // TODO
-}
-
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct VmArea {
     /// Vpn range
     pub vpn_range: VPNRange,
     /// We don't need to use lock because we've locked the process
     /// inner every time we handle page fault
-    pub data_frames: SyncUnsafeCell<FrameManager>,
+    pub data_frames: SyncUnsafeCell<PageManager>,
     /// Map type
     pub map_type: MapType,
     /// Map permission
@@ -80,7 +80,7 @@ impl VmArea {
         // println!("end vpn {:#x}", end_vpn.0);
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
-            data_frames: SyncUnsafeCell::new(FrameManager::new()),
+            data_frames: SyncUnsafeCell::new(PageManager::new()),
             map_type,
             map_perm,
             mmap_flags: None,
@@ -92,7 +92,7 @@ impl VmArea {
     pub fn from_another(another: &Self) -> Self {
         let mut ret = Self {
             vpn_range: VPNRange::new(another.vpn_range.start(), another.vpn_range.end()),
-            data_frames: SyncUnsafeCell::new(FrameManager::new()),
+            data_frames: SyncUnsafeCell::new(PageManager::new()),
             map_type: another.map_type,
             map_perm: another.map_perm,
             mmap_flags: None,
@@ -115,17 +115,18 @@ impl VmArea {
         self.vpn_range.end()
     }
     ///
-    pub fn handle_page_fault(
+    pub fn page_fault_handler(
         &self,
         va: VirtAddr,
-        page_table: &mut PageTable,
-    ) -> GeneralRet<Option<Arc<dyn PageFaultHandler>>> {
+        // page_table: &mut PageTable,
+    ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&Self>)> {
         if let Some(handler) = self.handler.as_ref() {
-            if !handler.handle_page_fault(va, self, page_table)? {
-                Ok(self.handler.as_ref().cloned())
-            } else {
-                Ok(None)
-            }
+            Ok((handler.clone(), Some(self)))
+            // if !handler.handle_page_fault(va, Some(self), page_table)? {
+            //     Ok(self.handler.as_ref().cloned())
+            // } else {
+            //     Ok(None)
+            // }
         } else {
             warn!("No page fault handler for va {:#x}", va.0);
             Err(SyscallErr::EFAULT)
@@ -142,8 +143,11 @@ impl VmArea {
                 // ppn = PhysPageNum(vpn.0);
             }
             MapType::Framed => {
-                let frame = frame_alloc().unwrap();
-                ppn = frame.ppn;
+                let frame = PageBuilder::new()
+                    .permission(self.map_perm)
+                    .physical_frame(frame_alloc().unwrap())
+                    .build();
+                ppn = frame.data_frame.ppn;
                 self.data_frames.get_mut().0.insert(vpn, Arc::new(frame));
             }
             MapType::Direct => {
@@ -158,28 +162,6 @@ impl VmArea {
         ppn
     }
 
-    /// only add the given va and pa to the pagetable without allocating new physical frame
-    pub fn map_one_lazily(
-        &mut self,
-        page_table: &mut PageTable,
-        vpn: VirtPageNum,
-        ph_frame: &Arc<FrameTracker>,
-    ) -> PhysPageNum {
-        match self.map_type {
-            MapType::Framed => {
-                self.data_frames.get_mut().0.insert(vpn, ph_frame.clone());
-            }
-            _ => {
-                panic!("Unsupported map type");
-            }
-        }
-        let ppn = ph_frame.ppn;
-        // debug!("ppn {:#x}", ppn.0);
-        let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
-        // debug!("vpn {:#x} pg ph {:#x}", vpn.0, ppn.0);
-        page_table.map(vpn, ppn, pte_flags);
-        ppn
-    }
     ///
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         if self.map_type == MapType::Framed {

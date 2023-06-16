@@ -47,14 +47,14 @@ pub fn sys_mmap(
         }
         current_process().inner_handler(|proc| {
             let mut vma = proc
-                .memory_set
+                .memory_space
                 .find_unused_area(length, map_permission)
                 .ok_or(SyscallErr::ENOMEM)?;
             vma.mmap_flags = Some(flags);
             let handler = SBrkPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
             let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_set.insert_area(vma);
+            proc.memory_space.insert_area(vma);
 
             debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
             Ok(start_va.0 as isize)
@@ -67,7 +67,7 @@ pub fn sys_mmap(
             // file.seek(0)?;
             // file.sync_read(&mut buf)?;
             let mut vma = proc
-                .memory_set
+                .memory_space
                 .find_unused_area(length, map_permission)
                 .ok_or(SyscallErr::ENOMEM)?;
             vma.mmap_flags = Some(flags);
@@ -84,7 +84,7 @@ pub fn sys_mmap(
                                     // .unwrap(),
             });
             let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_set.insert_area(vma);
+            proc.memory_space.insert_area(vma);
 
             debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
             Ok(start_va.0 as isize)
@@ -105,7 +105,7 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
     }
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     // current_process().inner_handler(| proc | {
-    //     let vma = proc.memory_set.find_vm_area_mut_by_vpn(VirtAddr::from(addr).floor()).ok_or(Err(SyscallErr::))
+    //     let vma = proc.memory_space.find_vm_area_mut_by_vpn(VirtAddr::from(addr).floor()).ok_or(Err(SyscallErr::))
     // })
     // TODO
     Ok(0)

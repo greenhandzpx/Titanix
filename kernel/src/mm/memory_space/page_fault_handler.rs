@@ -1,17 +1,18 @@
 use alloc::{boxed::Box, string::String, sync::Arc};
-use log::{debug, info, trace, warn};
+use log::{debug,  trace, warn};
 use riscv::register::scause::Scause;
 
 use crate::{
     mm::{
-        address::KernelAddr, frame_alloc, page_table::PTEFlags, PageTable, PhysPageNum, VirtAddr,
+        address::KernelAddr, frame_alloc, page::PageBuilder, page_table::PTEFlags, 
+        PhysPageNum, VirtAddr, MapPermission,
     },
     process::Process,
     processor::current_process,
     utils::error::{AgeneralRet, GeneralRet, SyscallErr},
 };
 
-use super::VmArea;
+use super::{MemorySpace, VmArea};
 
 // type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -22,8 +23,8 @@ pub trait PageFaultHandler: Send + Sync {
     fn handle_page_fault(
         &self,
         va: VirtAddr,
-        vma: &VmArea,
-        page_table: &mut PageTable,
+        memory_space: &MemorySpace,
+        vma: Option<&VmArea>,
     ) -> GeneralRet<bool>;
 
     ///
@@ -52,8 +53,8 @@ impl PageFaultHandler for UStackPageFaultHandler {
     fn handle_page_fault(
         &self,
         va: VirtAddr,
-        vma: &VmArea,
-        page_table: &mut PageTable,
+        memory_space: &MemorySpace,
+        vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
         // Box::pin(async move {
         debug!("handle ustack page fault, va {:#x}", va.0);
@@ -61,9 +62,14 @@ impl PageFaultHandler for UStackPageFaultHandler {
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
-        let data_frames = unsafe { &mut *vma.data_frames.get() };
-        data_frames.0.insert(vpn, Arc::new(frame));
+        let page = PageBuilder::new()
+            .permission(vma.as_ref().unwrap().map_perm)
+            .physical_frame(frame)
+            .build();
+        let data_frames = unsafe { &mut *vma.as_ref().unwrap().data_frames.get() };
+        data_frames.0.insert(vpn, Arc::new(page));
         let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::X | PTEFlags::U;
+        let page_table = memory_space.page_table.get_unchecked_mut();
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
         Ok(true)
@@ -91,8 +97,8 @@ impl PageFaultHandler for SBrkPageFaultHandler {
     fn handle_page_fault(
         &self,
         va: VirtAddr,
-        vma: &VmArea,
-        page_table: &mut PageTable,
+        memory_space: &MemorySpace,
+        vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
         // todo!()
         // Box::pin(async move {
@@ -100,11 +106,16 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
-        let data_frames = unsafe { &mut *vma.data_frames.get() };
-        if let Some(frame) = data_frames.0.get(&vpn) {
-            warn!("[sbrk page fault handler]: already exist phyiscal frame {:#x} for va {:#x}, pte flags {:?}", frame.ppn.0, va.0, page_table.find_pte(va.floor()).unwrap().flags());
-        }
-        data_frames.0.insert(vpn, Arc::new(frame));
+        let page = PageBuilder::new()
+            .permission(vma.as_ref().unwrap().map_perm)
+            .physical_frame(frame)
+            .build();
+        let data_frames = unsafe { &mut *vma.as_ref().unwrap().data_frames.get() };
+        let page_table = memory_space.page_table.get_unchecked_mut();
+        // if let Some(frame) = data_frames.0.get(&vpn) {
+        //     warn!("[sbrk page fault handler]: already exist phyiscal frame {:#x} for va {:#x}, pte flags {:?}", ppn.0, va.0, page_table.find_pte(va.floor()).unwrap().flags());
+        // }
+        data_frames.0.insert(vpn, Arc::new(page));
         let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::X | PTEFlags::U;
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
@@ -157,8 +168,8 @@ impl PageFaultHandler for MmapPageFaultHandler {
     fn handle_page_fault(
         &self,
         va: VirtAddr,
-        _vma: &VmArea,
-        _page_table: &mut PageTable,
+        _memory_space: &MemorySpace,
+        _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
         debug!("handle mmap page fault, va {:#x}", va.0);
         Ok(false)
@@ -169,14 +180,14 @@ impl PageFaultHandler for MmapPageFaultHandler {
     fn handle_page_fault_async(
         &self,
         va: VirtAddr,
-        process: &'static Arc<Process>, // vma: &VmArea,
+        process: &'static Arc<Process>, 
                                         // page_table: &mut PageTable,
     ) -> AgeneralRet<()> {
         Box::pin(async move {
             debug!("handle mmap page fault asynchronously");
-            let (inode, mut pte_flags, start_vpn) = process.inner_handler(|proc| {
+            let (inode, mut map_perm, start_vpn) = process.inner_handler(|proc| {
                 let vma = proc
-                    .memory_set
+                    .memory_space
                     .find_vm_area_by_vpn(va.floor())
                     .ok_or(SyscallErr::EFAULT)?;
                 Ok((
@@ -184,7 +195,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
                         .as_ref()
                         .cloned()
                         .ok_or(SyscallErr::ENODEV)?,
-                    PTEFlags::from(vma.map_perm),
+                    vma.map_perm,
                     vma.start_vpn(),
                 ))
             })?;
@@ -205,15 +216,14 @@ impl PageFaultHandler for MmapPageFaultHandler {
                 .page_cache
                 .as_mut()
                 .unwrap()
-                .get_page(offset)?;
+                .get_page(offset, Some(map_perm))?;
             page.load_all_buffers().await?;
             // let mut pte_flags = vma.map_perm.into();
-            pte_flags |= PTEFlags::U;
-            let phy_page_num =
-                PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr() as usize));
+            let pte_flags: PTEFlags = PTEFlags::from(map_perm) | PTEFlags::U;
+            let phy_page_num = PhysPageNum::from(KernelAddr::from(page.bytes_array_ptr() as usize));
             trace!(
                 "file page content {:?}",
-                String::from_utf8(page.bytes_array().await.to_vec())
+                String::from_utf8(page.bytes_array().to_vec())
             );
             trace!(
                 "phy page num {:#x}, kernel addr {:#x}",
@@ -222,7 +232,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             );
 
             process.inner_handler(|proc| {
-                let page_table = unsafe { &mut *proc.memory_set.page_table.get() };
+                let page_table = unsafe { &mut *proc.memory_space.page_table.get() };
                 page_table.map(va.floor(), phy_page_num, pte_flags);
                 page_table.activate();
             });
@@ -243,92 +253,88 @@ impl PageFaultHandler for CowPageFaultHandler {
     fn handle_page_fault(
         &self,
         va: VirtAddr,
-        vma: &VmArea,
-        page_table: &mut PageTable,
+        memory_space: &MemorySpace,
+        _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
-        // todo!()
-        // Box::pin(async move {
-        debug!("handle fork page fault(cow), va {:#x}", va.0);
-        // panic!();
-        let data_frames = unsafe { &mut *vma.data_frames.get() };
+        debug!("handle cow page fault(cow), va {:#x}", va.0);
+
         let vpn = va.floor();
+        let page_table = memory_space.page_table.get_unchecked_mut();
 
         if let Some(pte) = page_table.find_pte(vpn) {
             // the page has correlated physical frame
             debug_assert!(pte.flags().contains(PTEFlags::COW));
             debug_assert!(!pte.flags().contains(PTEFlags::W));
-            let old_frame = data_frames
-                .0
-                .get(&vpn)
-                .expect("There must a physical frame");
+            let shared_page = memory_space.cow_pages.page_mgr.get_unchecked_mut().0.get(&va.floor()).unwrap();
+
+            if !shared_page.permission.contains(MapPermission::W) {
+                warn!("pagefault illegal although cow since map perm doesn't contain W, va {:#x}, ppn {:#x}, map perm {:?}, pte flags {:?}", va.0, pte.ppn().0, shared_page.permission, pte.flags());
+                return Err(SyscallErr::EFAULT)
+            }
 
             // modify pte
             let mut pte_flags = pte.flags() | PTEFlags::W;
             pte_flags.remove(PTEFlags::COW);
 
-            // // Else
-            // // we should allocate new frame and decrease
-            // // old frame's ref cnt
-            // let new_frame = frame_alloc().unwrap();
-            // // copy old frame's data to the new frame
-            // new_frame
-            //     .ppn
-            //     .bytes_array()
-            //     .copy_from_slice(&old_frame.ppn.bytes_array());
-            // // modify page table
-            // page_table.unmap(vpn);
-            // page_table.map(vpn, new_frame.ppn, pte_flags);
-            // page_table.activate();
-            // // decrease old frame's ref cnt
-            // debug!("ph frame ref cnt {}", Arc::strong_count(old_frame));
-            // data_frames.0.remove(&vpn);
-            // data_frames.0.insert(vpn, Arc::new(new_frame));
-
             // Note that we must hold the process_inner's lock now
             // so it is safe for us to check the ref count.
-            if Arc::strong_count(old_frame) == 1 {
-                debug!(
-                    "[pid {}] ph frame ref cnt is 1, va: {:#x}",
-                    current_process().pid(),
-                    va.0
-                );
-                // If the ref cnt is only 1
-                // we can just modify the pagetable without
-                // allocating new frame
-                pte.set_flags(pte_flags);
-                page_table.activate();
-            } else {
-                // Else
-                // we should allocate new frame and decrease
-                // old frame's ref cnt
-                let new_frame = frame_alloc().unwrap();
-                // copy old frame's data to the new frame
-                new_frame
-                    .ppn
-                    .bytes_array()
-                    .copy_from_slice(&old_frame.ppn.bytes_array());
-                // modify page table
-                page_table.unmap(vpn);
-                page_table.map(vpn, new_frame.ppn, pte_flags);
-                page_table.activate();
-                // decrease old frame's ref cnt
-                data_frames.0.remove(&vpn);
-                data_frames.0.insert(vpn, Arc::new(new_frame));
-            }
+
+            let page = match Arc::strong_count(shared_page) {
+                1 => {
+                    debug!(
+                        "[pid {}] ph frame ref cnt is 1, va: {:#x}",
+                        current_process().pid(),
+                        va.0
+                    );
+                    // If the ref cnt is only 1
+                    // we can just modify the pagetable without
+                    // allocating new frame
+                    pte.set_flags(pte_flags);
+                    page_table.activate();
+                    memory_space.cow_pages.page_mgr.get_unchecked_mut().0.remove(&vpn).unwrap()
+                }
+                _ => {
+                    // Else
+                    // we should allocate new frame and decrease
+                    // old frame's ref cnt
+                    let new_frame = frame_alloc().unwrap();
+                    // copy old frame's data to the new frame
+                    new_frame
+                        .ppn
+                        .bytes_array()
+                        .copy_from_slice(&shared_page.bytes_array());
+                    // modify page table
+                    page_table.unmap(vpn);
+                    page_table.map(vpn, new_frame.ppn, pte_flags);
+                    page_table.activate();
+                    // decrease old frame's ref cnt
+                    memory_space.cow_pages.page_mgr.get_unchecked_mut().0.remove(&vpn);
+                    Arc::new(
+                        PageBuilder::new()
+                            .permission(shared_page.permission)
+                            .physical_frame(new_frame)
+                            .build(),
+                    )
+                }
+            };
+            let old_vma = memory_space.find_vm_area_by_vpn(vpn).unwrap();
+            let data_frames = old_vma.data_frames.get_unchecked_mut();
+            data_frames.0.insert(vpn, page);
+
         } else {
-            // the page still not allocated (maybe because of lazy alloc(e.g. ustack))
-            // we should allocate new frame
-            info!("no such frame in cow, va {:#x}", va.0);
-            let new_frame = frame_alloc().unwrap();
-            let mut pte_flags = PTEFlags::from_bits(vma.map_perm.bits()).unwrap() | PTEFlags::W;
-            pte_flags.remove(PTEFlags::COW);
-            page_table.map(vpn, new_frame.ppn, pte_flags);
-            page_table.activate();
-            data_frames.0.insert(vpn, Arc::new(new_frame));
+            panic!();
+            // // the page still not allocated (maybe because of lazy alloc(e.g. ustack))
+            // // we should allocate new frame
+            // info!("no such frame in cow, va {:#x}", va.0);
+            // let new_frame = frame_alloc().unwrap();
+            // let mut pte_flags = PTEFlags::from_bits(vma.map_perm.bits()).unwrap() | PTEFlags::W;
+            // pte_flags.remove(PTEFlags::COW);
+            // page_table.map(vpn, new_frame.ppn, pte_flags);
+            // page_table.activate();
+            // data_frames.0.insert(vpn, Arc::new(new_frame));
         }
 
         Ok(true)
-        // })
     }
 
     fn is_legal(&self, scause: Scause) -> bool {
@@ -355,8 +361,8 @@ impl PageFaultHandler for ElfPageFaultHandler {
     fn handle_page_fault(
         &self,
         _va: VirtAddr,
-        _vma: &VmArea,
-        _page_table: &mut PageTable,
+        _memory_space: &MemorySpace,
+        _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
         todo!()
     }

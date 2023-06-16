@@ -123,7 +123,7 @@ pub struct ProcessInner {
     /// Whether this process is a zombie process
     pub is_zombie: bool,
     /// The process's address space
-    pub memory_set: MemorySpace,
+    pub memory_space: MemorySpace,
     /// Parent process
     pub parent: Option<Weak<Process>>,
     /// Children processes
@@ -233,8 +233,8 @@ impl Drop for Process {
 impl Process {
     /// Create a new process
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
-        let (memory_set, user_sp_base, entry_point, auxv) = MemorySpace::from_elf(elf_data);
-        // let debug_pa = memory_set.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
+        let (memory_space, user_sp_base, entry_point, auxv) = MemorySpace::from_elf(elf_data);
+        // let debug_pa = memory_space.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
         // println!("entry pa {:#x}", debug_pa);
         // Alloc a pid
         let pid_handle = pid_alloc();
@@ -242,7 +242,7 @@ impl Process {
             pid: pid_handle,
             inner: SpinNoIrqLock::new(ProcessInner {
                 is_zombie: false,
-                memory_set,
+                memory_space,
                 parent: None,
                 children: Vec::new(),
                 fd_table: FdTable::new(),
@@ -291,22 +291,22 @@ impl Process {
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
         debug!("exec pid {}", current_process().pid());
         stack_trace!();
-        let (memory_set, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
+        let (memory_space, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
         let task_ptr: *const Thread = self.inner_handler(|proc| {
             assert_eq!(proc.thread_count(), 1);
-            // memory_set with elf program headers/trampoline/trap context/user stack
-            // substitute memory_set
-            memory_set.activate();
+            // memory_space with elf program headers/trampoline/trap context/user stack
+            // substitute memory_space
+            memory_space.activate();
             // Change hart local context's pagetable (quite important!!!)
             let hart = local_hart();
-            hart.change_page_table(memory_set.page_table.clone());
-            // process_inner.memory_set = memory_set;
+            hart.change_page_table(memory_space.page_table.clone());
+            // process_inner.memory_space = memory_space;
             proc.threads[0].as_ptr()
         });
 
         terminate_all_threads_except_main();
         // Then we alloc user resource for main thread again
-        // since memory_set has been changed
+        // since memory_space has been changed
         let task = unsafe {
             &*task_ptr
             // &*process_inner.threads[0].as_ptr()
@@ -317,11 +317,11 @@ impl Process {
 
         self.inner_handler(|proc| {
             proc.ustack_base = ustack_base;
-            proc.memory_set = memory_set;
+            proc.memory_space = memory_space;
         });
         // // dealloc old ustack
         // task.dealloc_ustack();
-        // self.inner.lock().memory_set = memory_set;
+        // self.inner.lock().memory_space = memory_space;
         task_inner.ustack_base = ustack_base;
         // alloc new ustack
         task.alloc_ustack();
@@ -540,10 +540,11 @@ impl Process {
                 "fork: child's pid {}, parent's pid {} before",
                 pid.0, self.pid.0
             );
-            // clone parent's memory_set completely including trampoline/ustacks/trap_cxs
+            // clone parent's memory_space completely including trampoline/ustacks/trap_cxs
             // here we just copy on write
-            let memory_set = MemorySpace::from_existed_user_lazily(&mut parent_inner.memory_set);
-            // let memory_set = MemorySpace::from_existed_user(&parent_inner.memory_set);
+            let memory_space =
+                MemorySpace::from_existed_user_lazily(&mut parent_inner.memory_space);
+            // let memory_space = MemorySpace::from_existed_user(&parent_inner.memory_space);
 
             // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
@@ -552,7 +553,7 @@ impl Process {
                 pid,
                 inner: SpinNoIrqLock::new(ProcessInner {
                     is_zombie: false,
-                    memory_set,
+                    memory_space,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     fd_table: FdTable::from_another(&parent_inner.fd_table),

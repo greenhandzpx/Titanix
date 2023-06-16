@@ -7,7 +7,18 @@ impl<T> SyncUnsafeCell<T> {
         Self(core::cell::SyncUnsafeCell::new(value))
     }
 
-    pub unsafe fn get_unchecked_mut(&self) -> &mut T {
-        &mut *self.0.get()
+    #[inline]
+    pub fn get_unchecked_mut(&self) -> &mut T {
+        unsafe { &mut *self.0.get() }
+    }
+
+    #[inline]
+    pub const fn get(&self) -> *mut T {
+        self.0.get()
+    }    
+    
+    #[inline]
+    pub const fn get_mut(&mut self) -> &mut T {
+        self.0.get_mut()
     }
 }
