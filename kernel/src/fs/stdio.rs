@@ -7,7 +7,7 @@ use crate::{
     process,
     processor::SumGuard,
     sbi::console_getchar,
-    sync::mutex::{SleepLock, SpinNoIrqLock},
+    sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
