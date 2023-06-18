@@ -1,8 +1,5 @@
 //! SBI console driver, for text output
-use crate::{
-    sbi::console_putchar,
-    sync::mutex::{SleepLock, SpinNoIrqLock},
-};
+use crate::{sbi::console_putchar, sync::mutex::SpinNoIrqLock};
 use core::fmt::{self, Write};
 use lazy_static::*;
 

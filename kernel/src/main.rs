@@ -31,7 +31,7 @@ mod config;
 mod driver;
 mod executor;
 mod fs;
-mod lang_items;
+mod panic;
 mod loader;
 pub mod mm;
 pub mod process;

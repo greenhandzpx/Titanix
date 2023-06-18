@@ -180,6 +180,7 @@ impl Future for SleepFuture {
     }
 }
 
+#[allow(unused)]
 pub async fn ksleep(duration: Duration) {
     let future = &mut SleepFuture::new(duration);
     unsafe { Pin::new_unchecked(future).init().await.await }
