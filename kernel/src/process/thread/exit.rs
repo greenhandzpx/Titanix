@@ -1,9 +1,8 @@
 use crate::{
-    mm::user_check::UserCheck, process::INITPROC, processor::current_process, signal::Signal,
-    stack_trace,
+    process::INITPROC, processor::current_process, signal::Signal, stack_trace, sync::Event,
 };
 use alloc::{sync::Arc, vec::Vec};
-use log::{debug, error, info, warn};
+use log::debug;
 
 use super::Thread;
 
@@ -68,6 +67,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
         thread.tid()
     );
     process_inner.is_zombie = true;
+
     for child in process_inner.children.iter() {
         unsafe {
             child.inner.lock().parent = Some(Arc::downgrade(INITPROC.as_ref().unwrap()));
@@ -92,6 +92,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // In order to avoid dead lock
     drop(process_inner);
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
+    parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
     parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(Signal::SIGCHLD))
     // todo!("Handle thread exit")
 }

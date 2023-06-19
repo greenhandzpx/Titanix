@@ -4,3 +4,6 @@ pub use cond_var::CondVar;
 
 /// Different kinds of mutex
 pub mod mutex;
+mod mailbox;
+pub use mailbox::Mailbox;
+pub use mailbox::Event;

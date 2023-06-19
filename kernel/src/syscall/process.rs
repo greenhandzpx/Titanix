@@ -1,5 +1,6 @@
+use crate::config::process::INITPROC_PID;
 use crate::fs::inode::open_file;
-use crate::fs::{print_dir_tree, OpenFlags};
+use crate::fs::OpenFlags;
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -7,11 +8,12 @@ use crate::process::thread::{self, exit_and_terminate_all_threads, terminate_giv
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::Signal;
+use crate::sync::Event;
 use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::string::c_str_to_string;
-use crate::{fs, process, stack_trace};
+use crate::{process, stack_trace};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{debug, info, trace, warn};
@@ -372,18 +374,18 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     //     UserCheck::new()
     //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
     // }
+
     loop {
-        let (found_pid, exit_code) = process.inner_handler(move |proc| {
-            // find a child process
+        process.mailbox.wait_for_event(Event::CHILD_EXIT).await;
+        if let Some((os_exit, found_pid, exit_code)) = process.inner_handler(|proc| {
+            if process.pid() == INITPROC_PID && proc.children.is_empty() {
+                return Ok(Some((true, 0, 0)));
+            }
             if !proc
                 .children
                 .iter()
                 .any(|p| pid == -1 || pid as usize == p.pid())
             {
-                if pid == -1 && proc.children.len() == 0 && current_process().pid() == 1 {
-                    // system exit, since no children is alive
-                    return Ok((-3, 0));
-                }
                 warn!(
                     "proc[{}] no such pid {} exit code addr {:#x}",
                     current_process().pid(),
@@ -392,7 +394,6 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 );
                 return Err(SyscallErr::ECHILD);
             }
-
             let idx = proc
                 .children
                 .iter()
@@ -413,52 +414,46 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 let exit_code = child.exit_code();
                 debug!("waitpid: found pid {} exit code {}", found_pid, exit_code);
 
-                Ok((found_pid as isize, exit_code as i32))
+                Ok(Some((false, found_pid as isize, exit_code as i32)))
             } else {
                 // the child still alive
-                Ok((-1 as isize, 0))
+                // Ok((-1 as isize, 0))
+                Ok(None)
             }
-        })?;
-
-        if found_pid == -1 {
-            // info!("yield now");
-            process::yield_now().await;
-        } else if found_pid == -3 {
-            // system exit
-            info!("os will exit");
-            exit_and_terminate_all_threads(0);
-            // TODO: not sure where to invoke `shutdown`
-            shutdown();
-            // return Ok(ret);
-        } else {
-            if exit_status_addr != 0 {
-                UserCheck::new().check_writable_slice(
-                    exit_status_addr as *mut u8,
-                    core::mem::size_of::<i32>(),
-                )?;
-                // TODO: here may cause some concurrency problem between we user_check and write it
-                let _sum_guard = SumGuard::new();
-                let exit_status_ptr = exit_status_addr as *mut i32;
-                debug!(
-                    "waitpid: write pid to exit_status_ptr {:#x} before",
-                    exit_status_addr
-                );
-                // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
-                unsafe {
-                    exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
+        })? {
+            if os_exit {
+                // system exit
+                info!("os will exit");
+                exit_and_terminate_all_threads(0);
+                // TODO: not sure where to invoke `shutdown`
+                shutdown();
+            } else {
+                if exit_status_addr != 0 {
+                    UserCheck::new().check_writable_slice(
+                        exit_status_addr as *mut u8,
+                        core::mem::size_of::<i32>(),
+                    )?;
+                    // TODO: here may cause some concurrency problem between we user_check and write it
+                    let _sum_guard = SumGuard::new();
+                    let exit_status_ptr = exit_status_addr as *mut i32;
                     debug!(
-                        "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
-                        (*exit_status_ptr & 0xff00) >> 8
+                        "waitpid: write pid to exit_status_ptr {:#x} before",
+                        exit_status_addr
                     );
-                    // info!(
-                    //     "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
-                    //     (*exit_status_ptr & 0xff00) >> 8
-                    // );
+                    // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
+                    unsafe {
+                        exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
+                        debug!(
+                            "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
+                            (*exit_status_ptr & 0xff00) >> 8
+                        );
+                    }
                 }
+                // info!("ret {}", found_pid);
+                return Ok(found_pid);
             }
-            debug!("ret {}", found_pid);
-            // info!("ret {}", found_pid);
-            return Ok(found_pid);
+        } else {
+            continue;
         }
     }
 }

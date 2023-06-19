@@ -137,7 +137,6 @@ pub fn rust_main(hart_id: usize) {
         // executor::init();
         // loader::list_apps();
         fs::fat32_tmp::list_apps_fat32();
-        // list_apps();
 
         fs::init();
 
@@ -151,12 +150,12 @@ pub fn rust_main(hart_id: usize) {
             // println!("after initproc!");
         });
 
-        // thread::spawn_kernel_thread(async move {
-        //     loop {
-        //         ksleep(Duration::from_secs(5)).await;
-        //         warn!("I'm awake!! hhh just ignore me");
-        //     }
-        // });
+        thread::spawn_kernel_thread(async move {
+            loop {
+                ksleep(Duration::from_secs(5)).await;
+                warn!("I'm awake!! hhh just ignore me");
+            }
+        });
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);

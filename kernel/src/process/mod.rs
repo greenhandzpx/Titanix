@@ -27,7 +27,7 @@ use crate::{
     processor::{current_process, current_task, hart::local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
-    sync::{mutex::SpinNoIrqLock, CondVar},
+    sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallRet},
 };
@@ -56,14 +56,6 @@ pub static mut INITPROC: Option<Arc<Process>> = None;
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();
-    // debug!("add initproc");
-    // let init_inode = fs::fat32_tmp::open_file("initproc", fs::fat32_tmp::OpenFlags::RDONLY).expect("Cannot find `initproc`!!");
-    // let shell_inode = fs::fat32_tmp::open_file("usershell", fs::fat32_tmp::OpenFlags::RDONLY);
-    // if shell_inode.is_none() {
-    //     warn!("Cannot find user_shell");
-    // }
-    // let elf_data = init_inode.read_all();
-    // unsafe { INITPROC = Some(Process::new(&elf_data)) }
     let elf_data = get_app_data_by_name("initproc").unwrap();
     unsafe { INITPROC = Some(Process::new(elf_data)) }
 }
@@ -148,6 +140,8 @@ pub struct ProcessInner {
     /// Current Work Directory
     /// Maybe change to Dentry later.
     pub cwd: String,
+
+    
 }
 
 impl ProcessInner {
@@ -160,6 +154,8 @@ impl ProcessInner {
 pub struct Process {
     /// immutable
     pid: PidHandle,
+    /// mailbox,
+    pub mailbox: Arc<Mailbox>,
     /// mutable
     inner: SpinNoIrqLock<ProcessInner>,
 }
@@ -240,6 +236,7 @@ impl Process {
         let pid_handle = pid_alloc();
         let process = Arc::new(Self {
             pid: pid_handle,
+            mailbox: Arc::new(Mailbox::new()),
             inner: SpinNoIrqLock::new(ProcessInner {
                 is_zombie: false,
                 memory_space,
@@ -551,6 +548,7 @@ impl Process {
             // create child process pcb
             let child = Arc::new(Self {
                 pid,
+                mailbox: Arc::new(Mailbox::new()),
                 inner: SpinNoIrqLock::new(ProcessInner {
                     is_zombie: false,
                     memory_space,
