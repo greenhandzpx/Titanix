@@ -700,11 +700,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
         let buf_str = unsafe { core::str::from_utf8_unchecked(buf) };
         trace!("[writev] buf: {:?}", buf_str);
-        let fw_ret = file.write(buf).await;
-        // if error, return
-        if fw_ret.is_err() {
-            return fw_ret;
-        }
+        file.write(buf).await?;
     }
     Ok(ret as isize)
 }

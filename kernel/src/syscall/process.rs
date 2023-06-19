@@ -366,7 +366,15 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
 }
 
-pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
+bitflags! {
+    struct WaitOption: i32 {
+        const WNOHANG = 1;
+        const WUNTRACED = 1 << 1;
+        const WCONTINUED = 1 << 3;
+    }
+}
+
+pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> SyscallRet {
     stack_trace!();
     let process = current_process();
 
@@ -374,9 +382,11 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     //     UserCheck::new()
     //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
     // }
+    info!("[sys_waitpid]: enter, pid {}, options {:#x}", pid, options);
+
+    let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
 
     loop {
-        process.mailbox.wait_for_event(Event::CHILD_EXIT).await;
         if let Some((os_exit, found_pid, exit_code)) = process.inner_handler(|proc| {
             if process.pid() == INITPROC_PID && proc.children.is_empty() {
                 return Ok(Some((true, 0, 0)));
@@ -453,7 +463,10 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 return Ok(found_pid);
             }
         } else {
-            continue;
+            if options.contains(WaitOption::WNOHANG) {
+                return Ok(0);
+            }
+            process.mailbox.wait_for_event(Event::CHILD_EXIT).await;
         }
     }
 }

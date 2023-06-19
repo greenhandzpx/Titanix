@@ -57,7 +57,7 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
-const SYSCALL_WAITPID: usize = 260;
+const SYSCALL_WAIT4: usize = 260;
 
 const AT_FDCWD: isize = -100;
 const SEEK_SET: u8 = 0;
@@ -189,7 +189,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[5],
         ),
         SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
-        SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1]).await,
+        SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
         _ => {
             // panic!("Unsupported syscall_id: {}", syscall_id);
             error!("Unsupported syscall_id: {}", syscall_id);
