@@ -15,7 +15,7 @@
 
 ### Page Fault
 
-- 目前Fork的时候cow时会直接挂上`ForkPageFaultHandler`，后面实现懒加载elf时可能会冲突？
+- 目前Fork的时候cow时会直接挂上`CowPageFaultHandler`，后面实现懒加载elf时可能会冲突？
 
 
 

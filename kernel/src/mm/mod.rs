@@ -14,7 +14,7 @@
 //! everything about memory management, like frame allocator, page table,
 //! map area and memory set, is implemented here.
 //!
-//! Every task or process has a memory_set to control its virtual memory.
+//! Every task or process has a memory_space to control its virtual memory.
 mod address;
 mod frame_allocator;
 pub mod heap_allocator;

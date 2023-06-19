@@ -8,6 +8,7 @@ use crate::{
 use super::{
     page::{Page, PageBuilder},
     radix_tree::RadixTree,
+    MapPermission,
 };
 
 type Mutex<T> = SpinNoIrqLock<T>;
@@ -38,7 +39,11 @@ impl PageCache {
             .insert(offset >> PAGE_SIZE_BITS, Arc::new(page))
     }
     /// Get a page according to the given file offset
-    pub fn get_page(&self, offset: usize) -> GeneralRet<Arc<Page>> {
+    pub fn get_page(
+        &self,
+        offset: usize,
+        map_perm: Option<MapPermission>,
+    ) -> GeneralRet<Arc<Page>> {
         trace!("[PageCache]: get page at file offset {:#x}", offset);
         if let Some(page) = self.lookup(offset) {
             Ok(page)
@@ -46,6 +51,11 @@ impl PageCache {
             // TODO add evict policy
             let page = Arc::new(
                 PageBuilder::new()
+                    .is_file_page()
+                    .permission(match map_perm {
+                        None => MapPermission::from_bits(0).unwrap(),
+                        Some(map_perm) => map_perm,
+                    })
                     .offset(offset)
                     .inode(self.inode.clone().unwrap())
                     .build(),

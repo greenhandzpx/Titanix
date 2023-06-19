@@ -48,7 +48,7 @@ impl<F: Future + Send + 'static> UserTaskFuture<F> {
     pub fn new(thread: Arc<Thread>, future: F) -> Self {
         let mut task_ctx = TaskContext {
             thread: thread.clone(),
-            page_table: thread.process.inner.lock().memory_set.page_table.clone(),
+            page_table: thread.process.inner.lock().memory_space.page_table.clone(),
             env: EnvContext::new(),
         };
         task_ctx.env.stack_tracker = Some(StackTracker::new());

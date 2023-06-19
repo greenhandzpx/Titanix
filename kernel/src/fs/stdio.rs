@@ -1,13 +1,13 @@
+use alloc::boxed::Box;
 use core::sync::atomic::{AtomicU8, Ordering};
 use lazy_static::*;
-use alloc::boxed::Box;
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 use crate::{
     process,
     processor::SumGuard,
     sbi::console_getchar,
-    sync::mutex::{SleepLock, SpinNoIrqLock},
+    sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
@@ -21,7 +21,7 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
-            buf: AtomicU8::new(0),
+            buf: AtomicU8::new(255),
         }
     }
 }
@@ -43,11 +43,6 @@ impl File for Stdin {
     }
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        // // TODO: add read buf whose len is longer than 1
-        // // Urgent!! Since async trait will allocate heap memory every
-        // // time this function is invoked, we should decrease the times
-        // // of invocation
-        // assert_eq!(buf.len(), 1, "Only support len = 1 in sys_read!");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
             let mut c: u8;
@@ -55,17 +50,15 @@ impl File for Stdin {
             loop {
                 loop {
                     let self_buf = self.buf.load(Ordering::Acquire);
-                    if self_buf != 0 {
-                        self.buf.store(0, Ordering::Release);
+                    if self_buf != 255 {
+                        self.buf.store(255, Ordering::Release);
                         c = self_buf;
                         break;
                     }
                     c = console_getchar();
                     // debug!("stdin read a char {}", c);
-                    // suspend_current_and_run_next();
                     if c as i8 == -1 {
                         process::yield_now().await;
-                        // continue;
                     } else {
                         break;
                     }
@@ -79,12 +72,6 @@ impl File for Stdin {
             }
             Ok(buf.len() as isize)
         })
-
-        // unsafe {
-
-        //     let buf = buf as *mut u8;
-        //     buf.write_volatile(ch);
-        // }
     }
 
     fn write(&self, _: &[u8]) -> AsyscallRet {
@@ -94,7 +81,7 @@ impl File for Stdin {
     }
 
     fn pollin(&self) -> GeneralRet<bool> {
-        if self.buf.load(Ordering::Acquire) != 0 {
+        if self.buf.load(Ordering::Acquire) != 255 {
             return Ok(true);
         }
         let _sum_guard = SumGuard::new();
@@ -141,7 +128,12 @@ impl File for Stdout {
             // let buff = unsafe { core::slice::from_raw_parts(buf, len) };
             if PRINT_LOCKED {
                 let _locked = PRINT_MUTEX.lock().await;
-                print!("{}", core::str::from_utf8(buf).unwrap());
+                // info!("[test]:{:?}", buf);
+                if let Some(ch) = core::str::from_utf8(buf).ok() {
+                    print!("{}", ch);
+                } else {
+                    warn!("cannot transfer to utf8: {:?}", buf);
+                }
             } else {
                 print!("{}", core::str::from_utf8(buf).unwrap());
             }

@@ -63,7 +63,7 @@ __return_to_user:
     # a0: *TrapContext in user space(Constant); a1: user space token
     # switch to user space
 
-    # 用户和内核共用页表，因此不需要刷tlb
+    # User and Kernel use one pagetable, therefore no need to flush TLB
     # csrw satp, a1
     # sfence.vma
     # let sscratch store the trap context's address
@@ -106,6 +106,6 @@ __return_to_user:
     sret
 
 # kernel -> kernel
-__kernel_trap:
+__trap_from_kernel:
 
 

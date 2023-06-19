@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     config::mm::PAGE_SIZE,
@@ -29,34 +29,29 @@ pub fn sys_mmap(
     debug!("[sys_mmap]: start... len {}, fd {}", length, fd);
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
-    let mut map_permission = MapPermission::from_bits(0).unwrap();
-    if prot.contains(MmapProt::PROT_READ) {
-        map_permission |= MapPermission::R;
-    }
-    if prot.contains(MmapProt::PROT_WRITE) {
-        map_permission |= MapPermission::W;
-    }
-    if prot.contains(MmapProt::PROT_EXEC) {
-        map_permission |= MapPermission::X;
-    }
+    let map_permission: MapPermission = prot.into();
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
-        debug!("handle anonymous mmap, prot {:?}, flags {:?}", prot, flags);
         if offset != 0 {
             return Err(SyscallErr::EINVAL);
         }
         current_process().inner_handler(|proc| {
             let mut vma = proc
-                .memory_set
+                .memory_space
                 .find_unused_area(length, map_permission)
                 .ok_or(SyscallErr::ENOMEM)?;
             vma.mmap_flags = Some(flags);
             let handler = SBrkPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
             let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_set.insert_area(vma);
+            let end_va: VirtAddr = vma.end_vpn().into();
+            proc.memory_space.insert_area(vma);
 
             debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
+            debug!(
+                "handle anonymous mmap, vma {:#x}-{:#x}, prot {:?}, flags {:?}, map perm {:?}",
+                start_va.0, end_va.0, prot, flags, map_permission
+            );
             Ok(start_va.0 as isize)
         })
         // todo!("Handle anonymous mmap")
@@ -67,7 +62,7 @@ pub fn sys_mmap(
             // file.seek(0)?;
             // file.sync_read(&mut buf)?;
             let mut vma = proc
-                .memory_set
+                .memory_space
                 .find_unused_area(length, map_permission)
                 .ok_or(SyscallErr::ENOMEM)?;
             vma.mmap_flags = Some(flags);
@@ -84,7 +79,7 @@ pub fn sys_mmap(
                                     // .unwrap(),
             });
             let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_set.insert_area(vma);
+            proc.memory_space.insert_area(vma);
 
             debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
             Ok(start_va.0 as isize)
@@ -100,13 +95,20 @@ pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
 }
 
 pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
+    stack_trace!();
+    debug!("[sys_mprotect]: addr {:#x} len {:#x}", addr, len);
     if addr % PAGE_SIZE != 0 {
         return Err(SyscallErr::EINVAL);
     }
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
-    // current_process().inner_handler(| proc | {
-    //     let vma = proc.memory_set.find_vm_area_mut_by_vpn(VirtAddr::from(addr).floor()).ok_or(Err(SyscallErr::))
-    // })
-    // TODO
+    let map_permission: MapPermission = prot.into();
+    current_process().inner_handler(|proc| {
+        let vma = proc
+            .memory_space
+            .find_vm_area_mut_by_vpn(VirtAddr::from(addr).floor())
+            .ok_or(SyscallErr::EINVAL)?;
+        vma.map_perm = map_permission;
+        Ok(())
+    })?;
     Ok(0)
 }

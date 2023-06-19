@@ -31,7 +31,7 @@ impl Thread {
             ustack_bottom,
             ustack_bottom + USER_STACK_SIZE
         );
-        // self.process.inner.lock().memory_set.insert_framed_area(
+        // self.process.inner.lock().memory_space.insert_framed_area(
         //     ustack_bottom.into(),
         //     (ustack_bottom + USER_STACK_SIZE).into(),
         //     MapPermission::R | MapPermission::W | MapPermission::U,
@@ -39,31 +39,31 @@ impl Thread {
 
         self.process.inner_handler(move |proc| {
             if proc
-                .memory_set
+                .memory_space
                 .find_vm_area_by_vpn(VirtAddr::from(ustack_bottom).floor())
                 .is_some()
             {
                 debug!("ustack {:#x} has been added to memory set", ustack_bottom);
                 return;
             }
-            proc.memory_set.insert_framed_area_lazily(
+            proc.memory_space.insert_framed_area_lazily(
                 ustack_bottom.into(),
                 (ustack_bottom + USER_STACK_SIZE).into(),
                 MapPermission::R | MapPermission::W | MapPermission::U,
                 Some(Arc::new(UStackPageFaultHandler {})),
             );
-            proc.memory_set.activate();
+            proc.memory_space.activate();
         });
         // self.process.inner_handler(move |proc| {
         //     if proc
-        //         .memory_set
+        //         .memory_space
         //         .find_vm_area_by_vpn(VirtAddr::from(ustack_bottom).floor())
         //         .is_some()
         //     {
         //         debug!("ustack {:#x} has been added to memory set", ustack_bottom);
         //         return;
         //     }
-        //     proc.memory_set.insert_framed_area(
+        //     proc.memory_space.insert_framed_area(
         //         ustack_bottom.into(),
         //         (ustack_bottom + USER_STACK_SIZE).into(),
         //         MapPermission::R | MapPermission::W | MapPermission::U,
@@ -73,7 +73,7 @@ impl Thread {
         // self.process
         //     .inner
         //     .lock()
-        //     .memory_set
+        //     .memory_space
         //     .insert_framed_area_lazily(
         //         ustack_bottom.into(),
         //         (ustack_bottom + USER_STACK_SIZE).into(),
@@ -95,7 +95,7 @@ impl Thread {
         self.process
             .inner
             .lock()
-            .memory_set
+            .memory_space
             .remove_area_with_start_vpn(ustack_bottom.into());
     }
 

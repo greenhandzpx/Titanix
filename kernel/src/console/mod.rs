@@ -1,5 +1,5 @@
 //! SBI console driver, for text output
-use crate::{sbi::console_putchar, sync::mutex::{SpinNoIrqLock, SleepLock}};
+use crate::{sbi::console_putchar, sync::mutex::SpinNoIrqLock};
 use core::fmt::{self, Write};
 use lazy_static::*;
 
@@ -7,9 +7,8 @@ struct Stdout;
 
 const PRINT_LOCKED: bool = true;
 
-lazy_static!{
+lazy_static! {
     static ref PRINT_MUTEX: SpinNoIrqLock<()> = SpinNoIrqLock::new(());
-
 }
 
 impl Write for Stdout {

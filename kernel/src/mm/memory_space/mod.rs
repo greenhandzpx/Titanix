@@ -1,7 +1,5 @@
-use core::cell::SyncUnsafeCell;
-
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 
 use crate::{
     config::{
@@ -14,11 +12,15 @@ use crate::{
     process::aux::*,
     processor::current_process,
     stack_trace,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::{
+        cell::SyncUnsafeCell,
+        error::{GeneralRet, SyscallErr},
+    },
 };
 
+use self::cow::CowPageManager;
 pub use self::{
-    page_fault_handler::{ForkPageFaultHandler, PageFaultHandler, UStackPageFaultHandler},
+    page_fault_handler::{CowPageFaultHandler, PageFaultHandler, UStackPageFaultHandler},
     vm_area::VmArea,
 };
 
@@ -30,6 +32,8 @@ use super::{
 pub mod page_fault_handler;
 ///
 pub mod vm_area;
+
+mod cow;
 
 extern "C" {
     fn stext();
@@ -59,22 +63,19 @@ pub fn init_kernel_space() {
         KERNEL_SPACE = Some(MemorySpace::new_kernel());
     }
 }
-// lazy_static! {
-//     /// a memory set instance through lazy_static! managing kernel space
-//     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySpace>> =
-//         Arc::new(unsafe { UPSafeCell::new(MemorySpace::new_kernel()) });
-// }
 
 /// Heap range
 pub type HeapRange = SimpleRange<VirtAddr>;
 
-/// memory set structure, controls virtual-memory space
+/// memory space structure, controls virtual-memory space
 pub struct MemorySpace {
     /// we should ensure modifying page table exclusively(e.g. through process_inner's lock)
     /// TODO: optimization: decrease the lock granularity when handling page fault
     pub page_table: Arc<SyncUnsafeCell<PageTable>>,
     /// start vpn -> vm_area
-    areas: BTreeMap<VirtPageNum, VmArea>,
+    areas: SyncUnsafeCell<BTreeMap<VirtPageNum, VmArea>>,
+    /// Cow page manager
+    cow_pages: CowPageManager,
     /// heap range
     pub heap_range: Option<HeapRange>,
 }
@@ -82,10 +83,12 @@ pub struct MemorySpace {
 impl MemorySpace {
     ///Create an empty `MemorySpace`
     pub fn new_bare() -> Self {
+        let page_table = Arc::new(SyncUnsafeCell::new(PageTable::new()));
         Self {
-            page_table: Arc::new(SyncUnsafeCell::new(PageTable::new())),
-            areas: BTreeMap::new(),
+            page_table: page_table,
+            areas: SyncUnsafeCell::new(BTreeMap::new()),
             heap_range: None,
+            cow_pages: CowPageManager::new(),
         }
     }
 
@@ -97,39 +100,37 @@ impl MemorySpace {
         // but actually we can only copy the root ppn's corresponding ptes(i.e. level 1)
         // which may be faster (see `PageTable::from_global()`)
         let mut new_page_table = PageTable::new();
-        for (_, area) in kernel_space.areas.iter() {
+        for (_, area) in kernel_space.areas.get_unchecked_mut().iter() {
             let pte_flags = PTEFlags::from_bits(area.map_perm.bits()).unwrap();
             for vpn in area.vpn_range {
                 let ppn = kernel_space.translate(vpn).unwrap().ppn();
                 new_page_table.map(vpn, ppn, pte_flags);
             }
         }
+        let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
-            page_table: Arc::new(SyncUnsafeCell::new(new_page_table)),
-            areas: BTreeMap::new(),
+            page_table: page_table,
+            areas: SyncUnsafeCell::new(BTreeMap::new()),
             heap_range: None,
+            cow_pages: CowPageManager::new(),
         }
-        // Self {
-        //     page_table: Arc::new(SyncUnsafeCell::new(PageTable::from_global())),
-        //     areas: BTreeMap::new(),
-        // }
     }
 
     /// Get pagetable `root_ppn`
     pub fn token(&self) -> usize {
-        unsafe { (*self.page_table.get()).token() }
+        self.page_table.get_unchecked_mut().token()
     }
 
     /// Find the immutable ref of map area by the given vpn
     pub fn find_vm_area_by_vpn(&self, vpn: VirtPageNum) -> Option<&VmArea> {
         // Range query to find the map area that this vpn belongs to
         // debug!("len before {}", self.areas.len());
-        if let Some((_, vm_area)) = self.areas.range(..=vpn).next_back() {
+        if let Some((_, vm_area)) = self.areas.get_unchecked_mut().range(..=vpn).next_back() {
             if vm_area.end_vpn() <= vpn {
                 return None;
             }
             debug!(
-                "vpn {:#x} map area start {:#x} end {:#x}",
+                "[find_vm_area_by_vpn]: vpn {:#x} map area start {:#x} end {:#x}",
                 vpn.0,
                 vm_area.start_vpn().0,
                 vm_area.end_vpn().0
@@ -158,7 +159,7 @@ impl MemorySpace {
     pub fn find_vm_area_mut_by_vpn_included(&mut self, vpn: VirtPageNum) -> Option<&mut VmArea> {
         // Range query to find the map area that this vpn belongs to
         // debug!("len before {}", self.areas.len());
-        if let Some((_, vm_area)) = self.areas.range_mut(..=vpn).next_back() {
+        if let Some((_, vm_area)) = self.areas.get_unchecked_mut().range_mut(..=vpn).next_back() {
             if vm_area.end_vpn() < vpn {
                 return None;
             }
@@ -177,11 +178,11 @@ impl MemorySpace {
 
     /// Handle page fault synchronously.
     /// Return Some(handler) if async handle should be invoked.
-    pub fn handle_page_fault(
-        &mut self,
+    pub fn page_fault_handler(
+        &self,
         va: VirtAddr,
         _scause: usize,
-    ) -> GeneralRet<Option<Arc<dyn PageFaultHandler>>> {
+    ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&VmArea>)> {
         // There are serveral kinds of page faults:
         // 1. mmap area
         // 2. sbrk area
@@ -193,14 +194,25 @@ impl MemorySpace {
         // todo!()
         // find map area
         let vpn = va.floor();
+        // First we should query from cow pages
+        if self
+            .cow_pages
+            .page_mgr
+            .get_unchecked_mut()
+            .0
+            .get(&va.floor())
+            .is_some()
+        {
+            return self.cow_pages.page_fault_handler(va);
+        }
         // Range query to find the map area that this vpn belongs to
         if let Some(vm_area) = self.find_vm_area_by_vpn(vpn) {
             // vm_area.handle_page_fault(va, page_table)
-            let page_table = unsafe { &mut (*self.page_table.get()) };
-            vm_area.handle_page_fault(va, page_table)
+            // let page_table = unsafe { &mut (*self.page_table.get()) };
+            vm_area.page_fault_handler(va)
         } else {
-            warn!("memory set len {}", self.areas.len());
-            for area in self.areas.iter() {
+            warn!("memory set len {}", self.areas.get_unchecked_mut().len());
+            for area in self.areas.get_unchecked_mut().iter() {
                 warn!(
                     "area start vpn {:#x}, end vpn {:#x}",
                     area.0 .0,
@@ -247,11 +259,11 @@ impl MemorySpace {
 
     ///Remove `VmArea` that starts with `start_vpn`
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
-        if let Some(area) = self.areas.get_mut(&start_vpn) {
-            let pgtbl_ref = unsafe { &mut (*self.page_table.get()) };
+        if let Some(area) = self.areas.get_unchecked_mut().get_mut(&start_vpn) {
+            let pgtbl_ref = self.page_table.get_unchecked_mut();
             // area.unmap(pgtbl_ref);
             area.unmap_lazily(pgtbl_ref);
-            self.areas.remove(&start_vpn);
+            self.areas.get_unchecked_mut().remove(&start_vpn);
         }
         // if let Some((idx, area)) = self
         //     .areas
@@ -267,24 +279,27 @@ impl MemorySpace {
     /// Add the map area to memory set and map the map area(allocating physical frames)
     fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
         stack_trace!();
-        let pgtbl_ref = unsafe { &mut (*self.page_table.get()) };
+        let pgtbl_ref = self.page_table.get_unchecked_mut();
         vm_area.map(pgtbl_ref);
         if let Some(data) = data {
             vm_area.copy_data_with_offset(pgtbl_ref, data_offset, data);
         }
-        self.areas.insert(vm_area.start_vpn(), vm_area);
+        self.areas
+            .get_unchecked_mut()
+            .insert(vm_area.start_vpn(), vm_area);
     }
     /// Only add the map area to memory set (without allocating physical frames)
-    fn push_lazily(&mut self, vm_area: VmArea, _: Option<&[u8]>) {
-        // debug!("push lazily");
-        self.areas.insert(vm_area.start_vpn(), vm_area);
+    fn push_lazily(&self, vm_area: VmArea, _: Option<&[u8]>) {
+        self.areas
+            .get_unchecked_mut()
+            .insert(vm_area.start_vpn(), vm_area);
         // self.areas.push(vm_area);
     }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
-        let mut memory_set = Self::new_bare();
+        let mut memory_space = Self::new_bare();
         // // map trampoline
-        // memory_set.map_trampoline();
+        // memory_space.map_trampoline();
         // map kernel sections
         info!(
             "[kernel].text [{:#x}, {:#x})",
@@ -309,7 +324,7 @@ impl MemorySpace {
         );
 
         info!("[kernel]mapping .text section");
-        memory_set.push(
+        memory_space.push(
             VmArea::new(
                 (stext as usize).into(),
                 (etext as usize).into(),
@@ -322,7 +337,7 @@ impl MemorySpace {
             None,
         );
         info!("[kernel]mapping .rodata section");
-        memory_set.push(
+        memory_space.push(
             VmArea::new(
                 (srodata as usize).into(),
                 (erodata as usize).into(),
@@ -335,7 +350,7 @@ impl MemorySpace {
             None,
         );
         info!("[kernel]mapping .data section");
-        memory_set.push(
+        memory_space.push(
             VmArea::new(
                 (sdata as usize).into(),
                 (edata as usize).into(),
@@ -349,7 +364,7 @@ impl MemorySpace {
         );
         // add stack section in `linker.ld`
         info!("[kernel]mapping .stack section");
-        memory_set.push(
+        memory_space.push(
             VmArea::new(
                 (sstack as usize).into(),
                 (estack as usize).into(),
@@ -362,7 +377,7 @@ impl MemorySpace {
             None,
         );
         info!("[kernel]mapping .bss section");
-        memory_set.push(
+        memory_space.push(
             VmArea::new(
                 (sbss as usize).into(),
                 (ebss as usize).into(),
@@ -375,7 +390,7 @@ impl MemorySpace {
             None,
         );
         info!("[kernel]mapping physical memory");
-        memory_set.push(
+        memory_space.push(
             VmArea::new(
                 (ekernel as usize).into(),
                 MEMORY_END.into(),
@@ -391,7 +406,7 @@ impl MemorySpace {
         for pair in MMIO_VIRT {
             // println!("start va: {:#x}", (*pair).0);
             // println!("end va: {:#x}", (*pair).0 + (*pair).1);
-            memory_set.push(
+            memory_space.push(
                 VmArea::new(
                     (*pair).0.into(),
                     ((*pair).0 + (*pair).1).into(),
@@ -404,16 +419,16 @@ impl MemorySpace {
                 None,
             );
         }
-        memory_set
+        memory_space
     }
     /// Include sections in elf and trampoline and TrapContext and user stack,
     /// also returns user_sp and entry point.
     /// TODO: resolve elf file lazily
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
-        // let mut memory_set = Self::new_bare();
-        let mut memory_set = Self::new_from_global();
+        // let mut memory_space = Self::new_bare();
+        let mut memory_space = Self::new_from_global();
         // // map trampoline
-        // memory_set.map_trampoline();
+        // memory_space.map_trampoline();
 
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
@@ -442,7 +457,7 @@ impl MemorySpace {
             value: 0 as usize,
         });
 
-        // _at_base = memory_set.load_dl(&elf);
+        // _at_base = memory_space.load_dl(&elf);
 
         // if _at_base != 0 {
         //     auxv.push(AuxHeader {
@@ -526,21 +541,19 @@ impl MemorySpace {
                 // let _ = &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize].iter().enumerate().for_each(|(i, byte)| {
                 //     raw_data[i + start_va.0 - start_va.floor().0 * PAGE_SIZE] = *byte;
                 // });
-                // memory_set.push(
+                // memory_space.push(
                 //     vm_area,
                 //     Some(&raw_data),
                 // );
                 let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
-                memory_set.push(
+                memory_space.push(
                     vm_area,
                     offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
                 debug!(
-                    "from elf: {:#x}, {:#x}, map_perm: {:#x}",
-                    start_va.0,
-                    end_va.0,
-                    map_perm.bits()
+                    "from elf: {:#x}, {:#x}, map_perm: {:?}",
+                    start_va.0, end_va.0, map_perm
                 );
                 // let magic = 0x1213d0;
                 // if start_va.0 < magic && magic < end_va.0 {
@@ -576,15 +589,15 @@ impl MemorySpace {
             Some(Arc::new(SBrkPageFaultHandler {})),
             None,
         );
-        memory_set.push(heap_vma, 0, None);
-        memory_set.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
+        memory_space.push(heap_vma, 0, None);
+        memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
         debug!(
             "from elf: map heap: {:#x}, {:#x}",
             heap_start_va, heap_start_va
         );
 
         // let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        // memory_set.push(
+        // memory_space.push(
         //     VmArea::new(
         //         user_stack_bottom.into(),
         //         user_stack_top.into(),
@@ -594,7 +607,7 @@ impl MemorySpace {
         //     None,
         // );
         // // map TrapContext
-        // memory_set.push(
+        // memory_space.push(
         //     VmArea::new(
         //         TRAP_CONTEXT.into(),
         //         TRAMPOLINE.into(),
@@ -604,7 +617,7 @@ impl MemorySpace {
         //     None,
         // );
         (
-            memory_set,
+            memory_space,
             user_stack_bottom,
             elf.header.pt2.entry_point() as usize,
             auxv,
@@ -612,15 +625,15 @@ impl MemorySpace {
     }
     ///Clone a same `MemorySpace`
     pub fn from_existed_user(user_space: &Self) -> Self {
-        // let mut memory_set = Self::new_bare();
-        let mut memory_set = Self::new_from_global();
-        let new_pagetable = unsafe { &mut (*memory_set.page_table.get()) };
+        // let mut memory_space = Self::new_bare();
+        let memory_space = Self::new_from_global();
+        let new_pagetable = memory_space.page_table.get_unchecked_mut();
         // // map trampoline
-        // memory_set.map_trampoline();
+        // memory_space.map_trampoline();
         // copy data sections/trap_context/user_stack
-        for (_, area) in user_space.areas.iter() {
+        for (_, area) in user_space.areas.get_unchecked_mut().iter() {
             let mut new_area = VmArea::from_another(area);
-            // memory_set.push(new_area, None);
+            // memory_space.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {
                 if let Some(ppn) = user_space.translate(vpn) {
@@ -629,76 +642,92 @@ impl MemorySpace {
                     dst_ppn.bytes_array().copy_from_slice(src_ppn.bytes_array());
                 }
                 // let src_ppn = user_space.translate(vpn).unwrap().ppn();
-                // let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+                // let dst_ppn = memory_space.translate(vpn).unwrap().ppn();
                 // dst_ppn
                 //     .get_bytes_array()
                 //     .copy_from_slice(src_ppn.get_bytes_array());
             }
-            memory_set.push_lazily(new_area, None);
+            memory_space.push_lazily(new_area, None);
         }
-        memory_set
+        memory_space
     }
     ///Clone a same `MemorySpace`
     pub fn from_existed_user_lazily(user_space: &mut Self) -> Self {
-        // let mut memory_set = Self::new_bare();
-        let mut memory_set = Self::new_from_global();
+        // TODO: optimize: no need to new a CowPageManager
+        let mut memory_space = Self::new_from_global();
         // SAFETY: the process inner has been locked when invoking this function
-        let new_pagetable = unsafe { &mut (*memory_set.page_table.get()) };
+        memory_space.cow_pages =
+            CowPageManager::from_another(&user_space.cow_pages, memory_space.page_table.clone());
 
-        for (_, area) in user_space.areas.iter_mut() {
-            // clear write bit && add cow bit
-            if area.map_perm.contains(MapPermission::W)
-                || area.map_perm.contains(MapPermission::COW)
-            {
-                area.map_perm |= MapPermission::COW;
-                area.map_perm.remove(MapPermission::W);
-                area.handler = Some(Arc::new(ForkPageFaultHandler {}));
-            }
-        }
+        let new_pagetable = memory_space.page_table.get_unchecked_mut();
+
+        // for (_, area) in user_space.areas.iter_mut() {
+        //     // clear write bit && add cow bit
+        //     if area.map_perm.contains(MapPermission::W)
+        //         || area.map_perm.contains(MapPermission::COW)
+        //     {
+        //         area.map_perm |= MapPermission::COW;
+        //         area.map_perm.remove(MapPermission::W);
+        //         area.handler = Some(Arc::new(CowPageFaultHandler {}));
+        //     }
+        // }
 
         // copy data sections/trap_context/user_stack
-        for (_, area) in user_space.areas.iter() {
-            let mut new_area = VmArea::from_another(area);
-            // memory_set.push(new_area, None);
+        for (_, area) in user_space.areas.get_unchecked_mut().iter() {
+            let new_area = VmArea::from_another(area);
             // copy data from another space
             for vpn in area.vpn_range {
                 // SAFETY: we've locked the process inner before calling this function
-                if let Some(ph_frame) = unsafe { (*area.data_frames.get()).0.get(&vpn) } {
+                if let Some(ph_frame) = unsafe { (*area.data_frames.get()).0.remove(&vpn) } {
                     // If there is related physcial frame, then we let the child and father share it.
-                    let pte = unsafe { (*user_space.page_table.get()).find_pte(vpn).unwrap() };
+                    let pte = user_space
+                        .page_table
+                        .get_unchecked_mut()
+                        .find_pte(vpn)
+                        .unwrap();
+                    trace!(
+                        "change vpn {:#x} to cow page, ppn {:#x}, pte flags {:?}",
+                        vpn.0,
+                        ph_frame.data_frame.ppn.0,
+                        pte.flags()
+                    );
 
-                    if pte.flags().contains(PTEFlags::W) || pte.flags().contains(PTEFlags::COW) {
-                        let mut new_flags = pte.flags() | PTEFlags::COW;
-                        new_flags.remove(PTEFlags::W);
-                        pte.set_flags(new_flags);
-                        assert!(pte.flags().contains(PTEFlags::COW));
-                        assert!(!pte.flags().contains(PTEFlags::W));
-                    }
-                    // new_area
-                    //     .data_frames
-                    //     .get_mut()
-                    //     .0
-                    //     .insert(vpn, ph_frame.clone());
-                    let _dst_ppn = new_area.map_one_lazily(new_pagetable, vpn, ph_frame);
-                    // dst_ppn
-                    //     .get_bytes_array()
-                    //     .copy_from_slice(src_ppn.get_bytes_array());
+                    // if pte.flags().contains(PTEFlags::W) {
+                    let mut new_flags = pte.flags() | PTEFlags::COW;
+                    new_flags.remove(PTEFlags::W);
+                    pte.set_flags(new_flags);
+                    debug_assert!(pte.flags().contains(PTEFlags::COW));
+                    debug_assert!(!pte.flags().contains(PTEFlags::W));
+
+                    user_space
+                        .cow_pages
+                        .page_mgr
+                        .get_unchecked_mut()
+                        .0
+                        .insert(vpn, ph_frame.clone());
+
+                    new_pagetable.map(vpn, ph_frame.data_frame.ppn, new_flags);
+                    memory_space
+                        .cow_pages
+                        .page_mgr
+                        .get_unchecked_mut()
+                        .0
+                        .insert(vpn, ph_frame);
+                    // }
+                    // let _dst_ppn = new_area.map_one_lazily(new_pagetable, vpn, ph_frame);
                 } else {
-                    debug!("no ppn for vpn {:#x}", vpn.0);
+                    trace!("no ppn for vpn {:#x}", vpn.0);
                 }
             }
-            memory_set.push_lazily(new_area, None);
+            memory_space.push_lazily(new_area, None);
         }
         user_space.activate();
         new_pagetable.activate();
-        memory_set
+        memory_space
     }
     ///Refresh TLB with `sfence.vma`
     pub fn activate(&self) {
-        unsafe {
-            let page_table = &mut (*self.page_table.get());
-            page_table.activate();
-        }
+        self.page_table.get_unchecked_mut().activate()
     }
     ///Translate throuth pagetable
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
@@ -707,7 +736,7 @@ impl MemorySpace {
     ///Remove all `VmArea`
     pub fn recycle_data_pages(&mut self) {
         //*self = Self::new_bare();
-        self.areas.clear();
+        self.areas.get_unchecked_mut().clear();
     }
 
     /// Allocate an unused area(mostly for mmap)
@@ -719,7 +748,7 @@ impl MemorySpace {
         let mut last_start = MMAP_TOP;
         // traverse reversely
         let length_rounded = (length - 1 + PAGE_SIZE) / PAGE_SIZE * PAGE_SIZE;
-        for vma in self.areas.iter().rev() {
+        for vma in self.areas.get_unchecked_mut().iter().rev() {
             // debug!("start {:#x}, end {:#x}", vma.1.start_vpn().0, vma.1.end_vpn().0);
             let curr_end = vma.1.end_vpn().0 * PAGE_SIZE;
             if last_start - curr_end >= length_rounded {
@@ -743,7 +772,7 @@ impl MemorySpace {
     /// Check whether the given vpn range conflicts with other vma.
     /// Note that the start_vpn must have been in memory set.
     pub fn check_vpn_range_conflict(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> bool {
-        for vma in self.areas.iter() {
+        for vma in self.areas.get_unchecked_mut().iter() {
             if *vma.0 == start_vpn {
                 continue;
             }
@@ -823,9 +852,14 @@ pub fn remap_test() {
 
 /// Handle different kinds of page fault
 pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
-    if let Some(handler) =
-        current_process().inner_handler(|proc| proc.memory_set.handle_page_fault(va, scause))?
-    {
+    if let Some(handler) = current_process().inner_handler(|proc| {
+        let (handler, vma) = proc.memory_space.page_fault_handler(va, scause)?;
+        if !handler.handle_page_fault(va, &proc.memory_space, vma)? {
+            Ok(Some(handler))
+        } else {
+            Ok(None)
+        }
+    })? {
         debug!("handle pagefault asynchronously, va: {:#x}", va.0);
         handler.handle_page_fault_async(va, current_process()).await
     } else {

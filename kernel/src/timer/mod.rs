@@ -18,7 +18,6 @@ use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
-const NSEC_PER_SEC: usize = 1000000000;
 
 /// for clock_gettime
 pub const CLOCK_REALTIME: usize = 0;
@@ -156,6 +155,7 @@ impl SleepFuture {
             expired_time: get_time_duration() + duration,
             waker: SyncUnsafeCell::new(None),
         });
+        TIMER_LIST.timers.lock().push_back(timer.clone());
         Self { timer }
     }
 
@@ -180,6 +180,7 @@ impl Future for SleepFuture {
     }
 }
 
+#[allow(unused)]
 pub async fn ksleep(duration: Duration) {
     let future = &mut SleepFuture::new(duration);
     unsafe { Pin::new_unchecked(future).init().await.await }

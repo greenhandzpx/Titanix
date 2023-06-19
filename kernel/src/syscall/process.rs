@@ -364,8 +364,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
 }
 
-/// If there is not a child process whose pid is same as given, return -1.
-/// Else if there is a child process but it is still running, return -2.
 pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
     stack_trace!();
     let process = current_process();
@@ -382,7 +380,7 @@ pub async fn sys_waitpid(pid: isize, exit_status_addr: usize) -> SyscallRet {
                 .iter()
                 .any(|p| pid == -1 || pid as usize == p.pid())
             {
-                if pid == -1 && proc.children.len() == 0 {
+                if pid == -1 && proc.children.len() == 0 && current_process().pid() == 1 {
                     // system exit, since no children is alive
                     return Ok((-3, 0));
                 }
@@ -471,13 +469,13 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
     if addr == 0 {
         debug!("[sys_brk]: addr: 0");
         return Ok(current_process()
-            .inner_handler(|proc| proc.memory_set.heap_range.unwrap().end().0)
+            .inner_handler(|proc| proc.memory_space.heap_range.unwrap().end().0)
             as isize);
     }
 
     current_process().inner_handler(|proc| {
-        let heap_start: VirtAddr = proc.memory_set.heap_range.unwrap().start();
-        let current_heap_end: VirtAddr = proc.memory_set.heap_range.unwrap().end();
+        let heap_start: VirtAddr = proc.memory_space.heap_range.unwrap().start();
+        let current_heap_end: VirtAddr = proc.memory_space.heap_range.unwrap().end();
         let new_heap_end: VirtAddr = addr.into();
         debug!(
             "[sys_brk]: old heap end: {:#x}, new heap end: {:#x}",
@@ -486,27 +484,27 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
         if addr > current_heap_end.0 {
             // allocate memory lazily
             if proc
-                .memory_set
+                .memory_space
                 .check_vpn_range_conflict(heap_start.floor(), new_heap_end.ceil())
             {
                 warn!("[sys_brk]: new addr invalid");
                 Err(SyscallErr::ENOMEM)
             } else {
                 let heap_vma = proc
-                    .memory_set
+                    .memory_space
                     .find_vm_area_mut_by_vpn_included(heap_start.floor())
                     .unwrap();
                 // modify vma
                 heap_vma.vpn_range.modify_right_bound(new_heap_end.ceil());
                 // modify process info(lazy allocation)
-                proc.memory_set
+                proc.memory_space
                     .heap_range
                     .as_mut()
                     .unwrap()
                     .modify_right_bound(new_heap_end);
                 debug!(
                     "new heap end {:#x}",
-                    proc.memory_set.heap_range.unwrap().end().0
+                    proc.memory_space.heap_range.unwrap().end().0
                 );
                 Ok(0)
             }
@@ -516,14 +514,14 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                 Err(SyscallErr::ENOMEM)
             } else {
                 let heap_vma = proc
-                    .memory_set
+                    .memory_space
                     .find_vm_area_mut_by_vpn(heap_start.floor())
                     .unwrap();
                 heap_vma.vpn_range.modify_right_bound(new_heap_end.ceil());
                 let data_frames = unsafe { &mut (*heap_vma.data_frames.get()) };
                 // modify vma
                 heap_vma.vpn_range.modify_right_bound(new_heap_end.ceil());
-                let page_table = unsafe { &mut (*proc.memory_set.page_table.get()) };
+                let page_table = unsafe { &mut (*proc.memory_space.page_table.get()) };
                 let removed_vpns = VPNRange::new(new_heap_end.ceil(), current_heap_end.ceil());
                 for vpn in removed_vpns {
                     if data_frames.0.contains_key(&vpn) {
@@ -533,7 +531,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                 }
                 page_table.activate();
                 // modify process info
-                proc.memory_set
+                proc.memory_space
                     .heap_range
                     .unwrap()
                     .modify_right_bound(new_heap_end);

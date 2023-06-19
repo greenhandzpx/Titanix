@@ -1,4 +1,4 @@
-use core::{arch::asm, cell::SyncUnsafeCell};
+use core::arch::asm;
 
 use alloc::sync::Arc;
 use log::info;
@@ -9,6 +9,7 @@ use crate::{
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
     stack_trace,
+    utils::cell::SyncUnsafeCell,
 };
 
 use super::context::{EnvContext, KernelTaskContext, LocalContext};
