@@ -21,11 +21,11 @@ use crate::mm::user_check::UserCheck;
 use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
-use crate::syscall::{MmapFlags, MmapProt, AT_FDCWD, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::get_time_spec;
 use crate::timer::{get_time_ms, TimeSpec};
 use crate::utils::error::{SyscallErr, SyscallRet};
-use crate::utils::path::Path;
+use crate::utils::path::{Path, AT_FDCWD};
 use crate::utils::string::{array_str_len, c_str_to_string};
 use crate::{fs, stack_trace};
 
@@ -103,14 +103,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     // TODO: check whether the memory pointed by path is vaild
     UserCheck::new().check_c_str(path)?;
-    let absolute_path: Option<String>;
-    if dirfd == AT_FDCWD {
-        debug!("path with cwd");
-        absolute_path = Path::path_process(path);
-    } else {
-        debug!("path with dirfd");
-        absolute_path = Path::path_with_dirfd(dirfd, path);
-    }
+    let absolute_path = Path::path_process(dirfd, path);
     match absolute_path {
         Some(absolute_path) => {
             let target_inode = <dyn Inode>::lookup_from_root_tmp(&absolute_path);
@@ -150,14 +143,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     let _sum_guard = SumGuard::new();
     // TODO: check whether the memory pointed by pathname is vaild
     UserCheck::new().check_c_str(pathname)?;
-    let absolute_path: Option<String>;
-    if dirfd == AT_FDCWD {
-        debug!("path with cwd");
-        absolute_path = Path::path_process(pathname);
-    } else {
-        debug!("path with dirfd");
-        absolute_path = Path::path_with_dirfd(dirfd, pathname);
-    }
+    let absolute_path = Path::path_process(dirfd, pathname);
     match absolute_path {
         Some(absolute_path) => {
             debug!("absolute path: {}", absolute_path);
@@ -224,13 +210,13 @@ pub fn sys_mount(
         UserCheck::new().check_c_str(_data)?;
     }
     // Check and convert the arguments.
-    let dev_name = Path::path_process(dev_name);
+    let dev_name = Path::path_process(AT_FDCWD, dev_name);
     if dev_name.is_none() {
         return Err(SyscallErr::EMFILE);
     }
     // let dev_name = Path::get_name(&dev_name.unwrap());
 
-    let target_path = Path::path_process(target_path);
+    let target_path = Path::path_process(AT_FDCWD, target_path);
     if target_path.is_none() {
         return Err(SyscallErr::ENOENT);
     }
@@ -240,7 +226,7 @@ pub fn sys_mount(
         return Err(SyscallErr::EACCES);
     }
 
-    let ftype = Path::path_process(ftype);
+    let ftype = Path::path_process(AT_FDCWD, ftype);
     let ftype = {
         if ftype.is_some() {
             let ftype = ftype.unwrap();
@@ -277,7 +263,7 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(target_path)?;
-    let target_path = Path::path_process(target_path);
+    let target_path = Path::path_process(AT_FDCWD, target_path);
     if target_path.is_none() {
         return Err(SyscallErr::ENOENT);
     }
@@ -511,13 +497,7 @@ pub fn sys_newfstatat(
             return _fstat(dirfd as usize, stat_buf);
         }
     } else {
-        if dirfd == AT_FDCWD {
-            debug!("[newfstatat] path with cwd");
-            absolute_path = Path::path_process(pathname);
-        } else {
-            debug!("[newfstatat] path with dirfd");
-            absolute_path = Path::path_with_dirfd(dirfd, pathname);
-        }
+        absolute_path = Path::path_process(dirfd, pathname);
     }
     debug!("[newfstatat] final absolute path: {:?}", absolute_path);
 
@@ -568,14 +548,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
 pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
     stack_trace!();
 
-    let absolute_path: Option<String>;
-    if dirfd == AT_FDCWD {
-        debug!("path with cwd");
-        absolute_path = Path::path_process(filename_addr);
-    } else {
-        debug!("path with dirfd");
-        absolute_path = Path::path_with_dirfd(dirfd, filename_addr);
-    }
+    let absolute_path = Path::path_process(dirfd, filename_addr);
 
     _openat(absolute_path, flags)
 }
@@ -863,4 +836,21 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
             thread::yield_now().await;
         }
     }
+}
+
+pub fn sys_renameat2(
+    olddirfd: isize,
+    oldpath: *const u8,
+    newdirfd: isize,
+    newpath: *const u8,
+    flags: u32,
+) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_c_str(oldpath)?;
+    let oldpath = Path::path_process(olddirfd, oldpath);
+    UserCheck::new().check_c_str(newpath)?;
+    let newpath = Path::path_process(newdirfd, newpath);
+
+    todo!()
 }
