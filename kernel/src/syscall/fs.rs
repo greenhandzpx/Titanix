@@ -5,8 +5,9 @@ use core::ptr::copy_nonoverlapping;
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec;
 use inode::InodeState;
-use log::{debug, trace, warn};
+use log::{debug, trace, warn, info};
 
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::dirent::MAX_NAME_LEN;
@@ -861,8 +862,41 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
     }
 }
 
-pub fn sys_sendfile(out_fd: isize, in_fd: isize, offset: *const usize, count: usize) -> SyscallRet {
+pub async fn sys_sendfile(out_fd: isize, in_fd: isize, offset_ptr: usize, count: usize) -> SyscallRet {
     stack_trace!();
-    
-    todo!()
+    debug!("[sys_sendfile]: out fd {} in fd {} offset_ptr {:#x} count {}", out_fd, in_fd, offset_ptr, count);
+    let (input_file, output_file) = current_process().inner_handler(|proc| {
+        Ok((proc.fd_table.get(in_fd as usize).ok_or(SyscallErr::EBADF)?, proc.fd_table.get(out_fd as usize).ok_or(SyscallErr::EBADF)?))
+    })?;
+    if !input_file.readable() {
+        return Err(SyscallErr::EBADF);
+    }
+    if !output_file.writable() {
+        return Err(SyscallErr::EBADF);
+    }
+
+    let mut buf = vec![0 as u8; count];
+    let nbytes = match offset_ptr {
+        0 => {
+            input_file.read(&mut buf).await?
+        }
+        _ => {
+            UserCheck::new().check_readable_slice(offset_ptr as *const u8, core::mem::size_of::<usize>())?;
+            let _sum_guard = SumGuard::new();
+            let old_offset = input_file.offset()?;
+            let input_offset = unsafe {
+                *(offset_ptr as *const usize)
+            };
+            input_file.seek(input_offset)?;
+            let nbytes = input_file.read(&mut buf).await?;
+            input_file.seek(old_offset as usize)?;
+            unsafe {
+                *(offset_ptr as *mut usize) = *(offset_ptr as *mut usize) + nbytes as usize;
+            }
+            nbytes
+        }
+    };
+    let ret = output_file.write(&buf[0..nbytes as usize]).await;
+    info!("[sys_sendfile]: finished");
+    ret
 }
