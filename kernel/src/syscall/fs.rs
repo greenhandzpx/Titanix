@@ -22,8 +22,8 @@ use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::get_time_spec;
-use crate::timer::{get_time_ms, TimeSpec};
+use crate::timer::{get_time_ms, get_time_spec, UTIME_NOW};
+use crate::timer::{TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::{Path, AT_FDCWD};
 use crate::utils::string::{array_str_len, c_str_to_string};
@@ -1084,6 +1084,61 @@ pub fn sys_renameat2(
             } else {
                 panic!("not support");
             }
+        }
+    }
+}
+
+/// change file timestamps with nanosecond precision
+pub fn sys_utimensat(
+    dirfd: isize,
+    pathname: *const u8,
+    times: *const TimeSpec,
+    _flags: u32,
+) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new().check_c_str(pathname)?;
+    let _sum_guard = SumGuard::new();
+    let pathname = Path::path_process(dirfd, pathname);
+    if pathname.is_none() {
+        debug!("[sys_utimensat] pathname is empty");
+        return Err(SyscallErr::ENOENT);
+    }
+    let pathname = pathname.unwrap();
+    debug!("[sys_utimensat] pathname: {}", pathname);
+    let inode = fs::inode::open_file(&pathname, OpenFlags::RDWR);
+    match inode {
+        Some(inode) => {
+            let mut inner_lock = inode.metadata().inner.lock();
+            if times.is_null() {
+                debug!("[sys_utimensat] times is null");
+                // If times is null, then both timestamps are set to the current time.
+                inner_lock.st_atim = get_time_spec();
+                inner_lock.st_mtim = inner_lock.st_atim;
+            } else {
+                // times[0] for atime, times[1] for mtime
+                let atime = unsafe { &*times };
+                unsafe {
+                    times.add(1);
+                }
+                let mtime = unsafe { &*times };
+                if atime.nsec == UTIME_NOW || mtime.nsec == UTIME_NOW {
+                    debug!("[sys_utimensat] nsec is UTIME_NOW");
+                    inner_lock.st_atim = get_time_spec();
+                    inner_lock.st_mtim = inner_lock.st_atim;
+                } else if atime.nsec == UTIME_OMIT || mtime.nsec == UTIME_OMIT {
+                    debug!("[sys_utimensat] nsec is UTIME_OMIT");
+                    return Ok(0);
+                } else {
+                    debug!("[sys_utimensat] normal nsec");
+                    inner_lock.st_atim = *atime;
+                    inner_lock.st_mtim = *mtime;
+                }
+            }
+            Ok(0)
+        }
+        None => {
+            debug!("[sys_utimensat] cannot find inode relatived to pathname");
+            Err(SyscallErr::ENOENT)
         }
     }
 }
