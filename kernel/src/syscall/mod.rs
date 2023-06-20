@@ -76,7 +76,7 @@ use core::arch::asm;
 
 use dev::*;
 use fs::*;
-use log::{debug, error, trace};
+use log::{debug, error, trace, info};
 use mm::*;
 use process::*;
 use signal::*;
@@ -84,7 +84,6 @@ pub use sync::futex_wake;
 use sync::*;
 
 use crate::{
-    fs::Iovec,
     mm::MapPermission,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},

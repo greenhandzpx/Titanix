@@ -52,13 +52,14 @@ use core::{
 };
 
 use log::{info, warn, debug};
+use riscv::register::sstatus;
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     process::thread,
-    processor::{hart, HARTS},
+    processor::{hart, HARTS, open_interrupt},
     sbi::hart_start,
     timer::ksleep,
 };
@@ -146,8 +147,6 @@ pub fn rust_main(hart_id: usize) {
 
         thread::spawn_kernel_thread(async move {
             process::add_initproc();
-            // process::scan_prilimary_tests();
-            // println!("after initproc!");
         });
 
         // thread::spawn_kernel_thread(async move {

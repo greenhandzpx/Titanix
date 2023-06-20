@@ -12,7 +12,7 @@ use crate::{
     utils::cell::SyncUnsafeCell,
 };
 
-use super::context::{EnvContext, LocalContext};
+use super::{context::{EnvContext, LocalContext}, close_interrupt, open_interrupt};
 
 /// Local context in one hart, either Idle or Something(about one thread)
 
@@ -91,9 +91,14 @@ impl Hart {
     /// Change thread(task) context,
     /// Now only change page table temporarily
     pub fn push_task(&mut self, task: &mut Box<LocalContext>) {
+
+        close_interrupt();
+
         let new_env = task.env();
         let old_env = self.env();
-        EnvContext::env_change(new_env, old_env);
+
+
+        let sie = EnvContext::env_change(new_env, old_env);
         if self.is_idle()
             || task.task_ctx().thread.process.pid() != self.current_task().process.pid()
         {
@@ -105,12 +110,18 @@ impl Hart {
             }
         }
         core::mem::swap(self.local_ctx_mut(), task);
+        if sie {
+            open_interrupt();
+        } 
     }
 
     pub fn pop_task(&mut self, task: &mut Box<LocalContext>) {
+
+        close_interrupt();
+
         let new_env = task.env();
         let old_env = self.env();
-        EnvContext::env_change(new_env, old_env);
+        let sie = EnvContext::env_change(new_env, old_env);
         unsafe {
             KERNEL_SPACE
                 .as_ref()
@@ -119,25 +130,38 @@ impl Hart {
         }
         // task.task_ctx().page_table.activate();
         core::mem::swap(self.local_ctx_mut(), task);
+
+        if sie {
+            open_interrupt();
+        }
     }
 
     pub fn push_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-        // unsafe {
-        //     (*task.task_ctx().page_table.get()).activate();
-        // }
-        // todo!()
-        // TODO: save sie state?
-        // core::mem::swap(&mut self.local_ctx, task);
+
+        close_interrupt();
+
+        let new_env = task.env();
+        let old_env = self.env();
+        let sie = EnvContext::env_change(new_env, old_env);
+        core::mem::swap(self.local_ctx_mut(), task);
+
+        if sie {
+            open_interrupt();
+        }
     }
 
     pub fn pop_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-        // let dummy = self.local_ctx.as_mut();
-        // unsafe {
-        //     (*task.task_ctx().page_table.get()).activate();
-        // }
-        // todo!()
-        // TODO: recover sie state?
-        // core::mem::swap(&mut self.local_ctx, task);
+
+        close_interrupt();
+
+        let new_env = task.env();
+        let old_env = self.env();
+        let sie = EnvContext::env_change(new_env, old_env);
+        core::mem::swap(self.local_ctx_mut(), task);
+
+        if sie {
+            open_interrupt();
+        }
     }
 }
 

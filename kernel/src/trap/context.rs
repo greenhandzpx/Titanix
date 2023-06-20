@@ -14,7 +14,6 @@ use core::arch::asm;
 
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
-use crate::processor::local_hart;
 
 /// Trap context structure containing sstatus, sepc and registers
 #[derive(Clone, Copy)]

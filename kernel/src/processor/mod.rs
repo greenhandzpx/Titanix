@@ -12,6 +12,7 @@ pub mod hart;
 
 use alloc::sync::Arc;
 pub use env::SumGuard;
+use riscv::register::sstatus;
 
 /// We store the local hart's addr in `tp` reg, instead of the hart id,
 
@@ -44,3 +45,13 @@ pub fn hart_idle_now() -> bool {
 //         }
 //     }
 // }
+
+pub fn close_interrupt() {
+    #[cfg(feature = "kernel_interrupt")]
+    unsafe { sstatus::clear_sie() }
+}
+
+pub fn open_interrupt() {
+    #[cfg(feature = "kernel_interrupt")]
+    unsafe { sstatus::set_sie() }
+}

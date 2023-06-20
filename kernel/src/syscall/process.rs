@@ -307,6 +307,8 @@ pub fn sys_clone(
 
 pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usize) -> SyscallRet {
     stack_trace!();
+
+    info!("path1 {:#x}", path as usize);
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
     // transfer the cmd args

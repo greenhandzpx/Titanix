@@ -10,7 +10,7 @@ use crate::{
     utils::{
         async_tools::block_on,
         error::{GeneralRet, SyscallErr},
-    }, process::thread::exit_and_terminate_all_threads, sync::mutex::SieGuard,
+    }, process::thread::exit_and_terminate_all_threads, sync::mutex::SieGuard, trap::set_kernel_trap_entry,
 };
 
 use super::{memory_space, VirtAddr};
@@ -32,10 +32,7 @@ extern "C" {
 
 impl Drop for UserCheck {
     fn drop(&mut self) {
-        unsafe {
-            // stvec::write(TRAMPOLINE as usize, TrapMode::Direct);
-            stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
-        }
+        set_kernel_trap_entry();
     }
 }
 impl UserCheck {

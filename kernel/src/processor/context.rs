@@ -70,15 +70,33 @@ pub struct EnvContext {
 
 impl EnvContext {
     pub fn new() -> Self {
-        let sie = 1;
-        if sie > 0 {
-            EnvContext::enable_sie();
-        }
+        let sie = usize::MAX;
+        // if sie > 0 {
+        //     EnvContext::enable_sie();
+        // }
         Self {
             sie,
             sum: 0,
             stack_tracker: StackTracker::new(),
         }
+    }
+
+    pub fn sie_dec(&mut self) {
+        if self.sie == usize::MAX {
+            unsafe {
+                sstatus::clear_sum();
+            }
+        }
+        self.sie -= 1;
+    }
+
+    pub fn sie_inc(&mut self) {
+        if self.sum == 0 {
+            unsafe {
+                sstatus::set_sum();
+            }
+        }
+        self.sie += 1;
     }
 
     pub fn sum_inc(&mut self) {
@@ -99,7 +117,12 @@ impl EnvContext {
         self.sum -= 1
     }
 
-    pub fn env_change(new: &Self, old: &Self) {
+
+    pub fn sie(&self) -> bool {
+        self.sie > 0
+    }
+
+    pub fn env_change(new: &Self, old: &Self) -> bool {
         unsafe {
             if (new.sum > 0) != (old.sum > 0) {
                 if new.sum > 0 {
@@ -108,21 +131,15 @@ impl EnvContext {
                     sstatus::clear_sum();
                 }
             }
-            if (new.sie > 0) != (old.sie > 0) {
-                if new.sie > 0 {
-                    EnvContext::enable_sie();
-                } else {
-                    sstatus::clear_sie();
-                }
-            }
+            // if (new.sie > 0) != (old.sie > 0) {
+            //     if new.sie > 0 {
+            //         EnvContext::enable_sie();
+            //     } else {
+            //         sstatus::clear_sie();
+            //     }
+            // }
         }
+        return new.sie > 0;
     }
 
-    fn enable_sie() {
-        // warn!("[kernel] sie enable");
-        // unsafe { sstatus::set_sie() }
-
-        // sie.sext();
-        // sie.stimer();
-    }
 }

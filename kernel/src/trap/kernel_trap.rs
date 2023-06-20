@@ -15,7 +15,7 @@ pub fn kernel_trap_handler() {
             todo!()
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // warn!("timer interrupt!!, sepc {:#x}", sepc::read());
+            warn!("timer interrupt!!");
             set_next_trigger();
             // todo!()
         }
