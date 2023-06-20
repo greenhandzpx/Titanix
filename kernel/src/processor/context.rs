@@ -1,5 +1,6 @@
-use alloc::{boxed::Box, sync::Arc};
-use riscv::register::sstatus;
+use alloc::sync::Arc;
+use log::warn;
+use riscv::register::{sie, sstatus};
 
 use crate::{
     mm::PageTable,
@@ -7,66 +8,76 @@ use crate::{
     utils::{cell::SyncUnsafeCell, debug::stack_tracker::StackTracker},
 };
 
-pub enum LocalContext {
-    /// There is no user task now(i.e. kernel thread is running)
-    Idle,
-    /// User task is running
-    TaskContext(Box<TaskContext>),
+pub struct LocalContext {
+    /// If no user task now(i.e. kernel thread is running), then None
+    user_task_ctx: Option<UserTaskContext>,
+    env: EnvContext,
 }
 
 impl LocalContext {
-    pub fn task_ctx_mut(&mut self) -> &mut TaskContext {
-        match self {
-            LocalContext::TaskContext(task_ctx) => task_ctx,
-            LocalContext::Idle => panic!("Idle LocalContext"),
+    pub fn new(user_task_ctx: Option<UserTaskContext>, env: Option<EnvContext>) -> Self {
+        let env = match env {
+            Some(env) => env,
+            None => EnvContext::new(),
+        };
+        Self { user_task_ctx, env }
+    }
+
+    pub fn task_ctx_mut(&mut self) -> &mut UserTaskContext {
+        match self.user_task_ctx.as_mut() {
+            Some(user_ctx) => user_ctx,
+            None => panic!("Idle LocalContext"),
         }
     }
 
-    pub fn task_ctx(&self) -> &TaskContext {
-        match self {
-            LocalContext::TaskContext(task_ctx) => task_ctx,
-            LocalContext::Idle => panic!("Idle LocalContext"),
+    pub fn task_ctx(&self) -> &UserTaskContext {
+        match self.user_task_ctx.as_ref() {
+            Some(user_ctx) => user_ctx,
+            None => panic!("Idle LocalContext"),
         }
     }
 
-    pub fn env(&mut self, spare_env: *mut EnvContext) -> &mut EnvContext {
-        match self {
-            // SAFETY:
-            // spare_env is the local hart's member, which lives forever
-            Self::Idle => unsafe { &mut *spare_env },
-            Self::TaskContext(task) => &mut task.env,
-        }
+    pub fn env_mut(&mut self) -> &mut EnvContext {
+        &mut self.env
+    }
+
+    pub fn env(&self) -> &EnvContext {
+        &self.env
     }
 
     /// Whether there is no user task now(i.e. kernel thread is running)
     pub fn is_idle(&self) -> bool {
-        match self {
-            LocalContext::Idle => true,
-            _ => false,
-        }
+        self.user_task_ctx.is_none()
     }
 }
 
-pub struct TaskContext {
+pub struct UserTaskContext {
     pub thread: Arc<Thread>,
+    /// Although we can get pagetable from the thread's process's memory space,
+    /// it needs lock, which reduces performance.
     pub page_table: Arc<SyncUnsafeCell<PageTable>>,
-    pub env: EnvContext,
 }
 
 /// Store some permission flags
 pub struct EnvContext {
+    /// Supervisor interrupt enable
     sie: usize,
+    /// Permit supervisor user memory access
     sum: usize,
-    // TODO: add more members
-    pub stack_tracker: Option<StackTracker>,
+    /// Stack tracker
+    pub stack_tracker: StackTracker,
 }
 
 impl EnvContext {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
+        let sie = 1;
+        if sie > 0 {
+            EnvContext::enable_sie();
+        }
         Self {
-            sie: 0,
+            sie,
             sum: 0,
-            stack_tracker: None,
+            stack_tracker: StackTracker::new(),
         }
     }
 
@@ -88,7 +99,7 @@ impl EnvContext {
         self.sum -= 1
     }
 
-    pub fn env_change(new: &mut Self, old: &mut Self) {
+    pub fn env_change(new: &Self, old: &Self) {
         unsafe {
             if (new.sum > 0) != (old.sum > 0) {
                 if new.sum > 0 {
@@ -97,16 +108,21 @@ impl EnvContext {
                     sstatus::clear_sum();
                 }
             }
-            // if (new.sie > 0) != (old.sie > 0) {
-            //     if new.sie > 0 {
-            //         sstatus::set_sie();
-            //     } else {
-            //         sstatus::clear_sie();
-            //     }
-            // }
-            // TODO: what if just clear sie in the period of trap
-            sstatus::clear_sie();
+            if (new.sie > 0) != (old.sie > 0) {
+                if new.sie > 0 {
+                    EnvContext::enable_sie();
+                } else {
+                    sstatus::clear_sie();
+                }
+            }
         }
     }
+
+    fn enable_sie() {
+        // warn!("[kernel] sie enable");
+        // unsafe { sstatus::set_sie() }
+
+        // sie.sext();
+        // sie.stimer();
+    }
 }
-pub struct KernelTaskContext {}

@@ -50,7 +50,8 @@ impl MutexSupport for Spin {
 pub struct SieGuard(bool);
 
 impl SieGuard {
-    fn new() -> Self {
+    /// Construct a SieGuard
+    pub fn new() -> Self {
         Self(unsafe {
             let sie_before = sstatus::read().sie();
             sstatus::clear_sie();

@@ -20,8 +20,6 @@ fn panic(info: &PanicInfo) -> ! {
     local_hart()
         .env()
         .stack_tracker
-        .as_mut()
-        .unwrap()
         .print_stacks();
     shutdown()
 }

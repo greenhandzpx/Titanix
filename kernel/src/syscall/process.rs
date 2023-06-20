@@ -315,6 +315,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         if unsafe { *args == 0 } {
             break;
         }
+        // TODO: add user check
         args_vec.push(c_str_to_string(unsafe { (*args) as *const u8 }));
         debug!("exec get an arg {}", args_vec[args_vec.len() - 1]);
         unsafe {
@@ -326,6 +327,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         if unsafe { *envs == 0 } {
             break;
         }
+        // TODO: add user check
         envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
         debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
         unsafe {
@@ -356,13 +358,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             warn!("[sys_exec] Cannot find this elf file {}", path);
             Err(SyscallErr::EACCES)
         }
-        // if let Some(app_inode) = fs::fat32_tmp::open_file(&path, OpenFlags::RDONLY) {
-        //     let elf_data = app_inode.read_all();
-        //     current_process().exec(&elf_data, args_vec, envs_vec)
-        // } else {
-        //     warn!("[sys_exec] Cannot find this elf file {}", path);
-        //     Err(SyscallErr::EACCES)
-        // }
     }
 }
 

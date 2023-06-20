@@ -42,9 +42,16 @@ pub use page_table::PageTable;
 pub use page_table::PageTableEntry;
 pub use recycle_allocator::RecycleAllocator;
 
+use crate::processor::hart::HARTS;
+
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
     heap_allocator::init_heap();
+    unsafe {
+        for hart in HARTS.iter_mut() {
+            hart.init_local_ctx();
+        }
+    }
     frame_allocator::init_frame_allocator();
     memory_space::init_kernel_space();
     unsafe {

@@ -27,6 +27,7 @@ const SYSCALL_LSEEK: usize = 62;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_WRITEV: usize = 66;
+const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
@@ -129,6 +130,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
+        SYSCALL_SENDFILE => sys_sendfile(args[0] as isize, args[1] as isize, args[2] as *const usize, args[3] as usize),
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
         SYSCALL_NEWFSTATAT => sys_newfstatat(
             args[0] as isize,

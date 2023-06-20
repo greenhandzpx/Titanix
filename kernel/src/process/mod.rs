@@ -286,6 +286,7 @@ impl Process {
     /// When one process invokes `exec`, all of the threads will terminate except the
     /// main thread, and the new program is executed in the main thread.
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
+        stack_trace!();
         debug!("exec pid {}", current_process().pid());
         stack_trace!();
         let (memory_space, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);

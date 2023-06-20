@@ -860,3 +860,9 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
         }
     }
 }
+
+pub fn sys_sendfile(out_fd: isize, in_fd: isize, offset: *const usize, count: usize) -> SyscallRet {
+    stack_trace!();
+    
+    todo!()
+}

@@ -9,7 +9,7 @@ use log::{debug, warn};
 use crate::{
     processor::{
         self,
-        context::{EnvContext, KernelTaskContext, TaskContext},
+        context::{EnvContext, UserTaskContext},
     },
     utils::debug::stack_tracker::StackTracker,
 };
@@ -39,21 +39,19 @@ impl Future for YieldFuture {
 /// one thread's task future(doing some env context changes e.g.
 /// pagetable switching)
 pub struct UserTaskFuture<F: Future + Send + 'static> {
-    task_ctx: LocalContext,
+    task_ctx: Box<LocalContext>,
     task_future: F,
 }
 
 impl<F: Future + Send + 'static> UserTaskFuture<F> {
     #[inline]
     pub fn new(thread: Arc<Thread>, future: F) -> Self {
-        let mut task_ctx = TaskContext {
+        let task_ctx = UserTaskContext {
             thread: thread.clone(),
             page_table: thread.process.inner.lock().memory_space.page_table.clone(),
-            env: EnvContext::new(),
         };
-        task_ctx.env.stack_tracker = Some(StackTracker::new());
-        let task_ctx = Box::new(task_ctx);
-        let local_ctx = LocalContext::TaskContext(task_ctx);
+        // task_ctx.env.stack_tracker = Some(StackTracker::new());
+        let local_ctx = Box::new(LocalContext::new(Some(task_ctx), None));
         Self {
             task_ctx: local_ctx,
             task_future: future,
@@ -74,8 +72,6 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         // let this = self.get_mut();
         let hart = processor::local_hart();
         hart.push_task(&mut this.task_ctx);
-        // warn!("poll new task");
-        // hart.push_task(&mut self.task_ctx);
 
         // run the `threadloop`
         // SAFETY:
@@ -91,14 +87,14 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
 
 pub struct KernelTaskFuture<F: Future<Output = ()> + Send + 'static> {
     // always_local: AlwaysLocal,
-    task_ctx: KernelTaskContext,
+    task_ctx: Box<LocalContext>,
     task: F,
 }
 
 impl<F: Future<Output = ()> + Send + 'static> KernelTaskFuture<F> {
     pub fn new(task: F) -> Self {
         Self {
-            task_ctx: KernelTaskContext {},
+            task_ctx: Box::new(LocalContext::new(None, None)),
             // always_local: AlwaysLocal::new(),
             task,
         }
@@ -121,7 +117,7 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
             Pin::new_unchecked(&mut this.task).poll(cx)
             // local.switch_kernel_task(&mut this.always_local);
         };
-        hart.push_kernel_task(&mut this.task_ctx);
+        hart.pop_kernel_task(&mut this.task_ctx);
         ret
         // todo!("Finish kernel task switch");
     }

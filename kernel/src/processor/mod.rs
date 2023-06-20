@@ -1,7 +1,6 @@
 use crate::{
     process::{thread::Thread, Process},
     trap::TrapContext,
-    utils::debug::stack_tracker::StackTracker,
 };
 
 pub use self::hart::{local_hart, HARTS};
@@ -17,7 +16,7 @@ pub use env::SumGuard;
 /// We store the local hart's addr in `tp` reg, instead of the hart id,
 
 pub fn local_env() -> &'static mut EnvContext {
-    local_hart().env()
+    local_hart().env_mut()
 }
 
 // TODO: figure out whether to use ref or not
@@ -38,10 +37,10 @@ pub fn hart_idle_now() -> bool {
     local_hart().is_idle()
 }
 
-pub fn init() {
-    unsafe {
-        for hart in HARTS.iter_mut() {
-            hart.env().stack_tracker = Some(StackTracker::new());
-        }
-    }
-}
+// pub fn init() {
+//     unsafe {
+//         for hart in HARTS.iter_mut() {
+//             hart.init();
+//         }
+//     }
+// }

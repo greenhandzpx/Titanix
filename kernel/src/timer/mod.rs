@@ -1,6 +1,5 @@
 //! RISC-V timer-related functionality
 
-use core::cell::SyncUnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
@@ -9,9 +8,7 @@ use core::time::Duration;
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::utils::async_tools;
 use alloc::collections::{BTreeMap, LinkedList};
-use alloc::sync::Arc;
 use lazy_static::*;
 use log::info;
 use riscv::register::time;

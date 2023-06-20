@@ -111,7 +111,7 @@ pub fn rust_main(hart_id: usize) {
         // The first hart
         clear_bss();
 
-        processor::init();
+        // processor::init();
         hart::init(hart_id);
         utils::logging::init();
 
