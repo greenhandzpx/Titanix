@@ -20,6 +20,10 @@ const MSEC_PER_SEC: usize = 1000;
 pub const CLOCK_REALTIME: usize = 0;
 pub const CLOCK_MONOTONIC: usize = 1;
 
+/// for utimensat
+pub const UTIME_NOW: usize = 1073741823;
+pub const UTIME_OMIT: usize = 1073741822;
+
 /// Used for get time
 #[repr(C)]
 pub struct TimeVal {
