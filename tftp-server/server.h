@@ -1,3 +1,6 @@
+#ifndef _TFTP_SERVER_H_
+#define _TFTP_SERVER_H_
+
 #include <netinet/in.h>
 #include <stdio.h>
 
@@ -25,3 +28,5 @@ struct tftp_connect
     int lst_blk_id;
     FILE *fp;
 };
+
+#endif
