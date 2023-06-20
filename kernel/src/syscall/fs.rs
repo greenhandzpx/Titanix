@@ -759,7 +759,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
 
     UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
     let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
-    info!("[sys_ppoll]: fds {:?}", fds);
+    debug!("[sys_ppoll]: fds {:?}", fds);
 
     let start_ms = get_time_ms();
     let infinite_timeout: bool;

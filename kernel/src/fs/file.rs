@@ -64,7 +64,9 @@ pub trait File: Send + Sync {
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
     fn pollin(&self) -> GeneralRet<bool> {
-        todo!()
+        // TODO: optimize
+        Ok(true)
+        // todo!()
     }
 
     fn pollout(&self) -> GeneralRet<bool> {
