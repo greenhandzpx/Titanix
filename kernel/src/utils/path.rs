@@ -134,4 +134,20 @@ impl Path {
         }
         Some(res)
     }
+    pub fn merge(p1: &str, p2: &str) -> String {
+        let mut res = p1.to_string();
+        res += "/";
+        res += p2;
+        res
+    }
+    pub fn exchange_prefix(p1: &str, p2: &str) -> (String, String) {
+        let p1_prefix = Self::get_parent_dir(p1).unwrap();
+        let p1_name = Self::get_name(p1);
+        let p2_prefix = Self::get_parent_dir(p2).unwrap();
+        let p2_name = Self::get_name(p2);
+        (
+            Self::merge(&p2_prefix, p1_name),
+            Self::merge(&p1_prefix, p2_name),
+        )
+    }
 }

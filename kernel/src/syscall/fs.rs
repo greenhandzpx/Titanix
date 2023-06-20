@@ -6,15 +6,15 @@ use core::ptr::copy_nonoverlapping;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use inode::InodeState;
-use log::{debug, trace, warn};
+use log::{debug, info, trace, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::dirent::MAX_NAME_LEN;
 use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
-    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, StatFlags, UtsName,
-    DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, Renameat2Flags, StatFlags,
+    UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
@@ -24,10 +24,11 @@ use crate::signal::SigSet;
 use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::get_time_spec;
 use crate::timer::{get_time_ms, TimeSpec};
+use crate::utils::debug;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::{Path, AT_FDCWD};
 use crate::utils::string::{array_str_len, c_str_to_string};
-use crate::{fs, stack_trace};
+use crate::{fs, panic, stack_trace};
 
 use super::PollFd;
 
@@ -317,14 +318,6 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
 
             // load children from disk
             <dyn Inode>::load_children(inode.clone());
-            // match state {
-            //     InodeState::Init => {
-            //         inode.metadata().inner.lock().state = InodeState::Synced;
-            //     }
-            //     _ => {
-            //         // do nothing
-            //     }
-            // }
 
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
@@ -584,16 +577,6 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                     let fd = proc.fd_table.alloc_fd();
                     let file = inode.open(inode.clone(), flags)?;
 
-                    // // just for debug
-                    // let file2 = inode.open(inode.clone(), flags)?;
-                    // let buf: [u8; 3] = [1; 3];
-                    // file2.sync_write(&buf)?;
-                    // // just for debug
-                    // let file2 = inode.open(inode.clone(), flags)?;
-                    // file2.seek(0)?;
-                    // let mut buf: [u8; 3] = [1; 3];
-                    // file2.sync_read(&mut buf)?;
-
                     proc.fd_table.put(fd, file);
                     Ok(fd)
                 })?;
@@ -601,7 +584,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
                 Ok(fd as isize)
             } else {
                 debug!("file {} doesn't exist", absolute_path);
-                Err(SyscallErr::EACCES)
+                Err(SyscallErr::ENOENT)
             }
         }
         None => {
@@ -671,15 +654,21 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         ret += iov_len;
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
-        let buf_str = unsafe { core::str::from_utf8_unchecked(buf) };
-        trace!("[writev] buf: {:?}", buf_str);
-        let fw_ret = file.write(buf).await;
-        // if error, return
-        if fw_ret.is_err() {
-            return fw_ret;
-        }
+        trace!("[writev] buf: {:?}", buf);
+        test();
+        file.write(buf).await?;
     }
     Ok(ret as isize)
+}
+
+fn test() -> SyscallRet {
+    let iov_base = 1189160;
+    let iov_len = 4;
+    UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
+    let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
+    let buf_str = unsafe { core::str::from_utf8_unchecked(buf) };
+    trace!("[writev] buf: {:?}, buf_str: {}", buf, buf_str);
+    Ok(0)
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -691,16 +680,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     if !file.readable() {
         return Err(SyscallErr::EPERM);
     }
-
-    // file.meta_data()
-    //     .inode
-    //     .lock()
-    //     .as_ref()
-    //     .unwrap()
-    //     .meta_data()
-    //     .inner
-    //     .lock()
-    //     .st_atime = get_time() as i64;
 
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
@@ -795,7 +774,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
         let mut cnt = 0;
         for i in 0..nfds {
             let current_fd = &mut fds[i];
-            trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
+            // trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
             if let Some(file) =
                 current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
             {
@@ -838,6 +817,10 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
     }
 }
 
+/// If newpath already exists, replace it.
+/// If oldpath and newpath are existing hard links referring to the same inode, then return a success.
+/// If newpath exists but operation failed (for some reason, rename() failed), leave an instance of newpath in place (which means you should keep the backup of newpath if it exist).
+/// If oldpath can specify a directory, then newpath should be a blank directory or not exist.
 pub fn sys_renameat2(
     olddirfd: isize,
     oldpath: *const u8,
@@ -846,11 +829,186 @@ pub fn sys_renameat2(
     flags: u32,
 ) -> SyscallRet {
     stack_trace!();
+    let flags = Renameat2Flags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    if flags.contains(Renameat2Flags::RENAME_EXCHANGE)
+        && (flags.contains(Renameat2Flags::RENAME_NOREPLACE)
+            || flags.contains(Renameat2Flags::RENAME_WHITEOUT))
+    {
+        return Err(SyscallErr::EINVAL);
+    }
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(oldpath)?;
     let oldpath = Path::path_process(olddirfd, oldpath);
     UserCheck::new().check_c_str(newpath)?;
     let newpath = Path::path_process(newdirfd, newpath);
-
-    todo!()
+    debug!(
+        "[sys_renameat2] oldpath: {:?}, newpath: {:?}, flags: {:?}",
+        oldpath, newpath, flags
+    );
+    if oldpath.is_none() {
+        debug!("[sys_renameat2] oldpath is empty");
+        return Err(SyscallErr::ENOENT);
+    }
+    if newpath.is_none() {
+        debug!("[sys_renameat2] newpath is empty");
+        return Err(SyscallErr::ENOENT);
+    }
+    let oldpath = oldpath.unwrap();
+    let newpath = newpath.unwrap();
+    if newpath.starts_with(&oldpath) {
+        debug!("[sys_renameat2] newpath start with oldpath");
+        return Err(SyscallErr::EINVAL);
+    }
+    let oldinode = fs::inode::open_file(&oldpath, OpenFlags::RDWR);
+    let newinode = fs::inode::open_file(&newpath, OpenFlags::RDWR);
+    if oldinode.is_none() {
+        debug!("[sys_renameat2] doesn'n have oldinode");
+        return Err(SyscallErr::ENOENT);
+    }
+    let oldinode = oldinode.unwrap();
+    let oldtype = oldinode.metadata().mode;
+    let oldname = oldinode.metadata().name.clone();
+    if newinode.is_none() {
+        // newpath doesn't exist, so we can create one and needn't care about the replace problem.
+        debug!("[sys_renameat2] doesn'n have newinode");
+        if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
+            return Err(SyscallErr::ENOENT);
+        }
+        let oldparent = oldinode
+            .metadata()
+            .inner
+            .lock()
+            .parent
+            .clone()
+            .unwrap()
+            .upgrade()
+            .unwrap();
+        oldparent.remove_child(oldinode.clone())?;
+        let newparent_path = Path::get_parent_dir(&newpath).unwrap();
+        let parent = fs::inode::open_file(&newparent_path, OpenFlags::RDWR);
+        if parent.is_none() {
+            debug!("[sys_renameat2] newparent doesn't create");
+            return Err(SyscallErr::ENOENT);
+        } else {
+            let parent = parent.unwrap();
+            if oldtype == InodeMode::FileDIR {
+                stack_trace!();
+                parent.mkdir(parent.clone(), &newpath, oldtype)?;
+            } else {
+                parent.mknod(
+                    parent.clone(),
+                    &newpath,
+                    oldtype,
+                    oldinode.metadata().rdev.unwrap(),
+                )?;
+            }
+            let new_inner_lock = parent.metadata().inner.lock();
+            let newinode = new_inner_lock
+                .children
+                .get(Path::get_name(&newpath))
+                .unwrap();
+            let mut old_inner = oldinode.metadata().inner.lock().clone();
+            old_inner.parent = Some(Arc::downgrade(&parent));
+            newinode.metadata().inner_set(old_inner);
+            Ok(0)
+        }
+    } else {
+        // newpath is already existing, check flag.
+        debug!("[sys_renameat2] newinode already exist");
+        let newinode = newinode.unwrap();
+        let newtype = newinode.metadata().mode;
+        let newname = newinode.metadata().name.clone();
+        let old_parent = oldinode
+            .metadata()
+            .inner
+            .lock()
+            .parent
+            .clone()
+            .unwrap()
+            .upgrade()
+            .unwrap();
+        let new_parent = newinode
+            .metadata()
+            .inner
+            .lock()
+            .parent
+            .clone()
+            .unwrap()
+            .upgrade()
+            .unwrap();
+        old_parent.remove_child(oldinode.clone())?;
+        new_parent.remove_child(newinode.clone())?;
+        if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
+            debug!("[sys_renameat2] exchange old and new");
+            // If flag is RENAME_EXCHANGE, exchange old and new one.
+            if newtype == InodeMode::FileDIR {
+                old_parent.mkdir(old_parent.clone(), &newpath, newtype)?;
+            } else {
+                old_parent.mknod(
+                    old_parent.clone(),
+                    &newpath,
+                    newtype,
+                    newinode.clone().metadata().rdev.unwrap(),
+                )?;
+            }
+            if oldtype == InodeMode::FileDIR {
+                new_parent.mkdir(new_parent.clone(), &oldpath, oldtype)?;
+            } else {
+                new_parent.mknod(
+                    new_parent.clone(),
+                    &oldpath,
+                    oldtype,
+                    oldinode.clone().metadata().rdev.unwrap(),
+                )?;
+            }
+            // inner exchange
+            let old_inner_lock = old_parent.metadata().inner.lock();
+            // get inner before overwrite
+            let mut oldinner = oldinode.metadata().inner.lock().clone();
+            let new_inner_lock = new_parent.metadata().inner.lock();
+            // get inner before overwrite
+            let mut newinner = newinode.metadata().inner.lock().clone();
+            // overwrite with current oldpath inode
+            let oldinode = old_inner_lock.children.get(oldname.as_str()).unwrap();
+            // overwrite with current newpath inode
+            let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
+            // overwrite the newinner with current old_parent
+            newinner.parent = Some(Arc::downgrade(&old_parent));
+            oldinode.metadata().inner_set(newinner);
+            // overwrite the oldinner with current new_parent
+            oldinner.parent = Some(Arc::downgrade(&new_parent));
+            newinode.metadata().inner_set(oldinner);
+            Ok(0)
+        } else if flags.contains(Renameat2Flags::RENAME_NOREPLACE) {
+            debug!("[sys_renameat2] cound not replace, error");
+            // If flag is RENAME_NOREPLACE, should not to replace newpath.
+            // So return EEXIST
+            Err(SyscallErr::EEXIST)
+        } else {
+            // Normally, replace the newpath.
+            // But you should check the newpath type, if newtype is not the same as oldtype, should return EISDIR or ENOTEMPTY or ENOTDIR
+            debug!("[sys_renameat2] replace newpath");
+            if newtype == oldtype {
+                // the same type, replace directly.
+                if newtype == InodeMode::FileDIR {
+                    new_parent.mkdir(new_parent.clone(), &newpath, newtype)?;
+                } else {
+                    new_parent.mknod(
+                        new_parent.clone(),
+                        &newpath,
+                        newtype,
+                        oldinode.clone().metadata().rdev.unwrap(),
+                    )?;
+                }
+                let mut oldinner = oldinode.metadata().inner.lock().clone();
+                oldinner.parent = Some(Arc::downgrade(&new_parent));
+                let new_inner_lock = new_parent.metadata().inner.lock();
+                let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
+                newinode.metadata().inner_set(oldinner);
+                Ok(0)
+            } else {
+                panic!("not support");
+            }
+        }
+    }
 }

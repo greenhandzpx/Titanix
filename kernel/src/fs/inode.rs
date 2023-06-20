@@ -43,7 +43,7 @@ lazy_static! {
     ///
     pub static ref INODE_CACHE: Mutex<HashTable<usize, Arc<dyn Inode>>> = Mutex::new(HashTable::new());
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum InodeMode {
     FileSOCK = 0xC000, /* socket */
     FileLNK = 0xA000,  /* symbolic link */
@@ -358,8 +358,6 @@ impl dyn Inode {
 pub struct InodeMeta {
     /// inode number
     pub ino: usize,
-    /// data address
-    pub data: usize,
     /// type of inode
     pub mode: InodeMode,
     // pub i_op: Arc<dyn InodeOperations + Sync + Send>,
@@ -378,8 +376,12 @@ impl InodeMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut InodeMetaInner) -> T) -> T {
         f(&mut self.inner.lock())
     }
+    pub fn inner_set(&self, inner: InodeMetaInner) {
+        *self.inner.lock() = inner;
+    }
 }
 
+#[derive(Clone)]
 pub struct InodeMetaInner {
     // /// inode' file's size
     // pub size: usize,
@@ -415,7 +417,6 @@ impl InodeMeta {
         };
         Self {
             ino: INODE_NUMBER.fetch_add(1, Ordering::Relaxed),
-            data: 0,
             mode,
             rdev: None,
             device: None,
