@@ -18,12 +18,12 @@ jobs:
           components: rust-src, llvm-tools-preview
           target: riscv64gc-unknown-none-elf
       - name: Build doc
-        run: cd os && cargo doc --no-deps --verbose
+        run: cd kernel && cargo doc --no-deps --verbose
       # - name: Deploy to Github Pages
       #   uses: peaceiris/actions-gh-pages@v3
       #   with:
       #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_dir: ./os/target/riscv64gc-unknown-none-elf/doc
+      #     publish_dir: ./kernel/target/riscv64gc-unknown-none-elf/doc
       #     destination_dir: ${{ github.ref_name }}
 
   run-tests:
@@ -63,6 +63,6 @@ jobs:
           qemu-system-riscv64 --version
 
       - name: Run usertests
-        run: cd os && make run 
+        run: cd kernel && make run 
         timeout-minutes: 10
       
