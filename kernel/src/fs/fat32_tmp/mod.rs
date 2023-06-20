@@ -87,8 +87,8 @@ impl Inode for Fat32RootInode {
         let file_meta = FileMeta {
             // TODO: not sure whether this file_name() is absolute path or not
             path: "/".to_string(),
-            flags,
             inner: Mutex::new(FileMetaInner {
+                flags,
                 inode: Some(this),
                 pos: 0,
                 dirent_index: 0,
@@ -247,8 +247,8 @@ impl Inode for Fat32Inode {
         let file_meta = FileMeta {
             // TODO: not sure whether this file_name() is absolute path or not
             path: self.dentry.file_name(),
-            flags,
             inner: Mutex::new(FileMetaInner {
+                flags,
                 inode: Some(this),
                 pos: 0,
                 dirent_index: 0,

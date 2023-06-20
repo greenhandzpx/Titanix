@@ -78,6 +78,20 @@ impl FdTable {
             self.fd_table.len() - 1
         }
     }
+    pub fn alloc_fd_lower_bound(&mut self, bound: usize) -> usize {
+        if let Some(fd) =
+            (0..self.fd_table.len()).find(|fd| *fd >= bound && self.fd_table[*fd].is_none())
+        {
+            fd
+        } else {
+            if bound >= self.fd_table.len() {
+                self.fd_table.resize(bound + 1, None);
+            } else {
+                self.fd_table.push(None)
+            }
+            self.fd_table.len() - 1
+        }
+    }
 
     pub fn alloc_spec_fd(&mut self, newfd: usize) -> usize {
         if newfd >= self.fd_table.len() {

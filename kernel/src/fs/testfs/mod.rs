@@ -35,8 +35,8 @@ impl Inode for TestRootInode {
         let file = TestRootFile {
             metadata: Some(FileMeta {
                 path: this.metadata().path.clone(),
-                flags,
                 inner: Mutex::new(FileMetaInner {
+                    flags,
                     inode: Some(this.clone()),
                     pos: 0,
                     dirent_index: 0,

@@ -83,13 +83,13 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
                     return Ok(0);
                 } else {
-                    warn!("invalid set arg");
+                    info!("invalid set arg");
                     return Err(SyscallErr::EINVAL);
                 }
             }
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
-                    debug!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
+                    info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
                     return Ok(0);
                 } else {

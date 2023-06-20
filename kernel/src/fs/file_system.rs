@@ -3,7 +3,6 @@ use lazy_static::*;
 use log::debug;
 
 use crate::{
-    fs::inode::INODE_CACHE,
     stack_trace,
     sync::mutex::SpinNoIrqLock,
     utils::{
@@ -12,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{testfs::TestFs, Inode};
+use super::{Inode, testfs::TestFs};
 
 #[derive(Clone)]
 pub enum FileSystemType {
