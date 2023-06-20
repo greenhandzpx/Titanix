@@ -21,8 +21,8 @@ impl Inode for NullInode {
         Ok(Arc::new(NullFile {
             meta: FileMeta {
                 path: "todo_here()".to_string(),
-                flags,
                 inner: Mutex::new(FileMetaInner {
+                    flags,
                     inode: Some(this),
                     pos: 0,
                     dirent_index: 0,

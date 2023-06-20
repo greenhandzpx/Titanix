@@ -10,7 +10,6 @@ use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use crate::config::fs::RLIMIT_NOFILE;
-use crate::fs::dirent::MAX_NAME_LEN;
 use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
@@ -25,7 +24,6 @@ use crate::signal::SigSet;
 use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::get_time_spec;
 use crate::timer::{get_time_ms, TimeSpec};
-use crate::utils::debug;
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path::{Path, AT_FDCWD};
 use crate::utils::string::{array_str_len, c_str_to_string};
@@ -597,15 +595,7 @@ fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
 
 pub fn sys_close(fd: usize) -> SyscallRet {
     stack_trace!();
-    let process = current_process();
-    return process.inner_handler(move |proc| {
-        if proc.fd_table.take(fd).is_none() {
-            Err(SyscallErr::EBADF)
-        } else {
-            debug!("close fd {}", fd);
-            Ok(0)
-        }
-    });
+    current_process().close_file(fd)
 }
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -674,6 +664,7 @@ fn test() -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
+    trace!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -709,11 +700,46 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     Ok(0)
 }
 
+enum FcntlCmd {
+    F_DUPFD = 0,
+    F_DUPFD_CLOEXEC = 1030,
+    F_GETFD = 1,
+    F_SETFD = 2,
+    F_GETFL = 3,
+    F_SETFL = 4,
+}
+
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     stack_trace!();
     debug!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
     // TODO
-    Ok(0)
+    match cmd {
+        _ if cmd == FcntlCmd::F_DUPFD as i32 || cmd == FcntlCmd::F_DUPFD_CLOEXEC as i32 => {
+            current_process().inner_handler(|proc| {
+                // if proc.fd_table.get_ref(fd).is_none()
+                // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
+                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+                let newfd = proc.fd_table.alloc_fd_lower_bound(arg);
+                proc.fd_table.put(newfd, file);
+                debug!("[sys_fcntl]: dup file fd from {} to {}", fd, newfd);
+                Ok(newfd as isize)
+            })
+        }
+        _ if cmd == FcntlCmd::F_SETFD as i32 => {
+            current_process().inner_handler(|proc| {
+                // if proc.fd_table.get_ref(fd).is_none()
+                // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
+                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+                let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
+                file.metadata().inner.lock().flags = flags;
+                debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                Ok(0)
+            })
+        }
+        _ => {
+            todo!()
+        }
+    }
 }
 
 bitflags! {
@@ -731,9 +757,9 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
     stack_trace!();
     let _sum_guard = SumGuard::new();
 
-    stack_trace!();
     UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
     let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
+    debug!("[sys_ppoll]: fds {:?}", fds);
 
     let start_ms = get_time_ms();
     let infinite_timeout: bool;

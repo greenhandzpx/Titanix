@@ -12,6 +12,7 @@ use crate::sync::Event;
 use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
+use crate::utils::path::{Path, AT_FDCWD};
 use crate::utils::string::c_str_to_string;
 use crate::{process, stack_trace};
 use alloc::string::{String, ToString};
@@ -308,7 +309,7 @@ pub fn sys_clone(
 pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usize) -> SyscallRet {
     stack_trace!();
 
-    info!("path1 {:#x}", path as usize);
+    // info!("path1 {:#x}", path as usize);
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
     // transfer the cmd args
@@ -339,7 +340,8 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     envs_vec.push("PATH=/".to_string());
     // UserCheck::new().readable_slice(path, len);
     UserCheck::new().check_c_str(path)?;
-    let path = c_str_to_string(path);
+    // let path = c_str_to_string(path);
+    let path = Path::path_process(AT_FDCWD, path as *const u8).unwrap();
     debug!("sys exec {}", path);
     // print_dir_tree();
 
@@ -356,6 +358,9 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             trace!("try to read all data in file {}", path);
             let elf_data = app_file.sync_read_all()?;
             current_process().exec(&elf_data, args_vec, envs_vec)
+            // if app_file.metadata().flags.contains(OpenFlags::CLOEXEC) {
+            //     current_process().close_file(fd)
+            // }
         } else {
             warn!("[sys_exec] Cannot find this elf file {}", path);
             Err(SyscallErr::EACCES)

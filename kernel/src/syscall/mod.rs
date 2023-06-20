@@ -281,6 +281,7 @@ pub enum FutexOperations {
 
 /// Poll Fd
 #[repr(C)]
+#[derive(Debug)]
 pub struct PollFd {
     /// Fd
     pub fd: i32,
@@ -289,3 +290,4 @@ pub struct PollFd {
     /// Returned events
     pub revents: i16,
 }
+
