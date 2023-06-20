@@ -69,12 +69,12 @@ pub trait FileSystem: Send + Sync {
         debug!("create root inode success");
 
         // root_inode.init(parent, mount_point)?;
-        let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
 
-        let root_inode = {
-            INODE_CACHE.lock().insert(key, root_inode.clone());
-            INODE_CACHE.lock().get(&key).unwrap().clone()
-        };
+        // let root_inode = {
+        //     INODE_CACHE.lock().insert(key, root_inode.clone());
+        //     INODE_CACHE.lock().get(&key).unwrap().clone()
+        // };
 
         let meta = FileSystemMeta {
             ftype,
@@ -107,9 +107,12 @@ pub trait FileSystem: Send + Sync {
         debug!("create root inode success");
 
         // root_inode.init(parent, mount_point)?;
-        let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
 
-        INODE_CACHE.lock().insert(key, root_inode.clone());
+        // let root_inode = {
+        //     INODE_CACHE.lock().insert(key, root_inode.clone());
+        //     INODE_CACHE.lock().get(&key).unwrap().clone()
+        // };
 
         let meta = FileSystemMeta {
             ftype,

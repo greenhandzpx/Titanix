@@ -5,12 +5,15 @@ use riscv::register::{stvec, utvec::TrapMode};
 
 use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
+    process::thread::exit_and_terminate_all_threads,
     processor::{current_process, local_hart, SumGuard},
     stack_trace,
+    sync::mutex::SieGuard,
+    trap::set_kernel_trap_entry,
     utils::{
         async_tools::block_on,
         error::{GeneralRet, SyscallErr},
-    }, process::thread::exit_and_terminate_all_threads, sync::mutex::SieGuard, trap::set_kernel_trap_entry,
+    },
 };
 
 use super::{memory_space, VirtAddr};
@@ -165,10 +168,7 @@ impl UserCheck {
                     current_process().pid()
                 );
                 warn!("backtrace:");
-                local_hart()
-                    .env()
-                    .stack_tracker
-                    .print_stacks();
+                local_hart().env().stack_tracker.print_stacks();
                 exit_and_terminate_all_threads(-2);
                 // current_process().inner_handler(|proc| {
                 //     proc.exit_code = -2;

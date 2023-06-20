@@ -46,10 +46,7 @@ impl StackInfoGuard {
 
 impl Drop for StackInfoGuard {
     fn drop(&mut self) {
-        local_hart()
-            .env_mut()
-            .stack_tracker
-            .pop_stack_info();
+        local_hart().env_mut().stack_tracker.pop_stack_info();
     }
 }
 

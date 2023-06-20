@@ -31,9 +31,9 @@ mod config;
 mod driver;
 mod executor;
 mod fs;
-mod panic;
 mod loader;
 pub mod mm;
+mod panic;
 pub mod process;
 mod processor;
 mod sbi;
@@ -51,7 +51,7 @@ use core::{
     time::Duration,
 };
 
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 use riscv::register::sstatus;
 
 use crate::{
@@ -59,7 +59,7 @@ use crate::{
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     process::thread,
-    processor::{hart, HARTS, open_interrupt},
+    processor::{hart, open_interrupt, HARTS},
     sbi::hart_start,
     timer::ksleep,
 };

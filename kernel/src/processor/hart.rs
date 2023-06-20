@@ -12,7 +12,11 @@ use crate::{
     utils::cell::SyncUnsafeCell,
 };
 
-use super::{context::{EnvContext, LocalContext}, close_interrupt, open_interrupt};
+use super::{
+    close_interrupt,
+    context::{EnvContext, LocalContext},
+    open_interrupt,
+};
 
 /// Local context in one hart, either Idle or Something(about one thread)
 
@@ -91,12 +95,10 @@ impl Hart {
     /// Change thread(task) context,
     /// Now only change page table temporarily
     pub fn push_task(&mut self, task: &mut Box<LocalContext>) {
-
         close_interrupt();
 
         let new_env = task.env();
         let old_env = self.env();
-
 
         let sie = EnvContext::env_change(new_env, old_env);
         if self.is_idle()
@@ -112,11 +114,10 @@ impl Hart {
         core::mem::swap(self.local_ctx_mut(), task);
         if sie {
             open_interrupt();
-        } 
+        }
     }
 
     pub fn pop_task(&mut self, task: &mut Box<LocalContext>) {
-
         close_interrupt();
 
         let new_env = task.env();
@@ -137,7 +138,6 @@ impl Hart {
     }
 
     pub fn push_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-
         close_interrupt();
 
         let new_env = task.env();
@@ -151,7 +151,6 @@ impl Hart {
     }
 
     pub fn pop_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-
         close_interrupt();
 
         let new_env = task.env();

@@ -15,6 +15,8 @@ use log::{debug, info};
 
 // use crate::fs::Dentry;
 
+pub const AT_FDCWD: isize = -100;
+
 pub struct Path {
     // pub mnt: Arc<VfsMount>,
     // pub dentry: Arc<dyn Dentry>,
@@ -65,40 +67,40 @@ impl Path {
         }
         Some(res.join("/"))
     }
-    pub fn path_process(path: *const u8) -> Option<String> {
-        let path = &c_str_to_string(path);
-        debug!("path name {}", path);
+    pub fn path_process(dirfd: isize, path: *const u8) -> Option<String> {
+        let path_str = &c_str_to_string(path);
+        debug!("[path_process] dirfd {}, path name {}", dirfd, path_str);
         let absolute_path;
-        if Self::judge_is_relative(path) {
-            debug!("It is a relative path");
-            let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
-            debug!("cwd {}", cwd);
-            absolute_path = Self::change_relative_to_absolute(path, &cwd);
+        if Self::judge_is_relative(path_str) {
+            debug!("[path_process] It is a relative path");
+            if dirfd == AT_FDCWD {
+                debug!("[path_process] dirfd is AT_FDCWD");
+                let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+                debug!("[path_process] cwd {}", cwd);
+                absolute_path = Self::change_relative_to_absolute(path_str, &cwd);
+            } else {
+                debug!("[path_process] dirfd is a normal fd");
+                absolute_path = Self::path_with_dirfd(dirfd, path);
+            }
         } else {
-            debug!("It is a absolute path");
-            absolute_path = Some(path.clone());
+            debug!("[path_process] It is a absolute path");
+            absolute_path = Some(path_str.clone());
         }
         absolute_path
     }
     pub fn path_with_dirfd(dirfd: isize, path: *const u8) -> Option<String> {
         let path = &c_str_to_string(path);
-        debug!("path name {}", path);
-        let absolute_path: Option<String>;
-        if Self::judge_is_relative(path) {
-            absolute_path = current_process().inner_handler(|proc| {
-                let wd_inode = proc.fd_table.get_ref(dirfd as usize);
-                match wd_inode {
-                    Some(wd_inode) => {
-                        let wd = wd_inode.metadata().path.clone();
-                        debug!("wd: {}", wd);
-                        Self::change_relative_to_absolute(path, &wd)
-                    }
-                    None => None,
+        let absolute_path = current_process().inner_handler(|proc| {
+            let wd_inode = proc.fd_table.get_ref(dirfd as usize);
+            match wd_inode {
+                Some(wd_inode) => {
+                    let wd = wd_inode.metadata().path.clone();
+                    debug!("wd: {}", wd);
+                    Self::change_relative_to_absolute(path, &wd)
                 }
-            });
-        } else {
-            absolute_path = Some(path.clone());
-        }
+                None => None,
+            }
+        });
         absolute_path
     }
     pub fn user_path(file_system: Arc<dyn FileSystem>, path: &str) -> GeneralRet<Arc<dyn Inode>> {
@@ -131,5 +133,21 @@ impl Path {
             res += "/";
         }
         Some(res)
+    }
+    pub fn merge(p1: &str, p2: &str) -> String {
+        let mut res = p1.to_string();
+        res += "/";
+        res += p2;
+        res
+    }
+    pub fn exchange_prefix(p1: &str, p2: &str) -> (String, String) {
+        let p1_prefix = Self::get_parent_dir(p1).unwrap();
+        let p1_name = Self::get_name(p1);
+        let p2_prefix = Self::get_parent_dir(p2).unwrap();
+        let p2_name = Self::get_name(p2);
+        (
+            Self::merge(&p2_prefix, p1_name),
+            Self::merge(&p1_prefix, p2_name),
+        )
     }
 }

@@ -117,7 +117,6 @@ impl EnvContext {
         self.sum -= 1
     }
 
-
     pub fn sie(&self) -> bool {
         self.sie > 0
     }
@@ -141,5 +140,4 @@ impl EnvContext {
         }
         return new.sie > 0;
     }
-
 }

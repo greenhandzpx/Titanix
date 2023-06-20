@@ -7,13 +7,19 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use clap::ArgMatches;
 use clap::{App, Arg};
 use fatfs::{format_volume, FormatVolumeOptions, StdIoWrapper};
-use fscommon::BufStream;
 use fatfs::{FileSystem, FsOptions};
+use fscommon::BufStream;
 
 fn mkfs(filename: String) -> io::Result<()> {
-    let file = fs::OpenOptions::new().read(true).write(true).open(&filename)?;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&filename)?;
     let buf_file = BufStream::new(file);
-    format_volume(&mut StdIoWrapper::from(buf_file), FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32))?;
+    format_volume(
+        &mut StdIoWrapper::from(buf_file),
+        FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32),
+    )?;
     Ok(())
 }
 
@@ -40,7 +46,7 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         .into_iter()
         .map(|dir_entry| {
             dir_entry.unwrap().file_name().into_string().unwrap()
-            
+
             // let mut name_with_ext = dir_entry.unwrap().file_name().into_string().unwrap();
             // name_with_ext.drain(name_with_ext.find('.').unwrap()..name_with_ext.len());
             // name_with_ext
@@ -69,12 +75,11 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
     // write data to fat-fs
     file.write_all(&all_data)?;
 
-    // // Write busybox_debug
-    // let busybox_path = "../testcases/busybox/busybox_debug";
-    // let mut host_file = File::open(busybox_path).unwrap();
-    // let mut all_data: Vec<u8> = Vec::new();
-    // host_file.read_to_end(&mut all_data).unwrap();
-
+    // Write busybox_debug
+    let busybox_path = "../testcases/busybox/busybox_debug";
+    let mut host_file = File::open(busybox_path).unwrap();
+    let mut all_data: Vec<u8> = Vec::new();
+    host_file.read_to_end(&mut all_data).unwrap();
     // create a file in fat-fs
     let mut file = fs.root_dir().create_file("busybox_debug")?;
     // write data to fat-fs
@@ -137,9 +142,7 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
     Ok(())
 }
 
-
 fn main() -> io::Result<()> {
-
     let matches = App::new("Fat32FileSystem packer")
         .arg(
             Arg::with_name("fs_img")

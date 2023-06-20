@@ -140,8 +140,6 @@ pub struct ProcessInner {
     /// Current Work Directory
     /// Maybe change to Dentry later.
     pub cwd: String,
-
-    
 }
 
 impl ProcessInner {

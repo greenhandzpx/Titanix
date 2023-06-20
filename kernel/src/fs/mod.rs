@@ -23,6 +23,7 @@ pub use dirent::DIRENT_SIZE;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;
 pub use file::File;
+pub use file::Renameat2Flags;
 pub use file_system::FileSystem;
 pub use file_system::FileSystemType;
 pub use file_system::FILE_SYSTEM_MANAGER;

@@ -1,10 +1,10 @@
-use alloc::sync::Arc;
+use alloc::string::String;
 
 #[derive(Clone, PartialEq)]
 pub struct HashName {
     pub name_hash: u64,
     pub parent: usize,
-    pub name: Arc<str>,
+    pub name: String,
 }
 
 impl HashName {
@@ -26,7 +26,7 @@ impl HashName {
         HashName {
             name_hash: Self::myhash(parent_ptr, Self::str2num(name)),
             parent: parent_ptr as usize,
-            name: Arc::from(name),
+            name: String::from(name),
         }
     }
     pub fn all_same(&self, other: &Self) -> bool {

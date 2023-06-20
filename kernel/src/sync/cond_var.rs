@@ -1,4 +1,4 @@
-use core::{task::Waker, future::Future};
+use core::{future::Future, task::Waker};
 
 use alloc::{collections::VecDeque, sync::Arc};
 
@@ -23,7 +23,9 @@ impl CondVar {
     }
     /// Wait in this condvar
     pub async fn wait_without_mutex(&self) {
-        self.wait_queue.lock().push_back(async_tools::take_waker().await);
+        self.wait_queue
+            .lock()
+            .push_back(async_tools::take_waker().await);
     }
     /// Wait in this condvar
     pub fn wait(&self) {
@@ -38,13 +40,13 @@ impl CondVar {
 }
 
 // struct CondVarFuture {
-//     predicate:  
+//     predicate:
 // }
 
 // impl Future for CondVarFuture {
 
 //     type Output = ();
 //     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
-        
+
 //     }
 // }

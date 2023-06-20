@@ -1,10 +1,21 @@
 use log::{debug, warn};
-use riscv::register::{scause::{self, Trap, Exception, Interrupt}, stval};
+use riscv::register::{
+    scause::{self, Exception, Interrupt, Trap},
+    stval,
+};
 
-use crate::{processor::{current_trap_cx, hart::local_hart, current_process}, syscall::syscall, stack_trace, mm::{memory_space, VirtAddr}, process::{thread::exit_and_terminate_all_threads, self}, timer::{set_next_trigger, handle_timeout_events}, trap::set_user_trap_entry, signal::check_signal_for_current_process};
+use crate::{
+    mm::{memory_space, VirtAddr},
+    process::{self, thread::exit_and_terminate_all_threads},
+    processor::{current_process, current_trap_cx, hart::local_hart},
+    signal::check_signal_for_current_process,
+    stack_trace,
+    syscall::syscall,
+    timer::{handle_timeout_events, set_next_trigger},
+    trap::set_user_trap_entry,
+};
 
 use super::{set_kernel_trap_entry, TrapContext};
-
 
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
@@ -72,10 +83,7 @@ pub async fn trap_handler() {
                     );
                     #[cfg(feature = "stack_trace")]
                     warn!("backtrace:");
-                    local_hart()
-                        .env()
-                        .stack_tracker
-                        .print_stacks();
+                    local_hart().env().stack_tracker.print_stacks();
                     exit_and_terminate_all_threads(-2);
                     // current_process().inner_handler(|proc| {
                     //     proc.exit_code = -2;

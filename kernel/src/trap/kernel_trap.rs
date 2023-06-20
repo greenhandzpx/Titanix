@@ -1,8 +1,10 @@
-use log::{warn, error};
-use riscv::register::{scause::{self, Trap, Interrupt}, stval, sepc};
+use log::{error, warn};
+use riscv::register::{
+    scause::{self, Interrupt, Trap},
+    sepc, stval,
+};
 
 use crate::timer::set_next_trigger;
-
 
 /// Kernel trap handler
 #[no_mangle]

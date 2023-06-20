@@ -73,7 +73,7 @@ kernel:
 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
 	@echo Platform: $(BOARD)
 	@cp src/linker64.ld src/linker.ld
-	@cargo build --release --offline
+	@cargo build --release 
 	@rm src/linker.ld
 
 

@@ -1,11 +1,11 @@
 use core::{future::Future, pin::Pin, task::Poll};
 
-use alloc::{boxed::Box, vec::Vec, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 
 use super::mutex::SpinNoIrqLock;
 
 bitflags! {
-    /// 
+    ///
     pub struct Event: u16 {
         /// Children exit
         const CHILD_EXIT = 1 << 0;
@@ -29,7 +29,6 @@ pub struct MailboxInner {
 }
 
 impl Mailbox {
-
     /// Construct a mailbox
     pub fn new() -> Self {
         Self {
@@ -49,7 +48,7 @@ impl Mailbox {
             // let mut consumed_events = Event::empty();
             inner.callbacks.retain(|e| {
                 let (care, _event) = e(new_event);
-                // consumed_events |= event; 
+                // consumed_events |= event;
                 !care
             });
             // inner.events.remove(consumed_events);
@@ -62,8 +61,6 @@ impl Mailbox {
     }
 }
 
-
-
 struct WaitForEventFuture {
     mailbox: Arc<Mailbox>,
     event: Event,
@@ -71,16 +68,11 @@ struct WaitForEventFuture {
 
 impl WaitForEventFuture {
     pub fn new(event: Event, mailbox: Arc<Mailbox>) -> Self {
-        Self {
-            mailbox,
-            event,
-        }
+        Self { mailbox, event }
     }
 }
 
-
 impl Future for WaitForEventFuture {
-
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
@@ -92,7 +84,7 @@ impl Future for WaitForEventFuture {
         let self_event = self.event;
         let waker = cx.waker().clone();
         inner.callbacks.push(Box::new(move |events| {
-            if events & self_event  != Event::empty() {
+            if events & self_event != Event::empty() {
                 // the events contain what we want
                 waker.wake_by_ref();
                 (true, self_event)

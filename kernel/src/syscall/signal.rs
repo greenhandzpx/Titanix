@@ -1,4 +1,4 @@
-use log::{debug, warn, info};
+use log::{debug, info, warn};
 
 use crate::{
     mm::user_check::UserCheck,
@@ -11,7 +11,10 @@ use crate::{
 
 pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
-    info!("[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}", sig, act as usize, oldact as usize);
+    info!(
+        "[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}",
+        sig, act as usize, oldact as usize
+    );
     Ok(0)
     // if sig < 0 || sig as usize >= SIG_NUM {
     //     return Err(SyscallErr::EINVAL);

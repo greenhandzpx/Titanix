@@ -160,11 +160,11 @@ impl Future for SleepFuture {
         if get_time_duration() >= this.expired_time {
             Poll::Ready(())
         } else {
-        let timer = Timer {
-            expired_time: this.expired_time,
-            waker: Some(cx.waker().clone()),
-        };
-        TIMER_LIST.timers.lock().push_back(timer);
+            let timer = Timer {
+                expired_time: this.expired_time,
+                waker: Some(cx.waker().clone()),
+            };
+            TIMER_LIST.timers.lock().push_back(timer);
             Poll::Pending
         }
     }

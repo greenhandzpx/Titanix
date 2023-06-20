@@ -3,9 +3,11 @@ use log::trace;
 
 use crate::{
     config::mm::PAGE_SIZE,
+    fs::InodeState,
     mm::memory_space::VmArea,
     processor::SumGuard,
     stack_trace,
+    timer::get_time_spec,
     utils::{
         async_tools::block_on,
         error::{AsyscallRet, GeneralRet, SyscallRet},
@@ -13,6 +15,20 @@ use crate::{
 };
 
 use super::{inode::Inode, Mutex, OpenFlags};
+
+bitflags! {
+    /// renameat flag
+    pub struct Renameat2Flags: u32 {
+        /// Go back to renameat
+        const RENAME_NONE = 0;
+        /// Atomically exchange oldpath and newpath.
+        const RENAME_EXCHANGE = 1 << 1;
+        /// Don't overwrite newpath of the rename. Return an error if newpath already exists.
+        const RENAME_NOREPLACE = 1 << 0;
+        /// This operation makes sense only for overlay/union filesystem implementations.
+        const RENAME_WHITEOUT = 1 << 2;
+    }
+}
 
 pub struct FileMeta {
     /// path to file, need to be absolute path
@@ -166,6 +182,16 @@ impl File for DefaultFile {
                 buf_offset += bytes;
             }
 
+            let mut inner_lock = inode.metadata().inner.lock();
+            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_mtim = inner_lock.st_atim;
+            inner_lock.st_ctim = inner_lock.st_atim;
+            match inner_lock.state {
+                InodeState::DirtyData => inner_lock.state = InodeState::DirtyAll,
+                InodeState::Synced => inner_lock.state = InodeState::DirtyInode,
+                _ => {}
+            }
+
             self.metadata().inner.lock().pos = file_offset;
             trace!("[DefaultFile::read]: read {} bytes", res);
             Ok(res as isize)
@@ -225,6 +251,16 @@ impl File for DefaultFile {
                         inner.data_len = file_offset;
                     }
                 });
+            }
+
+            let mut inner_lock = inode.metadata().inner.lock();
+            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_ctim = inner_lock.st_atim;
+            inner_lock.st_mtim = inner_lock.st_atim;
+            match inner_lock.state {
+                InodeState::DirtyInode => inner_lock.state = InodeState::DirtyAll,
+                InodeState::Synced => inner_lock.state = InodeState::DirtyData,
+                _ => {}
             }
 
             self.metadata().inner.lock().pos = file_offset;

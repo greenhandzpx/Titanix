@@ -2,8 +2,8 @@
 mod cond_var;
 pub use cond_var::CondVar;
 
+mod mailbox;
 /// Different kinds of mutex
 pub mod mutex;
-mod mailbox;
-pub use mailbox::Mailbox;
 pub use mailbox::Event;
+pub use mailbox::Mailbox;

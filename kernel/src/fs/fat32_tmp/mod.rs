@@ -11,6 +11,7 @@ use log::{debug, error, info, trace, warn};
 use crate::fs::file::DefaultFile;
 use crate::fs::inode::INODE_CACHE;
 use crate::utils::error::{self, AgeneralRet, AsyscallRet, SyscallErr};
+use crate::utils::path::Path;
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     sync::mutex::SpinNoIrqLock,
@@ -146,10 +147,10 @@ impl Inode for Fat32RootInode {
         mode: InodeMode,
         dev_id: usize,
     ) -> GeneralRet<()> {
-        debug!("fatfs mknod: {}", pathname);
+        debug!("[Fat32RootInode mknod] fatfs mknod: {}", pathname);
 
-        let name = pathname.to_string();
-        let _new_file = self.fs.fat_fs.root_dir().create_file(&name).unwrap();
+        let name = Path::get_name(pathname);
+        let _new_file = self.fs.fat_fs.root_dir().create_file(name).unwrap();
         let func = || {
             for dentry in self.fs.fat_fs.root_dir().iter() {
                 if dentry.as_ref().unwrap().file_name() == name {
@@ -161,9 +162,9 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        INODE_CACHE.lock().insert(key, new_inode.clone());
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
@@ -173,10 +174,10 @@ impl Inode for Fat32RootInode {
     }
 
     fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
-        debug!("fatfs mkdir: {}", pathname);
+        debug!("[Fat32RootInode mkdir] fatfs mkdir: {}", pathname);
 
-        let name = pathname.to_string();
-        let _new_dir = self.fs.fat_fs.root_dir().create_dir(&name).unwrap();
+        let name = Path::get_name(pathname);
+        let _new_dir = self.fs.fat_fs.root_dir().create_dir(name).unwrap();
         let func = || {
             for dentry in self.fs.fat_fs.root_dir().iter() {
                 if dentry.as_ref().unwrap().file_name() == name {
@@ -188,9 +189,9 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        INODE_CACHE.lock().insert(key, new_inode.clone());
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
@@ -308,13 +309,13 @@ impl Inode for Fat32Inode {
         mode: InodeMode,
         _dev_id: usize,
     ) -> GeneralRet<()> {
-        debug!("fatfs mknod: {}", pathname);
+        debug!("[Fat32Inode mknod] fatfs mknod: {}", pathname);
 
-        let name = pathname.to_string();
+        let name = Path::get_name(pathname);
         if self.dentry.is_file() {
             return Err(SyscallErr::ENOTDIR);
         }
-        let _new_file = self.dentry.to_dir().create_file(&name).unwrap();
+        let _new_file = self.dentry.to_dir().create_file(name).unwrap();
         let func = || {
             for dentry in self.dentry.to_dir().iter() {
                 if dentry.as_ref().unwrap().file_name() == name {
@@ -326,9 +327,39 @@ impl Inode for Fat32Inode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        INODE_CACHE.lock().insert(key, new_inode.clone());
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
+        this.metadata()
+            .inner
+            .lock()
+            .children
+            .insert(new_inode.metadata().name.clone(), new_inode);
+        Ok(())
+    }
+
+    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+        debug!("[Fat32Inode mkdir] fatfs mkdir: {}", pathname);
+
+        let name = Path::get_name(pathname);
+        if self.dentry.is_file() {
+            return Err(SyscallErr::ENOTDIR);
+        }
+        let _new_dir = self.dentry.to_dir().create_dir(name).unwrap();
+        let func = || {
+            for dentry in self.dentry.to_dir().iter() {
+                if dentry.as_ref().unwrap().file_name() == name {
+                    return Some(dentry.unwrap());
+                }
+            }
+            return None;
+        };
+        let new_dentry = func();
+        let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
+        new_inode.init(Some(this.clone()), pathname, mode, 0)?;
+        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        let new_inode = Arc::new(new_inode);
+        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()

@@ -1,5 +1,3 @@
-use core::hash::Hash;
-
 use alloc::vec;
 use alloc::{string::String, vec::Vec};
 use log::trace;

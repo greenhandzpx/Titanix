@@ -59,8 +59,8 @@ const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAIT4: usize = 260;
+const SYSCALL_REMANEAT2: usize = 276;
 
-const AT_FDCWD: isize = -100;
 const SEEK_SET: u8 = 0;
 const SEEK_CUR: u8 = 1;
 const SEEK_END: u8 = 2;
@@ -76,7 +76,7 @@ use core::arch::asm;
 
 use dev::*;
 use fs::*;
-use log::{debug, error, trace, info};
+use log::{debug, error, info, trace};
 use mm::*;
 use process::*;
 use signal::*;
@@ -129,7 +129,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
-        SYSCALL_SENDFILE => sys_sendfile(args[0] as isize, args[1] as isize, args[2], args[3] as usize).await,
+        SYSCALL_SENDFILE => {
+            sys_sendfile(
+                args[0] as isize,
+                args[1] as isize,
+                args[2],
+                args[3] as usize,
+            )
+            .await
+        }
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
         SYSCALL_NEWFSTATAT => sys_newfstatat(
             args[0] as isize,
@@ -191,6 +199,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
         SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
+        SYSCALL_REMANEAT2 => sys_renameat2(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2] as isize,
+            args[3] as *const u8,
+            args[4] as u32,
+        ),
         _ => {
             // panic!("Unsupported syscall_id: {}", syscall_id);
             error!("Unsupported syscall_id: {}", syscall_id);
