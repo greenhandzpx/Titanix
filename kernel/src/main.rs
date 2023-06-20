@@ -31,9 +31,9 @@ mod config;
 mod driver;
 mod executor;
 mod fs;
-mod panic;
 mod loader;
 pub mod mm;
+mod panic;
 pub mod process;
 mod processor;
 mod sbi;
@@ -51,14 +51,15 @@ use core::{
     time::Duration,
 };
 
-use log::{info, warn};
+use log::{debug, info, warn};
+use riscv::register::sstatus;
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     process::thread,
-    processor::{hart, HARTS},
+    processor::{hart, open_interrupt, HARTS},
     sbi::hart_start,
     timer::ksleep,
 };
@@ -111,7 +112,7 @@ pub fn rust_main(hart_id: usize) {
         // The first hart
         clear_bss();
 
-        processor::init();
+        // processor::init();
         hart::init(hart_id);
         utils::logging::init();
 
@@ -137,7 +138,6 @@ pub fn rust_main(hart_id: usize) {
         // executor::init();
         // loader::list_apps();
         fs::fat32_tmp::list_apps_fat32();
-        // list_apps();
 
         fs::init();
 
@@ -147,14 +147,12 @@ pub fn rust_main(hart_id: usize) {
 
         thread::spawn_kernel_thread(async move {
             process::add_initproc();
-            // process::scan_prilimary_tests();
-            // println!("after initproc!");
         });
 
         // thread::spawn_kernel_thread(async move {
         //     loop {
         //         ksleep(Duration::from_secs(5)).await;
-        //         warn!("I'm awake!! hhh just ignore me");
+        //         debug!("I'm awake!! hhh just ignore me");
         //     }
         // });
 

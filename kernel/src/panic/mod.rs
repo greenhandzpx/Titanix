@@ -17,11 +17,6 @@ fn panic(info: &PanicInfo) -> ! {
     }
     #[cfg(feature = "stack_trace")]
     warn!("backtrace:");
-    local_hart()
-        .env()
-        .stack_tracker
-        .as_mut()
-        .unwrap()
-        .print_stacks();
+    local_hart().env().stack_tracker.print_stacks();
     shutdown()
 }

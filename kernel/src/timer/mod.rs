@@ -1,6 +1,5 @@
 //! RISC-V timer-related functionality
 
-use core::cell::SyncUnsafeCell;
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
@@ -9,9 +8,7 @@ use core::time::Duration;
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::utils::async_tools;
 use alloc::collections::{BTreeMap, LinkedList};
-use alloc::sync::Arc;
 use lazy_static::*;
 use log::info;
 use riscv::register::time;
@@ -119,8 +116,7 @@ pub fn handle_timeout_events() {
     let mut timeout_cnt = 0;
     for timer in timers.iter_mut() {
         if current_time >= timer.expired_time {
-            let timer = unsafe { &mut *timer.waker.get() };
-            timer.take().unwrap().wake();
+            timer.waker.take().unwrap().wake();
             timeout_cnt += 1;
         }
     }
@@ -130,7 +126,7 @@ pub fn handle_timeout_events() {
 }
 
 struct TimerList {
-    timers: SpinNoIrqLock<LinkedList<Arc<Timer>>>,
+    timers: SpinNoIrqLock<LinkedList<Timer>>,
 }
 
 lazy_static! {
@@ -141,40 +137,34 @@ lazy_static! {
 
 struct Timer {
     expired_time: Duration,
-    waker: SyncUnsafeCell<Option<Waker>>,
+    waker: Option<Waker>,
+    // waker: SyncUnsafeCell<Option<Waker>>,
 }
 
 struct SleepFuture {
-    // duration: Duration,
-    timer: Arc<Timer>,
+    expired_time: Duration,
 }
 
 impl SleepFuture {
     fn new(duration: Duration) -> Self {
-        let timer = Arc::new(Timer {
+        Self {
             expired_time: get_time_duration() + duration,
-            waker: SyncUnsafeCell::new(None),
-        });
-        TIMER_LIST.timers.lock().push_back(timer.clone());
-        Self { timer }
-    }
-
-    async fn init(self: Pin<&mut Self>) -> Pin<&mut SleepFuture> {
-        let this = unsafe { self.get_unchecked_mut() };
-        if get_time_duration() < this.timer.expired_time {
-            unsafe { *this.timer.waker.get() = Some(async_tools::take_waker().await) };
         }
-        unsafe { Pin::new_unchecked(this) }
     }
 }
 
 impl Future for SleepFuture {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        if get_time_duration() >= this.timer.expired_time {
+        if get_time_duration() >= this.expired_time {
             Poll::Ready(())
         } else {
+            let timer = Timer {
+                expired_time: this.expired_time,
+                waker: Some(cx.waker().clone()),
+            };
+            TIMER_LIST.timers.lock().push_back(timer);
             Poll::Pending
         }
     }
@@ -182,6 +172,5 @@ impl Future for SleepFuture {
 
 #[allow(unused)]
 pub async fn ksleep(duration: Duration) {
-    let future = &mut SleepFuture::new(duration);
-    unsafe { Pin::new_unchecked(future).init().await.await }
+    SleepFuture::new(duration).await
 }

@@ -83,6 +83,10 @@ pub trait File: Send + Sync {
         todo!()
     }
 
+    fn offset(&self) -> SyscallRet {
+        todo!()
+    }
+
     /// Read all data from this file synchronously
     /// TODO: add async version
     fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {

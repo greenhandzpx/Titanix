@@ -37,10 +37,8 @@ pub struct StackInfoGuard {}
 impl StackInfoGuard {
     pub fn new(msg: Msg, file: &'static str, line: u32) -> Self {
         local_hart()
-            .env()
+            .env_mut()
             .stack_tracker
-            .as_mut()
-            .unwrap()
             .push_stack_info(StackInfo::new(msg, file, line));
         Self {}
     }
@@ -48,12 +46,7 @@ impl StackInfoGuard {
 
 impl Drop for StackInfoGuard {
     fn drop(&mut self) {
-        local_hart()
-            .env()
-            .stack_tracker
-            .as_mut()
-            .unwrap()
-            .pop_stack_info();
+        local_hart().env_mut().stack_tracker.pop_stack_info();
     }
 }
 

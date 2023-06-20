@@ -27,6 +27,7 @@ const SYSCALL_LSEEK: usize = 62;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_WRITEV: usize = 66;
+const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
@@ -57,7 +58,7 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
-const SYSCALL_WAITPID: usize = 260;
+const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_REMANEAT2: usize = 276;
 
 const SEEK_SET: u8 = 0;
@@ -75,7 +76,7 @@ use core::arch::asm;
 
 use dev::*;
 use fs::*;
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use mm::*;
 use process::*;
 use signal::*;
@@ -83,7 +84,6 @@ pub use sync::futex_wake;
 use sync::*;
 
 use crate::{
-    fs::Iovec,
     mm::MapPermission,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
@@ -129,6 +129,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
+        SYSCALL_SENDFILE => {
+            sys_sendfile(
+                args[0] as isize,
+                args[1] as isize,
+                args[2],
+                args[3] as usize,
+            )
+            .await
+        }
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
         SYSCALL_NEWFSTATAT => sys_newfstatat(
             args[0] as isize,
@@ -189,7 +198,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[5],
         ),
         SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
-        SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1]).await,
+        SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_REMANEAT2 => sys_renameat2(
             args[0] as isize,
             args[1] as *const u8,

@@ -15,3 +15,19 @@ impl Drop for SumGuard {
         local_env().sum_dec();
     }
 }
+
+/// use RAII to guard `sie` flag
+pub struct SieGuard {}
+
+impl SieGuard {
+    pub fn new() -> Self {
+        local_env().sie_dec();
+        Self {}
+    }
+}
+
+impl Drop for SieGuard {
+    fn drop(&mut self) {
+        local_env().sie_inc();
+    }
+}

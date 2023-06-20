@@ -8,7 +8,8 @@ use crate::{
     process::thread::exit_and_terminate_all_threads,
     processor::{current_process, local_hart, SumGuard},
     stack_trace,
-    trap::trap_from_kernel,
+    sync::mutex::SieGuard,
+    trap::set_kernel_trap_entry,
     utils::{
         async_tools::block_on,
         error::{GeneralRet, SyscallErr},
@@ -21,6 +22,7 @@ global_asm!(include_str!("check.S"));
 ///
 pub struct UserCheck {
     _sum_guard: SumGuard,
+    _sie_guard: SieGuard,
 }
 
 extern "C" {
@@ -28,14 +30,12 @@ extern "C" {
     fn __try_read_user_u8(user_addr: usize) -> (usize, usize);
     fn __try_write_user_u8(user_addr: usize) -> (usize, usize);
     fn __trap_from_user();
+    fn __trap_from_kernel();
 }
 
 impl Drop for UserCheck {
     fn drop(&mut self) {
-        unsafe {
-            // stvec::write(TRAMPOLINE as usize, TrapMode::Direct);
-            stvec::write(trap_from_kernel as usize, TrapMode::Direct);
-        }
+        set_kernel_trap_entry();
     }
 }
 impl UserCheck {
@@ -46,6 +46,7 @@ impl UserCheck {
         }
         let ret = Self {
             _sum_guard: SumGuard::new(),
+            _sie_guard: SieGuard::new(),
         };
         ret
     }
@@ -53,6 +54,7 @@ impl UserCheck {
     /// Check wether the given user addr is readable or not
     pub fn check_readable_slice(&self, buf: *const u8, len: usize) -> GeneralRet<()> {
         // let _sum_guard = SumGuard::new();
+        stack_trace!();
         let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
         let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
         let mut va = buf_start;
@@ -69,6 +71,7 @@ impl UserCheck {
     /// Check wether the given user addr is writable or not
     pub fn check_writable_slice(&self, buf: *mut u8, len: usize) -> GeneralRet<()> {
         // let _sum_guard = SumGuard::new();
+        stack_trace!();
         let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
         let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
         let mut va = buf_start;
@@ -147,43 +150,32 @@ impl UserCheck {
     }
 
     async fn handle_page_fault(&self, va: &mut VirtAddr, scause: usize) -> GeneralRet<()> {
-        memory_space::handle_page_fault(*va, scause).await
-        // match current_process()
-        //     .inner_handler(|proc| proc.memory_space.page_fault_handler(*va, scause))
-        // {
-        //     Ok(handler) => {
-        //         if handler.0.handle_page_fault(va, memory_space, vma) {
-        //             panic!()
-        //         }
-        //         debug!(
-        //             "[kernel] [proc {}]handle legal page fault, addr {:#x}",
-        //             current_process().pid(),
-        //             va.0
-        //         );
-        //         va.0 += PAGE_SIZE;
-        //         Ok(())
-        //     }
-        //     Err(_) => {
-        //         warn!(
-        //             "[kernel] [user check](scause:{}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
-        //             scause,
-        //             va.0,
-        //             current_process().pid()
-        //         );
-        //         warn!("backtrace:");
-        //         local_hart()
-        //             .env()
-        //             .stack_tracker
-        //             .as_ref()
-        //             .unwrap()
-        //             .print_stacks();
-        //         exit_and_terminate_all_threads(-2);
-        //         // current_process().inner_handler(|proc| {
-        //         //     proc.exit_code = -2;
-        //         //     proc.is_zombie = true;
-        //         // });
-        //         return Err(SyscallErr::EFAULT);
-        //     }
-        // }
+        match memory_space::handle_page_fault(*va, scause).await {
+            Ok(_) => {
+                debug!(
+                    "[kernel] [proc {}]handle legal page fault, addr {:#x}",
+                    current_process().pid(),
+                    va.0
+                );
+                va.0 += PAGE_SIZE;
+                Ok(())
+            }
+            Err(_) => {
+                warn!(
+                    "[kernel] [UserCheck](scause:{}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
+                    scause,
+                    va.0,
+                    current_process().pid()
+                );
+                warn!("backtrace:");
+                local_hart().env().stack_tracker.print_stacks();
+                exit_and_terminate_all_threads(-2);
+                // current_process().inner_handler(|proc| {
+                //     proc.exit_code = -2;
+                //     proc.is_zombie = true;
+                // });
+                return Err(SyscallErr::EFAULT);
+            }
+        }
     }
 }

@@ -27,7 +27,7 @@ use crate::{
     processor::{current_process, current_task, hart::local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
-    sync::{mutex::SpinNoIrqLock, CondVar},
+    sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallRet},
 };
@@ -56,14 +56,6 @@ pub static mut INITPROC: Option<Arc<Process>> = None;
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();
-    // debug!("add initproc");
-    // let init_inode = fs::fat32_tmp::open_file("initproc", fs::fat32_tmp::OpenFlags::RDONLY).expect("Cannot find `initproc`!!");
-    // let shell_inode = fs::fat32_tmp::open_file("usershell", fs::fat32_tmp::OpenFlags::RDONLY);
-    // if shell_inode.is_none() {
-    //     warn!("Cannot find user_shell");
-    // }
-    // let elf_data = init_inode.read_all();
-    // unsafe { INITPROC = Some(Process::new(&elf_data)) }
     let elf_data = get_app_data_by_name("initproc").unwrap();
     unsafe { INITPROC = Some(Process::new(elf_data)) }
 }
@@ -160,6 +152,8 @@ impl ProcessInner {
 pub struct Process {
     /// immutable
     pid: PidHandle,
+    /// mailbox,
+    pub mailbox: Arc<Mailbox>,
     /// mutable
     inner: SpinNoIrqLock<ProcessInner>,
 }
@@ -240,6 +234,7 @@ impl Process {
         let pid_handle = pid_alloc();
         let process = Arc::new(Self {
             pid: pid_handle,
+            mailbox: Arc::new(Mailbox::new()),
             inner: SpinNoIrqLock::new(ProcessInner {
                 is_zombie: false,
                 memory_space,
@@ -289,6 +284,7 @@ impl Process {
     /// When one process invokes `exec`, all of the threads will terminate except the
     /// main thread, and the new program is executed in the main thread.
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
+        stack_trace!();
         debug!("exec pid {}", current_process().pid());
         stack_trace!();
         let (memory_space, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
@@ -551,6 +547,7 @@ impl Process {
             // create child process pcb
             let child = Arc::new(Self {
                 pid,
+                mailbox: Arc::new(Mailbox::new()),
                 inner: SpinNoIrqLock::new(ProcessInner {
                     is_zombie: false,
                     memory_space,

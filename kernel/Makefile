@@ -24,10 +24,11 @@ KERNEL_ENTRY_PA := 0x80200000
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=riscv64
+OBJDUMP_PATH := ../objdump/kernel.asm
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
 # Disassembly
-DISASM ?= -x
+DISASM ?= -d
 
 # Run usertests or usershell
 TEST ?=
@@ -72,7 +73,7 @@ kernel:
 	@cd ../user && make build TEST=$(TEST) PRELIMINARY=$(PRELIMINARY)
 	@echo Platform: $(BOARD)
 	@cp src/linker64.ld src/linker.ld
-	@cargo build --release --offline
+	@cargo build --release 
 	@rm src/linker.ld
 
 
@@ -89,8 +90,9 @@ clean:
 	@cargo clean
 
 
-disasm: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
+objdump: 
+	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(OBJDUMP_PATH)
+	@echo "kernel.bin has been dumped to $(OBJDUMP_PATH)"
 
 
 disasm-vim: kernel

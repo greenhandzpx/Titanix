@@ -29,10 +29,11 @@ fu740-hal = { path = "../dependencies/fu740-hal" }
 
 [features]
 # default = []
-default = ["stack_trace", "board_qemu", "kernel_timer_interrupt"]
+# default = ["stack_trace", "board_qemu", "kernel_interrupt"]
+default = ["stack_trace", "board_qemu"]
 board_qemu = []
 stack_trace = []
-kernel_timer_interrupt = []
+kernel_interrupt = []
 
 [profile.release]
 debug = true

@@ -38,10 +38,10 @@ pub async fn threadloop(thread: Arc<Thread>) {
         };
         // let trap_context = thread.task.inner_exclusive_access().get_trap_cx();
         // // TODO: not sure whther `exclusive access` leads to deadlock
-        trap::trap_return(trap_context);
+        trap::user_trap::trap_return(trap_context);
         // println!("trap from user");
         // next time when user traps into kernel, it will come back here
-        trap::trap_handler().await;
+        trap::user_trap::trap_handler().await;
 
         stack_trace!();
 
