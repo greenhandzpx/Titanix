@@ -1146,8 +1146,8 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     let mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
     let flags = FnctlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     UserCheck::new().check_c_str(pathname)?;
-    let pathname = path::path_process(dirfd, pathname);
     stack_trace!();
+    let pathname = path::path_process(dirfd, pathname);
     if pathname.is_none() {
         debug!("[sys_faccessat] pathname is none");
         return Err(SyscallErr::ENOENT);
@@ -1157,12 +1157,23 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     let inode = fs::inode::open_file(&pathname, OpenFlags::RDONLY);
     match inode {
         Some(inode) => {
-            // check mode
-            // TODO: set permission
+            // TODO: add user concept and check mode
+            // check inode mode and arg mode
+            // if mode.contains(FaccessatFlags::R_OK)
+            //     && !(f_flags.contains(OpenFlags::RDONLY) || f_flags.contains(OpenFlags::RDWR))
+            // {
+            //     debug!("[sys_faccessat] cannot read");
+            //     Err(SyscallErr::EACCES)
+            // } else if mode.contains(FaccessatFlags::W_OK) && f_flags.contains(OpenFlags::RDONLY) {
+            //     debug!("[sys_faccessat] cannot write");
+            //     Err(SyscallErr::EROFS)
+            // } else {
+            //     Ok(0)
+            // }
             Ok(0)
         }
         None => {
-            debug!("[sys_faccessat] don't find file");
+            debug!("[sys_faccessat] don't find inode");
             Err(SyscallErr::ENOENT)
         }
     }
