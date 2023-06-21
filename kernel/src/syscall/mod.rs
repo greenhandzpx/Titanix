@@ -117,6 +117,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3],
             args[4] as *const u8,
         ),
+        SYSCALL_FACCESSAT => sys_faccessat(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2] as u32,
+            args[3] as u32,
+        ),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_OPEN => sys_openat(
             args[0] as isize,
@@ -298,4 +304,3 @@ pub struct PollFd {
     /// Returned events
     pub revents: i16,
 }
-

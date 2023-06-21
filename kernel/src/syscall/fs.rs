@@ -1142,11 +1142,28 @@ pub fn sys_utimensat(
 /// Checks whether the calling process can access the file pathname.
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
     let mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
     let flags = FnctlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     UserCheck::new().check_c_str(pathname)?;
     let pathname = path::path_process(dirfd, pathname);
-    debug!("[sys_faccessat] pathname: {:?}", pathname);
-
-    todo!()
+    stack_trace!();
+    if pathname.is_none() {
+        debug!("[sys_faccessat] pathname is none");
+        return Err(SyscallErr::ENOENT);
+    }
+    let pathname = pathname.unwrap();
+    debug!("[sys_faccessat] pathname: {}", pathname);
+    let inode = fs::inode::open_file(&pathname, OpenFlags::RDONLY);
+    match inode {
+        Some(inode) => {
+            // check mode
+            // TODO: set permission
+            Ok(0)
+        }
+        None => {
+            debug!("[sys_faccessat] don't find file");
+            Err(SyscallErr::ENOENT)
+        }
+    }
 }

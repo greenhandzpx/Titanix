@@ -121,7 +121,7 @@ pub trait Inode: Send + Sync {
     }
 
     /// You should call this function through the parent inode
-    /// You should give a relative path
+    /// You should give a absolute path
     fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
