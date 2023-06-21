@@ -23,7 +23,6 @@ pub use dirent::DIRENT_SIZE;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;
 pub use file::File;
-pub use file::Renameat2Flags;
 pub use file_system::FileSystem;
 pub use file_system::FileSystemType;
 pub use file_system::FILE_SYSTEM_MANAGER;
@@ -50,6 +49,8 @@ pub fn init() {
     // todo!();
     devfs::init().expect("devfs init fail");
 }
+
+pub const AT_FDCWD: isize = -100;
 
 bitflags! {
     /// Open file flags
@@ -83,11 +84,32 @@ bitflags! {
         const NONBLOCK = 1 << 11;
     }
 
-    /// stat flags
-    pub struct StatFlags: u32 {
+    /// fcntl flags
+    pub struct FnctlFlags: u32 {
         const AT_EMPTY_PATH = 1 << 0;
         const AT_NO_AUTOMOUNT = 1 << 11;
         const AT_SYMLINK_NOFOLLOW = 1 << 8;
+        const AT_EACCESS = 1 << 9;
+    }
+
+    /// renameat flag
+    pub struct Renameat2Flags: u32 {
+        /// Go back to renameat
+        const RENAME_NONE = 0;
+        /// Atomically exchange oldpath and newpath.
+        const RENAME_EXCHANGE = 1 << 1;
+        /// Don't overwrite newpath of the rename. Return an error if newpath already exists.
+        const RENAME_NOREPLACE = 1 << 0;
+        /// This operation makes sense only for overlay/union filesystem implementations.
+        const RENAME_WHITEOUT = 1 << 2;
+    }
+
+    /// faccessat flag
+    pub struct FaccessatFlags: u32 {
+        const F_OK = 0;
+        const R_OK = 1 << 2;
+        const W_OK = 1 << 1;
+        const X_OK = 1 << 0;
     }
 }
 

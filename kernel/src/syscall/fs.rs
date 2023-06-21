@@ -9,12 +9,13 @@ use alloc::vec;
 use inode::InodeState;
 use log::{debug, info, trace, warn};
 
+use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
-    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, Renameat2Flags, StatFlags,
-    UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    inode, Dirent, FaccessatFlags, FileSystem, FileSystemType, FnctlFlags, Inode, InodeMode, Iovec,
+    Renameat2Flags, UtsName, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
@@ -25,23 +26,9 @@ use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::{get_time_ms, get_time_spec, UTIME_NOW};
 use crate::timer::{TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
-use crate::utils::path::{Path, AT_FDCWD};
-use crate::utils::string::{array_str_len, c_str_to_string};
-use crate::{fs, panic, stack_trace};
-
-use super::PollFd;
-
-// const FD_STDIN: usize = 0;
-// const FD_STDOUT: usize = 1;
-// bitflags! {
-//     pub struct OpenFlags: u32 {
-//         const O_RDONLY = 0;
-//         const O_WRONLY = 1 << 0;
-//         const O_RDWR = 1 << 1;
-//         const O_CREATE = 1 << 9;
-//         const O_TRUNC = 1 << 10;
-//     }
-// }
+use crate::utils::path;
+use crate::utils::string::c_str_to_string;
+use crate::{fs, stack_trace};
 
 /// get current working directory
 pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
@@ -103,7 +90,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     // TODO: check whether the memory pointed by path is vaild
     UserCheck::new().check_c_str(path)?;
-    let absolute_path = Path::path_process(dirfd, path);
+    let absolute_path = path::path_process(dirfd, path);
     match absolute_path {
         Some(absolute_path) => {
             let target_inode = <dyn Inode>::lookup_from_root_tmp(&absolute_path);
@@ -143,15 +130,19 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     let _sum_guard = SumGuard::new();
     // TODO: check whether the memory pointed by pathname is vaild
     UserCheck::new().check_c_str(pathname)?;
-    let absolute_path = Path::path_process(dirfd, pathname);
+    let absolute_path = path::path_process(dirfd, pathname);
     match absolute_path {
         Some(absolute_path) => {
-            debug!("absolute path: {}", absolute_path);
+            debug!("[sys_mkdirat] absolute path: {}", absolute_path);
             let _find_inode = <dyn Inode>::lookup_from_root_tmp(&absolute_path);
             match _find_inode {
-                Some(_find_inode) => Err(SyscallErr::EEXIST),
+                Some(_find_inode) => {
+                    debug!("[sys_mkdirat] already exists");
+                    Err(SyscallErr::EEXIST)
+                }
                 None => {
-                    let parent = Path::get_parent_dir(&absolute_path).unwrap();
+                    let parent = path::get_parent_dir(&absolute_path).unwrap();
+                    debug!("[sys_mkdirat] get parent name: {}", parent);
                     let parent_inode = <dyn Inode>::lookup_from_root_tmp(&parent);
                     match parent_inode {
                         Some(parent_inode) => match parent_inode.metadata().mode {
@@ -172,18 +163,23 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                                 }
                                 // TODO: add to dirty list, should add inode to the target fs which is include this inode
                                 drop(inner_lock);
+                                stack_trace!();
                                 parent_inode.mkdir(
                                     parent_inode.clone(),
-                                    &Path::get_name(&absolute_path),
+                                    &absolute_path,
                                     InodeMode::FileDIR,
                                 )?;
                                 Ok(0)
                             }
                             _ => {
+                                debug!("[sys_mkdirat] parent isn't a dir");
                                 return Err(SyscallErr::ENOTDIR);
                             }
                         },
-                        None => Err(SyscallErr::ENOENT),
+                        None => {
+                            debug!("[sys_mkdirat] parent not exists");
+                            Err(SyscallErr::ENOENT)
+                        }
                     }
                 }
             }
@@ -210,13 +206,13 @@ pub fn sys_mount(
         UserCheck::new().check_c_str(_data)?;
     }
     // Check and convert the arguments.
-    let dev_name = Path::path_process(AT_FDCWD, dev_name);
+    let dev_name = path::path_process(AT_FDCWD, dev_name);
     if dev_name.is_none() {
         return Err(SyscallErr::EMFILE);
     }
-    // let dev_name = Path::get_name(&dev_name.unwrap());
+    // let dev_name = path::get_name(&dev_name.unwrap());
 
-    let target_path = Path::path_process(AT_FDCWD, target_path);
+    let target_path = path::path_process(AT_FDCWD, target_path);
     if target_path.is_none() {
         return Err(SyscallErr::ENOENT);
     }
@@ -226,7 +222,7 @@ pub fn sys_mount(
         return Err(SyscallErr::EACCES);
     }
 
-    let ftype = Path::path_process(AT_FDCWD, ftype);
+    let ftype = path::path_process(AT_FDCWD, ftype);
     let ftype = {
         if ftype.is_some() {
             let ftype = ftype.unwrap();
@@ -240,7 +236,7 @@ pub fn sys_mount(
         }
     };
 
-    // let parent = Path::get_parent_dir(&target_path);
+    // let parent = path::get_parent_dir(&target_path);
     // let parent_inode = match parent {
     //     Some(parent) => <dyn Inode>::lookup_from_root_tmp(&parent),
     //     None => None,
@@ -263,7 +259,7 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(target_path)?;
-    let target_path = Path::path_process(AT_FDCWD, target_path);
+    let target_path = path::path_process(AT_FDCWD, target_path);
     if target_path.is_none() {
         return Err(SyscallErr::ENOENT);
     }
@@ -466,17 +462,17 @@ pub fn sys_newfstatat(
 ) -> SyscallRet {
     stack_trace!();
     debug!("[newfstatat] drifd:{}, flags:{}", dirfd, flags);
-    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let flags = FnctlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(pathname)?;
     UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
     stack_trace!();
     let absolute_path: Option<String>;
-    if flags.contains(StatFlags::AT_SYMLINK_NOFOLLOW) {
+    if flags.contains(FnctlFlags::AT_SYMLINK_NOFOLLOW) {
         // todo: support symlink?
         debug!("the pathname represent a symbolic link");
     }
-    if flags.contains(StatFlags::AT_EMPTY_PATH) {
+    if flags.contains(FnctlFlags::AT_EMPTY_PATH) {
         // path is empty
         // If dirfd is AT_FDCWD, change it to absolute path
         if dirfd == AT_FDCWD {
@@ -489,7 +485,7 @@ pub fn sys_newfstatat(
             return _fstat(dirfd as usize, stat_buf);
         }
     } else {
-        absolute_path = Path::path_process(dirfd, pathname);
+        absolute_path = path::path_process(dirfd, pathname);
     }
     debug!("[newfstatat] final absolute path: {:?}", absolute_path);
 
@@ -540,7 +536,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
 pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
     stack_trace!();
 
-    let absolute_path = Path::path_process(dirfd, filename_addr);
+    let absolute_path = path::path_process(dirfd, filename_addr);
 
     _openat(absolute_path, flags)
 }
@@ -885,9 +881,9 @@ pub fn sys_renameat2(
     }
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(oldpath)?;
-    let oldpath = Path::path_process(olddirfd, oldpath);
+    let oldpath = path::path_process(olddirfd, oldpath);
     UserCheck::new().check_c_str(newpath)?;
-    let newpath = Path::path_process(newdirfd, newpath);
+    let newpath = path::path_process(newdirfd, newpath);
     debug!(
         "[sys_renameat2] oldpath: {:?}, newpath: {:?}, flags: {:?}",
         oldpath, newpath, flags
@@ -931,7 +927,7 @@ pub fn sys_renameat2(
             .upgrade()
             .unwrap();
         oldparent.remove_child(oldinode.clone())?;
-        let newparent_path = Path::get_parent_dir(&newpath).unwrap();
+        let newparent_path = path::get_parent_dir(&newpath).unwrap();
         let parent = fs::inode::open_file(&newparent_path, OpenFlags::RDWR);
         if parent.is_none() {
             debug!("[sys_renameat2] newparent doesn't create");
@@ -952,7 +948,7 @@ pub fn sys_renameat2(
             let new_inner_lock = parent.metadata().inner.lock();
             let newinode = new_inner_lock
                 .children
-                .get(Path::get_name(&newpath))
+                .get(path::get_name(&newpath))
                 .unwrap();
             let mut old_inner = oldinode.metadata().inner.lock().clone();
             old_inner.parent = Some(Arc::downgrade(&parent));
@@ -1070,7 +1066,7 @@ pub fn sys_utimensat(
     stack_trace!();
     UserCheck::new().check_c_str(pathname)?;
     let _sum_guard = SumGuard::new();
-    let pathname = Path::path_process(dirfd, pathname);
+    let pathname = path::path_process(dirfd, pathname);
     if pathname.is_none() {
         debug!("[sys_utimensat] pathname is empty");
         return Err(SyscallErr::ENOENT);
@@ -1113,4 +1109,16 @@ pub fn sys_utimensat(
             Err(SyscallErr::ENOENT)
         }
     }
+}
+
+/// Checks whether the calling process can access the file pathname.
+pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -> SyscallRet {
+    stack_trace!();
+    let mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
+    let flags = FnctlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    UserCheck::new().check_c_str(pathname)?;
+    let pathname = path::path_process(dirfd, pathname);
+    debug!("[sys_faccessat] pathname: {:?}", pathname);
+
+    todo!()
 }

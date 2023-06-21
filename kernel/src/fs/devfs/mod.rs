@@ -9,7 +9,7 @@ use alloc::{
 use log::{debug, info};
 
 use crate::utils::error::AsyscallRet;
-use crate::utils::path::Path;
+use crate::utils::path;
 use crate::{
     driver::block::{BlockDevice, BlockDeviceImpl},
     sync::mutex::SpinNoIrqLock,
@@ -168,7 +168,7 @@ impl FileSystem for DevFs {
             .inner
             .lock()
             .children
-            .insert(Path::get_name(mount_point).to_string(), res.clone());
+            .insert(path::get_name(mount_point).to_string(), res.clone());
         Ok(res)
     }
     fn set_metadata(&mut self, metadata: super::file_system::FileSystemMeta) {

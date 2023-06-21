@@ -8,7 +8,7 @@ use crate::{
     sync::mutex::SpinNoIrqLock,
     utils::{
         error::{GeneralRet, SyscallRet},
-        path::Path,
+        path,
     },
 };
 
@@ -53,7 +53,7 @@ pub trait FileSystem: Send + Sync {
 
     fn init_ref(&self, mount_point: &str, ftype: FileSystemType) -> GeneralRet<()> {
         debug!("start to init fs, mount point {}", mount_point);
-        let parent_dir = Path::get_parent_dir(mount_point);
+        let parent_dir = path::get_parent_dir(mount_point);
         debug!("parent dir {:?}", parent_dir);
         let parent = {
             if parent_dir.is_none() {
@@ -90,7 +90,7 @@ pub trait FileSystem: Send + Sync {
 
     fn init(&mut self, mount_point: &str, ftype: FileSystemType) -> GeneralRet<()> {
         debug!("start to init fs, mount point {}", mount_point);
-        let parent_dir = Path::get_parent_dir(mount_point);
+        let parent_dir = path::get_parent_dir(mount_point);
         debug!("parent dir {:?}", parent_dir);
         stack_trace!();
         let parent = {

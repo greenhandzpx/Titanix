@@ -18,6 +18,7 @@ const SYSCALL_UNLINK: usize = 35;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UMOUNT: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
+const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_OPEN: usize = 56;
 const SYSCALL_CLOSE: usize = 57;

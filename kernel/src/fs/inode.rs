@@ -18,7 +18,7 @@ use crate::{
     utils::{
         error::{AgeneralRet, GeneralRet},
         hash_table::HashTable,
-        path::Path,
+        path,
     },
 };
 
@@ -155,7 +155,7 @@ pub trait Inode: Send + Sync {
             Some(value) => Some(value.clone()),
             None => {
                 debug!(
-                    "cannot find child dentry, name: {}, try to find in inode",
+                    "[lookup] cannot find child dentry, name: {}, try to find in inode",
                     name
                 );
                 let target_inode = self.try_find_and_insert_inode(this, name);
@@ -189,7 +189,7 @@ pub trait Inode: Send + Sync {
     ) -> Option<Arc<dyn Inode>> {
         <dyn Inode>::load_children(this.clone());
         debug!(
-            "children size {}",
+            "[try_find_and_insert_inode] children size {}",
             self.metadata().inner.lock().children.len()
         );
 
@@ -207,7 +207,10 @@ pub trait Inode: Send + Sync {
                 Some(target_inode)
             }
             None => {
-                debug!("Cannot find {} in children", child_name);
+                debug!(
+                    "[try_find_and_insert_inode] Cannot find {} in children",
+                    child_name
+                );
                 None
             }
         }
@@ -304,7 +307,7 @@ impl dyn Inode {
         // file_system: Arc<dyn FileSystem>,
         path: &str,
     ) -> Option<Arc<dyn Inode>> {
-        let path_names = Path::path2vec(path);
+        let path_names = path::path2vec(path);
         // path_names.remove(0);
 
         let root_fs = FILE_SYSTEM_MANAGER
@@ -329,7 +332,7 @@ impl dyn Inode {
         // file_system: Arc<dyn FileSystem>,
         path: &str,
     ) -> Option<Arc<dyn Inode>> {
-        let path_names = Path::path2vec(path);
+        let path_names = path::path2vec(path);
         // path_names.remove(0);
 
         let mut parent = ROOT_FS.metadata().root_inode.clone().unwrap();
@@ -410,7 +413,7 @@ impl InodeMeta {
         mode: InodeMode,
         data_len: usize,
     ) -> Self {
-        let name = Path::get_name(path);
+        let name = path::get_name(path);
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),
             None => None,
@@ -451,9 +454,9 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
         if inode.is_some() {
             return inode;
         }
-        let parent_path = Path::get_parent_dir(name).unwrap();
+        let parent_path = path::get_parent_dir(name).unwrap();
         let parent = <dyn Inode>::lookup_from_root_tmp(&parent_path);
-        let child_name = Path::get_name(name);
+        let child_name = path::get_name(name);
         if let Some(parent) = parent {
             debug!("create file {}", name);
             if flags.contains(OpenFlags::DIRECTORY) {
