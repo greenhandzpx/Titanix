@@ -19,8 +19,6 @@ use super::{inode::Inode, Mutex, OpenFlags};
 pub struct FileMeta {
     /// path to file, need to be absolute path
     pub path: String,
-    /// open flags
-    pub flags: OpenFlags,
     /// Mutable,
     pub inner: Mutex<FileMetaInner>,
 }
@@ -31,6 +29,8 @@ impl FileMeta {
     }
 }
 pub struct FileMetaInner {
+    /// open flags
+    pub flags: OpenFlags,
     /// inode to which this file refers
     pub inode: Option<Arc<dyn Inode>>,
     /// file offset
@@ -50,7 +50,9 @@ pub trait File: Send + Sync {
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
     fn pollin(&self) -> GeneralRet<bool> {
-        todo!()
+        // TODO: optimize
+        Ok(true)
+        // todo!()
     }
 
     fn pollout(&self) -> GeneralRet<bool> {
@@ -109,12 +111,13 @@ impl DefaultFile {
 // #[async_trait]
 impl File for DefaultFile {
     fn readable(&self) -> bool {
-        self.metadata().flags.contains(OpenFlags::RDONLY)
-            || self.metadata().flags.contains(OpenFlags::RDWR)
+        let flags = self.metadata().inner.lock().flags;
+        flags.contains(OpenFlags::RDONLY) || flags.contains(OpenFlags::RDWR)
     }
 
     fn writable(&self) -> bool {
-        self.metadata().flags.contains(OpenFlags::RDWR)
+        let flags = self.metadata().inner.lock().flags;
+        flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
     }
 
     fn metadata(&self) -> &FileMeta {

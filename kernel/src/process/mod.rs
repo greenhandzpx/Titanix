@@ -29,7 +29,7 @@ use crate::{
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
     trap::TrapContext,
-    utils::error::{GeneralRet, SyscallRet},
+    utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 use alloc::{
     collections::BTreeMap,
@@ -59,54 +59,6 @@ pub fn add_initproc() {
     let elf_data = get_app_data_by_name("initproc").unwrap();
     unsafe { INITPROC = Some(Process::new(elf_data)) }
 }
-
-// const PRELIMINARY_TESTS: [&str; 31] = [
-//     "brk",
-//     "chdir",
-//     "clone",
-//     "close",
-//     "dup2",
-//     "dup",
-//     "execve",
-//     "exit",
-//     "fork",
-//     "fstat",
-//     "getcwd",
-//     "getdents",
-//     "getpid",
-//     "getppid",
-//     "gettimeofday",
-//     "mkdir_",
-//     "mmap",
-//     "mount",
-//     "munmap",
-//     "openat",
-//     "open",
-//     "pipe",
-//     "read",
-//     "times",
-//     "umount",
-//     "uname",
-//     "unlink",
-//     "wait",
-//     "waitpid",
-//     "write",
-//     "yield",
-// ];
-
-// /// Scan all prilimary tests
-// pub fn scan_prilimary_tests() {
-//     info!("---------- SCAN PRELIMINARY TEST -----------\n");
-//     for test in PRELIMINARY_TESTS {
-//         let inode = fs::fat32_tmp::open_file(test, OpenFlags::RDONLY);
-//         if inode.is_none() {
-//             continue;
-//         }
-//         let inode = inode.unwrap();
-//         let elf_data = inode.read_all();
-//         Process::new(&elf_data);
-//     }
-// }
 
 use self::thread::TidHandle;
 
@@ -214,6 +166,17 @@ impl Process {
     /// Send signal to this process
     pub fn send_signal(&self, sig_info: SigInfo) {
         self.inner.lock().pending_sigs.sig_queue.push_back(sig_info);
+    }
+
+    ///
+    pub fn close_file(&self, fd: usize) -> SyscallRet {
+        let mut inner = self.inner.lock();
+        if inner.fd_table.take(fd).is_none() {
+            Err(SyscallErr::EBADF)
+        } else {
+            debug!("close fd {}", fd);
+            Ok(0)
+        }
     }
 }
 

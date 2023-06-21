@@ -21,8 +21,8 @@ impl Inode for ZeroInode {
             meta: FileMeta {
                 path: "todo_here()".to_string(),
                 // path: self.metadata().path.clone(),
-                flags,
                 inner: Mutex::new(FileMetaInner {
+                    flags,
                     inode: Some(this),
                     pos: 0,
                     dirent_index: 0,

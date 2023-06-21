@@ -109,8 +109,8 @@ pub trait Inode: Send + Sync {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         let file_meta = FileMeta {
             path: self.metadata().path.clone(),
-            flags,
             inner: Mutex::new(FileMetaInner {
+                flags,
                 inode: Some(this),
                 pos: 0,
                 dirent_index: 0,
@@ -447,7 +447,7 @@ pub enum InodeDevice {
 }
 
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
-    // let inode = <dyn Inode>::lookup_from_root_tmp(name);
+    debug!("[open_file]: name {}, flags {:?}", name, flags);
     let inode = <dyn Inode>::lookup_from_root_tmp(name);
     // inode
     if flags.contains(OpenFlags::CREATE) {

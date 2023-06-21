@@ -128,5 +128,11 @@ gdbserver: build
 gdbclient:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 
+tftp-server: build
+	sudo make -C ../tftp-server -f Makefile run
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient
+com:
+	sudo picocom -b 115200 /dev/ttyUSB1
+
+
+.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient  tftp-server com
