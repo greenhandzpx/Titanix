@@ -1,5 +1,5 @@
 use crate::config::process::INITPROC_PID;
-use crate::fs::{OpenFlags, resolve_path};
+use crate::fs::{OpenFlags, resolve_path, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -11,7 +11,7 @@ use crate::sync::Event;
 use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
-use crate::utils::path::{Path, AT_FDCWD};
+use crate::utils::path;
 use crate::utils::string::c_str_to_string;
 use crate::{process, stack_trace};
 use alloc::string::{String, ToString};
@@ -340,7 +340,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     // UserCheck::new().readable_slice(path, len);
     UserCheck::new().check_c_str(path)?;
     // let path = c_str_to_string(path);
-    let path = Path::path_process(AT_FDCWD, path as *const u8).unwrap();
+    let path = path::path_process(AT_FDCWD, path as *const u8).unwrap();
     debug!("sys exec {}", path);
     // print_dir_tree();
 

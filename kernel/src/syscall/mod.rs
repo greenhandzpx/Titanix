@@ -18,6 +18,8 @@ const SYSCALL_UNLINK: usize = 35;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UMOUNT: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
+const SYSCALL_STATFS: usize = 43;
+const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_OPEN: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
@@ -32,6 +34,7 @@ const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
+const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
@@ -118,6 +121,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3],
             args[4] as *const u8,
         ),
+        SYSCALL_FACCESSAT => sys_faccessat(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2] as u32,
+            args[3] as u32,
+        ),
         SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SYSCALL_OPEN => sys_openat(
             args[0] as isize,
@@ -150,6 +159,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[3] as u32,
         ),
         SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
+        SYSCALL_UTIMENSAT => sys_utimensat(
+            args[0] as isize,
+            args[1] as *const u8,
+            args[2] as *const TimeSpec,
+            args[3] as u32,
+        ),
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),

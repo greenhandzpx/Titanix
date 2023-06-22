@@ -15,7 +15,7 @@ use crate::{
     utils::{
         error::{AgeneralRet, GeneralRet},
         hash_table::HashTable,
-        path::Path,
+        path,
     },
 };
 
@@ -98,7 +98,7 @@ pub trait Inode: Send + Sync {
     }
 
     /// You should call this function through the parent inode
-    /// You should give a relative path
+    /// You should give a absolute path
     fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
@@ -132,7 +132,7 @@ pub trait Inode: Send + Sync {
             Some(value) => Some(value.clone()),
             None => {
                 debug!(
-                    "cannot find child dentry, name: {}, try to find in inode",
+                    "[lookup] cannot find child dentry, name: {}, try to find in inode",
                     name
                 );
                 let target_inode = self.try_find_and_insert_inode(this, name);
@@ -166,7 +166,7 @@ pub trait Inode: Send + Sync {
     ) -> Option<Arc<dyn Inode>> {
         <dyn Inode>::load_children(this.clone());
         debug!(
-            "children size {}",
+            "[try_find_and_insert_inode] children size {}",
             self.metadata().inner.lock().children.len()
         );
 
@@ -184,7 +184,10 @@ pub trait Inode: Send + Sync {
                 Some(target_inode)
             }
             None => {
-                debug!("Cannot find {} in children", child_name);
+                debug!(
+                    "[try_find_and_insert_inode] Cannot find {} in children",
+                    child_name
+                );
                 None
             }
         }
@@ -281,7 +284,7 @@ impl dyn Inode {
         // file_system: Arc<dyn FileSystem>,
         path: &str,
     ) -> Option<Arc<dyn Inode>> {
-        let path_names = Path::path2vec(path);
+        let path_names = path::path2vec(path);
         // path_names.remove(0);
 
         let root_fs = FILE_SYSTEM_MANAGER
@@ -306,7 +309,7 @@ impl dyn Inode {
         // file_system: Arc<dyn FileSystem>,
         path: &str,
     ) -> Option<Arc<dyn Inode>> {
-        let path_names = Path::path2vec(path);
+        let path_names = path::path2vec(path);
         // path_names.remove(0);
 
         let mut parent = ROOT_FS.metadata().root_inode.clone().unwrap();
@@ -388,7 +391,7 @@ impl InodeMeta {
         data_len: usize,
         device: Option<InodeDevice>,
     ) -> Self {
-        let name = Path::get_name(path);
+        let name = path::get_name(path);
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),
             None => None,

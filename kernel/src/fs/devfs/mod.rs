@@ -4,7 +4,7 @@ use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
 use crate::utils::error::GeneralRet;
-use crate::utils::path::Path;
+use crate::utils::path;
 
 use self::null::NullInode;
 use self::{tty::TtyInode, zero::ZeroInode};
@@ -105,7 +105,7 @@ impl FileSystem for DevFs {
             .inner
             .lock()
             .children
-            .insert(Path::get_name(mount_point).to_string(), res.clone());
+            .insert(path::get_name(mount_point).to_string(), res.clone());
         Ok(res)
     }
     fn set_metadata(&mut self, metadata: super::file_system::FileSystemMeta) {

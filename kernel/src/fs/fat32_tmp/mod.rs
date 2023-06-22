@@ -10,8 +10,9 @@ use log::{debug, error, info, trace, warn};
 
 use crate::fs::file::DefaultFile;
 use crate::fs::inode::INODE_CACHE;
+use crate::stack_trace;
 use crate::utils::error::{self, AgeneralRet, AsyscallRet, SyscallErr};
-use crate::utils::path::Path;
+use crate::utils::path;
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     sync::mutex::SpinNoIrqLock,
@@ -150,7 +151,7 @@ impl Inode for Fat32RootInode {
     ) -> GeneralRet<()> {
         debug!("[Fat32RootInode mknod] fatfs mknod: {}", pathname);
 
-        let name = Path::get_name(pathname);
+        let name = path::get_name(pathname);
         let _new_file = self.fs.fat_fs.root_dir().create_file(name).unwrap();
         let func = || {
             for dentry in self.fs.fat_fs.root_dir().iter() {
@@ -177,7 +178,9 @@ impl Inode for Fat32RootInode {
     fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
         debug!("[Fat32RootInode mkdir] fatfs mkdir: {}", pathname);
 
-        let name = Path::get_name(pathname);
+        let name = path::get_name(pathname);
+        stack_trace!();
+        debug!("[Fat32RootInode mkdir] get name: {}", name);
         let _new_dir = self.fs.fat_fs.root_dir().create_dir(name).unwrap();
         let func = || {
             for dentry in self.fs.fat_fs.root_dir().iter() {
@@ -313,7 +316,7 @@ impl Inode for Fat32Inode {
     ) -> GeneralRet<()> {
         debug!("[Fat32Inode::mknod] fatfs mknod: {}", pathname);
 
-        let name = Path::get_name(pathname);
+        let name = path::get_name(pathname);
         if self.dentry.is_file() {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -343,7 +346,7 @@ impl Inode for Fat32Inode {
     fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
         debug!("[Fat32Inode mkdir] fatfs mkdir: {}", pathname);
 
-        let name = Path::get_name(pathname);
+        let name = path::get_name(pathname);
         if self.dentry.is_file() {
             return Err(SyscallErr::ENOTDIR);
         }

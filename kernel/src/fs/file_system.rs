@@ -7,7 +7,7 @@ use crate::{
     sync::mutex::SpinNoIrqLock,
     utils::{
         error::{GeneralRet, SyscallRet},
-        path::Path,
+        path,
     },
 };
 
@@ -21,11 +21,11 @@ pub enum FileSystemType {
 }
 
 impl FileSystemType {
-    pub fn fs_type(ftype: String) -> Option<Self> {
+    pub fn fs_type(ftype: &str) -> Option<Self> {
         match ftype {
-            vfat => Some(Self::VFAT),
-            ext2 => Some(Self::EXT2),
-            nfs => Some(Self::NFS),
+            "vfat" => Some(Self::VFAT),
+            "ext2" => Some(Self::EXT2),
+            "nfs" => Some(Self::NFS),
             _ => None,
         }
     }
@@ -52,7 +52,7 @@ pub trait FileSystem: Send + Sync {
 
     fn init_ref(&self, mount_point: &str, ftype: FileSystemType) -> GeneralRet<()> {
         debug!("start to init fs, mount point {}", mount_point);
-        let parent_dir = Path::get_parent_dir(mount_point);
+        let parent_dir = path::get_parent_dir(mount_point);
         debug!("parent dir {:?}", parent_dir);
         let parent = {
             if parent_dir.is_none() {
@@ -89,7 +89,7 @@ pub trait FileSystem: Send + Sync {
 
     fn init(&mut self, mount_point: &str, ftype: FileSystemType) -> GeneralRet<()> {
         debug!("start to init fs, mount point {}", mount_point);
-        let parent_dir = Path::get_parent_dir(mount_point);
+        let parent_dir = path::get_parent_dir(mount_point);
         debug!("parent dir {:?}", parent_dir);
         stack_trace!();
         let parent = {
@@ -188,7 +188,3 @@ lazy_static! {
     pub static ref FILE_SYSTEM_MANAGER: FileSystemManager = FileSystemManager::new();
 }
 
-// /// Resolve the given path
-// pub fn resolve_path(path: &str) -> GeneralRet<Arc<dyn Inode>> {
-//     todo!()
-// }
