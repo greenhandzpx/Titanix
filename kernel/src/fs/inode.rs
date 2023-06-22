@@ -1,33 +1,28 @@
-use core::{
-    hash::Hash,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
-    collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak},
 };
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use lazy_static::*;
 use log::{debug, info, warn};
 
 use crate::{
+    driver::block::BlockDevice,
     mm::PageCache,
-    timer::{get_time_ms, TimeSpec},
+    timer::TimeSpec,
     utils::{
         error::{AgeneralRet, GeneralRet},
         hash_table::HashTable,
-        path::{Path, AT_FDCWD},
+        path::Path,
     },
 };
 
 use super::{
-    devfs::DevWrapper,
     fat32_tmp::ROOT_FS,
     file::{DefaultFile, FileMeta, FileMetaInner},
     file_system::FILE_SYSTEM_MANAGER,
-    hash_name::HashName,
     // dentry::{self, Dentry},
     // inode::OpenFlags,
     pipe::Pipe,
@@ -81,29 +76,11 @@ pub trait Inode: Send + Sync {
         data_len: usize,
     ) -> GeneralRet<()> {
         debug!("start to init inode...");
-        let meta = InodeMeta::new(parent, path, mode, data_len);
+        let meta = InodeMeta::new(parent, path, mode, data_len, None);
         self.set_metadata(meta);
         debug!("init inode finished");
         Ok(())
     }
-    // fn create(&self, dentry: Arc<dyn Dentry>) -> GeneralRet<Arc<dyn Inode>> {
-    //     todo!();
-    // }
-    // // // you should use the parent inode to call this function and give the target dentry name
-    // // fn lookup(&self, target_name: &str) -> GeneralRet<Arc<dyn Dentry>>;
-    // fn unlink(self: Arc<Self>, dentry: Arc<dyn Dentry>) -> SyscallRet {
-    //     let count = Arc::strong_count(&self);
-    //     if count > 1 {
-    //         return SyscallRet::Err(crate::utils::error::SyscallErr::EBUSY);
-    //     } else {
-    //         // TODO: remove dentry, maybe not remove dentry in cache?
-    //         return Ok(0);
-    //     }
-    // }
-    // // TODO not sure what the args should be
-    // fn rename(&self, old_dentry: &mut Dentry, new_inode: &mut Self, new_dentry: &mut Dentry) {
-    //     todo!()
-    // }
 
     /// Default operation is to open the default file(i.e. file from disk)
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
@@ -409,6 +386,7 @@ impl InodeMeta {
         path: &str,
         mode: InodeMode,
         data_len: usize,
+        device: Option<InodeDevice>,
     ) -> Self {
         let name = Path::get_name(path);
         let parent = match parent {
@@ -419,7 +397,7 @@ impl InodeMeta {
             ino: INODE_NUMBER.fetch_add(1, Ordering::Relaxed),
             mode,
             rdev: None,
-            device: None,
+            device,
             path: path.to_string(),
             name: name.to_string(),
             inner: Mutex::new(InodeMetaInner {
@@ -439,44 +417,11 @@ impl InodeMeta {
 
 pub enum InodeDevice {
     Pipe(Pipe),
-    Device(Arc<DevWrapper>),
+    Device(DevWrapper),
     // TODO: add more
 }
 
-pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
-
-    debug!("[open_file]: name {}, flags {:?}", name, flags);
-    let inode = <dyn Inode>::lookup_from_root_tmp(name);
-    // inode
-    if flags.contains(OpenFlags::CREATE) {
-        if inode.is_some() {
-            return inode;
-        }
-        let parent_path = Path::get_parent_dir(name).unwrap();
-        let parent = <dyn Inode>::lookup_from_root_tmp(&parent_path);
-        let child_name = Path::get_name(name);
-        if let Some(parent) = parent {
-            debug!("create file {}", name);
-            if flags.contains(OpenFlags::DIRECTORY) {
-                parent
-                    .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
-                    .unwrap();
-            } else {
-                // TODO dev id
-                parent
-                    .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
-                    .unwrap();
-            }
-            let res = <dyn Inode>::lookup_from_root_tmp(name);
-            if let Some(inode) = res.as_ref() {
-                <dyn Inode>::create_page_cache_if_needed(inode.clone());
-            }
-            res
-        } else {
-            warn!("parent dir {} doesn't exist", parent_path);
-            return None;
-        }
-    } else {
-        inode
-    }
+pub struct DevWrapper {
+    pub block_device: Arc<dyn BlockDevice>,
+    pub dev_id: usize,
 }

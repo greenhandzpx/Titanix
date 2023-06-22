@@ -29,6 +29,7 @@ const SYSCALL_WRITE: usize = 64;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PPOLL: usize = 73;
+const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_EXIT: usize = 93;
@@ -40,6 +41,7 @@ const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
+const SYSCALL_TGKILL: usize = 131;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
 const SYSCALL_RT_SIGRETURN: usize = 139;
@@ -52,6 +54,7 @@ const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
+const SYSCALL_GETTID: usize = 176;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -94,7 +97,7 @@ use crate::{
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!(
+    info!(
         "syscall id: {}, sepc {:#x}",
         syscall_id,
         current_trap_cx().sepc
@@ -139,6 +142,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             .await
         }
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
+        SYSCALL_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
         SYSCALL_NEWFSTATAT => sys_newfstatat(
             args[0] as isize,
             args[1] as *const u8,
@@ -175,6 +179,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_GETEUID => sys_geteuid(),
+        SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
         SYSCALL_CLONE => sys_clone(
@@ -290,4 +295,3 @@ pub struct PollFd {
     /// Returned events
     pub revents: i16,
 }
-

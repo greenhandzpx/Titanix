@@ -116,14 +116,13 @@ pub fn rust_main(hart_id: usize) {
         hart::init(hart_id);
         utils::logging::init();
 
-        info!(r#"  _______ __              _     "#);
-        info!(r#" /_  __(_) /_____ _____  (_)  __"#);
-        info!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);
-        info!(r#" / / / / /_/ /_/ / / / / />  <  "#);
-        info!(r#"/_/ /_/\__/\__,_/_/ /_/_/_/|_|  "#);
-        info!("[kernel] Hello, world!");
-
-        info!(
+        println!(r#"  _______ __              _     "#);
+        println!(r#" /_  __(_) /_____ _____  (_)  __"#);
+        println!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);
+        println!(r#" / / / / /_/ /_/ / / / / />  <  "#);
+        println!(r#"/_/ /_/\__/\__,_/_/ /_/_/_/|_|  "#);
+        println!("[kernel] Hello, world!");
+        println!(
             "[kernel] ---------- main hart {} started ---------- ",
             hart_id
         );
@@ -179,7 +178,7 @@ pub fn rust_main(hart_id: usize) {
                 .expect("KERNEL SPACE not init yet")
                 .activate();
         }
-        info!("[kernel] ---------- hart {} started ---------- ", hart_id);
+        println!("[kernel] ---------- hart {} started ---------- ", hart_id);
 
         // return;
     }

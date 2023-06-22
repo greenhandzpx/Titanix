@@ -13,8 +13,8 @@ use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
-    inode, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, Renameat2Flags, StatFlags,
-    UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
+    inode, open_file, Dirent, FileSystem, FileSystemType, Inode, InodeMode, Iovec, Renameat2Flags,
+    StatFlags, UtsName, DIRENT_SIZE, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
@@ -421,10 +421,12 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
 
-    if !file.readable() {
-        return Err(SyscallErr::EACCES);
-    }
+    // if !file.readable() {
+    //     info!("[_fstat]: file cannot be read, fd {}, stat_buf addr {:#x}", fd, stat_buf);
+    //     return Err(SyscallErr::EACCES);
+    // }
 
+    info!("[_fstat]: fd {}", fd);
     let inode = file.metadata().inner.lock().inode.as_ref().unwrap().clone();
     let inode_meta = inode.metadata().clone();
     if let Some(dev) = inode_meta.device.as_ref() {
@@ -493,7 +495,7 @@ pub fn sys_newfstatat(
     }
     debug!("[newfstatat] final absolute path: {:?}", absolute_path);
 
-    let fd = _openat(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
+    let fd = open_file(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
 
     return _fstat(fd as usize, stat_buf);
 }
@@ -542,55 +544,7 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
 
     let absolute_path = Path::path_process(dirfd, filename_addr);
 
-    _openat(absolute_path, flags)
-}
-
-/// We should give the absolute path (Or None) to _openat function.
-fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
-    stack_trace!();
-    debug!(
-        "[_openat] absolute path: {:?}, flags: {}",
-        absolute_path, flags
-    );
-    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    match absolute_path {
-        Some(absolute_path) => {
-            debug!("[_openat] file name {}", absolute_path);
-            if let Some(inode) = fs::inode::open_file(&absolute_path, flags) {
-                stack_trace!();
-                let mut inner_lock = inode.metadata().inner.lock();
-                inner_lock.st_atim = get_time_spec();
-                match inner_lock.state {
-                    InodeState::Synced => {
-                        inner_lock.state = InodeState::DirtyInode;
-                    }
-                    _ => {}
-                }
-                debug!(
-                    "[_openat] inode ino: {}, name: {}",
-                    inode.metadata().ino,
-                    inode.metadata().name
-                );
-                // TODO: add to fs's dirty list
-                let fd = current_process().inner_handler(|proc| {
-                    let fd = proc.fd_table.alloc_fd();
-                    let file = inode.open(inode.clone(), flags)?;
-
-                    proc.fd_table.put(fd, file);
-                    Ok(fd)
-                })?;
-                debug!("[_openat] find fd: {}", fd);
-                Ok(fd as isize)
-            } else {
-                debug!("file {} doesn't exist", absolute_path);
-                Err(SyscallErr::ENOENT)
-            }
-        }
-        None => {
-            debug!("cannot find the file, absolute_path is none");
-            Err(SyscallErr::ENOENT)
-        }
-    }
+    open_file(absolute_path, flags)
 }
 
 pub fn sys_close(fd: usize) -> SyscallRet {
@@ -617,7 +571,10 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    trace!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
+    debug!(
+        "start writev, fd: {}, iov: {:#x}, iovcnt:{}",
+        fd, iov, iovcnt
+    );
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -646,7 +603,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
         trace!("[writev] buf: {:?}", buf);
-        test();
+        // test();
         file.write(buf).await?;
     }
     Ok(ret as isize)
@@ -934,8 +891,8 @@ pub fn sys_renameat2(
         debug!("[sys_renameat2] newpath start with oldpath");
         return Err(SyscallErr::EINVAL);
     }
-    let oldinode = fs::inode::open_file(&oldpath, OpenFlags::RDWR);
-    let newinode = fs::inode::open_file(&newpath, OpenFlags::RDWR);
+    let oldinode = fs::resolve_path(&oldpath, OpenFlags::RDWR);
+    let newinode = fs::resolve_path(&newpath, OpenFlags::RDWR);
     if oldinode.is_none() {
         debug!("[sys_renameat2] doesn'n have oldinode");
         return Err(SyscallErr::ENOENT);
@@ -960,7 +917,7 @@ pub fn sys_renameat2(
             .unwrap();
         oldparent.remove_child(oldinode.clone())?;
         let newparent_path = Path::get_parent_dir(&newpath).unwrap();
-        let parent = fs::inode::open_file(&newparent_path, OpenFlags::RDWR);
+        let parent = fs::resolve_path(&newparent_path, OpenFlags::RDWR);
         if parent.is_none() {
             debug!("[sys_renameat2] newparent doesn't create");
             return Err(SyscallErr::ENOENT);
@@ -1086,4 +1043,17 @@ pub fn sys_renameat2(
             }
         }
     }
+}
+
+pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usize) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new().check_c_str(path_name as *const u8)?;
+    let _sum_guard = SumGuard::new();
+    let path = c_str_to_string(path_name as *const u8);
+    info!(
+        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}",
+        dirfd, path, buf, buf_size
+    );
+    Err(SyscallErr::ENOENT)
+    // Ok(0)
 }

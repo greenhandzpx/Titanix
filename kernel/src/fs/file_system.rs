@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{Inode, testfs::TestFs};
+use super::{testfs::TestFs, Inode};
 
 #[derive(Clone)]
 pub enum FileSystemType {
@@ -188,7 +188,7 @@ lazy_static! {
     pub static ref FILE_SYSTEM_MANAGER: FileSystemManager = FileSystemManager::new();
 }
 
-/// Resolve the given path
-pub fn resolve_path(path: &str) -> GeneralRet<Arc<dyn Inode>> {
-    todo!()
-}
+// /// Resolve the given path
+// pub fn resolve_path(path: &str) -> GeneralRet<Arc<dyn Inode>> {
+//     todo!()
+// }

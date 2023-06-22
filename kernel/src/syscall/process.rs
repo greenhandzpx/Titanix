@@ -1,6 +1,5 @@
 use crate::config::process::INITPROC_PID;
-use crate::fs::inode::open_file;
-use crate::fs::OpenFlags;
+use crate::fs::{OpenFlags, resolve_path};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -345,7 +344,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     debug!("sys exec {}", path);
     // print_dir_tree();
 
-    if path == "shell" {
+    if path == "/shell" {
         if let Some(elf_data) = get_app_data_by_name("shell") {
             current_process().exec(elf_data, args_vec, envs_vec)
         } else {
@@ -353,7 +352,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             Err(SyscallErr::EACCES)
         }
     } else {
-        if let Some(app_inode) = open_file(&path, OpenFlags::RDONLY) {
+        if let Some(app_inode) = resolve_path(&path, OpenFlags::RDONLY) {
             let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
             trace!("try to read all data in file {}", path);
             let elf_data = app_file.sync_read_all()?;
@@ -516,7 +515,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     "new heap end {:#x}",
                     proc.memory_space.heap_range.unwrap().end().0
                 );
-                Ok(0)
+                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
             }
         } else {
             // deallocate memory
@@ -545,7 +544,8 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     .heap_range
                     .unwrap()
                     .modify_right_bound(new_heap_end);
-                Ok(0)
+                // Ok(0)
+                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
             }
         }
     })

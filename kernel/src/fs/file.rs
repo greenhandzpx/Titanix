@@ -56,8 +56,16 @@ pub struct FileMetaInner {
 
 // #[async_trait]
 pub trait File: Send + Sync {
-    fn readable(&self) -> bool;
-    fn writable(&self) -> bool;
+    fn readable(&self) -> bool {
+        let flags = self.metadata().inner.lock().flags;
+        flags.contains(OpenFlags::RDONLY) || flags.contains(OpenFlags::RDWR)
+    }
+
+    fn writable(&self) -> bool {
+        let flags = self.metadata().inner.lock().flags;
+        flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
+    }
+
     /// For default file, data must be read from page cache first
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
     /// For default file, data must be written to page cache first
@@ -124,16 +132,6 @@ impl DefaultFile {
 
 // #[async_trait]
 impl File for DefaultFile {
-    fn readable(&self) -> bool {
-        let flags = self.metadata().inner.lock().flags;
-        flags.contains(OpenFlags::RDONLY) || flags.contains(OpenFlags::RDWR)
-    }
-
-    fn writable(&self) -> bool {
-        let flags = self.metadata().inner.lock().flags;
-        flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
-    }
-
     fn metadata(&self) -> &FileMeta {
         &self.metadata
     }

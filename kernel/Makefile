@@ -7,6 +7,7 @@ DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 # FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 FS_IMG_FAT32_PREFIX := ../fat32-src
 FS_IMG_FAT32 := $(FS_IMG_FAT32_PREFIX)/fat32.img
+FS_IMG_BUSYBOX := $(FS_IMG_FAT32_PREFIX)/busybox.img
 PRELIMINARY = 0
 
 # BOARD
@@ -18,6 +19,8 @@ BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
+
+FS_IMG := $(FS_IMG_BUSYBOX)
 
 # KERNEL ENTRY
 KERNEL_ENTRY_PA := 0x80200000
@@ -45,7 +48,7 @@ QFLAGS += -nographic
 QFLAGS += -smp $(CPUS)
 QFLAGS += -kernel $(KERNEL_BIN)
 # QFLAGS += -bios $(BOOTLOADER) 
-QFLAGS += -drive file=$(FS_IMG_FAT32),if=none,format=raw,id=x0 
+QFLAGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0 
 QFLAGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 
 
 
