@@ -12,12 +12,13 @@ use log::{debug, info, trace, warn};
 use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::stat::{STAT, STAT_SIZE};
+use crate::fs::posix::{STAT, STAT_SIZE};
 use crate::fs::{
-    inode, Dirent, FaccessatFlags, FileSystem, FileSystemType, FcntlFlags, Inode, InodeMode, Iovec,
-    Renameat2Flags, UtsName, AT_FDCWD, FILE_SYSTEM_MANAGER, resolve_path, open_file,
+    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, Dirent, FaccessatFlags,
+    FcntlFlags, FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD,
+    FILE_SYSTEM_MANAGER,
 };
-use crate::fs::{OpenFlags, UTSNAME_SIZE};
+use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
 use crate::mm::user_check::UserCheck;
 use crate::process::thread;
 use crate::processor::{current_process, SumGuard};

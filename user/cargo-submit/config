@@ -6,8 +6,3 @@ rustflags = [
     "-Clink-args=-Tsrc/linker.ld", "-Cforce-frame-pointers=yes"
 ]
 
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"

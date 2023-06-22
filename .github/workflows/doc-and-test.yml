@@ -1,4 +1,4 @@
-name: Build Rust Doc And Run tests
+name: Build Rust Doc And Build Kernel
 
 on: [push]
 
@@ -41,7 +41,7 @@ jobs:
           crate: cargo-binutils
           version: latest
           use-tool-cache: true
-      - name: Run usertests
+      - name: Build Kernel
         run: cd kernel && make build
         timeout-minutes: 10
       

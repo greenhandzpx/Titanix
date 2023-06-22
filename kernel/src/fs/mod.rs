@@ -6,14 +6,12 @@ mod file;
 mod file_system;
 mod hash_name;
 pub mod inode;
-pub mod stat;
-pub mod utsname;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;
 pub mod pipe;
 mod procfs;
 mod testfs;
-mod uio;
+pub mod posix;
 
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -32,11 +30,6 @@ pub use inode::InodeState;
 use log::debug;
 use log::info;
 use log::warn;
-// pub use stdio::Stdin;
-// pub use stdio::Stdout;
-pub use uio::*;
-pub use utsname::UtsName;
-pub use utsname::UTSNAME_SIZE;
 
 use crate::fs::fat32_tmp::ROOT_FS;
 use crate::mm::MapPermission;
