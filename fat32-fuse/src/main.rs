@@ -7,13 +7,19 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use clap::ArgMatches;
 use clap::{App, Arg};
 use fatfs::{format_volume, FormatVolumeOptions, StdIoWrapper};
-use fscommon::BufStream;
 use fatfs::{FileSystem, FsOptions};
+use fscommon::BufStream;
 
 fn mkfs(filename: String) -> io::Result<()> {
-    let file = fs::OpenOptions::new().read(true).write(true).open(&filename)?;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&filename)?;
     let buf_file = BufStream::new(file);
-    format_volume(&mut StdIoWrapper::from(buf_file), FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32))?;
+    format_volume(
+        &mut StdIoWrapper::from(buf_file),
+        FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32),
+    )?;
     Ok(())
 }
 
@@ -36,29 +42,15 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
     let fs = FileSystem::new(buf_stream, options)?;
 
 
-    let apps_rust: Vec<_> = read_dir(src_path)
-        .unwrap()
-        .into_iter()
-        .map(|dir_entry| {
-            let mut name_with_ext = dir_entry.unwrap().file_name().into_string().unwrap();
-            name_with_ext.drain(name_with_ext.find('.').unwrap()..name_with_ext.len());
-            name_with_ext
-        })
-        .collect();
-    // let apps: Vec<_> = read_dir(src_path)
+    // Write preliminary tests
     let apps_pre: Vec<_> = read_dir(target_path)
         .unwrap()
         .into_iter()
         .map(|dir_entry| {
             dir_entry.unwrap().file_name().into_string().unwrap()
-            
-            // let mut name_with_ext = dir_entry.unwrap().file_name().into_string().unwrap();
-            // name_with_ext.drain(name_with_ext.find('.').unwrap()..name_with_ext.len());
-            // name_with_ext
         })
         .filter(|name| *name != "mnt" && *name != "fs.img")
         .collect();
-
     for app in apps_pre {
         // load app data from host file system
         let mut host_file = File::open(format!("{}{}", target_path, app)).unwrap();
@@ -70,35 +62,47 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         file.write_all(&all_data)?;
     }
 
-    // Write busybox
-    let busybox_path = "../testcases/busybox/busybox";
-    let mut host_file = File::open(busybox_path).unwrap();
-    let mut all_data: Vec<u8> = Vec::new();
-    host_file.read_to_end(&mut all_data).unwrap();
-    // create a file in fat-fs
-    let mut file = fs.root_dir().create_file("busybox")?;
-    // write data to fat-fs
-    file.write_all(&all_data)?;
+    // Write busybox && lua tests
+    let busybox_path = "../testcases/busybox/";
+    let apps_busybox: Vec<_> = read_dir(busybox_path)
+        .unwrap()
+        .into_iter()
+        .map(|dir_entry| {
+            dir_entry.unwrap().file_name().into_string().unwrap()
+        })
+        // .filter(|name| *name != "mnt" && *name != "fs.img")
+        .collect();
+    for app in apps_busybox {
+        // load app data from host file system
+        let mut host_file = File::open(format!("{}{}", busybox_path, app)).unwrap();
+        let mut all_data: Vec<u8> = Vec::new();
+        host_file.read_to_end(&mut all_data).unwrap();
+        // create a file in fat-fs
+        let mut file = fs.root_dir().create_file(&app)?;
+        // write data to fat-fs
+        file.write_all(&all_data)?;
+    }
 
-    // Write busybox_debug
-    let busybox_path = "../testcases/busybox/busybox_debug";
-    let mut host_file = File::open(busybox_path).unwrap();
-    let mut all_data: Vec<u8> = Vec::new();
-    host_file.read_to_end(&mut all_data).unwrap();
-    // create a file in fat-fs
-    let mut file = fs.root_dir().create_file("busybox_debug")?;
-    // write data to fat-fs
-    file.write_all(&all_data)?;
-
-    // // Write busybox_debug
-    // let busybox_path = "../testcases/busybox/busybox_unstripped.unstripped";
+    // // Write busybox
+    // let busybox_path = "../testcases/busybox/busybox";
     // let mut host_file = File::open(busybox_path).unwrap();
     // let mut all_data: Vec<u8> = Vec::new();
     // host_file.read_to_end(&mut all_data).unwrap();
     // // create a file in fat-fs
-    // let mut file = fs.root_dir().create_file("busybox_unstripped")?;
+    // let mut file = fs.root_dir().create_file("busybox")?;
     // // write data to fat-fs
     // file.write_all(&all_data)?;
+
+    // // Write busybox_debug
+    // let busybox_path = "../testcases/busybox/busybox_debug";
+    // let mut host_file = File::open(busybox_path).unwrap();
+    // let mut all_data: Vec<u8> = Vec::new();
+    // host_file.read_to_end(&mut all_data).unwrap();
+    // // create a file in fat-fs
+    // let mut file = fs.root_dir().create_file("busybox_debug")?;
+    // // write data to fat-fs
+    // file.write_all(&all_data)?;
+
 
     // // Write libc
     // let libc_path = "../testcases/libc/";
@@ -121,10 +125,17 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
     //     file.write_all(&all_data)?;
     // }
 
-
-    let init_usershell: Vec<&str> = vec!["initproc", "shell"];
-
-    for app in init_usershell {
+    // let rust_apps: Vec<_> = read_dir(src_path)
+    //     .unwrap()
+    //     .into_iter()
+    //     .map(|dir_entry| {
+    //         let mut name_with_ext = dir_entry.unwrap().file_name().into_string().unwrap();
+    //         name_with_ext.drain(name_with_ext.find('.').unwrap()..name_with_ext.len());
+    //         name_with_ext
+    //     })
+    //     .collect();
+    let rust_apps: Vec<&str> = vec!["initproc", "shell", "time_share_test"];
+    for app in rust_apps {
         let mut host_file = File::open(format!("{}{}", target_path2, app)).unwrap();
         let mut all_data: Vec<u8> = Vec::new();
         host_file.read_to_end(&mut all_data).unwrap();
@@ -134,26 +145,13 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         // write data to fat-fs
         file.write_all(&all_data)?;
     }
-    // for app in apps_rust {
-    //     let mut host_file = File::open(format!("{}{}", target_path2, app)).unwrap();
-    //     let mut all_data: Vec<u8> = Vec::new();
-    //     host_file.read_to_end(&mut all_data).unwrap();
-    //     // create a file in fat-fs
-    //     let mut file = fs.root_dir().create_file(&app)?;
-
-    //     // write data to fat-fs
-    //     file.write_all(&all_data)?;
-    // }
-    
 
     println!("pack apps finished");
 
     Ok(())
 }
 
-
 fn main() -> io::Result<()> {
-
     let matches = App::new("Fat32FileSystem packer")
         .arg(
             Arg::with_name("fs_img")

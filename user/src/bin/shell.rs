@@ -134,6 +134,7 @@ fn preliminary_test() {
             assert_eq!(pid, exit_pid);
         }
     }
+    exit(0);
 }
 
 #[no_mangle]
@@ -141,9 +142,8 @@ pub fn main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
 
-    // #[cfg(feature = "preliminary")]
-    // preliminary_test();
-    // exit(0);
+    #[cfg(feature = "preliminary")]
+    preliminary_test();
 
     print!("{}", LINE_START);
     loop {

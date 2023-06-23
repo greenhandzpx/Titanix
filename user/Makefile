@@ -18,6 +18,7 @@ ifeq ($(PRELIMINARY), 1)
 	@cargo build --release --features preliminary --offline 
 endif
 ifeq ($(PRELIMINARY), 0)
+	@echo "user: not build for preliminary"
 	@cargo build --release --offline
 endif
 ifeq ($(TEST), 1)

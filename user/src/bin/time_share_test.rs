@@ -13,7 +13,7 @@ pub fn main() -> i32 {
     if fork() == 0 {
         let p = 5u64;
         let m = 998244353u64;
-        let iter: usize = 1400000;
+        let iter: usize = 14000000;
         let mut s = [0u64; LEN];
         let mut cur = 0usize;
         s[cur] = 1;
@@ -30,7 +30,7 @@ pub fn main() -> i32 {
     } else {
         let p = 7u64;
         let m = 998244353u64;
-        let iter: usize = 1600000;
+        let iter: usize = 16000000;
         let mut s = [0u64; LEN];
         let mut cur = 0usize;
         s[cur] = 1;
