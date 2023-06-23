@@ -1,23 +1,22 @@
 use core::cell::UnsafeCell;
 use core::panic;
 
+use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use alloc::{boxed::Box, vec::Vec};
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
 use log::{debug, error, info, trace, warn};
 
 use crate::fs::file::DefaultFile;
-use crate::fs::inode::INODE_CACHE;
-use crate::fs::{StatFlags, FILE_SYSTEM_MANAGER};
+use crate::fs::posix::StatFlags;
 use crate::stack_trace;
-use crate::utils::error::{self, AgeneralRet, AsyscallRet, SyscallErr};
+use crate::utils::error::{AgeneralRet, SyscallErr};
 use crate::utils::path;
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallRet},
+    utils::error::GeneralRet,
 };
 
 use super::file::FileMetaInner;
@@ -127,6 +126,7 @@ impl Inode for Fat32RootInode {
                 &file_name,
                 inode_mode,
                 data_len as usize,
+                None,
             );
             let file_name = dentry.as_ref().unwrap().file_name();
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
@@ -291,6 +291,7 @@ impl Inode for Fat32Inode {
                 &file_name,
                 inode_mode,
                 data_len as usize,
+                None,
             );
             let file_name = dentry.as_ref().unwrap().file_name();
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
@@ -313,7 +314,7 @@ impl Inode for Fat32Inode {
         mode: InodeMode,
         _dev_id: usize,
     ) -> GeneralRet<()> {
-        debug!("[Fat32Inode mknod] fatfs mknod: {}", pathname);
+        debug!("[Fat32Inode::mknod] fatfs mknod: {}", pathname);
 
         let name = path::get_name(pathname);
         if self.dentry.is_file() {
@@ -511,16 +512,16 @@ pub fn init() -> GeneralRet<()> {
 // }
 
 // ///Open file with flags
-// pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
+// pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
 //     stack_trace!();
 //     // TODO support different kinds of files dispatching
 //     // (e.g. /dev/sda, /proc/1234, /usr/bin)
-//     debug!("[open_file] name: {}", name);
+//     debug!("[resolve_path] name: {}", name);
 
 //     let (readable, writable) = flags.read_write();
 //     let root_dir = ROOT_FS.fat_fs.root_dir();
 //     if flags.contains(OpenFlags::CREATE) {
-//         if let Some(inode) = root_dir.open_file(name).ok() {
+//         if let Some(inode) = root_dir.resolve_path(name).ok() {
 //             Some(Arc::new(Fat32File::new(
 //                 Fat32NodeType::File(inode),
 //                 None,
@@ -537,7 +538,7 @@ pub fn init() -> GeneralRet<()> {
 //             )))
 //         }
 //     } else {
-//         if let Some(inode) = root_dir.open_file(name).ok() {
+//         if let Some(inode) = root_dir.resolve_path(name).ok() {
 //             Some(Arc::new(Fat32File::new(
 //                 Fat32NodeType::File(inode),
 //                 None,

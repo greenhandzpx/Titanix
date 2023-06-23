@@ -9,7 +9,7 @@ pub struct MountsInode {
 impl MountsInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
         Self {
-            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0),
+            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0, None),
             content: Vec::new(),
         }
     }

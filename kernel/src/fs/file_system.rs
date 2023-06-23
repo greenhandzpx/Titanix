@@ -11,12 +11,12 @@ use crate::{
     stack_trace,
     sync::mutex::SpinNoIrqLock,
     utils::{
-        error::{GeneralRet, SyscallErr, SyscallRet},
+        error::{GeneralRet, SyscallRet},
         path,
     },
 };
 
-use super::{testfs::TestFs, Inode, StatFlags};
+use super::{posix::StatFlags, testfs::TestFs, Inode};
 
 #[derive(Clone)]
 pub enum FileSystemType {
@@ -26,11 +26,11 @@ pub enum FileSystemType {
 }
 
 impl FileSystemType {
-    pub fn fs_type(ftype: String) -> Option<Self> {
+    pub fn fs_type(ftype: &str) -> Option<Self> {
         match ftype {
-            vfat => Some(Self::VFAT),
-            ext2 => Some(Self::EXT2),
-            nfs => Some(Self::NFS),
+            "vfat" => Some(Self::VFAT),
+            "ext2" => Some(Self::EXT2),
+            "nfs" => Some(Self::NFS),
             _ => None,
         }
     }
@@ -261,9 +261,4 @@ impl FileSystemManager {
 
 lazy_static! {
     pub static ref FILE_SYSTEM_MANAGER: FileSystemManager = FileSystemManager::new();
-}
-
-/// Resolve the given path
-pub fn resolve_path(path: &str) -> GeneralRet<Arc<dyn Inode>> {
-    todo!()
 }

@@ -1,7 +1,7 @@
 use log::{debug, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
-    stval,
+    sepc, stval,
 };
 
 use crate::{
@@ -114,16 +114,27 @@ pub async fn trap_handler() {
             // exit_current_and_run_next(-3);
             // todo!("Exit current process when encounting illegal instruction");
         }
+        Trap::Exception(Exception::Breakpoint) => {
+            warn!(
+                "[kernel] Breakpoint from application, sepc = {:#x}",
+                sepc::read(),
+            );
+            // jump to next instruction anyway
+            let mut cx = current_trap_cx();
+            cx.sepc += 4;
+            process::yield_now().await
+        }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
             handle_timeout_events();
-            process::yield_now().await
+            process::yield_now().await;
         }
         _ => {
             panic!(
-                "Unsupported trap {:?}, stval = {:#x}!",
+                "Unsupported trap {:?}, stval = {:#x}!, sepc = {:#x}",
                 scause.cause(),
-                stval
+                stval,
+                sepc::read(),
             );
         }
     }

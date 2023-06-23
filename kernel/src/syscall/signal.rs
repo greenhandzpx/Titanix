@@ -132,6 +132,12 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     Ok(0)
 }
 
+pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
+    stack_trace!();
+    warn!("[sys_tgkill]: tgid {}, tid {}, sig {}", tgid, tid, sig);
+    Ok(0)
+}
+
 pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     stack_trace!();
     // TODO: add permission check for sending signal
