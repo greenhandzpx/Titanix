@@ -8,6 +8,7 @@ use alloc::{
 };
 use log::{debug, info};
 
+use crate::fs::StatFlags;
 use crate::utils::error::AsyscallRet;
 use crate::utils::path;
 use crate::{
@@ -184,7 +185,12 @@ pub fn init() -> GeneralRet<()> {
 
     let mut dev_fs = DevFs::new();
 
-    dev_fs.init("/dev", crate::fs::FileSystemType::VFAT)?;
+    dev_fs.init(
+        "udev".to_string(),
+        "/dev",
+        crate::fs::FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
     // dev_fs.init("/")?;
 
     let dev_fs = Arc::new(dev_fs);

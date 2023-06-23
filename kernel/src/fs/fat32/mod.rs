@@ -20,7 +20,7 @@ mod inode;
 mod time;
 mod util;
 
-const SECTOR_SIZE: usize = 512;
+pub const SECTOR_SIZE: usize = 512;
 const SHORTNAME_LEN: usize = 11;
 const LONGNAME_LEN: usize = 255;
 const BOOT_SECTOR_ID: usize = 0;

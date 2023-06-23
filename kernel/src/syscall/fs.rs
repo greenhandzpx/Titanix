@@ -15,7 +15,7 @@ use crate::fs::pipe::make_pipe;
 use crate::fs::stat::{STAT, STAT_SIZE};
 use crate::fs::{
     inode, Dirent, FaccessatFlags, FileSystem, FileSystemType, FnctlFlags, Inode, InodeMode, Iovec,
-    Renameat2Flags, UtsName, AT_FDCWD, FILE_SYSTEM_MANAGER,
+    Renameat2Flags, StatFlags, Statfs, UtsName, AT_FDCWD, FILE_SYSTEM_MANAGER, STATFS_SIZE,
 };
 use crate::fs::{OpenFlags, UTSNAME_SIZE};
 use crate::mm::user_check::UserCheck;
@@ -194,10 +194,11 @@ pub fn sys_mount(
     dev_name: *const u8,
     target_path: *const u8,
     ftype: *const u8,
-    _flags: usize,
+    flags: u32,
     _data: *const u8,
 ) -> SyscallRet {
     stack_trace!();
+    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(dev_name)?;
     UserCheck::new().check_c_str(target_path)?;
@@ -210,7 +211,7 @@ pub fn sys_mount(
     if dev_name.is_none() {
         return Err(SyscallErr::EMFILE);
     }
-    // let dev_name = path::get_name(&dev_name.unwrap());
+    let dev_name = dev_name.unwrap();
 
     let target_path = path::path_process(AT_FDCWD, target_path);
     if target_path.is_none() {
@@ -243,8 +244,8 @@ pub fn sys_mount(
     // };
 
     let mut fs = ftype.new_fs();
-    fs.init(&target_path, ftype)?;
-    fs.mount();
+    fs.init(dev_name, &target_path, ftype, flags)?;
+    fs.mount()?;
 
     let meta = fs.metadata();
     let root_inode = meta.root_inode.as_ref().unwrap();
@@ -274,7 +275,6 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
     }
     let target_fs = target_fs.unwrap();
     // sync fs
-    target_fs.sync_fs()?;
     let meta = target_fs.metadata();
     let root_inode = meta.root_inode.unwrap();
     let parent = root_inode.metadata().inner.lock().parent.clone();
@@ -283,6 +283,7 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
             let parent = parent.upgrade().unwrap();
             debug!("Have a parent: {}", parent.metadata().path);
             parent.remove_child(root_inode)?;
+            target_fs.umount()?;
             fs_mgr.remove(&target_path);
             Ok(0)
         }
@@ -884,6 +885,7 @@ pub async fn sys_sendfile(
             nbytes
         }
     };
+    debug!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
     let ret = output_file.write(&buf[0..nbytes as usize]).await;
     info!("[sys_sendfile]: finished");
     ret
@@ -1177,4 +1179,22 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
             Err(SyscallErr::ENOENT)
         }
     }
+}
+
+pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new().check_c_str(path)?;
+    UserCheck::new().check_writable_slice(buf as *mut u8, STATFS_SIZE)?;
+    let _sum_guard = SumGuard::new();
+    let path = path::path_process(AT_FDCWD, path);
+    if path.is_none() {
+        debug!("[sys_statfs] path does not exist");
+        return Err(SyscallErr::ENOENT);
+    }
+    let stfs = Statfs::new();
+    // TODO: find the target fs
+    unsafe {
+        ptr::write(buf, stfs);
+    }
+    Ok(0)
 }

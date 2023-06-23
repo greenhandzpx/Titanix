@@ -7,6 +7,7 @@ use alloc::{
 };
 use log::{debug, info, warn};
 
+use crate::fs::{StatFlags, Statfs};
 use crate::mm::memory_space::VmArea;
 use crate::utils::error::AsyscallRet;
 use crate::{
@@ -146,7 +147,12 @@ pub fn init() -> GeneralRet<()> {
     let mut test_fs = TestFs {
         metadata: SyncUnsafeCell::new(None),
     };
-    test_fs.init("/", crate::fs::FileSystemType::VFAT)?;
+    test_fs.init(
+        "/dev/sda1".to_string(),
+        "/",
+        crate::fs::FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
 
     FILE_SYSTEM_MANAGER
         .fs_mgr

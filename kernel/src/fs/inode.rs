@@ -396,7 +396,7 @@ pub struct InodeMetaInner {
     pub st_ctim: TimeSpec,
     /// parent
     pub parent: Option<Weak<dyn Inode>>,
-    /// children list
+    /// children list (name, inode)
     pub children: HashMap<String, Arc<dyn Inode>>,
     /// page cache of the related file
     pub page_cache: Option<Arc<PageCache>>,

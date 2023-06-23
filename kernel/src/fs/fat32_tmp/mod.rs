@@ -10,6 +10,7 @@ use log::{debug, error, info, trace, warn};
 
 use crate::fs::file::DefaultFile;
 use crate::fs::inode::INODE_CACHE;
+use crate::fs::{StatFlags, FILE_SYSTEM_MANAGER};
 use crate::stack_trace;
 use crate::utils::error::{self, AgeneralRet, AsyscallRet, SyscallErr};
 use crate::utils::path;
@@ -439,14 +440,16 @@ pub fn init() -> GeneralRet<()> {
     //     let root_fs = &mut (*(&ROOT_FS as *const Fat32FileSystem as *mut Fat32FileSystem));
     //     ROOT_FS.init("/", FileSystemType::VFAT).unwrap();
     // }
-    ROOT_FS.init_ref("/", FileSystemType::VFAT)?;
+    ROOT_FS.init_ref(
+        "/dev/sda1".to_string(),
+        "/",
+        FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
     let root_inode = ROOT_FS.metadata().root_inode.unwrap();
     root_inode.mkdir(root_inode.clone(), "mnt", InodeMode::FileDIR)?;
+    root_inode.mkdir(root_inode.clone(), "proc", InodeMode::FileDIR)?;
 
-    // FILE_SYSTEM_MANAGER
-    //     .fs_mgr
-    //     .lock()
-    //     .insert("/".to_string(), Arc::new(test_fs));
     info!("init fatfs success");
 
     Ok(())
