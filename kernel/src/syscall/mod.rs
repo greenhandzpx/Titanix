@@ -102,11 +102,11 @@ use crate::{
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    info!(
-        "syscall id: {}, sepc {:#x}",
-        syscall_id,
-        current_trap_cx().sepc
-    );
+    // info!(
+    //     "syscall id: {}, sepc {:#x}",
+    //     syscall_id,
+    //     current_trap_cx().sepc
+    // );
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
         SYSCALL_DUP => sys_dup(args[0]),

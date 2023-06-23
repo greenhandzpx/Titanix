@@ -10,6 +10,7 @@ use log::{debug, error, info, trace, warn};
 
 use crate::fs::file::DefaultFile;
 use crate::fs::posix::StatFlags;
+use crate::fs::{InodeState, FILE_SYSTEM_MANAGER};
 use crate::stack_trace;
 use crate::utils::error::{AgeneralRet, SyscallErr};
 use crate::utils::path;
@@ -109,6 +110,7 @@ impl Inode for Fat32RootInode {
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         debug!("[Fat32RootInode]: load children");
         let mut meta_inner = self.meta.as_ref().unwrap().inner.lock();
+        let children = meta_inner.children.clone();
         for dentry in self.fs.fat_fs.root_dir().iter() {
             let inode_mode = {
                 if dentry.as_ref().unwrap().is_dir() {
@@ -129,9 +131,24 @@ impl Inode for Fat32RootInode {
                 None,
             );
             let file_name = dentry.as_ref().unwrap().file_name();
+            // If the child is already exist, and stat is Synced, don't cover it.
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
+            let child_name = child.metadata().name.clone();
+            if let Some(v) = children.get(child_name.as_str()) {
+                match v.metadata().inner.lock().state {
+                    InodeState::Synced => {
+                        debug!(
+                            "[Fat32RootInode] {} has already synced",
+                            child.metadata().name
+                        );
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
             <dyn Inode>::create_page_cache_if_needed(child.clone());
             meta_inner.children.insert(file_name, child);
+            debug!("[Fat32RootInode] load child {}", child_name);
         }
     }
 
@@ -437,10 +454,6 @@ pub fn list_apps_fat32() {
 pub fn init() -> GeneralRet<()> {
     info!("start to init fatfs...");
 
-    // unsafe {
-    //     let root_fs = &mut (*(&ROOT_FS as *const Fat32FileSystem as *mut Fat32FileSystem));
-    //     ROOT_FS.init("/", FileSystemType::VFAT).unwrap();
-    // }
     ROOT_FS.init_ref(
         "/dev/sda1".to_string(),
         "/",
@@ -448,8 +461,11 @@ pub fn init() -> GeneralRet<()> {
         StatFlags::ST_NOSUID,
     )?;
     let root_inode = ROOT_FS.metadata().root_inode.unwrap();
-    root_inode.mkdir(root_inode.clone(), "mnt", InodeMode::FileDIR)?;
-    root_inode.mkdir(root_inode.clone(), "proc", InodeMode::FileDIR)?;
+
+    // FILE_SYSTEM_MANAGER
+    //     .fs_mgr
+    //     .lock()
+    //     .insert("/".to_string(), Arc::new(ROOT_FS));
 
     info!("init fatfs success");
 

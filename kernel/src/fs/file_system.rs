@@ -153,16 +153,7 @@ pub trait FileSystem: Send + Sync {
 
         Ok(())
     }
-    fn flush_mounts(&self) -> GeneralRet<isize> {
-        let path = "/proc/mounts";
-        let mounts = <dyn Inode>::lookup_from_root_tmp(path);
-        if mounts.is_none() {
-            debug!("[mount] /proc/mounts does not exist");
-            return Ok(0);
-        }
-        // let proc = "proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n";
-        // let dev = "udev /dev devtmpfs rw,nosuid,relatime 0 0\n";
-        let mounts = mounts.unwrap();
+    fn mounts_info(&self) -> String {
         let dev_name = self.metadata().dev_name.to_string();
         let root_inode = self.metadata().root_inode.unwrap();
         let mount_point = root_inode.metadata().path.as_str();
@@ -176,21 +167,17 @@ pub trait FileSystem: Send + Sync {
             + " "
             + flags.to_string().as_str()
             + " 0 0\n";
-        stack_trace!();
-        let len = buf_str.len();
-        mounts.write(len, buf_str.as_bytes());
-        Ok(0)
+        buf_str
     }
     fn mount(&self) -> GeneralRet<isize> {
         stack_trace!();
         let mut meta = self.metadata();
         meta.mnt_flags = true;
         self.set_metadata_ref(meta);
-        self.flush_mounts()
+        Ok(0)
     }
     fn umount(&self) -> GeneralRet<isize> {
         self.sync_fs()?;
-        self.flush_mounts()?;
         Ok(0)
     }
     fn dirty_inode(&self, inode: Arc<dyn Inode>) {
@@ -247,12 +234,13 @@ impl FileSystemManager {
             fs_mgr: SpinNoIrqLock::new(BTreeMap::new()),
         }
     }
-    pub fn flush_mounts(&self) -> GeneralRet<isize> {
+    pub fn mounts_info(&self) -> String {
+        let mut res = "".to_string();
         let fs_mgr = self.fs_mgr.lock();
         for (_mount_point, fs) in fs_mgr.iter() {
-            fs.flush_mounts()?;
+            res += fs.mounts_info().as_str();
         }
-        Ok(0)
+        res
     }
     // pub fn match_file_system(&self, path: &str) -> GeneralRet<Arc<dyn FileSystem>> {
     //     todo!()

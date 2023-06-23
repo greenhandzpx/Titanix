@@ -3,14 +3,14 @@ use core::sync::atomic::AtomicUsize;
 use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
-use crate::utils::{error::GeneralRet, path};
+use crate::{
+    fs::{posix::StatFlags, FileSystemType, InodeState, FILE_SYSTEM_MANAGER},
+    utils::{error::GeneralRet, path},
+};
 
 use self::mounts::MountsInode;
 
-use super::{
-    file_system::FileSystemMeta, inode::InodeMeta, FileSystem, Inode, InodeMode,
-    FILE_SYSTEM_MANAGER,
-};
+use super::{file_system::FileSystemMeta, inode::InodeMeta, FileSystem, Inode, InodeMode};
 
 mod mounts;
 pub struct ProcRootInode {
@@ -47,7 +47,7 @@ impl Inode for ProcRootInode {
         self.metadata = Some(meta);
     }
 
-    fn load_children_from_disk(&self, this: alloc::sync::Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         debug!("[ProcRootInode::load_children_from_disk]: there is nothing we should do.");
     }
 
@@ -93,13 +93,14 @@ impl FileSystem for ProcFs {
         let mut root_inode = ProcRootInode::new();
         root_inode.init(parent.clone(), mount_point, InodeMode::FileDIR, 0)?;
         let res = Arc::new(root_inode);
+        let name = path::get_name(mount_point);
+        let parent = parent.expect("No pareny");
         parent
-            .expect("No parent")
             .metadata()
             .inner
             .lock()
             .children
-            .insert(path::get_name(mount_point).to_string(), res.clone());
+            .insert(name.to_string(), res.clone());
         Ok(res)
     }
 
@@ -112,28 +113,37 @@ impl FileSystem for ProcFs {
     }
 }
 
-pub fn init() -> GeneralRet<isize> {
+pub fn init() -> GeneralRet<()> {
     info!("start to init procfs...");
     let mut proc_fs = ProcFs::new();
+    proc_fs.init(
+        "proc".to_string(),
+        "/proc",
+        FileSystemType::VFAT,
+        StatFlags::ST_NOSUID | StatFlags::ST_NODEV | StatFlags::ST_NOEXEC,
+    )?;
+    let proc_fs = Arc::new(proc_fs);
+    let proc_root_inode = proc_fs.metadata().root_inode.as_ref().cloned().unwrap();
 
-    // let root_fs = FILE_SYSTEM_MANAGER
-    //     .fs_mgr
-    //     .lock()
-    //     .get("/")
-    //     .cloned()
-    //     .expect("No root fs is mounted");
+    for (proc_name, inode_mode, _) in PROC_NAME {
+        proc_root_inode.mknod(
+            proc_root_inode.clone(),
+            proc_name,
+            inode_mode,
+            proc_fs
+                .id_allocator
+                .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
+        )?;
+        debug!("[procfs] insert {} finished", proc_name);
+    }
 
-    // let mut root_inode = root_fs.metadata().root_inode.clone().unwrap();
-    // root_inode.mkdir(root_inode.clone(), "proc", InodeMode::FileDIR)?;
-    // let inner = root_inode.metadata().inner.lock();
-    // let proc = inner.children.get("proc").unwrap();
-    // proc.mknod(proc.clone(), "mounts", InodeMode::FileREG, 0)?;
-    // let inner = proc.metadata().inner.lock();
-    // let mounts = inner.children.get("mounts").unwrap();
-    // let proc_str = "proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n";
-    // let dev_str = "udev /dev devtmpfs rw,nosuid,relatime 0 0\n";
-    // mounts.write(0, proc_str.as_bytes());
-    // let len = proc_str.len();
-    // mounts.write(len, dev_str.as_bytes());
-    Ok(0)
+    FILE_SYSTEM_MANAGER
+        .fs_mgr
+        .lock()
+        .insert("/proc".to_string(), proc_fs);
+    info!("[procfs] init procfs success");
+
+    proc_root_inode.metadata().inner.lock().state = InodeState::Synced;
+
+    Ok(())
 }

@@ -84,6 +84,7 @@ pub trait Inode: Send + Sync {
 
     /// Default operation is to open the default file(i.e. file from disk)
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+        debug!("[inode] open");
         let file_meta = FileMeta {
             path: self.metadata().path.clone(),
             inner: Mutex::new(FileMetaInner {
