@@ -298,7 +298,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 .iter()
                 .any(|p| pid == -1 || pid as usize == p.pid())
             {
-                warn!(
+                info!(
                     "proc[{}] no such pid {} exit code addr {:#x}",
                     current_process().pid(),
                     pid,
@@ -478,6 +478,12 @@ pub fn sys_geteuid() -> SyscallRet {
     info!("get euid");
     // TODO
     Ok(0)
+}
+
+pub fn sys_gettid() -> SyscallRet {
+    stack_trace!();
+    let tid = current_task().tid();
+    Ok(tid as isize)
 }
 
 #[repr(C)]

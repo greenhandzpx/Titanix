@@ -571,9 +571,11 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
     debug!(
-        "start writev, fd: {}, iov: {:#x}, iovcnt:{}",
+        "[sys_writev] fd: {}, iov: {:#x}, iovcnt:{}",
         fd, iov, iovcnt
     );
+    let _sum_guard = SumGuard::new();
+
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -584,8 +586,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
     let mut ret: usize = 0;
     let iovec_size = core::mem::size_of::<Iovec>();
-
-    let _sum_guard = SumGuard::new();
 
     for i in 0..iovcnt {
         trace!("write the {} buf", i + 1);
@@ -604,6 +604,45 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("[writev] buf: {:?}", buf);
         // test();
         file.write(buf).await?;
+    }
+    Ok(ret as isize)
+}
+
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
+    stack_trace!();
+    debug!(
+        "[sys_readv] fd: {}, iov: {:#x}, iovcnt: {}",
+        fd, iov, iovcnt
+    );
+    let _sum_guard = SumGuard::new();
+
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.readable() {
+        return Err(SyscallErr::EPERM);
+    }
+    stack_trace!();
+    let mut ret: usize = 0;
+    let iovec_size = core::mem::size_of::<Iovec>();
+
+    for i in 0..iovcnt {
+        trace!("read the {} buf", i + 1);
+        // current iovec pointer
+        let current = iov.add(iovec_size * i);
+        trace!("current iov: {}", current);
+        UserCheck::new().check_writable_slice(current as *mut u8, iovec_size)?;
+        trace!("pass writable check");
+        let iov_base = unsafe { &*(current as *const Iovec) }.iov_base;
+        trace!("get iov_base: {}", iov_base);
+        let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
+        trace!("get iov_len: {}", iov_len);
+        ret += iov_len;
+        UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
+        let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
+        trace!("[readv] buf: {:?}", buf);
+        // test();
+        file.read(buf).await?;
     }
     Ok(ret as isize)
 }
@@ -681,15 +720,23 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 Ok(newfd as isize)
             })
         }
-        _ if cmd == FcntlCmd::F_SETFD as i32 => {
+        _ if cmd == FcntlCmd::F_SETFD as i32 || cmd == FcntlCmd::F_SETFL as i32 => {
+            let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
                 // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
                 let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
                 file.metadata().inner.lock().flags = flags;
                 debug!("[sys_fcntl]: set file flags to {:?}", flags);
                 Ok(0)
+            })
+        }
+        _ if cmd == FcntlCmd::F_GETFD as i32 || cmd == FcntlCmd::F_GETFL as i32 => {
+            current_process().inner_handler(|proc| {
+                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+                let flags = file.metadata().inner.lock().flags;
+                debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                Ok(OpenFlags::bits(&flags) as isize)
             })
         }
         _ => {
