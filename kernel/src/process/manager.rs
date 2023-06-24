@@ -1,6 +1,9 @@
-use alloc::{collections::BTreeMap, sync::{Weak, Arc}};
+use alloc::{
+    collections::BTreeMap,
+    sync::{Arc, Weak},
+};
 
-use crate::{sync::mutex::SpinNoIrqLock, config::process::INITPROC_PID};
+use crate::{config::process::INITPROC_PID, sync::mutex::SpinNoIrqLock};
 use lazy_static::*;
 
 use super::Process;
@@ -9,9 +12,8 @@ use super::Process;
 pub struct ProcessManager(pub SpinNoIrqLock<BTreeMap<usize, Weak<Process>>>);
 
 impl ProcessManager {
-
     pub fn new() -> Self {
-        Self (SpinNoIrqLock::new(BTreeMap::new()))
+        Self(SpinNoIrqLock::new(BTreeMap::new()))
     }
 
     pub fn add_process(&self, pid: usize, process: &Arc<Process>) {

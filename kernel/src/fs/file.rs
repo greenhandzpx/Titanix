@@ -7,7 +7,7 @@ use crate::{
     mm::memory_space::VmArea,
     processor::SumGuard,
     stack_trace,
-    timer::current_time_spec,
+    timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
         error::{AsyscallRet, GeneralRet, SyscallRet},

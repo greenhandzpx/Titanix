@@ -1,17 +1,17 @@
 //! RISC-V timer-related functionality
 
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll, Waker};
+pub mod posix;
+pub mod timed_task;
+
 use core::time::Duration;
 
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
-use alloc::collections::{BTreeMap, LinkedList};
+use alloc::collections::BTreeMap;
 use lazy_static::*;
-use log::{info, debug};
-use riscv::register::{time, sepc};
+use log::{debug, info};
+use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
@@ -26,56 +26,12 @@ pub const UTIME_NOW: usize = 1073741823;
 pub const UTIME_OMIT: usize = 1073741822;
 
 /// Used for get time
-#[repr(C)]
-#[derive(Debug)]
-pub struct TimeVal {
-    pub sec: usize,
-    pub usec: usize,
-}
-
-impl From<Duration> for TimeVal {
-    fn from(duration: Duration) -> Self {
-        Self {
-            sec: duration.as_secs() as usize,
-            usec: duration.as_micros() as usize,
-        } 
-    }
-}
-
-
-/// Used for nanosleep
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct TimeSpec {
-    pub sec: usize,
-    pub nsec: usize,
-}
-
-impl TimeSpec {
-    pub fn new() -> Self {
-        // new a time spec with machine time
-        let current_time = current_time_ms();
-        Self {
-            sec: current_time / 1000,
-            nsec: current_time % 1000000 * 1000000,
-        }
-    }
-}
 
 /// Used for clock_gettime
 /// arg_timespec - device_timespec = diff
 pub struct TimeDiff {
     pub sec: isize,
     pub nsec: isize,
-}
-
-/// Used for times
-#[repr(C)]
-pub struct Tms {
-    pub utime: usize,
-    pub stime: usize,
-    pub cutime: usize,
-    pub cstime: usize,
 }
 
 /// get current time
@@ -94,15 +50,7 @@ pub fn current_time_us() -> usize {
 pub fn current_time_duration() -> Duration {
     Duration::from_micros(current_time_us() as u64)
 }
-/// get current time as TimeSpec
-pub fn current_time_spec() -> TimeSpec {
-    let current_time = current_time_ms();
-    let time_spec = TimeSpec {
-        sec: current_time / MSEC_PER_SEC,
-        nsec: (current_time % MSEC_PER_SEC) * 1000000,
-    };
-    time_spec
-}
+
 /// set the next timer interrupt
 pub fn set_next_trigger() {
     let next_trigger = get_time() + CLOCK_FREQ / TICKS_PER_SEC;
@@ -130,71 +78,4 @@ pub fn init() {
         .insert(CLOCK_REALTIME, TimeDiff { sec: 0, nsec: 0 });
 
     info!("init clock manager success");
-}
-
-pub fn handle_timeout_events() {
-    // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
-    let mut timers = TIMER_LIST.timers.lock();
-    let current_time = current_time_duration();
-    let mut timeout_cnt = 0;
-    for timer in timers.iter_mut() {
-        if current_time >= timer.expired_time {
-            timer.waker.take().unwrap().wake();
-            timeout_cnt += 1;
-        }
-    }
-    for _ in 0..timeout_cnt {
-        timers.pop_front();
-    }
-    // debug!("[handle_timeout_events]: finish, timeout cnt {}", timeout_cnt);
-}
-
-struct TimerList {
-    timers: SpinNoIrqLock<LinkedList<Timer>>,
-}
-
-lazy_static! {
-    static ref TIMER_LIST: TimerList = TimerList {
-        timers: SpinNoIrqLock::new(LinkedList::new())
-    };
-}
-
-struct Timer {
-    expired_time: Duration,
-    waker: Option<Waker>,
-    // waker: SyncUnsafeCell<Option<Waker>>,
-}
-
-struct SleepFuture {
-    expired_time: Duration,
-}
-
-impl SleepFuture {
-    fn new(duration: Duration) -> Self {
-        Self {
-            expired_time: current_time_duration() + duration,
-        }
-    }
-}
-
-impl Future for SleepFuture {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        if current_time_duration() >= this.expired_time {
-            Poll::Ready(())
-        } else {
-            let timer = Timer {
-                expired_time: this.expired_time,
-                waker: Some(cx.waker().clone()),
-            };
-            TIMER_LIST.timers.lock().push_back(timer);
-            Poll::Pending
-        }
-    }
-}
-
-#[allow(unused)]
-pub async fn ksleep(duration: Duration) {
-    SleepFuture::new(duration).await
 }

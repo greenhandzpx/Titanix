@@ -24,8 +24,8 @@ use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::{current_time_ms, current_time_spec, UTIME_NOW};
-use crate::timer::{TimeSpec, UTIME_OMIT};
+use crate::timer::{current_time_ms, posix::current_time_spec, UTIME_NOW};
+use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
@@ -1172,8 +1172,8 @@ pub fn sys_utimensat(
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
-    let flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let _mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
+    let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     UserCheck::new().check_c_str(pathname)?;
     stack_trace!();
     let pathname = path::path_process(dirfd, pathname);
@@ -1226,7 +1226,8 @@ pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
     Ok(0)
 }
 
+pub async fn sys_pselect6(nfds: i32) -> SyscallRet {
+    stack_trace!();
 
-pub async fn sys_pselect6() -> SyscallRet {
     todo!()
 }

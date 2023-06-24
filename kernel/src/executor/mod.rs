@@ -69,7 +69,7 @@ pub fn run_forever() -> ! {
         if let Some(task) = TASK_QUEUE.fetch_task() {
             // info!("fetch a task");
             task.run();
-        // } else {
+            // } else {
             // debug!("no task");
         }
     }

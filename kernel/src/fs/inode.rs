@@ -11,7 +11,7 @@ use log::{debug, info, warn};
 use crate::{
     driver::block::BlockDevice,
     mm::PageCache,
-    timer::TimeSpec,
+    timer::posix::TimeSpec,
     utils::{
         error::{AgeneralRet, GeneralRet},
         hash_table::HashTable,

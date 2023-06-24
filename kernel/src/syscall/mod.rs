@@ -102,7 +102,10 @@ use crate::{
     mm::MapPermission,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
-    timer::*,
+    timer::{
+        posix::{TimeSpec, TimeVal, Tms},
+        *,
+    },
     utils::error::SyscallRet,
 };
 

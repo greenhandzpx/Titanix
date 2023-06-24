@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec, vec::Vec};
 
-use super::{file::File, OpenFlags, resolve_path};
+use super::{file::File, resolve_path, OpenFlags};
 
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,

@@ -1,7 +1,7 @@
-use alloc::{sync::Arc, string::ToString};
+use alloc::{string::ToString, sync::Arc};
 
 use crate::{
-    fs::{inode::InodeMeta, Inode, Mutex, file::FileMetaInner, OpenFlags},
+    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
     utils::error::GeneralRet,
 };
 use alloc::boxed::Box;
@@ -74,10 +74,9 @@ impl TtyFile {
                     inode: Some(this),
                     pos: 0,
                     dirent_index: 0,
-                })
-            }
+                }),
+            },
         }
-
     }
 }
 
