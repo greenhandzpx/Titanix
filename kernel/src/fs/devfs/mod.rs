@@ -3,6 +3,7 @@ use core::sync::atomic::AtomicUsize;
 use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
+use crate::fs::posix::StatFlags;
 use crate::utils::error::GeneralRet;
 use crate::utils::path;
 
@@ -140,7 +141,12 @@ pub fn init() -> GeneralRet<()> {
 
     let mut dev_fs = DevFs::new();
 
-    dev_fs.init("/dev", crate::fs::FileSystemType::VFAT)?;
+    dev_fs.init(
+        "udev".to_string(),
+        "/dev",
+        crate::fs::FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
     // dev_fs.init("/")?;
 
     let dev_fs = Arc::new(dev_fs);

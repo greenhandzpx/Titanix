@@ -2,8 +2,9 @@ use core::cell::SyncUnsafeCell;
 
 use alloc::boxed::Box;
 use alloc::{string::ToString, sync::Arc};
-use log::{debug, info, warn};
+use log::{debug, info};
 
+use crate::fs::posix::StatFlags;
 use crate::utils::error::AsyscallRet;
 use crate::{fs::file_system::FILE_SYSTEM_MANAGER, utils::error::GeneralRet};
 
@@ -22,7 +23,9 @@ pub struct TestRootInode {
 impl TestRootInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
         let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0, None);
-        Self { metadata: Some(metadata) }
+        Self {
+            metadata: Some(metadata),
+        }
     }
 }
 
@@ -147,7 +150,12 @@ pub fn init() -> GeneralRet<()> {
     let mut test_fs = TestFs {
         metadata: SyncUnsafeCell::new(None),
     };
-    test_fs.init("/", crate::fs::FileSystemType::VFAT)?;
+    test_fs.init(
+        "/dev/sda1".to_string(),
+        "/",
+        crate::fs::FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
 
     FILE_SYSTEM_MANAGER
         .fs_mgr

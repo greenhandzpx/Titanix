@@ -49,6 +49,7 @@ pub fn init() {
     // testfs::init().expect("testfs init fail");
     // todo!();
     devfs::init().expect("devfs init fail");
+    procfs::init().expect("procfs init fail");
 }
 
 pub const AT_FDCWD: isize = -100;
