@@ -93,7 +93,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
                     return Ok(0);
                 } else {
-                    warn!(
+                    info!(
                         "[sys_rt_sigprocmask]: invalid set arg, raw sig mask {:#x}",
                         unsafe { *set }
                     );
