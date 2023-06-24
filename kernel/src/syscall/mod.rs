@@ -59,7 +59,8 @@ const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
-const SYSCALL_GETTID: usize = 176;
+const SYSCALL_GETTID: usize = 178;
+const SYSCALL_SYSINFO: usize = 179;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -199,6 +200,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_GETEUID => sys_geteuid(),
+        SYSCALL_GETTID => sys_gettid(),
         SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),

@@ -581,6 +581,12 @@ pub fn sys_geteuid() -> SyscallRet {
     Ok(0)
 }
 
+pub fn sys_gettid() -> SyscallRet {
+    stack_trace!();
+    let tid = current_task().tid();
+    Ok(tid as isize)
+}
+
 #[repr(C)]
 struct RUsage {
     /// user CPU time used
@@ -625,26 +631,26 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
     UserCheck::new().check_writable_slice(usage as *mut u8, core::mem::size_of::<RUsage>())?;
     let usage = unsafe { &mut *(usage as *mut RUsage) };
 
-
     match who {
-        RUSAGE_SELF => {
-            current_process().inner_handler(|proc| {
-                let mut user_time = Duration::ZERO;
-                let mut sys_time = Duration::ZERO;
-                for thread in proc.threads.iter() {
-                    if let Some(thread) = thread.upgrade() {
-                        user_time += unsafe { (*thread.inner.get()).time_info.user_time };
-                        sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
-                    }
+        RUSAGE_SELF => current_process().inner_handler(|proc| {
+            let mut user_time = Duration::ZERO;
+            let mut sys_time = Duration::ZERO;
+            for thread in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    user_time += unsafe { (*thread.inner.get()).time_info.user_time };
+                    sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
                 }
-                usage.ru_utime = user_time.into();
-                usage.ru_stime = sys_time.into();
-            })
-        }
+            }
+            usage.ru_utime = user_time.into();
+            usage.ru_stime = sys_time.into();
+        }),
         _ => {
             panic!()
         }
     }
-    debug!("[sys_getrusage]: ru_utime {:?}, ru_stime {:?}", usage.ru_utime, usage.ru_stime);
+    debug!(
+        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}",
+        usage.ru_utime, usage.ru_stime
+    );
     Ok(0)
 }
