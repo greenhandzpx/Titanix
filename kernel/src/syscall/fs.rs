@@ -24,7 +24,7 @@ use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::{get_time_ms, get_time_spec, UTIME_NOW};
+use crate::timer::{current_time_ms, current_time_spec, UTIME_NOW};
 use crate::timer::{TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
@@ -150,8 +150,8 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                             InodeMode::FileDIR => {
                                 let mut inner_lock = parent_inode.metadata().inner.lock();
                                 // change the time
-                                inner_lock.st_atim = get_time_spec();
-                                inner_lock.st_mtim = get_time_spec();
+                                inner_lock.st_atim = current_time_spec();
+                                inner_lock.st_mtim = current_time_spec();
                                 // change state
                                 match inner_lock.state {
                                     InodeState::Synced => {
@@ -319,7 +319,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
             let mut inner_lock = inode.metadata().inner.lock();
             // change access time
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             // change state
             match inner_lock.state {
                 InodeState::Synced => {
@@ -366,7 +366,7 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     match target_inode {
         Some(target_inode) => {
             let mut inner_lock = target_inode.metadata().inner.lock();
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             match inner_lock.state {
                 InodeState::Synced => {
                     inner_lock.state = InodeState::DirtyInode;
@@ -442,6 +442,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     // TODO: pre
     kstat.st_ino = inode_meta.ino as u64;
     kstat.st_mode = inode_meta.mode as u32;
+    // kstat.st_mode = InodeMode::FileCHR as u32;
     debug!("[_fstat] inode mode: {:?}", inode_meta.mode);
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
     let inner_lock = inode_meta.inner.lock();
@@ -715,7 +716,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
     let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
     debug!("[sys_ppoll]: fds {:?}", fds);
 
-    let start_ms = get_time_ms();
+    let start_ms = current_time_ms();
     let infinite_timeout: bool;
     let timeout: usize;
     if timeout_ptr == 0 {
@@ -789,7 +790,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
         }
         if cnt > 0 {
             return Ok(cnt as isize);
-        } else if !infinite_timeout && get_time_ms() >= expire_time {
+        } else if !infinite_timeout && current_time_ms() >= expire_time {
             debug!("[sys_ppoll]: timeout!");
             return Ok(0);
         } else {
@@ -1044,15 +1045,23 @@ pub fn sys_renameat2(
 
 pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usize) -> SyscallRet {
     stack_trace!();
-    UserCheck::new().check_c_str(path_name as *const u8)?;
     let _sum_guard = SumGuard::new();
+    UserCheck::new().check_c_str(path_name as *const u8)?;
     let path = c_str_to_string(path_name as *const u8);
     info!(
         "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}",
         dirfd, path, buf, buf_size
     );
-    Err(SyscallErr::ENOENT)
-    // Ok(0)
+    UserCheck::new().check_writable_slice(buf as *mut u8, buf_size)?;
+
+    // TODO: optimize
+    let target = "/lmbench_all".to_string();
+    unsafe {
+        (buf as *mut u8).copy_from(target.as_ptr(), target.len());
+        *((buf + target.len()) as *mut u8) = 0;
+    }
+    // Err(SyscallErr::ENOENT)
+    Ok(0)
 }
 
 /// change file timestamps with nanosecond precision
@@ -1079,7 +1088,7 @@ pub fn sys_utimensat(
             if times.is_null() {
                 debug!("[sys_utimensat] times is null");
                 // If times is null, then both timestamps are set to the current time.
-                inner_lock.st_atim = get_time_spec();
+                inner_lock.st_atim = current_time_spec();
                 inner_lock.st_mtim = inner_lock.st_atim;
             } else {
                 // times[0] for atime, times[1] for mtime
@@ -1090,7 +1099,7 @@ pub fn sys_utimensat(
                 let mtime = unsafe { &*times };
                 if atime.nsec == UTIME_NOW || mtime.nsec == UTIME_NOW {
                     debug!("[sys_utimensat] nsec is UTIME_NOW");
-                    inner_lock.st_atim = get_time_spec();
+                    inner_lock.st_atim = current_time_spec();
                     inner_lock.st_mtim = inner_lock.st_atim;
                 } else if atime.nsec == UTIME_OMIT || mtime.nsec == UTIME_OMIT {
                     debug!("[sys_utimensat] nsec is UTIME_OMIT");

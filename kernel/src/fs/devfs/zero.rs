@@ -17,7 +17,7 @@ pub struct ZeroInode {
 
 impl ZeroInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
-        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0, None);
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
         Self { metadata }
     }
 }

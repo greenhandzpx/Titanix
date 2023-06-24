@@ -1,14 +1,3 @@
-/*
- * @Author: greenhandzpx 893522573@qq.com
- * @Date: 2023-01-29 11:05:53
- * @LastEditors: greenhandzpx 893522573@qq.com
- * @LastEditTime: 2023-02-25 10:20:46
- * @FilePath: /oscomp-kernel/os/src/process/thread/mod.rs
- * @Description:
- *
- * Copyright (c) 2023 by greenhandzpx 893522573@qq.com, All Rights Reserved.
- */
-
 mod exit;
 mod schedule;
 #[allow(clippy::module_inception)]
@@ -16,8 +5,9 @@ mod thread_loop;
 mod thread_resource;
 mod thread_state;
 mod tid;
+mod time;
 
-use self::thread_state::{ThreadState, ThreadStateAtomic};
+use self::{thread_state::{ThreadState, ThreadStateAtomic}, time::ThreadTimeInfo};
 
 use super::Process;
 use crate::executor;
@@ -70,6 +60,8 @@ pub struct ThreadInner {
     pub state: ThreadStateAtomic,
     /// Tid address, which may be modified by `set_tid_address` syscall
     pub tid_addr: Option<TidAddress>,
+    /// 
+    pub time_info: ThreadTimeInfo,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -94,6 +86,7 @@ impl Thread {
                 ustack_base,
                 state: ThreadStateAtomic::new(),
                 tid_addr: None,
+                time_info: ThreadTimeInfo::new(),
                 // terminated: AtomicBool::new(false),
             }),
         };
@@ -113,14 +106,6 @@ impl Thread {
         Self {
             tid: new_process.alloc_tid(),
             process: new_process.clone(),
-            // user_specified_stack: {
-            //     if stack.is_some() {
-            //         true
-            //     } else {
-            //         false
-            //     }
-            // },
-            // user_specified_stack: false,
             inner: UnsafeCell::new(ThreadInner {
                 trap_context: {
                     let mut trap_context = self.trap_context();
@@ -133,6 +118,7 @@ impl Thread {
                 ustack_base: unsafe { (*self.inner.get()).ustack_base },
                 state: ThreadStateAtomic::new(),
                 tid_addr: None,
+                time_info: ThreadTimeInfo::new(),
                 // terminated: AtomicBool::new(false),
             }),
         }

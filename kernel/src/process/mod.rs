@@ -90,7 +90,6 @@ pub struct ProcessInner {
     /// Note that we may need to put this member in every thread
     pub exit_code: i8,
     /// Current Work Directory
-    /// Maybe change to Dentry later.
     pub cwd: String,
 }
 

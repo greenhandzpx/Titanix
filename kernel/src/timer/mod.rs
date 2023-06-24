@@ -15,6 +15,7 @@ use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
+const USEC_PER_SEC: usize = 1000000;
 
 /// for clock_gettime
 pub const CLOCK_REALTIME: usize = 0;
@@ -26,10 +27,21 @@ pub const UTIME_OMIT: usize = 1073741822;
 
 /// Used for get time
 #[repr(C)]
+#[derive(Debug)]
 pub struct TimeVal {
     pub sec: usize,
     pub usec: usize,
 }
+
+impl From<Duration> for TimeVal {
+    fn from(duration: Duration) -> Self {
+        Self {
+            sec: duration.as_secs() as usize,
+            usec: duration.as_micros() as usize,
+        } 
+    }
+}
+
 
 /// Used for nanosleep
 #[derive(Clone, Copy)]
@@ -42,7 +54,7 @@ pub struct TimeSpec {
 impl TimeSpec {
     pub fn new() -> Self {
         // new a time spec with machine time
-        let current_time = get_time_ms();
+        let current_time = current_time_ms();
         Self {
             sec: current_time / 1000,
             nsec: current_time % 1000000 * 1000000,
@@ -70,17 +82,21 @@ pub struct Tms {
 fn get_time() -> usize {
     time::read()
 }
-/// get current time in microseconds
-pub fn get_time_ms() -> usize {
+/// get current time in milliseconds
+pub fn current_time_ms() -> usize {
     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
 }
+/// get current time in microseconds
+pub fn current_time_us() -> usize {
+    time::read() / (CLOCK_FREQ / USEC_PER_SEC)
+}
 /// get current time in `Duration`
-pub fn get_time_duration() -> Duration {
-    Duration::from_millis(get_time_ms() as u64)
+pub fn current_time_duration() -> Duration {
+    Duration::from_micros(current_time_us() as u64)
 }
 /// get current time as TimeSpec
-pub fn get_time_spec() -> TimeSpec {
-    let current_time = get_time_ms();
+pub fn current_time_spec() -> TimeSpec {
+    let current_time = current_time_ms();
     let time_spec = TimeSpec {
         sec: current_time / MSEC_PER_SEC,
         nsec: (current_time % MSEC_PER_SEC) * 1000000,
@@ -116,7 +132,7 @@ pub fn init() {
 
 pub fn handle_timeout_events() {
     let mut timers = TIMER_LIST.timers.lock();
-    let current_time = get_time_duration();
+    let current_time = current_time_duration();
     let mut timeout_cnt = 0;
     for timer in timers.iter_mut() {
         if current_time >= timer.expired_time {
@@ -152,7 +168,7 @@ struct SleepFuture {
 impl SleepFuture {
     fn new(duration: Duration) -> Self {
         Self {
-            expired_time: get_time_duration() + duration,
+            expired_time: current_time_duration() + duration,
         }
     }
 }
@@ -161,7 +177,7 @@ impl Future for SleepFuture {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        if get_time_duration() >= this.expired_time {
+        if current_time_duration() >= this.expired_time {
             Poll::Ready(())
         } else {
             let timer = Timer {

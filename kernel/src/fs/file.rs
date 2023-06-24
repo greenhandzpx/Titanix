@@ -7,7 +7,7 @@ use crate::{
     mm::memory_space::VmArea,
     processor::SumGuard,
     stack_trace,
-    timer::get_time_spec,
+    timer::current_time_spec,
     utils::{
         async_tools::block_on,
         error::{AsyscallRet, GeneralRet, SyscallRet},
@@ -170,7 +170,7 @@ impl File for DefaultFile {
             }
 
             let mut inner_lock = inode.metadata().inner.lock();
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             inner_lock.st_mtim = inner_lock.st_atim;
             inner_lock.st_ctim = inner_lock.st_atim;
             match inner_lock.state {
@@ -241,7 +241,7 @@ impl File for DefaultFile {
             }
 
             let mut inner_lock = inode.metadata().inner.lock();
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             inner_lock.st_ctim = inner_lock.st_atim;
             inner_lock.st_mtim = inner_lock.st_atim;
             match inner_lock.state {

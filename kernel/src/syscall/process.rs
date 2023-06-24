@@ -1,5 +1,7 @@
+use core::time::Duration;
+
 use crate::config::process::INITPROC_PID;
-use crate::fs::{OpenFlags, resolve_path, AT_FDCWD};
+use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
@@ -8,7 +10,7 @@ use crate::processor::{current_process, current_task, current_trap_cx, local_har
 use crate::sbi::shutdown;
 use crate::signal::Signal;
 use crate::sync::Event;
-use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
+use crate::timer::{current_time_ms, current_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -72,7 +74,7 @@ pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
     UserCheck::new()
         .check_writable_slice(time_val_ptr as *mut u8, core::mem::size_of::<TimeVal>())?;
     let _sum_guard = SumGuard::new();
-    let current_time = get_time_ms();
+    let current_time = current_time_ms();
     let time_val = TimeVal {
         sec: current_time / 1000,
         usec: current_time % 1000 * 1000,
@@ -96,14 +98,14 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     } else if (time_spec.nsec as isize) < 0 || time_spec.nsec > 999999999 {
         debug!("Cannot set time. nsec is invalid");
         return Err(SyscallErr::EINVAL);
-    } else if clock_id == CLOCK_REALTIME && time_spec.sec < get_time_ms() / 1000 {
+    } else if clock_id == CLOCK_REALTIME && time_spec.sec < current_time_ms() / 1000 {
         debug!("set the time to a value less than the current value of the CLOCK_MONOTONIC clock.");
         return Err(SyscallErr::EINVAL);
     }
 
     // calculate the diff
     // arg_timespec - device_timespec = diff
-    let dev_spec = get_time_spec();
+    let dev_spec = current_time_spec();
     let diff_spec = TimeDiff {
         sec: time_spec.sec as isize - dev_spec.sec as isize,
         nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
@@ -125,7 +127,7 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
     match clock {
         Some(clock) => {
             debug!("Find the clock");
-            let dev_spec = get_time_spec();
+            let dev_spec = current_time_spec();
             let time_spec = TimeSpec {
                 sec: (dev_spec.sec as isize + clock.sec) as usize,
                 nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
@@ -166,11 +168,11 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
         let time_val = unsafe { &(*time_val_ptr) };
         time_val.sec * 1000 + time_val.nsec / 1000000
     };
-    let start_ms = get_time_ms();
+    let start_ms = current_time_ms();
     let end_ms = sleep_ms + start_ms;
 
     loop {
-        let now_ms = get_time_ms();
+        let now_ms = current_time_ms();
         if now_ms >= end_ms {
             return Ok(0);
         }
@@ -576,5 +578,73 @@ pub fn sys_geteuid() -> SyscallRet {
     stack_trace!();
     info!("get euid");
     // TODO
+    Ok(0)
+}
+
+#[repr(C)]
+struct RUsage {
+    /// user CPU time used
+    ru_utime: TimeVal,
+    /// system CPU time used
+    ru_stime: TimeVal,
+    /// maximum resident set size
+    ru_maxrss: usize,
+    /// integral shared memory size
+    ru_ixrss: usize,
+    /// integral unshared data size
+    ru_idrss: usize,
+    /// integral unshared stack size
+    ru_isrss: usize,
+    /// page reclaims (soft page faults)
+    ru_minflt: usize,
+    /// page faults (hard page faults)
+    ru_majflt: usize,
+    /// swaps
+    ru_nswap: usize,
+    /// block input operations
+    ru_inblock: usize,
+    /// block output operations
+    ru_oublock: usize,
+    /// IPC messages sent
+    ru_msgsnd: usize,
+    /// IPC messages received
+    ru_msgrcv: usize,
+    /// signals received
+    ru_nsignals: usize,
+    /// voluntary context switches
+    ru_nvcsw: usize,
+    /// involuntary context switches
+    ru_nivcsw: usize,
+}
+
+const RUSAGE_SELF: i32 = 0;
+
+pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(usage as *mut u8, core::mem::size_of::<RUsage>())?;
+    let usage = unsafe { &mut *(usage as *mut RUsage) };
+
+
+    match who {
+        RUSAGE_SELF => {
+            current_process().inner_handler(|proc| {
+                let mut user_time = Duration::ZERO;
+                let mut sys_time = Duration::ZERO;
+                for thread in proc.threads.iter() {
+                    if let Some(thread) = thread.upgrade() {
+                        user_time += unsafe { (*thread.inner.get()).time_info.user_time };
+                        sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
+                    }
+                }
+                usage.ru_utime = user_time.into();
+                usage.ru_stime = sys_time.into();
+            })
+        }
+        _ => {
+            panic!()
+        }
+    }
+    debug!("[sys_getrusage]: ru_utime {:?}, ru_stime {:?}", usage.ru_utime, usage.ru_stime);
     Ok(0)
 }

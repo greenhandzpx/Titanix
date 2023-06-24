@@ -7,7 +7,7 @@ use riscv::register::{
 use crate::{
     mm::{memory_space, VirtAddr},
     process::{self, thread::exit_and_terminate_all_threads},
-    processor::{current_process, current_trap_cx, hart::local_hart},
+    processor::{current_process, current_trap_cx, hart::local_hart, current_task},
     signal::check_signal_for_current_process,
     stack_trace,
     syscall::syscall,
@@ -20,9 +20,10 @@ use super::{set_kernel_trap_entry, TrapContext};
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
 pub async fn trap_handler() {
-    // TODO: modify the trap handout to be async
 
     set_kernel_trap_entry();
+
+    unsafe { (*current_task().inner.get()).time_info.when_trap_in(); }
     let scause = scause::read();
     let stval = stval::read();
     match scause.cause() {
@@ -155,8 +156,8 @@ pub fn trap_return(trap_context: &mut TrapContext) {
     }
 
     check_signal_for_current_process();
-    // info!("trap return sepc {:#x}", trap_context.sepc);
-    // debug!("trap return, sp {:#x}", trap_context.user_x[2]);
+
+    unsafe { (*current_task().inner.get()).time_info.when_trap_ret(); }
     unsafe {
         __return_to_user(trap_context);
     }

@@ -9,9 +9,9 @@ pub mod inode;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;
 pub mod pipe;
+pub mod posix;
 mod procfs;
 mod testfs;
-pub mod posix;
 
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -36,7 +36,7 @@ use crate::mm::MapPermission;
 use crate::processor::current_process;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::timer::get_time_spec;
+use crate::timer::current_time_spec;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -211,7 +211,7 @@ pub fn open_file(absolute_path: Option<String>, flags: u32) -> SyscallRet {
             if let Some(inode) = resolve_path(&absolute_path, flags) {
                 stack_trace!();
                 let mut inner_lock = inode.metadata().inner.lock();
-                inner_lock.st_atim = get_time_spec();
+                inner_lock.st_atim = current_time_spec();
                 match inner_lock.state {
                     InodeState::Synced => {
                         inner_lock.state = InodeState::DirtyInode;

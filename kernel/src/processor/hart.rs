@@ -111,6 +111,9 @@ impl Hart {
                 (*task.task_ctx().page_table.get()).activate();
             }
         }
+        if !task.is_idle() {
+            unsafe { (*task.task_ctx().thread.inner.get()).time_info.when_entering() }
+        }
         core::mem::swap(self.local_ctx_mut(), task);
         if sie {
             open_interrupt();
@@ -132,6 +135,9 @@ impl Hart {
         // task.task_ctx().page_table.activate();
         core::mem::swap(self.local_ctx_mut(), task);
 
+        if !task.is_idle() {
+            unsafe { (*task.task_ctx().thread.inner.get()).time_info.when_leaving() }
+        }
         if sie {
             open_interrupt();
         }
