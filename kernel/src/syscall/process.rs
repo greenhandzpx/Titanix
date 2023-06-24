@@ -198,12 +198,22 @@ pub fn sys_getppid() -> SyscallRet {
 bitflags! {
     ///Open file flags
     pub struct CloneFlags: u32 {
-        const CLONE_THREAD = 1 << 4;
-        const CLONE_CHILD_CLEARTID = 1 << 5;
+        const SIGCHLD = (1 << 4) | (1 << 0);
         const CLONE_VM = 1 << 8;
         const CLONE_FS = 1 << 9;
         const CLONE_FILES = 1 << 10;
-        const CLONE_CHILD_SETTID = 1 << 12;
+        const CLONE_SIGHAND = 1 << 11;
+        const CLONE_PTRACE = 1 << 13;
+        const CLONE_VFORK = 1 << 14;
+        const CLONE_PARENT = 1 << 15;
+        const CLONE_THREAD = 1 << 16;
+        const CLONE_PARENT_SETTID = 1 << 20;
+        const CLONE_CHILD_CLEARTID = 1 << 21;
+        const CLONE_UNTRACED = 1 << 23;
+        const CLONE_CHILD_SETTID = 1 << 24;
+        const CLONE_NEWIPC = 1 << 27;
+        const CLONE_NEWPID = 1 << 29;
+        const CLONE_IO = 1 << 31;
     }
 }
 
@@ -251,21 +261,23 @@ pub fn sys_clone(
 
     let clone_flags = CloneFlags::from_bits(flags.try_into().unwrap());
 
-    if clone_flags.is_none() && flags != Signal::SIGCHLD as usize {
+    if clone_flags.is_none() {
         warn!("Invalid clone flags {}", flags);
         return Err(SyscallErr::EINVAL);
     }
 
-    let clone_flags = {
-        // TODO: This is just a workaround for preliminary test
-        if flags == Signal::SIGCHLD as usize {
-            CloneFlags::from_bits(0).unwrap()
-        } else {
-            clone_flags.unwrap()
-        }
-    };
+    let clone_flags = clone_flags.unwrap();
+    // let clone_flags = {
+    //     // TODO: This is just a workaround for preliminary test
+    //     if flags == Signal::SIGCHLD as usize {
+    //         CloneFlags::from_bits(0).unwrap()
+    //     } else {
+    //         clone_flags.unwrap()
+    //     }
+    // };
 
-    if !clone_flags.contains(CloneFlags::CLONE_THREAD) {
+    if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_THREAD)
+    {
         // fork
 
         // TODO: maybe we should take more flags into account?
@@ -625,26 +637,26 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
     UserCheck::new().check_writable_slice(usage as *mut u8, core::mem::size_of::<RUsage>())?;
     let usage = unsafe { &mut *(usage as *mut RUsage) };
 
-
     match who {
-        RUSAGE_SELF => {
-            current_process().inner_handler(|proc| {
-                let mut user_time = Duration::ZERO;
-                let mut sys_time = Duration::ZERO;
-                for thread in proc.threads.iter() {
-                    if let Some(thread) = thread.upgrade() {
-                        user_time += unsafe { (*thread.inner.get()).time_info.user_time };
-                        sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
-                    }
+        RUSAGE_SELF => current_process().inner_handler(|proc| {
+            let mut user_time = Duration::ZERO;
+            let mut sys_time = Duration::ZERO;
+            for thread in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    user_time += unsafe { (*thread.inner.get()).time_info.user_time };
+                    sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
                 }
-                usage.ru_utime = user_time.into();
-                usage.ru_stime = sys_time.into();
-            })
-        }
+            }
+            usage.ru_utime = user_time.into();
+            usage.ru_stime = sys_time.into();
+        }),
         _ => {
             panic!()
         }
     }
-    debug!("[sys_getrusage]: ru_utime {:?}, ru_stime {:?}", usage.ru_utime, usage.ru_stime);
+    debug!(
+        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}",
+        usage.ru_utime, usage.ru_stime
+    );
     Ok(0)
 }
