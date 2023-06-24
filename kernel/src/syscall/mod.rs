@@ -94,7 +94,7 @@ pub use sync::futex_wake;
 use sync::*;
 
 use crate::{
-    fs::posix::Statfs,
+    fs::posix::{Statfs, Sysinfo},
     mm::MapPermission,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
@@ -179,6 +179,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0], args[1] as *const TimeSpec),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
+        SYSCALL_SYSLOG => sys_syslog(args[0] as u32, args[1] as *mut u8, args[2] as u32),
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(
@@ -203,6 +204,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_GETEUID => sys_geteuid(),
         SYSCALL_GETTID => sys_gettid(),
+        SYSCALL_SYSINFO => sys_sysinfo(args[0]),
         SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),

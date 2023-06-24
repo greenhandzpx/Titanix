@@ -4,7 +4,7 @@ use alloc::string::{String, ToString};
 use easy_fs::BLOCK_SZ;
 
 use super::fat32::SECTOR_SIZE;
-use crate::timer::TimeSpec;
+use crate::timer::{current_time_duration, TimeSpec};
 
 pub const STAT_SIZE: usize = size_of::<STAT>() as usize;
 
@@ -95,7 +95,7 @@ impl UtsName {
     }
 }
 
-pub const STATFS_SIZE: usize = core::mem::size_of::<Statfs>();
+pub const STATFS_SIZE: usize = size_of::<Statfs>();
 pub struct Fsid_t {
     val: [i32; 2],
 }
@@ -198,4 +198,61 @@ impl StatFlags {
 
 pub enum Magic {
     ExfatSuperMagic = 0x2011BAB0,
+}
+
+pub const SYSINFO_SIZE: usize = size_of::<Sysinfo>();
+
+const _F_SIZE: usize = 20 - 2 * size_of::<u64>() - size_of::<u32>();
+#[repr(C)]
+pub struct Sysinfo {
+    /// Seconds since boot
+    pub uptime: i64,
+    /// 1, 5, and 15 minute load averages
+    pub loads: [u64; 3],
+    /// Total usable main memory size
+    pub totalram: u64,
+    /// Available memory size
+    pub freeram: u64,
+    /// Amount of shared memory
+    pub sharedram: u64,
+    /// Memory used by buffers
+    pub bufferram: u64,
+    /// Total swap space size
+    pub totalswap: u64,
+    /// swap space still available
+    pub freeswap: u64,
+    /// Number of current processes
+    pub procs: u16,
+    /// Explicit padding for m68k
+    pub pad: u16,
+    /// Total high memory size
+    pub totalhigh: u64,
+    /// Available high memory size
+    pub freehigh: u64,
+    /// Memory unit size in bytes
+    pub mem_uint: u32,
+    /// Padding: libc5 uses this..
+    pub _f: [u8; _F_SIZE],
+}
+
+impl Sysinfo {
+    pub fn collect() -> Self {
+        // Self {
+        //     uptime: current_time_duration().as_secs() as i64,
+        //     loads: (),
+        //     totalram: (),
+        //     freeram: (),
+        //     sharedram: (),
+        //     bufferram: (),
+        //     totalswap: (),
+        //     freeswap: (),
+        //     procs: (),
+        //     pad: (),
+        //     totalhigh: (),
+        //     freehigh: (),
+        //     mem_uint: (),
+        //     _f: [0; _F_SIZE],
+        // }
+        todo!()
+    }
 }

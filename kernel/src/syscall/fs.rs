@@ -12,7 +12,7 @@ use log::{debug, info, trace, warn};
 use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::posix::{StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE};
+use crate::fs::posix::{StatFlags, Statfs, Sysinfo, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE};
 use crate::fs::{
     inode, open_file, posix::Iovec, posix::UtsName, resolve_path, Dirent, FaccessatFlags,
     FcntlFlags, FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD,
@@ -1224,4 +1224,35 @@ pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
         ptr::write(buf, stfs);
     }
     Ok(0)
+}
+
+pub fn sys_sysinfo(info: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(info as *mut u8, SYSINFO_SIZE)?;
+    Ok(0)
+}
+
+pub fn sys_syslog(log_type: u32, bufp: *mut u8, len: u32) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(bufp, len as usize)?;
+    match log_type as usize {
+        2 | 3 | 4 => {
+            // For type equal to 2, 3, or 4, a successful call to syslog() returns the number of bytes read.
+            Ok(0)
+        }
+        9 => {
+            // For type 9, syslog() returns the number of bytes currently available to be read on the kernel log buffer.
+            Ok(0)
+        }
+        10 => {
+            // For type 10, syslog() returns the total size of the kernel log buffer.  For other values of type, 0 is returned on success.
+            Ok(0)
+        }
+        _ => {
+            // For other values of type, 0 is returned on success.
+            Ok(0)
+        }
+    }
 }
