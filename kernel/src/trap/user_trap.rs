@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::{debug, warn, info};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -12,7 +12,7 @@ use crate::{
     stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
-    trap::set_user_trap_entry,
+    trap::set_user_trap_entry, FIRST_HART_ID,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -22,6 +22,10 @@ use super::{set_kernel_trap_entry, TrapContext};
 pub async fn trap_handler() {
 
     set_kernel_trap_entry();
+
+    // if local_hart().hart_id() as u8 != FIRST_HART_ID.load(core::sync::atomic::Ordering::Relaxed) {
+    //     info!("other hart trap");
+    // }
 
     unsafe { (*current_task().inner.get()).time_info.when_trap_in(); }
     let scause = scause::read();
@@ -122,12 +126,13 @@ pub async fn trap_handler() {
             );
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
-            cx.sepc += 4;
-            process::yield_now().await
+            cx.sepc += 2;
+            // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            set_next_trigger();
+            // debug!("timer interrupt");
             handle_timeout_events();
+            set_next_trigger();
             process::yield_now().await;
         }
         _ => {

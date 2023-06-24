@@ -30,6 +30,7 @@ const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
+const SYSCALL_PSELECT6: usize = 72;
 const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_NEWFSTATAT: usize = 79;
@@ -40,6 +41,7 @@ const SYSCALL_EXIT_GROUP: usize = 94;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
 const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
+const SYSCALL_SETTIMER: usize = 103;
 const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_SYSLOG: usize = 116;
@@ -79,6 +81,7 @@ mod mm;
 mod process;
 mod signal;
 mod sync;
+mod time;
 
 use core::arch::asm;
 
@@ -90,6 +93,7 @@ use process::*;
 use signal::*;
 pub use sync::futex_wake;
 use sync::*;
+use time::*;
 
 use crate::{
     fs::posix::Statfs,

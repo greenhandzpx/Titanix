@@ -11,7 +11,7 @@ use crate::{
 
 use super::error::{GeneralRet, SyscallErr};
 use super::string::c_str_to_string;
-use log::{debug, info};
+use log::{debug, info, trace};
 
 pub fn path2vec(path_name: &str) -> Vec<&str> {
     path_name.split('/').filter(|name| *name != "").collect()
@@ -19,7 +19,7 @@ pub fn path2vec(path_name: &str) -> Vec<&str> {
 pub fn get_name(path_name: &str) -> &str {
     let dentry_vec = path2vec(path_name);
     let len = dentry_vec.len();
-    debug!("[get_name] dentry_vec: {:?}, len: {}", dentry_vec, len);
+    trace!("[get_name] dentry_vec: {:?}, len: {}", dentry_vec, len);
     if len == 0 {
         ""
     } else {

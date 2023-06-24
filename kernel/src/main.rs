@@ -47,19 +47,16 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, Ordering, AtomicU16, AtomicU8},
     time::Duration,
 };
-
-use log::{debug, info, warn};
-use riscv::register::sstatus;
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     process::thread,
-    processor::{hart, open_interrupt, HARTS},
+    processor::{hart, HARTS},
     sbi::hart_start,
     timer::ksleep,
 };
@@ -85,6 +82,8 @@ fn clear_bss() {
 //         test();
 //     }
 // }
+///
+pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
@@ -157,6 +156,7 @@ pub fn rust_main(hart_id: usize) {
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);
+        FIRST_HART_ID.store(hart_id as u8, Ordering::SeqCst);
 
         let hart_num = unsafe { HARTS.len() };
         for i in 0..hart_num {
@@ -171,6 +171,9 @@ pub fn rust_main(hart_id: usize) {
         // while !INIT_FINISHED.load(Ordering::Acquire) {}
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+
         hart::init(hart_id);
         unsafe {
             KERNEL_SPACE
@@ -183,9 +186,9 @@ pub fn rust_main(hart_id: usize) {
         // return;
     }
 
-    loop {
-        executor::run_until_idle();
-    }
-    // executor::run_until_idle();
+    // loop {
+    //     executor::run_until_idle();
+    // }
+    executor::run_forever();
     // panic!("Unreachable in rust_main!");
 }

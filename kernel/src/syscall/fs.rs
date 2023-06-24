@@ -1178,3 +1178,8 @@ pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
     }
     Ok(0)
 }
+
+
+pub async fn sys_pselect6() -> SyscallRet {
+    todo!()
+}
