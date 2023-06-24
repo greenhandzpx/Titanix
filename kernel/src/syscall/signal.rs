@@ -143,7 +143,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     // TODO: add permission check for sending signal
     match pid {
         0 => {
-            for (_, proc) in PROCESS_MANAGER.lock().0.iter() {
+            for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
                 if let Some(proc) = proc.upgrade() {
                     let sig_info = SigInfo {
                         signo: signo as usize,
@@ -162,7 +162,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
             }
         }
         1 => {
-            for (_, proc) in PROCESS_MANAGER.lock().0.iter() {
+            for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
                 if let Some(proc) = proc.upgrade() {
                     if proc.pid() == 0 {
                         // init proc
@@ -189,7 +189,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
             if pid < 0 {
                 pid = -pid;
             }
-            if let Some(proc) = PROCESS_MANAGER.lock().0.get(&(pid as usize)) {
+            if let Some(proc) = PROCESS_MANAGER.0.lock().get(&(pid as usize)) {
                 if let Some(proc) = proc.upgrade() {
                     let sig_info = SigInfo {
                         signo: signo as usize,

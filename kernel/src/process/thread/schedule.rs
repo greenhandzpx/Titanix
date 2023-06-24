@@ -73,6 +73,8 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         let hart = processor::local_hart();
         hart.push_task(&mut this.task_ctx);
 
+        // debug!("[poll]: run task");
+
         // run the `threadloop`
         // SAFETY:
         // the task future(i.e. threadloop) won't be moved.

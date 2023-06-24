@@ -10,8 +10,8 @@ use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::{BTreeMap, LinkedList};
 use lazy_static::*;
-use log::info;
-use riscv::register::time;
+use log::{info, debug};
+use riscv::register::{time, sepc};
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
@@ -105,7 +105,9 @@ pub fn current_time_spec() -> TimeSpec {
 }
 /// set the next timer interrupt
 pub fn set_next_trigger() {
-    set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
+    let next_trigger = get_time() + CLOCK_FREQ / TICKS_PER_SEC;
+    // debug!("next trigger {}", next_trigger);
+    set_timer(next_trigger);
 }
 
 pub struct ClockManager(pub BTreeMap<usize, TimeDiff>);
@@ -131,6 +133,7 @@ pub fn init() {
 }
 
 pub fn handle_timeout_events() {
+    // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
     let mut timers = TIMER_LIST.timers.lock();
     let current_time = current_time_duration();
     let mut timeout_cnt = 0;
@@ -143,6 +146,7 @@ pub fn handle_timeout_events() {
     for _ in 0..timeout_cnt {
         timers.pop_front();
     }
+    // debug!("[handle_timeout_events]: finish, timeout cnt {}", timeout_cnt);
 }
 
 struct TimerList {

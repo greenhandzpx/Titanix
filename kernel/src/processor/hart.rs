@@ -112,7 +112,11 @@ impl Hart {
             }
         }
         if !task.is_idle() {
-            unsafe { (*task.task_ctx().thread.inner.get()).time_info.when_entering() }
+            unsafe {
+                (*task.task_ctx().thread.inner.get())
+                    .time_info
+                    .when_entering()
+            }
         }
         core::mem::swap(self.local_ctx_mut(), task);
         if sie {
@@ -136,7 +140,11 @@ impl Hart {
         core::mem::swap(self.local_ctx_mut(), task);
 
         if !task.is_idle() {
-            unsafe { (*task.task_ctx().thread.inner.get()).time_info.when_leaving() }
+            unsafe {
+                (*task.task_ctx().thread.inner.get())
+                    .time_info
+                    .when_leaving()
+            }
         }
         if sie {
             open_interrupt();

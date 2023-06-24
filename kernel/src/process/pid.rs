@@ -1,4 +1,5 @@
 //!Implementation of [`PidAllocator`]
+use crate::config::process::INITPROC_PID;
 use crate::mm::RecycleAllocator;
 use crate::sync::mutex::SpinNoIrqLock;
 use lazy_static::*;
@@ -6,7 +7,7 @@ use log::debug;
 
 lazy_static! {
     pub static ref PID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
-        SpinNoIrqLock::new(RecycleAllocator::new(1));
+        SpinNoIrqLock::new(RecycleAllocator::new(INITPROC_PID));
 }
 ///Bind pid lifetime to `PidHandle`
 pub struct PidHandle(pub usize);
