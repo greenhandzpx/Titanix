@@ -34,7 +34,6 @@ impl Inode for MountsInode {
                     dirent_index: 0,
                 }),
             },
-            buf: Mutex::new(Vec::new()),
         }))
     }
     fn metadata(&self) -> &InodeMeta {
@@ -56,7 +55,6 @@ impl Inode for MountsInode {
 
 pub struct MountsFile {
     meta: FileMeta,
-    buf: Mutex<Vec<u8>>,
 }
 
 impl File for MountsFile {
@@ -70,20 +68,17 @@ impl File for MountsFile {
         debug!("[MountsFile] read");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
-            // let (pos, inode) = self
-            //     .metadata()
-            //     .inner_get(|inner| (inner.pos, inner.inode.as_ref().cloned().unwrap()));
-            let mut mounts_buf = self.buf.lock();
-            if mounts_buf.is_empty() {
-                debug!("[MountFile read] buf is empty");
-                let info = FILE_SYSTEM_MANAGER.mounts_info();
-                *mounts_buf = info.as_bytes().to_vec();
-                buf[..info.len()].copy_from_slice(info.as_bytes());
+            let info = FILE_SYSTEM_MANAGER.mounts_info();
+            let len = info.len();
+            let mut inner = self.metadata().inner.lock();
+            if inner.pos == len {
+                debug!("[MountFile] already read");
+                Ok(0)
             } else {
-                debug!("[MountFile read] read from buf");
-                buf[..mounts_buf.len()].copy_from_slice(mounts_buf.as_slice());
+                buf[..len].copy_from_slice(info.as_bytes());
+                inner.pos = len;
+                Ok(len as isize)
             }
-            Ok(buf.len() as isize)
         })
     }
 
