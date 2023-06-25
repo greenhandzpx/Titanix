@@ -48,7 +48,12 @@ impl Inode for TestRootInode {
         };
         Ok(Arc::new(file))
     }
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+    ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
         // debug!("testfs mkdir: {}", pathname);
         // let mut new_inode = TestRootInode { metadata: None };

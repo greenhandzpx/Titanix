@@ -8,6 +8,7 @@ use lazy_static::*;
 use log::debug;
 
 use crate::{
+    fs::{hash_key::HashKey, inode::INODE_CACHE, InodeMode},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
     utils::{
@@ -83,16 +84,23 @@ pub trait FileSystem: Send + Sync {
         };
 
         debug!("start to create root inode...");
-        let root_inode = self.create_root(parent, mount_point)?;
+        let root_inode = self.create_root(parent.clone(), mount_point)?;
         debug!("create root inode success");
 
-        // root_inode.init(parent, mount_point)?;
-        // let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        let parent_ino = {
+            if parent.is_none() {
+                0
+            } else {
+                parent.unwrap().metadata().ino
+            }
+        };
+        let child_name = path::get_name(mount_point);
+        let key = HashKey::new(parent_ino, child_name.to_string());
 
-        // let root_inode = {
-        //     INODE_CACHE.lock().insert(key, root_inode.clone());
-        //     INODE_CACHE.lock().get(&key).unwrap().clone()
-        // };
+        let root_inode = {
+            INODE_CACHE.lock().insert(key.clone(), root_inode.clone());
+            INODE_CACHE.lock().get(&key).unwrap().clone()
+        };
 
         let meta = FileSystemMeta {
             dev_name,
@@ -129,16 +137,23 @@ pub trait FileSystem: Send + Sync {
         };
 
         debug!("start to create root inode...");
-        let root_inode = self.create_root(parent, mount_point)?;
+        let root_inode = self.create_root(parent.clone(), mount_point)?;
         debug!("create root inode success");
 
-        // root_inode.init(parent, mount_point)?;
-        // let key = root_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        let parent_ino = {
+            if parent.is_none() {
+                0
+            } else {
+                parent.unwrap().metadata().ino
+            }
+        };
+        let child_name = path::get_name(mount_point);
+        let key = HashKey::new(parent_ino, child_name.to_string());
 
-        // let root_inode = {
-        //     INODE_CACHE.lock().insert(key, root_inode.clone());
-        //     INODE_CACHE.lock().get(&key).unwrap().clone()
-        // };
+        let root_inode = {
+            INODE_CACHE.lock().insert(key.clone(), root_inode.clone());
+            INODE_CACHE.lock().get(&key).unwrap().clone()
+        };
 
         let meta = FileSystemMeta {
             dev_name,

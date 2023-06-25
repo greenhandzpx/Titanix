@@ -4,7 +4,10 @@ use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
 use crate::{
-    fs::{posix::StatFlags, FileSystemType, InodeState, FILE_SYSTEM_MANAGER},
+    fs::{
+        hash_key::HashKey, inode::INODE_CACHE, posix::StatFlags, FileSystemType, InodeState,
+        FILE_SYSTEM_MANAGER,
+    },
     utils::{error::GeneralRet, path},
 };
 
@@ -25,20 +28,22 @@ impl Inode for ProcRootInode {
         pathname: &str,
         _mode: InodeMode,
         _dev_id: usize,
-    ) -> GeneralRet<()> {
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[ProcRootInode mknod] mknod: {}", pathname);
-        for proc in PROC_NAME {
+        let mut index = 0;
+        for (i, proc) in PROC_NAME.into_iter().enumerate() {
             if proc.0 == pathname {
-                let creator = proc.2;
-                let inode = creator(this.clone(), pathname);
-                this.metadata()
-                    .inner
-                    .lock()
-                    .children
-                    .insert(path::get_name(pathname).to_string(), inode);
+                index = i;
             }
         }
-        Ok(())
+        let creator = PROC_NAME[index].2;
+        let inode = creator(this.clone(), pathname);
+        this.metadata()
+            .inner
+            .lock()
+            .children
+            .insert(path::get_name(pathname).to_string(), inode.clone());
+        Ok(inode)
     }
     fn metadata(&self) -> &InodeMeta {
         &self.metadata.as_ref().unwrap()
@@ -131,8 +136,11 @@ pub fn init() -> GeneralRet<()> {
     let proc_fs = Arc::new(proc_fs);
     let proc_root_inode = proc_fs.metadata().root_inode.as_ref().cloned().unwrap();
 
+    let mut cache_lock = INODE_CACHE.lock();
+    let parent_ino = proc_root_inode.metadata().ino;
+
     for (proc_name, inode_mode, _) in PROC_NAME {
-        proc_root_inode.mknod(
+        let child = proc_root_inode.mknod(
             proc_root_inode.clone(),
             proc_name,
             inode_mode,
@@ -140,6 +148,9 @@ pub fn init() -> GeneralRet<()> {
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
         )?;
+        let child_name = child.metadata().name.clone();
+        let key = HashKey::new(parent_ino, child_name);
+        cache_lock.insert(key, child);
         debug!("[procfs] insert {} finished", proc_name);
     }
 
