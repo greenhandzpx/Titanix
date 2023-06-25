@@ -7,6 +7,7 @@ use alloc::sync::Arc;
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
 use log::{debug, error, info, trace, warn};
+use xmas_elf::dynamic;
 
 use crate::fs::file::DefaultFile;
 use crate::fs::posix::StatFlags;
@@ -165,7 +166,7 @@ impl Inode for Fat32RootInode {
         pathname: &str,
         mode: InodeMode,
         dev_id: usize,
-    ) -> GeneralRet<()> {
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32RootInode mknod] fatfs mknod: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -181,18 +182,21 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32RootInode mkdir] fatfs mkdir: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -210,15 +214,13 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 }
 
@@ -330,7 +332,7 @@ impl Inode for Fat32Inode {
         pathname: &str,
         mode: InodeMode,
         _dev_id: usize,
-    ) -> GeneralRet<()> {
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32Inode::mknod] fatfs mknod: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -349,18 +351,21 @@ impl Inode for Fat32Inode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32Inode mkdir] fatfs mkdir: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -379,15 +384,13 @@ impl Inode for Fat32Inode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 
     fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AgeneralRet<usize> {

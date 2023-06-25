@@ -13,8 +13,10 @@ use log::{debug, info, trace, warn};
 
 use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
+use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::posix::{StatFlags, Statfs, Sysinfo, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE};
+use crate::fs::posix::{StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE};
+use crate::fs::HashKey;
 use crate::fs::{
     inode, open_file, posix::Iovec, posix::UtsName, resolve_path, Dirent, FaccessatFlags,
     FcntlFlags, FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD,
@@ -168,11 +170,17 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                                 // TODO: add to dirty list, should add inode to the target fs which is include this inode
                                 drop(inner_lock);
                                 stack_trace!();
-                                parent_inode.mkdir(
+                                let child = parent_inode.mkdir(
                                     parent_inode.clone(),
                                     &absolute_path,
                                     InodeMode::FileDIR,
                                 )?;
+                                // insert to cache
+                                let key = HashKey::new(
+                                    parent_inode.metadata().ino,
+                                    child.metadata().name.clone(),
+                                );
+                                INODE_CACHE.lock().insert(key, child);
                                 Ok(0)
                             }
                             _ => {
@@ -240,12 +248,6 @@ pub fn sys_mount(
             FileSystemType::fs_type("vfat").unwrap()
         }
     };
-
-    // let parent = path::get_parent_dir(&target_path);
-    // let parent_inode = match parent {
-    //     Some(parent) => <dyn Inode>::lookup_from_root_tmp(&parent),
-    //     None => None,
-    // };
 
     let mut fs = ftype.new_fs();
     fs.init(dev_name, &target_path, ftype, flags)?;
@@ -960,42 +962,51 @@ pub fn sys_renameat2(
         if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
             return Err(SyscallErr::ENOENT);
         }
-        let oldparent = oldinode
-            .metadata()
-            .inner
-            .lock()
-            .parent
-            .clone()
-            .unwrap()
-            .upgrade()
-            .unwrap();
-        oldparent.remove_child(oldinode.clone())?;
+        // check new path
         let newparent_path = path::get_parent_dir(&newpath).unwrap();
-        let parent = fs::resolve_path(&newparent_path, OpenFlags::RDWR);
-        if parent.is_none() {
+        let newparent = fs::resolve_path(&newparent_path, OpenFlags::RDWR);
+
+        if newparent.is_none() {
             debug!("[sys_renameat2] newparent doesn't create");
+            // restore
             return Err(SyscallErr::ENOENT);
         } else {
-            let parent = parent.unwrap();
+            // remove from old path
+            let oldparent = oldinode
+                .metadata()
+                .inner
+                .lock()
+                .parent
+                .clone()
+                .unwrap()
+                .upgrade()
+                .unwrap();
+            oldparent.remove_child(oldinode.clone())?;
+            let key = HashKey::new(oldparent.metadata().ino, oldname);
+            INODE_CACHE.lock().remove(&key);
+
+            let newparent = newparent.unwrap();
             if oldtype == InodeMode::FileDIR {
                 stack_trace!();
-                parent.mkdir(parent.clone(), &newpath, oldtype)?;
+                newparent.mkdir(newparent.clone(), &newpath, oldtype)?;
             } else {
-                parent.mknod(
-                    parent.clone(),
+                newparent.mknod(
+                    newparent.clone(),
                     &newpath,
                     oldtype,
                     oldinode.metadata().rdev.unwrap(),
                 )?;
             }
-            let new_inner_lock = parent.metadata().inner.lock();
+            let new_inner_lock = newparent.metadata().inner.lock();
             let newinode = new_inner_lock
                 .children
                 .get(path::get_name(&newpath))
                 .unwrap();
             let mut old_inner = oldinode.metadata().inner.lock().clone();
-            old_inner.parent = Some(Arc::downgrade(&parent));
+            old_inner.parent = Some(Arc::downgrade(&newparent));
             newinode.metadata().inner_set(old_inner);
+            let key = HashKey::new(newparent.metadata().ino, newinode.metadata().name.clone());
+            INODE_CACHE.lock().insert(key, newinode.clone());
             Ok(0)
         }
     } else {
@@ -1022,78 +1033,99 @@ pub fn sys_renameat2(
             .unwrap()
             .upgrade()
             .unwrap();
-        old_parent.remove_child(oldinode.clone())?;
-        new_parent.remove_child(newinode.clone())?;
-        if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
-            debug!("[sys_renameat2] exchange old and new");
-            // If flag is RENAME_EXCHANGE, exchange old and new one.
-            if newtype == InodeMode::FileDIR {
-                old_parent.mkdir(old_parent.clone(), &newpath, newtype)?;
-            } else {
-                old_parent.mknod(
-                    old_parent.clone(),
-                    &newpath,
-                    newtype,
-                    newinode.clone().metadata().rdev.unwrap(),
-                )?;
-            }
-            if oldtype == InodeMode::FileDIR {
-                new_parent.mkdir(new_parent.clone(), &oldpath, oldtype)?;
-            } else {
-                new_parent.mknod(
-                    new_parent.clone(),
-                    &oldpath,
-                    oldtype,
-                    oldinode.clone().metadata().rdev.unwrap(),
-                )?;
-            }
-            // inner exchange
-            let old_inner_lock = old_parent.metadata().inner.lock();
-            // get inner before overwrite
-            let mut oldinner = oldinode.metadata().inner.lock().clone();
-            let new_inner_lock = new_parent.metadata().inner.lock();
-            // get inner before overwrite
-            let mut newinner = newinode.metadata().inner.lock().clone();
-            // overwrite with current oldpath inode
-            let oldinode = old_inner_lock.children.get(oldname.as_str()).unwrap();
-            // overwrite with current newpath inode
-            let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
-            // overwrite the newinner with current old_parent
-            newinner.parent = Some(Arc::downgrade(&old_parent));
-            oldinode.metadata().inner_set(newinner);
-            // overwrite the oldinner with current new_parent
-            oldinner.parent = Some(Arc::downgrade(&new_parent));
-            newinode.metadata().inner_set(oldinner);
-            Ok(0)
-        } else if flags.contains(Renameat2Flags::RENAME_NOREPLACE) {
+
+        if flags.contains(Renameat2Flags::RENAME_NOREPLACE) {
             debug!("[sys_renameat2] cound not replace, error");
             // If flag is RENAME_NOREPLACE, should not to replace newpath.
             // So return EEXIST
             Err(SyscallErr::EEXIST)
         } else {
-            // Normally, replace the newpath.
-            // But you should check the newpath type, if newtype is not the same as oldtype, should return EISDIR or ENOTEMPTY or ENOTDIR
-            debug!("[sys_renameat2] replace newpath");
-            if newtype == oldtype {
-                // the same type, replace directly.
+            // remove from old path
+            let mut cache_lock = INODE_CACHE.lock();
+            old_parent.remove_child(oldinode.clone())?;
+            let key = HashKey::new(old_parent.metadata().ino, oldname.clone());
+            cache_lock.remove(&key);
+            // remove from new path
+            new_parent.remove_child(newinode.clone())?;
+            let key = HashKey::new(new_parent.metadata().ino, newname.clone());
+            cache_lock.remove(&key);
+            drop(cache_lock);
+
+            if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
+                debug!("[sys_renameat2] exchange old and new");
+                // If flag is RENAME_EXCHANGE, exchange old and new one.
                 if newtype == InodeMode::FileDIR {
-                    new_parent.mkdir(new_parent.clone(), &newpath, newtype)?;
+                    old_parent.mkdir(old_parent.clone(), &newpath, newtype)?;
+                } else {
+                    old_parent.mknod(
+                        old_parent.clone(),
+                        &newpath,
+                        newtype,
+                        newinode.clone().metadata().rdev.unwrap(),
+                    )?;
+                }
+                if oldtype == InodeMode::FileDIR {
+                    new_parent.mkdir(new_parent.clone(), &oldpath, oldtype)?;
                 } else {
                     new_parent.mknod(
                         new_parent.clone(),
-                        &newpath,
-                        newtype,
+                        &oldpath,
+                        oldtype,
                         oldinode.clone().metadata().rdev.unwrap(),
                     )?;
                 }
+                // inner exchange
+                let old_inner_lock = old_parent.metadata().inner.lock();
+                // get inner before overwrite
                 let mut oldinner = oldinode.metadata().inner.lock().clone();
-                oldinner.parent = Some(Arc::downgrade(&new_parent));
                 let new_inner_lock = new_parent.metadata().inner.lock();
+                // get inner before overwrite
+                let mut newinner = newinode.metadata().inner.lock().clone();
+                // overwrite with current oldpath inode
+                let oldinode = old_inner_lock.children.get(oldname.as_str()).unwrap();
+                // overwrite with current newpath inode
                 let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
+                // overwrite the newinner with current old_parent
+                newinner.parent = Some(Arc::downgrade(&old_parent));
+                oldinode.metadata().inner_set(newinner);
+                // overwrite the oldinner with current new_parent
+                oldinner.parent = Some(Arc::downgrade(&new_parent));
                 newinode.metadata().inner_set(oldinner);
+                // add to cache
+                let mut cache_lock = INODE_CACHE.lock();
+                let key = HashKey::new(old_parent.metadata().ino, newname);
+                cache_lock.insert(key, newinode.clone());
+                let key = HashKey::new(new_parent.metadata().ino, oldname);
+                cache_lock.insert(key, oldinode.clone());
                 Ok(0)
             } else {
-                panic!("not support");
+                // Normally, replace the newpath.
+                // But you should check the newpath type, if newtype is not the same as oldtype, should return EISDIR or ENOTEMPTY or ENOTDIR
+                debug!("[sys_renameat2] replace newpath");
+                if newtype == oldtype {
+                    // the same type, replace directly.
+                    if newtype == InodeMode::FileDIR {
+                        new_parent.mkdir(new_parent.clone(), &newpath, newtype)?;
+                    } else {
+                        new_parent.mknod(
+                            new_parent.clone(),
+                            &newpath,
+                            newtype,
+                            oldinode.clone().metadata().rdev.unwrap(),
+                        )?;
+                    }
+                    let mut oldinner = oldinode.metadata().inner.lock().clone();
+                    oldinner.parent = Some(Arc::downgrade(&new_parent));
+                    let new_inner_lock = new_parent.metadata().inner.lock();
+                    let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
+                    newinode.metadata().inner_set(oldinner);
+                    let mut cache_lock = INODE_CACHE.lock();
+                    let key = HashKey::new(new_parent.metadata().ino, newname);
+                    cache_lock.insert(key, newinode.clone());
+                    Ok(0)
+                } else {
+                    panic!("not support");
+                }
             }
         }
     }

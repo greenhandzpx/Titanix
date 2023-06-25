@@ -3,6 +3,8 @@ use core::sync::atomic::AtomicUsize;
 use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
+use crate::fs::hash_key::HashKey;
+use crate::fs::inode::INODE_CACHE;
 use crate::fs::posix::StatFlags;
 use crate::utils::error::GeneralRet;
 use crate::utils::path;
@@ -37,7 +39,7 @@ impl Inode for DevRootInode {
         pathname: &str,
         mode: InodeMode,
         dev_id: usize,
-    ) -> GeneralRet<()> {
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[DevRootInode::mknod]: mknod: {}", pathname);
         debug_assert!(dev_id < DEV_NAMES.len());
         let creator = DEV_NAMES[dev_id].2;
@@ -46,8 +48,8 @@ impl Inode for DevRootInode {
             .inner
             .lock()
             .children
-            .insert(inode.metadata().name.clone(), inode);
-        Ok(())
+            .insert(inode.metadata().name.clone(), inode.clone());
+        Ok(inode)
     }
 
     fn set_metadata(&mut self, meta: InodeMeta) {
@@ -158,8 +160,10 @@ pub fn init() -> GeneralRet<()> {
 
     let dev_root_inode = dev_fs.metadata().root_inode.as_ref().cloned().unwrap();
 
+    let mut cache_lock = INODE_CACHE.lock();
+    let parent_ino = dev_root_inode.metadata().ino;
     for (dev_name, inode_mode, _) in DEV_NAMES {
-        dev_root_inode.mknod(
+        let child = dev_root_inode.mknod(
             dev_root_inode.clone(),
             dev_name,
             inode_mode,
@@ -167,6 +171,9 @@ pub fn init() -> GeneralRet<()> {
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
         )?;
+        let child_name = child.metadata().name.clone();
+        let key = HashKey::new(parent_ino, child_name);
+        cache_lock.insert(key, child);
         debug!("insert {} finished", dev_name);
     }
 
