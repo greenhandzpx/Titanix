@@ -1172,8 +1172,8 @@ pub fn sys_utimensat(
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
-    let flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let _mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
+    let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     UserCheck::new().check_c_str(pathname)?;
     stack_trace!();
     let pathname = path::path_process(dirfd, pathname);
@@ -1185,20 +1185,8 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     debug!("[sys_faccessat] pathname: {}", pathname);
     let inode = resolve_path(&pathname, OpenFlags::RDONLY);
     match inode {
-        Some(inode) => {
-            // TODO: add user concept and check mode
-            // check inode mode and arg mode
-            // if mode.contains(FaccessatFlags::R_OK)
-            //     && !(f_flags.contains(OpenFlags::RDONLY) || f_flags.contains(OpenFlags::RDWR))
-            // {
-            //     debug!("[sys_faccessat] cannot read");
-            //     Err(SyscallErr::EACCES)
-            // } else if mode.contains(FaccessatFlags::W_OK) && f_flags.contains(OpenFlags::RDONLY) {
-            //     debug!("[sys_faccessat] cannot write");
-            //     Err(SyscallErr::EROFS)
-            // } else {
-            //     Ok(0)
-            // }
+        Some(_inode) => {
+            // We doesn't support user concept, if the file exist, then return 0.
             Ok(0)
         }
         None => {

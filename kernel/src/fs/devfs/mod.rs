@@ -8,6 +8,7 @@ use crate::utils::error::GeneralRet;
 use crate::utils::path;
 
 use self::null::NullInode;
+use self::rtc::RtcInode;
 use self::{tty::TtyInode, zero::ZeroInode};
 
 use super::testfs::TestRootInode;
@@ -20,6 +21,7 @@ use super::{
 
 mod block_device;
 mod null;
+mod rtc;
 mod tty;
 mod zero;
 
@@ -121,7 +123,7 @@ const DEV_NAMES: [(
     &str,
     InodeMode,
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
-); 4] = [
+); 5] = [
     ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
         Arc::new(TestRootInode::new(parent, path))
     }),
@@ -133,6 +135,9 @@ const DEV_NAMES: [(
     }),
     ("/dev/tty", InodeMode::FileCHR, |parent, path| {
         Arc::new(TtyInode::new(parent, path))
+    }),
+    ("/dev/rtc", InodeMode::FileCHR, |parent, path| {
+        Arc::new(RtcInode::new(parent, path))
     }),
 ];
 
