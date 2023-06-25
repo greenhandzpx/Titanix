@@ -337,19 +337,23 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             let dirents = Dirent::get_dirents(inode, dirent_index);
             let mut num_bytes = 0;
             let mut dirp_ptr = dirp;
-            for dirent in dirents.iter() {
+            let mut index: usize = 0;
+            for (i, dirent) in dirents.iter().enumerate() {
                 stack_trace!();
-                num_bytes += dirent.d_reclen as usize;
-                if num_bytes > count {
+                let temp = num_bytes + dirent.d_reclen as usize;
+                if temp > count {
                     debug!("[getdents] user buf size too small");
-                    return Err(SyscallErr::EINVAL);
+                    index = i + 1;
+                    break;
                 }
+                num_bytes = temp;
                 unsafe {
                     copy_nonoverlapping(&*dirent as *const Dirent, dirp_ptr as *mut Dirent, 1);
                     dirp_ptr += dirent.d_reclen as usize;
                 }
+                index = i + 1;
             }
-            file.metadata().inner.lock().dirent_index += dirents.len();
+            file.metadata().inner.lock().dirent_index += index;
 
             Ok(num_bytes as isize)
         }
