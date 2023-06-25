@@ -37,6 +37,12 @@ impl TimeSpec {
     }
 }
 
+impl From<TimeSpec> for Duration {
+    fn from(time_spec: TimeSpec) -> Self {
+        Duration::new(time_spec.sec as u64, time_spec.nsec as u32) 
+    }
+}
+
 /// Used for times
 #[repr(C)]
 pub struct Tms {

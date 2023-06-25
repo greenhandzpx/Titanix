@@ -45,18 +45,28 @@ struct Timer {
     // waker: SyncUnsafeCell<Option<Waker>>,
 }
 
-enum TimedTaskOutput<T> {
+pub enum TimedTaskOutput<T> {
     Timeout,
     Ok(T),
 }
 
-struct TimedTaskFuture<F: Future + Send + 'static> {
+impl<T> TimedTaskOutput<T> {
+    pub fn timeout(&self) -> bool {
+        match self {
+            Self::Timeout => true,
+            _ => false,
+        }
+    }
+
+}
+
+pub struct TimedTaskFuture<F: Future + Send + 'static> {
     expired_time: Duration,
     task_future: F,
 }
 
 impl<F: Future + Send + 'static> TimedTaskFuture<F> {
-    fn new(duration: Duration, task_future: F) -> Self {
+    pub fn new(duration: Duration, task_future: F) -> Self {
         Self {
             expired_time: current_time_duration() + duration,
             task_future,
@@ -68,11 +78,11 @@ impl<F: Future + Send + 'static> Future for TimedTaskFuture<F> {
     type Output = TimedTaskOutput<F::Output>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        if current_time_duration() >= this.expired_time {
-            Poll::Ready(TimedTaskOutput::Timeout)
-        } else {
-            let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
-            if ret.is_pending() {
+        let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
+        if ret.is_pending() {
+            if current_time_duration() >= this.expired_time {
+                Poll::Ready(TimedTaskOutput::Timeout)
+            } else {
                 // TODO: avoid adding to timer list repeatly
                 let timer = Timer {
                     expired_time: this.expired_time,
@@ -80,9 +90,9 @@ impl<F: Future + Send + 'static> Future for TimedTaskFuture<F> {
                 };
                 TIMER_LIST.timers.lock().push_back(timer);
                 Poll::Pending
-            } else {
-                Poll::Ready(TimedTaskOutput::Ok(ret.ready()?))
             }
+        } else {
+            Poll::Ready(TimedTaskOutput::Ok(ret.ready()?))
         }
     }
 }

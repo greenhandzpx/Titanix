@@ -317,7 +317,7 @@ pub enum FutexOperations {
 
 /// Poll Fd
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct PollFd {
     /// Fd
     pub fd: i32,
@@ -325,4 +325,22 @@ pub struct PollFd {
     pub events: i16,
     /// Returned events
     pub revents: i16,
+}
+
+bitflags! {
+    /// Poll events
+    pub struct PollEvents: u16 {
+        /// There is data to read
+        const POLLIN = 1 << 0;
+        /// Execption about fd
+        const POLLPRI = 1 << 1;
+        /// There is data to write
+        const POLLOUT = 1 << 2;
+        /// Error condition
+        const POLLERR = 1 << 3;
+        /// Hang up
+        const POLLHUP = 1 << 4;
+        /// Invalid request: fd not open
+        const POLLNVAL = 1 << 5;
+    }
 }

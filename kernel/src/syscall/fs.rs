@@ -2,10 +2,12 @@
 use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
+use core::time::Duration;
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
+use alloc::vec::Vec;
 use inode::InodeState;
 use log::{debug, info, trace, warn};
 
@@ -20,11 +22,12 @@ use crate::fs::{
 };
 use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
 use crate::mm::user_check::UserCheck;
-use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
-use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::{current_time_ms, posix::current_time_spec, UTIME_NOW};
+use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::timer::poll::FilePollFuture;
+use crate::timer::timed_task::{TimedTaskFuture, TimedTaskOutput};
+use crate::timer::{posix::current_time_spec, UTIME_NOW};
 use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
@@ -745,45 +748,28 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     }
 }
 
-bitflags! {
-    pub struct PollEvents: u16 {
-        const POLLIN = 1 << 0;
-        const POLLPRI = 1 << 1;
-        const POLLOUT = 1 << 2;
-        const POLLERR = 1 << 3;
-        const POLLHUP = 1 << 4;
-        const POLLNVAL = 1 << 5;
-    }
-}
-
 pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usize) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
 
     UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
-    let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
+    let raw_fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
+    let mut fds: Vec<PollFd> = Vec::new();
+    fds.extend_from_slice(raw_fds);
+    
     debug!("[sys_ppoll]: fds {:?}", fds);
 
-    let start_ms = current_time_ms();
-    let infinite_timeout: bool;
-    let timeout: usize;
-    if timeout_ptr == 0 {
-        debug!("[sys_ppoll]: infinite timeout");
-        infinite_timeout = true;
-        timeout = 0;
-    } else {
-        infinite_timeout = false;
-        stack_trace!();
-        UserCheck::new()
-            .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
-        let timeout_delta = unsafe { *(timeout_ptr as *const TimeSpec) };
-        // if timeout_delta < 0 {
-        //     warn!("invalid timeout");
-        //     return Err(SyscallErr::EINVAL);
-        // }
-        timeout = timeout_delta.sec * 1000 + timeout_delta.nsec / 1000000;
-    }
-    let expire_time = start_ms + timeout;
+    let timeout = match timeout_ptr {
+        0 => {
+            debug!("[sys_ppoll]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
+        }
+    };
 
     if sigmask != 0 {
         stack_trace!();
@@ -799,52 +785,69 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
         });
     }
 
-    loop {
-        // TODO: how to avoid user modify the address?
-        let mut cnt = 0;
-        for i in 0..nfds {
-            let current_fd = &mut fds[i];
-            // trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
-            if let Some(file) =
-                current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
-            {
-                if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
-                    current_fd.revents = 0;
-                    if events.contains(PollEvents::POLLIN) {
-                        // file.read()
-                        if file.pollin()? {
-                            current_fd.revents |= PollEvents::POLLIN.bits() as i16;
-                            cnt += 1;
-                            continue;
-                        }
-                    }
-                    if events.contains(PollEvents::POLLOUT) {
-                        // file.read()
-                        if file.pollout()? {
-                            current_fd.revents |= PollEvents::POLLOUT.bits() as i16;
-                            cnt += 1;
-                            continue;
-                        }
-                    }
-                } else {
-                    warn!("Invalid events: {:#x}", current_fd.events);
-                    // TODO: not sure
-                    return Err(SyscallErr::EINVAL);
-                }
-            } else {
-                debug!("No such file for fd {}", current_fd.fd);
-                continue;
+    let poll_future = FilePollFuture::new(fds);
+    if let Some(timeout) = timeout {
+        match TimedTaskFuture::new(timeout, poll_future).await {
+            TimedTaskOutput::Ok(ret) => {
+                return ret;
+            }
+            TimedTaskOutput::Timeout => {
+                warn!("[sys_ppoll]: timeout");
+                return Ok(0);
             }
         }
-        if cnt > 0 {
-            return Ok(cnt as isize);
-        } else if !infinite_timeout && current_time_ms() >= expire_time {
-            debug!("[sys_ppoll]: timeout!");
-            return Ok(0);
-        } else {
-            thread::yield_now().await;
-        }
+    } else {
+        let ret = poll_future.await;
+        debug!("[sys_ppoll]: ready");
+        ret
     }
+
+    // loop {
+    //     // TODO: how to avoid user modify the address?
+    //     let mut cnt = 0;
+    //     for i in 0..nfds {
+    //         let current_fd = &mut fds[i];
+    //         // trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
+    //         if let Some(file) =
+    //             current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
+    //         {
+    //             if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
+    //                 current_fd.revents = 0;
+    //                 if events.contains(PollEvents::POLLIN) {
+    //                     // file.read()
+    //                     if file.pollin()? {
+    //                         current_fd.revents |= PollEvents::POLLIN.bits() as i16;
+    //                         cnt += 1;
+    //                         continue;
+    //                     }
+    //                 }
+    //                 if events.contains(PollEvents::POLLOUT) {
+    //                     // file.read()
+    //                     if file.pollout()? {
+    //                         current_fd.revents |= PollEvents::POLLOUT.bits() as i16;
+    //                         cnt += 1;
+    //                         continue;
+    //                     }
+    //                 }
+    //             } else {
+    //                 warn!("Invalid events: {:#x}", current_fd.events);
+    //                 // TODO: not sure
+    //                 return Err(SyscallErr::EINVAL);
+    //             }
+    //         } else {
+    //             debug!("No such file for fd {}", current_fd.fd);
+    //             continue;
+    //         }
+    //     }
+    //     if cnt > 0 {
+    //         return Ok(cnt as isize);
+    //     } else if !infinite_timeout && current_time_ms() >= expire_time {
+    //         debug!("[sys_ppoll]: timeout!");
+    //         return Ok(0);
+    //     } else {
+    //         thread::yield_now().await;
+    //     }
+    // }
 }
 
 pub async fn sys_sendfile(
