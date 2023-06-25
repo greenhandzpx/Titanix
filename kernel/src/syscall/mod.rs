@@ -164,6 +164,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+        SYSCALL_PSELECT6 => {
+            sys_pselect6(args[0] as i32, args[1], args[2], args[3], args[4], args[5]).await
+        }
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
         SYSCALL_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
         SYSCALL_NEWFSTATAT => sys_newfstatat(
@@ -331,7 +334,7 @@ pub struct PollFd {
 
 bitflags! {
     /// Poll events
-    pub struct PollEvents: u16 {
+    pub struct PollEvents: i16 {
         /// There is data to read
         const POLLIN = 1 << 0;
         /// Execption about fd

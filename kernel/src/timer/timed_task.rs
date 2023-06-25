@@ -57,7 +57,6 @@ impl<T> TimedTaskOutput<T> {
             _ => false,
         }
     }
-
 }
 
 pub struct TimedTaskFuture<F: Future + Send + 'static> {

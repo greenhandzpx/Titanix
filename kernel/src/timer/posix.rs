@@ -3,10 +3,16 @@ use core::time::Duration;
 use super::{current_time_ms, MSEC_PER_SEC};
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct TimeVal {
     pub sec: usize,
     pub usec: usize,
+}
+
+impl From<TimeVal> for Duration {
+    fn from(time_val: TimeVal) -> Self {
+        Duration::new(time_val.sec as u64, (time_val.usec * 1000) as u32)
+    }
 }
 
 impl From<Duration> for TimeVal {
@@ -39,7 +45,7 @@ impl TimeSpec {
 
 impl From<TimeSpec> for Duration {
     fn from(time_spec: TimeSpec) -> Self {
-        Duration::new(time_spec.sec as u64, time_spec.nsec as u32) 
+        Duration::new(time_spec.sec as u64, time_spec.nsec as u32)
     }
 }
 

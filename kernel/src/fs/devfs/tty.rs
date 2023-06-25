@@ -5,7 +5,10 @@ use crate::{
     utils::error::GeneralRet,
 };
 use alloc::boxed::Box;
-use core::{sync::atomic::{AtomicU8, Ordering}, task::Waker};
+use core::{
+    sync::atomic::{AtomicU8, Ordering},
+    task::Waker,
+};
 use lazy_static::*;
 use log::{debug, info, warn};
 

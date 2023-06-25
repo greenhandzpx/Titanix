@@ -12,7 +12,7 @@ use crate::{
     timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
-        error::{AsyscallRet, GeneralRet, SyscallRet, AgeneralRet},
+        error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet},
     },
 };
 

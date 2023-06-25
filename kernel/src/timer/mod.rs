@@ -1,8 +1,8 @@
 //! RISC-V timer-related functionality
 
+pub mod poll;
 pub mod posix;
 pub mod timed_task;
-pub mod poll;
 
 use core::time::Duration;
 
