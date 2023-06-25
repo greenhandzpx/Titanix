@@ -1,4 +1,4 @@
-use log::{debug, warn, info};
+use log::{debug, info, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -7,12 +7,13 @@ use riscv::register::{
 use crate::{
     mm::{memory_space, VirtAddr},
     process::{self, thread::exit_and_terminate_all_threads},
-    processor::{current_process, current_trap_cx, hart::local_hart, current_task},
+    processor::{current_process, current_task, current_trap_cx, hart::local_hart},
     signal::check_signal_for_current_process,
     stack_trace,
     syscall::syscall,
-    timer::{handle_timeout_events, set_next_trigger},
-    trap::set_user_trap_entry, FIRST_HART_ID,
+    timer::{set_next_trigger, timed_task::handle_timeout_events},
+    trap::set_user_trap_entry,
+    FIRST_HART_ID,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -20,14 +21,15 @@ use super::{set_kernel_trap_entry, TrapContext};
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
 pub async fn trap_handler() {
-
     set_kernel_trap_entry();
 
     // if local_hart().hart_id() as u8 != FIRST_HART_ID.load(core::sync::atomic::Ordering::Relaxed) {
     //     info!("other hart trap");
     // }
 
-    unsafe { (*current_task().inner.get()).time_info.when_trap_in(); }
+    unsafe {
+        (*current_task().inner.get()).time_info.when_trap_in();
+    }
     let scause = scause::read();
     let stval = stval::read();
     match scause.cause() {
@@ -162,7 +164,9 @@ pub fn trap_return(trap_context: &mut TrapContext) {
 
     check_signal_for_current_process();
 
-    unsafe { (*current_task().inner.get()).time_info.when_trap_ret(); }
+    unsafe {
+        (*current_task().inner.get()).time_info.when_trap_ret();
+    }
     unsafe {
         __return_to_user(trap_context);
     }

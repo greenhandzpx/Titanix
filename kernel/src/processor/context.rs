@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use log::warn;
 use riscv::register::{sie, sstatus};
 
 use crate::{

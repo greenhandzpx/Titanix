@@ -65,7 +65,6 @@ pub fn add_initproc() {
     let spin_proc = Process::new(elf_data);
     info!("[add_initproc]: add user spin, pid {}", spin_proc.pid());
     PROCESS_MANAGER.add_process(init_proc.pid(), &spin_proc);
-
 }
 
 use self::thread::TidHandle;
@@ -548,7 +547,7 @@ impl Process {
             .lock()
             .threads
             .push(Arc::downgrade(&main_thread));
-        
+
         PROCESS_MANAGER.add_process(child.pid(), &child);
         // add this thread to scheduler
         main_thread.trap_context_mut().user_x[10] = 0;

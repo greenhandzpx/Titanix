@@ -34,7 +34,7 @@ impl ThreadTimeInfo {
 
     /// Switch to this task
     pub fn when_entering(&mut self) {
-        self.last_enter_ts = current_time_duration(); 
+        self.last_enter_ts = current_time_duration();
     }
 
     /// Switch to other task
@@ -58,5 +58,4 @@ impl ThreadTimeInfo {
         self.user_time += current_ts - self.last_user_ret_ts;
         self.last_user_trap_ts = current_ts;
     }
-
 }

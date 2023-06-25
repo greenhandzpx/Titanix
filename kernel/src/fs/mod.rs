@@ -36,7 +36,7 @@ use crate::mm::MapPermission;
 use crate::processor::current_process;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::timer::current_time_spec;
+use crate::timer::posix::current_time_spec;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;

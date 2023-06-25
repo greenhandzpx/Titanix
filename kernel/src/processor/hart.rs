@@ -23,8 +23,6 @@ use super::{
 /// The processor has several `Hart`s
 pub struct Hart {
     hart_id: usize,
-    // /// Spare env ctx when in need(e.g. kernel thread or idle thread)
-    // spare_env_ctx: EnvContext,
     local_ctx: Option<Box<LocalContext>>,
     /// Every hart has its own kernel stack
     kstack_bottom: usize,
@@ -39,6 +37,7 @@ impl Hart {
         self.local_ctx.as_mut().unwrap().env_mut()
     }
 
+    #[allow(unused)]
     pub fn local_ctx(&self) -> &LocalContext {
         &self.local_ctx.as_ref().unwrap()
     }

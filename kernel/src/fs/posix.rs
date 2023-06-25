@@ -4,7 +4,7 @@ use alloc::string::{String, ToString};
 use easy_fs::BLOCK_SZ;
 
 use super::fat32::SECTOR_SIZE;
-use crate::timer::{current_time_duration, TimeSpec};
+use crate::timer::posix::TimeSpec;
 
 pub const STAT_SIZE: usize = size_of::<STAT>() as usize;
 

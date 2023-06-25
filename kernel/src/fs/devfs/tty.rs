@@ -1,11 +1,11 @@
-use alloc::{sync::Arc, string::ToString};
+use alloc::{string::ToString, sync::Arc};
 
 use crate::{
-    fs::{inode::InodeMeta, Inode, Mutex, file::FileMetaInner, OpenFlags},
+    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
     utils::error::GeneralRet,
 };
 use alloc::boxed::Box;
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::{sync::atomic::{AtomicU8, Ordering}, task::Waker};
 use lazy_static::*;
 use log::{debug, info, warn};
 
@@ -74,10 +74,9 @@ impl TtyFile {
                     inode: Some(this),
                     pos: 0,
                     dirent_index: 0,
-                })
-            }
+                }),
+            },
         }
-
     }
 }
 
@@ -139,17 +138,18 @@ impl File for TtyFile {
         })
     }
 
-    fn pollin(&self) -> GeneralRet<bool> {
-        if self.buf.load(Ordering::Acquire) != 255 {
-            return Ok(true);
-        }
-        let _sum_guard = SumGuard::new();
-        let c = console_getchar();
-        if c as i8 == -1 {
-            return Ok(false);
-        } else {
-            self.buf.store(c as u8, Ordering::Release);
-            return Ok(true);
-        }
+    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        Ok(true)
+        // if self.buf.load(Ordering::Acquire) != 255 {
+        //     return Ok(true);
+        // }
+        // let _sum_guard = SumGuard::new();
+        // let c = console_getchar();
+        // if c as i8 == -1 {
+        //     return Ok(false);
+        // } else {
+        //     self.buf.store(c as u8, Ordering::Release);
+        //     return Ok(true);
+        // }
     }
 }

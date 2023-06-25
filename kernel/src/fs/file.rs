@@ -1,3 +1,5 @@
+use core::task::Waker;
+
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use log::trace;
 
@@ -7,10 +9,10 @@ use crate::{
     mm::memory_space::VmArea,
     processor::SumGuard,
     stack_trace,
-    timer::current_time_spec,
+    timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
-        error::{AsyscallRet, GeneralRet, SyscallRet},
+        error::{AsyscallRet, GeneralRet, SyscallRet, AgeneralRet},
     },
 };
 
@@ -57,13 +59,13 @@ pub trait File: Send + Sync {
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
-    fn pollin(&self) -> GeneralRet<bool> {
+    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
         Ok(true)
         // todo!()
     }
 
-    fn pollout(&self) -> GeneralRet<bool> {
+    fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         todo!()
     }
 

@@ -7,7 +7,10 @@ mod thread_state;
 mod tid;
 mod time;
 
-use self::{thread_state::{ThreadState, ThreadStateAtomic}, time::ThreadTimeInfo};
+use self::{
+    thread_state::{ThreadState, ThreadStateAtomic},
+    time::ThreadTimeInfo,
+};
 
 use super::Process;
 use crate::executor;
@@ -60,7 +63,7 @@ pub struct ThreadInner {
     pub state: ThreadStateAtomic,
     /// Tid address, which may be modified by `set_tid_address` syscall
     pub tid_addr: Option<TidAddress>,
-    /// 
+    ///
     pub time_info: ThreadTimeInfo,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread

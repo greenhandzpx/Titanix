@@ -12,6 +12,7 @@
 #![feature(linked_list_remove)]
 #![feature(core_intrinsics)]
 #![feature(const_mut_refs)]
+#![feature(poll_ready)]
 // #![feature(custom_test_frameworks)]
 // #![test_runner(crate::test_runner)]
 
@@ -47,9 +48,11 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering, AtomicU16, AtomicU8},
+    sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering},
     time::Duration,
 };
+
+use log::debug;
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
@@ -58,7 +61,7 @@ use crate::{
     process::thread,
     processor::{hart, HARTS},
     sbi::hart_start,
-    timer::ksleep,
+    timer::timed_task::ksleep,
 };
 
 global_asm!(include_str!("entry.S"));
