@@ -1,10 +1,11 @@
 use log::{debug, info, warn};
 
 use crate::{
+    config::signal::SIG_NUM,
     mm::user_check::UserCheck,
     process::PROCESS_MANAGER,
-    processor::{current_process, current_task, SumGuard},
-    signal::{SigAction, SigInfo, SigSet},
+    processor::{current_process, current_task, current_trap_cx, SumGuard},
+    signal::{KSigAction, SigAction, SigInfo, SigSet},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -12,45 +13,57 @@ use crate::{
 pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
     info!(
-        "[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}",
-        sig, act as usize, oldact as usize
+        "[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}, act size {}",
+        sig, act as usize, oldact as usize, core::mem::size_of::<SigAction>() 
     );
-    Ok(0)
-    // if sig < 0 || sig as usize >= SIG_NUM {
-    //     return Err(SyscallErr::EINVAL);
-    // }
-    // debug!("[sys_rt_sigaction]: sig {}", sig);
-    // current_process().inner_handler(|proc| {
-    //     let _sum_guard = SumGuard::new();
+    // Ok(0)
+    if sig < 0 || sig as usize >= SIG_NUM {
+        return Err(SyscallErr::EINVAL);
+    }
+    debug!("[sys_rt_sigaction]: sig {}", sig);
+    current_process().inner_handler(|proc| {
+        let _sum_guard = SumGuard::new();
 
-    //     if oldact as *const u8 != core::ptr::null::<u8>() {
-    //         UserCheck::new()
-    //             .check_writable_slice(oldact as *mut u8, core::mem::size_of::<SigAction>())?;
-    //         let sig_handler_locked = proc.sig_handler.lock();
-    //         let oldact_ref = sig_handler_locked.get(sig as usize);
-    //         unsafe {
-    //             oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, core::mem::size_of::<SigAction>());
-    //         }
-    //     }
+        if oldact as *const u8 != core::ptr::null::<u8>() {
+            UserCheck::new()
+                .check_writable_slice(oldact as *mut u8, core::mem::size_of::<SigAction>())?;
+            let sig_handler_locked = proc.sig_handler.lock();
+            let oldact_ref = sig_handler_locked.get(sig as usize);
+            unsafe {
+                oldact.copy_from(
+                    &oldact_ref.unwrap().sig_action as *const SigAction,
+                    1,
+                );
+            }
+        }
 
-    //     debug!("ra1: {:#x}, sp {:#x}", current_trap_cx().user_x[1], current_trap_cx().user_x[2]);
+        debug!(
+            "ra1: {:#x}, sp {:#x}",
+            current_trap_cx().user_x[1],
+            current_trap_cx().user_x[2]
+        );
 
-    //     if act as *const u8 != core::ptr::null::<u8>() {
-    //         UserCheck::new()
-    //             .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
+        if act as *const u8 != core::ptr::null::<u8>() {
+            UserCheck::new()
+                .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
-    //         let new_sigaction = SigActionKernel {
-    //             sig_action: unsafe { *act },
-    //             is_user_defined: true,
-    //         };
-    //         debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
-    //         proc.sig_handler
-    //             .lock()
-    //             .set_sigaction(sig as usize, new_sigaction);
-
-    //     }
-    //     Ok(0)
-    // })
+            let new_sigaction = KSigAction {
+                sig_action: unsafe { *act },
+                is_user_defined: true,
+            };
+            // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
+            debug!(
+                "[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}",
+                new_sigaction.sig_action.sa_handler as *const usize as usize,
+                new_sigaction.sig_action.sa_mask[0],
+                new_sigaction.sig_action.sa_flags
+            );
+            proc.sig_handler
+                .lock()
+                .set_sigaction(sig as usize, new_sigaction);
+        }
+        Ok(0)
+    })
 }
 
 enum SigProcmaskHow {

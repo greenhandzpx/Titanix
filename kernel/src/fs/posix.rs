@@ -266,6 +266,9 @@ pub struct FdSet {
 }
 
 impl FdSet {
+    pub fn clear_all(&mut self) {
+        self.fds_bits.fill(0);
+    }
     pub fn mark_fd(&mut self, fd: usize) {
         if fd >= FD_SET_SIZE {
             return;

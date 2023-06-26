@@ -54,14 +54,17 @@ impl RawFdSetRWE {
         for fd in fds.iter() {
             if let Some(fd_set_ptr) = self.read_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
+                fd_set.clear_all();
                 fd_set.mark_fd(fd.fd as usize);
             }
             if let Some(fd_set_ptr) = self.write_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
+                fd_set.clear_all();
                 fd_set.mark_fd(fd.fd as usize);
             }
             if let Some(fd_set_ptr) = self.except_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
+                fd_set.clear_all();
                 fd_set.mark_fd(fd.fd as usize);
             }
         }

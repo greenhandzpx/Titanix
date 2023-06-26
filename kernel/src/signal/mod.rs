@@ -46,13 +46,13 @@ bitflags! {
 }
 
 pub struct SigHandlerManager {
-    sigactions: [SigActionKernel; SIG_NUM],
+    sigactions: [KSigAction; SIG_NUM],
 }
 
 impl SigHandlerManager {
     pub fn new() -> Self {
-        let mut sigactions: [SigActionKernel; SIG_NUM] =
-            core::array::from_fn(|_| SigActionKernel::new(false));
+        let mut sigactions: [KSigAction; SIG_NUM] =
+            core::array::from_fn(|_| KSigAction::new(false));
         sigactions[Signal::SIGABRT as usize].sig_action.sa_handler = core_sig_handler;
         sigactions[Signal::SIGHUP as usize].sig_action.sa_handler = term_sig_handler;
         sigactions[Signal::SIGINT as usize].sig_action.sa_handler = term_sig_handler;
@@ -67,7 +67,7 @@ impl SigHandlerManager {
         Self { sigactions }
     }
 
-    pub fn get(&self, signo: usize) -> Option<&SigActionKernel> {
+    pub fn get(&self, signo: usize) -> Option<&KSigAction> {
         if signo < SIG_NUM {
             Some(&self.sigactions[signo])
         } else {
@@ -75,7 +75,7 @@ impl SigHandlerManager {
         }
     }
 
-    pub fn set_sigaction(&mut self, signo: usize, sigaction: SigActionKernel) {
+    pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
         if signo < SIG_NUM {
             self.sigactions[signo] = sigaction;
         }
@@ -86,11 +86,12 @@ impl SigHandlerManager {
 #[repr(C)]
 pub struct SigAction {
     pub sa_handler: fn(usize),
-    pub sa_flags: usize,
+    pub sa_mask: [SigSet; 1],
+    pub sa_flags: u32,
+    // pub sa_flags: usize,
+    pub sa_restorer: usize,
     // pub sa_sigaction: fn(i32, *const u8, *const u8),
     // pub sa_sigaction: usize,
-    pub sa_restorer: usize,
-    pub sa_mask: [SigSet; 1],
     // pub sa_mask: [SigSet; 2],
     // pub sa_restorer: fn(),
 }
@@ -108,12 +109,12 @@ impl SigAction {
 }
 
 #[derive(Clone, Copy)]
-pub struct SigActionKernel {
+pub struct KSigAction {
     pub sig_action: SigAction,
     pub is_user_defined: bool,
 }
 
-impl SigActionKernel {
+impl KSigAction {
     pub fn new(is_user_defined: bool) -> Self {
         Self {
             is_user_defined,
@@ -160,7 +161,7 @@ pub fn check_signal_for_current_process() {
     }
 }
 
-fn handle_signal(signo: usize, sig_action: SigActionKernel) {
+fn handle_signal(signo: usize, sig_action: KSigAction) {
     debug!("handle signal {}", signo);
     if sig_action.is_user_defined {
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;

@@ -126,3 +126,9 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
     //     thread::yield_now().await;
     // }
 }
+
+pub fn sys_settimer() -> SyscallRet {
+    stack_trace!();
+    
+    todo!()
+}
