@@ -78,24 +78,24 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
         file.write_all(&all_data)?;
     }
 
-    // Write libc tests
-    let libc_path = "../testcases/libc/";
-    let apps_libc: Vec<_> = read_dir(libc_path)
-        .unwrap()
-        .into_iter()
-        .map(|dir_entry| dir_entry.unwrap().file_name().into_string().unwrap())
-        // .filter(|name| *name != "mnt" && *name != "fs.img")
-        .collect();
-    for app in apps_libc {
-        // load app data from host file system
-        let mut host_file = File::open(format!("{}{}", libc_path, app)).unwrap();
-        let mut all_data: Vec<u8> = Vec::new();
-        host_file.read_to_end(&mut all_data).unwrap();
-        // create a file in fat-fs
-        let mut file = fs.root_dir().create_file(&app)?;
-        // write data to fat-fs
-        file.write_all(&all_data)?;
-    }
+    // // Write libc tests
+    // let libc_path = "../testcases/libc/";
+    // let apps_libc: Vec<_> = read_dir(libc_path)
+    //     .unwrap()
+    //     .into_iter()
+    //     .map(|dir_entry| dir_entry.unwrap().file_name().into_string().unwrap())
+    //     // .filter(|name| *name != "mnt" && *name != "fs.img")
+    //     .collect();
+    // for app in apps_libc {
+    //     // load app data from host file system
+    //     let mut host_file = File::open(format!("{}{}", libc_path, app)).unwrap();
+    //     let mut all_data: Vec<u8> = Vec::new();
+    //     host_file.read_to_end(&mut all_data).unwrap();
+    //     // create a file in fat-fs
+    //     let mut file = fs.root_dir().create_file(&app)?;
+    //     // write data to fat-fs
+    //     file.write_all(&all_data)?;
+    // }
 
     // // Write busybox
     // let busybox_path = "../testcases/busybox/busybox";

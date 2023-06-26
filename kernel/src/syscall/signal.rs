@@ -5,7 +5,7 @@ use crate::{
     mm::user_check::UserCheck,
     process::PROCESS_MANAGER,
     processor::{current_process, current_task, current_trap_cx, SumGuard},
-    signal::{KSigAction, SigAction, SigInfo, SigSet},
+    signal::{KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_IGN, ign_sig_handler, SIG_ERR},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -34,6 +34,12 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             let oldact_ref = sig_handler_locked.get(sig as usize);
             unsafe {
                 oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, 1);
+                debug!(
+                    "[sys_rt_sigaction]: get old sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}",
+                    (*oldact).sa_handler as *const usize as usize,
+                    (*oldact).sa_mask[0],
+                    (*oldact).sa_flags
+                );
             }
         }
 
@@ -47,16 +53,40 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             UserCheck::new()
                 .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
-            let sig_action = unsafe { *act };
-            // TODO: quite unsafe here!!!
-            let is_user_defined = if sig_action.sa_handler as usize & (1 << 63) > 0 {
-                false
-            } else {
-                true
-            };
-            let new_sigaction = KSigAction {
-                sig_action,
-                is_user_defined,
+            let mut sig_action = unsafe { *act };
+            // // TODO: quite unsafe here!!!
+            // let is_user_defined = if sig_action.sa_handler as usize == SIG_DFL {
+            //     false
+            // } else {
+            //     true
+            // };
+            let new_sigaction = match sig_action.sa_handler as usize {
+                SIG_DFL => {
+                    KSigAction::new(sig as usize, false)
+                }
+                SIG_IGN => {
+                    sig_action.sa_handler = ign_sig_handler;
+                    KSigAction {
+                        sig_action,
+                        is_user_defined: false,
+                    }
+                }
+                SIG_ERR => {
+                    panic!()
+                }
+                // TODO: quite unsafe here!!!
+                _ if sig_action.sa_handler as usize & (1 << 63) > 0 => {
+                    KSigAction {
+                        sig_action,
+                        is_user_defined: false,
+                    }
+                }
+                _ => {
+                    KSigAction {
+                        sig_action,
+                        is_user_defined: true,
+                    }
+                }
             };
             // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
             debug!(

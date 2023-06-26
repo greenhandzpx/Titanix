@@ -1,5 +1,5 @@
 use crate::{
-    process::PROCESS_MANAGER, processor::current_process, signal::Signal, stack_trace, sync::Event,
+    process::PROCESS_MANAGER, processor::current_process, stack_trace, sync::Event, signal::SIGCHLD,
 };
 use alloc::{sync::Arc, vec::Vec};
 use log::debug;
@@ -86,7 +86,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     drop(process_inner);
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
     parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
-    parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(Signal::SIGCHLD))
+    parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(SIGCHLD))
     // todo!("Handle thread exit")
 }
 

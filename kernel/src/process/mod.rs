@@ -116,7 +116,7 @@ pub struct Process {
     /// mailbox,
     pub mailbox: Arc<Mailbox>,
     /// mutable
-    inner: SpinNoIrqLock<ProcessInner>,
+    pub inner: SpinNoIrqLock<ProcessInner>,
 }
 
 impl Process {

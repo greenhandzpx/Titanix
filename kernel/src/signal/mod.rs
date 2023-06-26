@@ -1,4 +1,5 @@
 use alloc::collections::VecDeque;
+use lazy_static::*;
 use log::debug;
 
 use crate::{
@@ -11,22 +12,25 @@ use crate::{
 mod signal_context;
 mod signal_handler;
 pub use signal_context::SignalContext;
+pub use signal_handler::SIG_DFL;
+pub use signal_handler::SIG_IGN;
+pub use signal_handler::SIG_ERR;
 
-use self::signal_handler::{core_sig_handler, ign_sig_handler, stop_sig_handler, term_sig_handler};
+pub use self::signal_handler::{core_sig_handler, ign_sig_handler, stop_sig_handler, term_sig_handler};
 
-pub enum Signal {
-    SIGHUP = 1,
-    SIGINT = 2,
-    SIGILL = 4,
-    SIGABRT = 6,
-    SIGBUS = 7,
-    SIGKILL = 9,
-    SIGSEGV = 11,
-    SIGALRM = 14,
-    SIGTERM = 15,
-    SIGCHLD = 17,
-    SIGSTOP = 19,
-}
+// pub enum Signal {
+pub const SIGHUP: usize = 1;
+pub const SIGINT: usize = 2;
+pub const SIGILL: usize = 4;
+pub const SIGABRT: usize = 6;
+pub const SIGBUS: usize = 7;
+pub const SIGKILL: usize = 9;
+pub const SIGSEGV: usize = 11;
+pub const SIGALRM: usize = 14;
+pub const SIGTERM: usize = 15;
+pub const SIGCHLD: usize = 17;
+pub const SIGSTOP: usize = 19;
+// }
 
 bitflags! {
     pub struct SigSet: usize {
@@ -51,19 +55,8 @@ pub struct SigHandlerManager {
 
 impl SigHandlerManager {
     pub fn new() -> Self {
-        let mut sigactions: [KSigAction; SIG_NUM] =
-            core::array::from_fn(|_| KSigAction::new(false));
-        sigactions[Signal::SIGABRT as usize].sig_action.sa_handler = core_sig_handler;
-        sigactions[Signal::SIGHUP as usize].sig_action.sa_handler = term_sig_handler;
-        sigactions[Signal::SIGINT as usize].sig_action.sa_handler = term_sig_handler;
-        sigactions[Signal::SIGKILL as usize].sig_action.sa_handler = term_sig_handler;
-        sigactions[Signal::SIGBUS as usize].sig_action.sa_handler = core_sig_handler;
-        sigactions[Signal::SIGSEGV as usize].sig_action.sa_handler = core_sig_handler;
-        sigactions[Signal::SIGSTOP as usize].sig_action.sa_handler = stop_sig_handler;
-        sigactions[Signal::SIGCHLD as usize].sig_action.sa_handler = ign_sig_handler;
-        sigactions[Signal::SIGALRM as usize].sig_action.sa_handler = term_sig_handler;
-        sigactions[Signal::SIGTERM as usize].sig_action.sa_handler = term_sig_handler;
-        sigactions[Signal::SIGILL as usize].sig_action.sa_handler = core_sig_handler;
+        let sigactions: [KSigAction; SIG_NUM] =
+            core::array::from_fn(|signo| KSigAction::new(signo, false));
         Self { sigactions }
     }
 
@@ -97,9 +90,23 @@ pub struct SigAction {
 }
 
 impl SigAction {
-    pub fn new() -> Self {
+    pub fn new(signo: usize) -> Self {
+        let sa_handler = match signo {
+            SIGHUP => term_sig_handler,
+            SIGINT => term_sig_handler,
+            SIGILL => core_sig_handler,
+            SIGABRT => core_sig_handler,
+            SIGBUS => core_sig_handler,
+            SIGKILL => term_sig_handler,
+            SIGSEGV => core_sig_handler,
+            SIGALRM => term_sig_handler,
+            SIGTERM => term_sig_handler,
+            SIGCHLD => ign_sig_handler,
+            SIGSTOP => stop_sig_handler,
+            _ => ign_sig_handler,
+        };
         Self {
-            sa_handler: default_sig_handler,
+            sa_handler,
             // sa_sigaction: 0,
             sa_mask: [SigSet::from_bits(0).unwrap(); 1],
             sa_flags: 0,
@@ -115,10 +122,11 @@ pub struct KSigAction {
 }
 
 impl KSigAction {
-    pub fn new(is_user_defined: bool) -> Self {
+    /// Construct a default handler
+    pub fn new(signo: usize, is_user_defined: bool) -> Self {
         Self {
             is_user_defined,
-            sig_action: SigAction::new(),
+            sig_action: SigAction::new(signo),
         }
     }
 }
@@ -210,9 +218,9 @@ impl SigQueue {
             blocked_sigs: SigSet::from_bits(0).unwrap(),
         }
     }
-    pub fn send_signal(&mut self, sig: Signal) {
+    pub fn send_signal(&mut self, signo: usize) {
         self.sig_queue.push_back(SigInfo {
-            signo: sig as usize,
+            signo: signo as usize,
             errno: 0,
         });
     }

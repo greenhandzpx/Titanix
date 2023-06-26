@@ -563,6 +563,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
+    debug!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -1227,7 +1228,7 @@ pub async fn sys_pselect6(
     stack_trace!();
 
     let _sum_guard = SumGuard::new();
-    let readfds = {
+    let mut readfds = {
         if readfds_ptr != 0 {
             UserCheck::new()
                 .check_writable_slice(readfds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
@@ -1236,7 +1237,7 @@ pub async fn sys_pselect6(
             None
         }
     };
-    let writefds = {
+    let mut writefds = {
         if writefds_ptr != 0 {
             UserCheck::new()
                 .check_writable_slice(writefds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
@@ -1245,7 +1246,7 @@ pub async fn sys_pselect6(
             None
         }
     };
-    let exceptfds = {
+    let mut exceptfds = {
         if exceptfds_ptr != 0 {
             UserCheck::new()
                 .check_writable_slice(exceptfds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
@@ -1308,6 +1309,16 @@ pub async fn sys_pselect6(
                 }
             }
         }
+    }
+
+    if let Some(fds) = readfds.as_mut() {
+        fds.clear_all();
+    }
+    if let Some(fds) = writefds.as_mut() {
+        fds.clear_all();
+    }
+    if let Some(fds) = exceptfds.as_mut() {
+        fds.clear_all();
     }
 
     let timeout = match timeout_ptr {

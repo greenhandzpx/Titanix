@@ -27,8 +27,8 @@ pub fn kernel_trap_handler() {
                 "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel panicked!!",
                 scause::read().cause(),
                 scause::read().bits(),
-                sepc::read(),
                 stval::read(),
+                sepc::read(),
             );
             panic!(
                 "a trap {:?} from kernel! stval {:#x}",
