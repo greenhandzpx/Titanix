@@ -260,6 +260,8 @@ impl Sysinfo {
 
 pub const FD_SET_SIZE: usize = 1024;
 pub const FD_SET_LEN: usize = FD_SET_SIZE / (8 * core::mem::size_of::<usize>());
+
+#[derive(Debug)]
 #[repr(C)]
 pub struct FdSet {
     pub fds_bits: [usize; FD_SET_LEN],

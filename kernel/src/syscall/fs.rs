@@ -27,7 +27,7 @@ use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::poll::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
+use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
 use crate::timer::posix::TimeVal;
 use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{posix::current_time_spec, UTIME_NOW};
@@ -1254,6 +1254,8 @@ pub async fn sys_pselect6(
             None
         }
     };
+
+    debug!("[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}", readfds, writefds, exceptfds);
 
     let mut fds: Vec<PollFd> = Vec::new();
     let fd_slot_bits = 8 * core::mem::size_of::<usize>();

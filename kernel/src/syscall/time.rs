@@ -4,11 +4,19 @@ use log::debug;
 
 use crate::{
     mm::user_check::UserCheck,
-    processor::SumGuard,
+    process::{thread::spawn_kernel_thread, PROCESS_MANAGER},
+    processor::{current_process, SumGuard},
+    signal::Signal,
     stack_trace,
     timer::{
-        current_time_ms, posix::current_time_spec, posix::TimeSpec, posix::TimeVal, posix::Tms,
-        timeout_task::ksleep, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
+        current_time_duration, current_time_ms,
+        posix::current_time_spec,
+        posix::TimeVal,
+        posix::Tms,
+        posix::{ITimerval, TimeSpec},
+        timed_task::TimedTaskFuture,
+        timeout_task::ksleep,
+        TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -120,12 +128,6 @@ const ITIMER_REAL: i32 = 0;
 const ITIMER_VIRTUAL: i32 = 1;
 const ITIMER_PROF: i32 = 2;
 
-#[repr(C)]
-pub struct ITimerval {
-    it_interval: TimeVal,
-    it_value: TimeVal,
-}
-
 pub fn sys_settimer(
     which: i32,
     new_value: *const ITimerval,
@@ -133,13 +135,60 @@ pub fn sys_settimer(
 ) -> SyscallRet {
     stack_trace!();
 
-    match which {
-        ITIMER_REAL => {}
-        ITIMER_VIRTUAL => {}
-        ITIMER_PROF => {}
+    let current_pid = current_process().pid();
+
+    UserCheck::new()
+        .check_readable_slice(new_value as *const u8, core::mem::size_of::<ITimerval>())?;
+
+    let new_value = unsafe { &*new_value };
+    let interval = Duration::from(new_value.it_interval);
+    let next_timeout = Duration::from(new_value.it_value);
+    debug!("[sys_settimer]: which {}, new_value{{interval:{:?}, value:{:?} }}", which, interval, next_timeout);
+
+    let idx = match which {
+        ITIMER_REAL => {
+            let callback = move || {
+                if let Some(process) = PROCESS_MANAGER.get_process_by_pid(current_pid) {
+                    process.inner_handler(|proc| {
+                        let expired_time = current_time_duration() + interval;
+                        proc.timers[ITIMER_REAL as usize].it_value = expired_time.into();
+                        proc.pending_sigs.send_signal(Signal::SIGALRM)
+                    });
+                    if interval.is_zero() {
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            };
+            spawn_kernel_thread(async move {
+                TimedTaskFuture::new(interval, callback, Some(next_timeout)).await
+            });
+            which
+        }
+        ITIMER_VIRTUAL => {
+            todo!()
+        }
+        ITIMER_PROF => {
+            todo!()
+        }
         _ => {
             return Err(SyscallErr::EINVAL);
         }
+    };
+
+    if old_value as usize != 0 {
+        UserCheck::new()
+            .check_writable_slice(old_value as *mut u8, core::mem::size_of::<ITimerval>())?;
+        let old_value = unsafe { &mut *old_value };
+        *old_value = current_process().inner_handler(|proc| {
+            let value =
+                Duration::from(proc.timers[idx as usize].it_value) - current_time_duration();
+            proc.timers[idx as usize].it_value = value.into();
+            proc.timers[idx as usize]
+        })
     }
-    todo!()
+    Ok(0)
 }

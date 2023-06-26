@@ -3,7 +3,7 @@ use core::time::Duration;
 use super::{current_time_ms, MSEC_PER_SEC};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct TimeVal {
     pub sec: usize,
     pub usec: usize,
@@ -66,4 +66,14 @@ pub fn current_time_spec() -> TimeSpec {
         nsec: (current_time % MSEC_PER_SEC) * 1000000,
     };
     time_spec
+}
+
+/// Process's timer
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+pub struct ITimerval {
+    /// timer interval for periodic timer
+    pub it_interval: TimeVal,
+    /// time until next expiration
+    pub it_value: TimeVal,
 }

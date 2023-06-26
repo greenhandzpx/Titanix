@@ -20,6 +20,12 @@ impl ProcessManager {
         self.0.lock().insert(pid, Arc::downgrade(process));
     }
 
+    pub fn get_process_by_pid(&self, pid: usize) -> Option<Arc<Process>> {
+        match self.0.lock().get(&pid) {
+            Some(proc) => proc.upgrade(),
+            None => None,
+        }
+    }
     /// Get the init process
     pub fn init_proc(&self) -> Arc<Process> {
         self.0.lock().get(&INITPROC_PID).unwrap().upgrade().unwrap()

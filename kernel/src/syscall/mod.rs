@@ -103,7 +103,7 @@ use crate::{
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
     timer::{
-        posix::{TimeSpec, TimeVal, Tms},
+        posix::{TimeSpec, TimeVal, Tms, ITimerval},
         *,
     },
     utils::error::SyscallRet,

@@ -29,7 +29,7 @@ use crate::{
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
     trap::TrapContext,
-    utils::error::{GeneralRet, SyscallErr, SyscallRet},
+    utils::error::{GeneralRet, SyscallErr, SyscallRet}, timer::posix::ITimerval,
 };
 use alloc::{
     collections::BTreeMap,
@@ -98,6 +98,8 @@ pub struct ProcessInner {
     pub exit_code: i8,
     /// Current Work Directory
     pub cwd: String,
+    /// REAL, VIRTUAL, PROF timer
+    pub timers: [ITimerval; 3],
 }
 
 impl ProcessInner {
@@ -218,6 +220,7 @@ impl Process {
                 addr_to_condvar_map: BTreeMap::new(),
                 exit_code: 0,
                 cwd: String::from("/"),
+                timers: [ITimerval::default(); 3],
             }),
         });
         let trap_context =
@@ -528,6 +531,7 @@ impl Process {
                     addr_to_condvar_map: BTreeMap::new(),
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),
+                    timers: [ITimerval::default(); 3],
                 }),
             });
             // add child

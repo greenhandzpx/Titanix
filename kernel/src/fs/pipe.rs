@@ -206,10 +206,10 @@ impl PipeRingBuffer {
     }
 
     pub fn all_write_ends_closed(&self) -> bool {
-        debug!(
-            "writen end ref cnt {}",
-            self.write_end.as_ref().unwrap().strong_count()
-        );
+        // debug!(
+        //     "writen end ref cnt {}",
+        //     self.write_end.as_ref().unwrap().strong_count()
+        // );
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 }

@@ -1,6 +1,6 @@
 //! RISC-V timer-related functionality
 
-pub mod poll;
+pub mod io_multiplex;
 pub mod posix;
 pub mod timed_task;
 pub mod timeout_task;
@@ -85,14 +85,16 @@ pub fn init() {
 pub fn handle_timeout_events() {
     // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
     let current_time = current_time_duration();
+    let mut timers = TIMER_QUEUE.timers.lock();
+    // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time
+    // may be a little long.
     loop {
-        let mut timers = TIMER_QUEUE.timers.lock();
         if let Some(timer) = timers.peek() {
             if current_time >= timer.0.expired_time {
                 let mut timer = timers.pop().unwrap();
-                // Drop timers because the timer callback may lock the timer inside
-                // TODO: is it low efficiency?
-                drop(timers);
+                //// Drop timers because the timer callback may lock the timer inside
+                //// TODO: is it low efficiency?
+                //// drop(timers);
                 timer.0.waker.take().unwrap().wake();
                 // timer.0.waker.as_ref().unwrap().wake_by_ref();
             } else {
@@ -102,16 +104,6 @@ pub fn handle_timeout_events() {
             break;
         }
     }
-    // for timer in timers.iter_mut() {
-    //     if current_time >= timer.expired_time {
-    //         timer.waker.take().unwrap().wake();
-    //         timeout_cnt += 1;
-    //     }
-    // }
-    // for _ in 0..timeout_cnt {
-    //     timers.pop_front();
-    // }
-    // debug!("[handle_timeout_events]: finish, timeout cnt {}", timeout_cnt);
 }
 
 struct TimerQueue {
