@@ -3,13 +3,14 @@
 pub mod poll;
 pub mod posix;
 pub mod timed_task;
+pub mod timeout_task;
 
-use core::time::Duration;
+use core::{cmp::Reverse, task::Waker, time::Duration};
 
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BinaryHeap};
 use lazy_static::*;
 use log::{debug, info};
 use riscv::register::time;
@@ -79,4 +80,90 @@ pub fn init() {
         .insert(CLOCK_REALTIME, TimeDiff { sec: 0, nsec: 0 });
 
     info!("init clock manager success");
+}
+
+pub fn handle_timeout_events() {
+    // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
+    let current_time = current_time_duration();
+    loop {
+        let mut timers = TIMER_QUEUE.timers.lock();
+        if let Some(timer) = timers.peek() {
+            if current_time >= timer.0.expired_time {
+                let mut timer = timers.pop().unwrap();
+                // Drop timers because the timer callback may lock the timer inside
+                // TODO: is it low efficiency?
+                drop(timers);
+                timer.0.waker.take().unwrap().wake();
+                // timer.0.waker.as_ref().unwrap().wake_by_ref();
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    // for timer in timers.iter_mut() {
+    //     if current_time >= timer.expired_time {
+    //         timer.waker.take().unwrap().wake();
+    //         timeout_cnt += 1;
+    //     }
+    // }
+    // for _ in 0..timeout_cnt {
+    //     timers.pop_front();
+    // }
+    // debug!("[handle_timeout_events]: finish, timeout cnt {}", timeout_cnt);
+}
+
+struct TimerQueue {
+    timers: SpinNoIrqLock<BinaryHeap<Reverse<Timer>>>,
+}
+
+impl TimerQueue {
+    fn add_timer(&self, timer: Timer) {
+        self.timers.lock().push(Reverse(timer))
+    }
+}
+
+lazy_static! {
+    static ref TIMER_QUEUE: TimerQueue = TimerQueue {
+        timers: SpinNoIrqLock::new(BinaryHeap::new())
+    };
+}
+
+struct Timer {
+    expired_time: Duration,
+    waker: Option<Waker>,
+    // waker: SyncUnsafeCell<Option<Waker>>,
+}
+
+impl PartialEq for Timer {
+    fn eq(&self, other: &Self) -> bool {
+        self.expired_time == other.expired_time
+    }
+}
+
+impl PartialOrd for Timer {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        if self.expired_time < other.expired_time {
+            Some(core::cmp::Ordering::Less)
+        } else if self.expired_time > other.expired_time {
+            Some(core::cmp::Ordering::Greater)
+        } else {
+            Some(core::cmp::Ordering::Equal)
+        }
+    }
+}
+
+impl Eq for Timer {}
+
+impl Ord for Timer {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        if self.expired_time < other.expired_time {
+            core::cmp::Ordering::Less
+        } else if self.expired_time > other.expired_time {
+            core::cmp::Ordering::Greater
+        } else {
+            core::cmp::Ordering::Equal
+        }
+    }
 }

@@ -27,9 +27,9 @@ use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::poll::{IOMultiplexFuture, RawFdSetRWE, IOMultiplexFormat};
+use crate::timer::poll::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
 use crate::timer::posix::TimeVal;
-use crate::timer::timed_task::{TimedTaskFuture, TimedTaskOutput};
+use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{posix::current_time_spec, UTIME_NOW};
 use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
@@ -1200,11 +1200,11 @@ pub async fn sys_ppoll(
 
     let poll_future = IOMultiplexFuture::new(fds, IOMultiplexFormat::PollFds(fds_ptr));
     if let Some(timeout) = timeout {
-        match TimedTaskFuture::new(timeout, poll_future).await {
-            TimedTaskOutput::Ok(ret) => {
+        match TimeoutTaskFuture::new(timeout, poll_future).await {
+            TimeoutTaskOutput::Ok(ret) => {
                 return ret;
             }
-            TimedTaskOutput::Timeout => {
+            TimeoutTaskOutput::Timeout => {
                 warn!("[sys_ppoll]: timeout");
                 return Ok(0);
             }
@@ -1336,11 +1336,11 @@ pub async fn sys_pselect6(
         IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
     );
     if let Some(timeout) = timeout {
-        match TimedTaskFuture::new(timeout, poll_future).await {
-            TimedTaskOutput::Ok(ret) => {
+        match TimeoutTaskFuture::new(timeout, poll_future).await {
+            TimeoutTaskOutput::Ok(ret) => {
                 return ret;
             }
-            TimedTaskOutput::Timeout => {
+            TimeoutTaskOutput::Timeout => {
                 warn!("[sys_pselect]: timeout");
                 return Ok(0);
             }

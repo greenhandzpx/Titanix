@@ -187,6 +187,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
+        SYSCALL_SETTIMER => sys_settimer(
+            args[0] as i32,
+            args[1] as *const ITimerval,
+            args[2] as *mut ITimerval,
+        ),
         SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0], args[1] as *const TimeSpec),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
         SYSCALL_SYSLOG => sys_syslog(args[0] as u32, args[1] as *mut u8, args[2] as u32),

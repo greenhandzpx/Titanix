@@ -72,14 +72,8 @@ impl RawFdSetRWE {
 }
 
 impl IOMultiplexFuture {
-    pub fn new(
-        fds: Vec<PollFd>,
-        user_format: IOMultiplexFormat,
-    ) -> Self {
-        Self {
-            fds,
-            user_format,
-        }
+    pub fn new(fds: Vec<PollFd>, user_format: IOMultiplexFormat) -> Self {
+        Self { fds, user_format }
     }
 }
 

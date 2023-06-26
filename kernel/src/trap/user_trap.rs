@@ -11,7 +11,7 @@ use crate::{
     signal::check_signal_for_current_process,
     stack_trace,
     syscall::syscall,
-    timer::{set_next_trigger, timed_task::handle_timeout_events},
+    timer::{handle_timeout_events, set_next_trigger},
     trap::set_user_trap_entry,
     FIRST_HART_ID,
 };

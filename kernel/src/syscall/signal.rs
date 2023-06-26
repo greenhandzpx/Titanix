@@ -14,7 +14,10 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
     stack_trace!();
     info!(
         "[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}, act size {}",
-        sig, act as usize, oldact as usize, core::mem::size_of::<SigAction>() 
+        sig,
+        act as usize,
+        oldact as usize,
+        core::mem::size_of::<SigAction>()
     );
     // Ok(0)
     if sig < 0 || sig as usize >= SIG_NUM {
@@ -30,10 +33,7 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             let sig_handler_locked = proc.sig_handler.lock();
             let oldact_ref = sig_handler_locked.get(sig as usize);
             unsafe {
-                oldact.copy_from(
-                    &oldact_ref.unwrap().sig_action as *const SigAction,
-                    1,
-                );
+                oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, 1);
             }
         }
 

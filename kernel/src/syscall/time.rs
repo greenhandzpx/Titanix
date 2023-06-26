@@ -4,12 +4,11 @@ use log::debug;
 
 use crate::{
     mm::user_check::UserCheck,
-    process::thread,
     processor::SumGuard,
     stack_trace,
     timer::{
         current_time_ms, posix::current_time_spec, posix::TimeSpec, posix::TimeVal, posix::Tms,
-        timed_task::ksleep, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
+        timeout_task::ksleep, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -115,20 +114,32 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
     };
     ksleep(Duration::from_millis(sleep_ms as u64)).await;
     Ok(0)
-    // let start_ms = current_time_ms();
-    // let end_ms = sleep_ms + start_ms;
-
-    // loop {
-    //     let now_ms = current_time_ms();
-    //     if now_ms >= end_ms {
-    //         return Ok(0);
-    //     }
-    //     thread::yield_now().await;
-    // }
 }
 
-pub fn sys_settimer() -> SyscallRet {
+const ITIMER_REAL: i32 = 0;
+const ITIMER_VIRTUAL: i32 = 1;
+const ITIMER_PROF: i32 = 2;
+
+#[repr(C)]
+pub struct ITimerval {
+    it_interval: TimeVal,
+    it_value: TimeVal,
+}
+
+pub fn sys_settimer(
+    which: i32,
+    new_value: *const ITimerval,
+    old_value: *mut ITimerval,
+) -> SyscallRet {
     stack_trace!();
-    
+
+    match which {
+        ITIMER_REAL => {}
+        ITIMER_VIRTUAL => {}
+        ITIMER_PROF => {}
+        _ => {
+            return Err(SyscallErr::EINVAL);
+        }
+    }
     todo!()
 }
