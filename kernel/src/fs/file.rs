@@ -61,8 +61,8 @@ pub trait File: Send + Sync {
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
-        Ok(true)
-        // todo!()
+        // Ok(true)
+        todo!()
     }
 
     fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {

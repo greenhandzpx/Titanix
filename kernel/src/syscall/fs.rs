@@ -669,7 +669,7 @@ fn test() -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    trace!("[sys_read]: fd {}, len {}", fd, len);
+    debug!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -1255,7 +1255,10 @@ pub async fn sys_pselect6(
         }
     };
 
-    debug!("[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}", readfds, writefds, exceptfds);
+    debug!(
+        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}",
+        readfds, writefds, exceptfds
+    );
 
     let mut fds: Vec<PollFd> = Vec::new();
     let fd_slot_bits = 8 * core::mem::size_of::<usize>();

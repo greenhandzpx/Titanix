@@ -5,7 +5,7 @@ use log::info;
 use crate::timer::current_time_duration;
 
 /// Used for sys_getrusage
-///                                                  -- user --                -user- 
+///                                                  -- user --                -user-
 /// ---kernel---(switch to other thread) ---kernel---          --- kernel --          --- (switch)
 ///                                   enter          ret      trap          ret     trap     leave
 pub struct ThreadTimeInfo {
@@ -27,7 +27,7 @@ impl ThreadTimeInfo {
             sys_time: Duration::ZERO,
             last_enter_ts: current_ts,
             last_leave_ts: current_ts,
-            last_user_ret_ts: None, 
+            last_user_ret_ts: None,
             last_user_trap_ts: None,
         }
     }

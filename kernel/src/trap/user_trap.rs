@@ -117,7 +117,11 @@ pub async fn trap_handler() {
                 stval
             );
             // // illegal instruction exit code
-            current_process().set_zombie();
+            // current_process().set_zombie();
+            #[cfg(feature = "stack_trace")]
+            warn!("backtrace:");
+            local_hart().env().stack_tracker.print_stacks();
+            exit_and_terminate_all_threads(-2);
             // exit_current_and_run_next(-3);
             // todo!("Exit current process when encounting illegal instruction");
         }

@@ -28,8 +28,9 @@ use crate::{
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
+    timer::posix::ITimerval,
     trap::TrapContext,
-    utils::error::{GeneralRet, SyscallErr, SyscallRet}, timer::posix::ITimerval,
+    utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 use alloc::{
     collections::BTreeMap,

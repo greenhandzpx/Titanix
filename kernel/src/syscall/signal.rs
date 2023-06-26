@@ -47,9 +47,16 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             UserCheck::new()
                 .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
+            let sig_action = unsafe { *act };
+            // TODO: quite unsafe here!!!
+            let is_user_defined = if sig_action.sa_handler as usize & (1 << 63) > 0 {
+                false
+            } else {
+                true
+            };
             let new_sigaction = KSigAction {
-                sig_action: unsafe { *act },
-                is_user_defined: true,
+                sig_action,
+                is_user_defined,
             };
             // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
             debug!(

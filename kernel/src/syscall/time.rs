@@ -143,7 +143,10 @@ pub fn sys_settimer(
     let new_value = unsafe { &*new_value };
     let interval = Duration::from(new_value.it_interval);
     let next_timeout = Duration::from(new_value.it_value);
-    debug!("[sys_settimer]: which {}, new_value{{interval:{:?}, value:{:?} }}", which, interval, next_timeout);
+    debug!(
+        "[sys_settimer]: which {}, new_value{{interval:{:?}, value:{:?} }}",
+        which, interval, next_timeout
+    );
 
     let idx = match which {
         ITIMER_REAL => {

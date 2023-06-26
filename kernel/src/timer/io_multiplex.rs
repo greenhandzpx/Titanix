@@ -55,17 +55,35 @@ impl RawFdSetRWE {
             if let Some(fd_set_ptr) = self.read_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
                 fd_set.clear_all();
-                fd_set.mark_fd(fd.fd as usize);
+                if PollEvents::from_bits(fd.revents)
+                    .unwrap()
+                    .contains(PollEvents::POLLIN)
+                {
+                    fd_set.mark_fd(fd.fd as usize);
+                    debug!("[update_by_fds_vec]: read fd set {:?}", fd_set);
+                }
             }
             if let Some(fd_set_ptr) = self.write_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
                 fd_set.clear_all();
-                fd_set.mark_fd(fd.fd as usize);
+                if PollEvents::from_bits(fd.revents)
+                    .unwrap()
+                    .contains(PollEvents::POLLOUT)
+                {
+                    fd_set.mark_fd(fd.fd as usize);
+                    debug!("[update_by_fds_vec]: write fd set {:?}", fd_set);
+                }
             }
             if let Some(fd_set_ptr) = self.except_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
                 fd_set.clear_all();
-                fd_set.mark_fd(fd.fd as usize);
+                if PollEvents::from_bits(fd.revents)
+                    .unwrap()
+                    .contains(PollEvents::POLLPRI)
+                {
+                    fd_set.mark_fd(fd.fd as usize);
+                    debug!("[update_by_fds_vec]: except fd set {:?}", fd_set);
+                }
             }
         }
     }
