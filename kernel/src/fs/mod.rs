@@ -1,5 +1,4 @@
 mod devfs;
-pub mod dirent;
 pub mod fat32;
 mod fd_table;
 mod file;
@@ -15,9 +14,6 @@ mod testfs;
 
 use alloc::string::String;
 use alloc::sync::Arc;
-// pub use dentry::Dentry;
-pub use dirent::Dirent;
-pub use dirent::DIRENT_SIZE;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;
 pub use file::File;

@@ -15,12 +15,11 @@ use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::posix::{StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE};
+use crate::fs::posix::{Dirent, StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE};
 use crate::fs::HashKey;
 use crate::fs::{
-    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, Dirent, FaccessatFlags,
-    FcntlFlags, FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD,
-    FILE_SYSTEM_MANAGER,
+    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
+    FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
 use crate::mm::user_check::UserCheck;
@@ -759,10 +758,11 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usi
     let _sum_guard = SumGuard::new();
 
     UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
-    let raw_fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
+    let raw_fds: &mut [PollFd] =
+        unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
     let mut fds: Vec<PollFd> = Vec::new();
     fds.extend_from_slice(raw_fds);
-    
+
     debug!("[sys_ppoll]: fds {:?}", fds);
 
     let timeout = match timeout_ptr {
