@@ -8,7 +8,7 @@ use crate::{
         PhysPageNum, VirtAddr,
     },
     process::Process,
-    processor::current_process,
+    processor::{current_process, SumGuard},
     utils::error::{AgeneralRet, GeneralRet, SyscallErr},
 };
 
@@ -331,6 +331,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                     // old frame's ref cnt
                     let new_frame = frame_alloc().unwrap();
                     // copy old frame's data to the new frame
+                    let _sum_guard = SumGuard::new();
                     new_frame
                         .ppn
                         .bytes_array()
@@ -370,6 +371,7 @@ impl PageFaultHandler for CowPageFaultHandler {
             // data_frames.0.insert(vpn, Arc::new(new_frame));
         }
 
+        debug!("handle cow page fault(cow) finished, va {:#x}", va.0);
         Ok(true)
     }
 

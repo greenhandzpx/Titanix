@@ -28,6 +28,7 @@ use crate::{
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
+    timer::posix::ITimerval,
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
@@ -98,6 +99,8 @@ pub struct ProcessInner {
     pub exit_code: i8,
     /// Current Work Directory
     pub cwd: String,
+    /// REAL, VIRTUAL, PROF timer
+    pub timers: [ITimerval; 3],
 }
 
 impl ProcessInner {
@@ -113,7 +116,7 @@ pub struct Process {
     /// mailbox,
     pub mailbox: Arc<Mailbox>,
     /// mutable
-    inner: SpinNoIrqLock<ProcessInner>,
+    pub inner: SpinNoIrqLock<ProcessInner>,
 }
 
 impl Process {
@@ -218,6 +221,7 @@ impl Process {
                 addr_to_condvar_map: BTreeMap::new(),
                 exit_code: 0,
                 cwd: String::from("/"),
+                timers: [ITimerval::default(); 3],
             }),
         });
         let trap_context =
@@ -528,6 +532,7 @@ impl Process {
                     addr_to_condvar_map: BTreeMap::new(),
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),
+                    timers: [ITimerval::default(); 3],
                 }),
             });
             // add child

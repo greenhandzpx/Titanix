@@ -103,7 +103,7 @@ use crate::{
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
     timer::{
-        posix::{TimeSpec, TimeVal, Tms},
+        posix::{ITimerval, TimeSpec, TimeVal, Tms},
         *,
     },
     utils::error::SyscallRet,
@@ -112,7 +112,7 @@ use crate::{
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!(
+    info!(
         "syscall id: {}, sepc {:#x}",
         syscall_id,
         current_trap_cx().sepc
@@ -164,6 +164,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+        SYSCALL_PSELECT6 => {
+            sys_pselect6(args[0] as i32, args[1], args[2], args[3], args[4], args[5]).await
+        }
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
         SYSCALL_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
         SYSCALL_NEWFSTATAT => sys_newfstatat(
@@ -184,6 +187,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
+        SYSCALL_SETTIMER => sys_settimer(
+            args[0] as i32,
+            args[1] as *const ITimerval,
+            args[2] as *mut ITimerval,
+        ),
         SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0], args[1] as *const TimeSpec),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
         SYSCALL_SYSLOG => sys_syslog(args[0] as u32, args[1] as *mut u8, args[2] as u32),
@@ -331,7 +339,7 @@ pub struct PollFd {
 
 bitflags! {
     /// Poll events
-    pub struct PollEvents: u16 {
+    pub struct PollEvents: i16 {
         /// There is data to read
         const POLLIN = 1 << 0;
         /// Execption about fd

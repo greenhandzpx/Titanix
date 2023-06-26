@@ -15,7 +15,7 @@ use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::posix::{Dirent, StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE};
+use crate::fs::posix::{Dirent, StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE, FdSet, FD_SET_LEN};
 use crate::fs::HashKey;
 use crate::fs::{
     inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
@@ -26,8 +26,9 @@ use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::poll::FilePollFuture;
-use crate::timer::timed_task::{TimedTaskFuture, TimedTaskOutput};
+use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
+use crate::timer::posix::TimeVal;
+use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{posix::current_time_spec, UTIME_NOW};
 use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
@@ -561,6 +562,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
+    debug!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -667,7 +669,7 @@ fn test() -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    trace!("[sys_read]: fd {}, len {}", fd, len);
+    debug!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -751,109 +753,6 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
             todo!()
         }
     }
-}
-
-pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usize) -> SyscallRet {
-    stack_trace!();
-    let _sum_guard = SumGuard::new();
-
-    UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
-    let raw_fds: &mut [PollFd] =
-        unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
-    let mut fds: Vec<PollFd> = Vec::new();
-    fds.extend_from_slice(raw_fds);
-
-    debug!("[sys_ppoll]: fds {:?}", fds);
-
-    let timeout = match timeout_ptr {
-        0 => {
-            debug!("[sys_ppoll]: infinite timeout");
-            None
-        }
-        _ => {
-            UserCheck::new()
-                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
-            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
-        }
-    };
-
-    if sigmask != 0 {
-        stack_trace!();
-        UserCheck::new()
-            .check_readable_slice(sigmask as *const u8, core::mem::size_of::<SigSet>())?;
-        let sigmask = unsafe { *(sigmask as *const usize) };
-        current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
-                proc.pending_sigs.blocked_sigs |= new_sig_mask;
-            } else {
-                warn!("invalid set arg");
-            }
-        });
-    }
-
-    let poll_future = FilePollFuture::new(fds);
-    if let Some(timeout) = timeout {
-        match TimedTaskFuture::new(timeout, poll_future).await {
-            TimedTaskOutput::Ok(ret) => {
-                return ret;
-            }
-            TimedTaskOutput::Timeout => {
-                warn!("[sys_ppoll]: timeout");
-                return Ok(0);
-            }
-        }
-    } else {
-        let ret = poll_future.await;
-        debug!("[sys_ppoll]: ready");
-        ret
-    }
-
-    // loop {
-    //     // TODO: how to avoid user modify the address?
-    //     let mut cnt = 0;
-    //     for i in 0..nfds {
-    //         let current_fd = &mut fds[i];
-    //         // trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
-    //         if let Some(file) =
-    //             current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
-    //         {
-    //             if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
-    //                 current_fd.revents = 0;
-    //                 if events.contains(PollEvents::POLLIN) {
-    //                     // file.read()
-    //                     if file.pollin()? {
-    //                         current_fd.revents |= PollEvents::POLLIN.bits() as i16;
-    //                         cnt += 1;
-    //                         continue;
-    //                     }
-    //                 }
-    //                 if events.contains(PollEvents::POLLOUT) {
-    //                     // file.read()
-    //                     if file.pollout()? {
-    //                         current_fd.revents |= PollEvents::POLLOUT.bits() as i16;
-    //                         cnt += 1;
-    //                         continue;
-    //                     }
-    //                 }
-    //             } else {
-    //                 warn!("Invalid events: {:#x}", current_fd.events);
-    //                 // TODO: not sure
-    //                 return Err(SyscallErr::EINVAL);
-    //             }
-    //         } else {
-    //             debug!("No such file for fd {}", current_fd.fd);
-    //             continue;
-    //         }
-    //     }
-    //     if cnt > 0 {
-    //         return Ok(cnt as isize);
-    //     } else if !infinite_timeout && current_time_ms() >= expire_time {
-    //         debug!("[sys_ppoll]: timeout!");
-    //         return Ok(0);
-    //     } else {
-    //         thread::yield_now().await;
-    //     }
-    // }
 }
 
 pub async fn sys_sendfile(
@@ -1283,8 +1182,217 @@ pub fn sys_syslog(log_type: u32, bufp: *mut u8, len: u32) -> SyscallRet {
         }
     }
 }
-pub async fn sys_pselect6(nfds: i32) -> SyscallRet {
+
+pub async fn sys_ppoll(
+    fds_ptr: usize,
+    nfds: usize,
+    timeout_ptr: usize,
+    sigmask_ptr: usize,
+) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+
+    UserCheck::new()
+        .check_writable_slice(fds_ptr as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
+    let raw_fds: &mut [PollFd] =
+        unsafe { core::slice::from_raw_parts_mut(fds_ptr as *mut PollFd, nfds) };
+    // TODO: can we just use the fds in place without allocating memeory in heap?
+    let mut fds: Vec<PollFd> = Vec::new();
+    fds.extend_from_slice(raw_fds);
+
+    debug!("[sys_ppoll]: fds {:?}", fds);
+
+    let timeout = match timeout_ptr {
+        0 => {
+            debug!("[sys_ppoll]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
+        }
+    };
+
+    if sigmask_ptr != 0 {
+        stack_trace!();
+        UserCheck::new()
+            .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe { *(sigmask_ptr as *const usize) };
+        current_process().inner_handler(|proc| {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+            } else {
+                warn!("[sys_ppoll]: invalid set arg");
+            }
+        });
+    }
+
+    let poll_future = IOMultiplexFuture::new(fds, IOMultiplexFormat::PollFds(fds_ptr));
+    if let Some(timeout) = timeout {
+        match TimeoutTaskFuture::new(timeout, poll_future).await {
+            TimeoutTaskOutput::Ok(ret) => {
+                return ret;
+            }
+            TimeoutTaskOutput::Timeout => {
+                warn!("[sys_ppoll]: timeout");
+                return Ok(0);
+            }
+        }
+    } else {
+        let ret = poll_future.await;
+        debug!("[sys_ppoll]: ready");
+        ret
+    }
+}
+
+pub async fn sys_pselect6(
+    nfds: i32,
+    readfds_ptr: usize,
+    writefds_ptr: usize,
+    exceptfds_ptr: usize,
+    timeout_ptr: usize,
+    sigmask_ptr: usize,
+) -> SyscallRet {
     stack_trace!();
 
-    todo!()
+    let _sum_guard = SumGuard::new();
+    let mut readfds = {
+        if readfds_ptr != 0 {
+            UserCheck::new()
+                .check_writable_slice(readfds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
+            Some(unsafe { &mut *(readfds_ptr as *mut FdSet) })
+        } else {
+            None
+        }
+    };
+    let mut writefds = {
+        if writefds_ptr != 0 {
+            UserCheck::new()
+                .check_writable_slice(writefds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
+            Some(unsafe { &mut *(writefds_ptr as *mut FdSet) })
+        } else {
+            None
+        }
+    };
+    let mut exceptfds = {
+        if exceptfds_ptr != 0 {
+            UserCheck::new()
+                .check_writable_slice(exceptfds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
+            Some(unsafe { &mut *(exceptfds_ptr as *mut FdSet) })
+        } else {
+            None
+        }
+    };
+
+    debug!(
+        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}",
+        readfds, writefds, exceptfds
+    );
+
+    let mut fds: Vec<PollFd> = Vec::new();
+    let fd_slot_bits = 8 * core::mem::size_of::<usize>();
+    for fd_slot in 0..FD_SET_LEN {
+        for offset in 0..fd_slot_bits {
+            let fd = fd_slot * fd_slot_bits + offset;
+            if fd >= nfds as usize {
+                break;
+            }
+            if let Some(readfds) = readfds.as_ref() {
+                if readfds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                    fds.push(PollFd {
+                        fd: fd as i32,
+                        events: PollEvents::POLLIN.bits(),
+                        revents: PollEvents::empty().bits(),
+                    })
+                }
+            }
+            if let Some(writefds) = writefds.as_ref() {
+                if writefds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                    if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                            let events = PollEvents::from_bits(last_fd.events).unwrap()
+                                | PollEvents::POLLOUT;
+                            fds.last_mut().unwrap().events = events.bits();
+                        } else {
+                            fds.push(PollFd {
+                                fd: fd as i32,
+                                events: PollEvents::POLLOUT.bits(),
+                                revents: PollEvents::empty().bits(),
+                            })
+                        }
+                }
+            }
+            if let Some(exceptfds) = exceptfds.as_ref() {
+                if exceptfds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                    if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                            let events = PollEvents::from_bits(last_fd.events).unwrap()
+                                | PollEvents::POLLPRI;
+                            fds.last_mut().unwrap().events = events.bits();
+                        } else {
+                            fds.push(PollFd {
+                                fd: fd as i32,
+                                events: PollEvents::POLLPRI.bits(),
+                                revents: PollEvents::empty().bits(),
+                            })
+                        }
+                }
+            }
+        }
+    }
+
+    if let Some(fds) = readfds.as_mut() {
+        fds.clear_all();
+    }
+    if let Some(fds) = writefds.as_mut() {
+        fds.clear_all();
+    }
+    if let Some(fds) = exceptfds.as_mut() {
+        fds.clear_all();
+    }
+
+    let timeout = match timeout_ptr {
+        0 => {
+            debug!("[sys_pselect]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
+        }
+    };
+
+    if sigmask_ptr != 0 {
+        stack_trace!();
+        UserCheck::new()
+            .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe { *(sigmask_ptr as *const usize) };
+        current_process().inner_handler(|proc| {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+            } else {
+                warn!("[sys_pselect]: invalid set arg");
+            }
+        });
+    }
+
+    let poll_future = IOMultiplexFuture::new(
+        fds,
+        IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
+    );
+    if let Some(timeout) = timeout {
+        match TimeoutTaskFuture::new(timeout, poll_future).await {
+            TimeoutTaskOutput::Ok(ret) => {
+                return ret;
+            }
+            TimeoutTaskOutput::Timeout => {
+                warn!("[sys_pselect]: timeout");
+                return Ok(0);
+            }
+        }
+    } else {
+        let ret = poll_future.await;
+        debug!("[sys_pselect]: ready");
+        ret
+    }
 }

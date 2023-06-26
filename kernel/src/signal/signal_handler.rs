@@ -2,6 +2,12 @@ use log::debug;
 
 use crate::{process::thread::exit_and_terminate_all_threads, stack_trace};
 
+
+pub const SIG_ERR: usize = usize::MAX;
+pub const SIG_DFL: usize = 0;
+pub const SIG_IGN: usize = 1;
+
+
 pub fn term_sig_handler(signo: usize) {
     stack_trace!();
     debug!("term sig handler, sig {}", signo);

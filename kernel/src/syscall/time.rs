@@ -4,12 +4,19 @@ use log::debug;
 
 use crate::{
     mm::user_check::UserCheck,
-    process::thread,
-    processor::SumGuard,
+    process::{thread::spawn_kernel_thread, PROCESS_MANAGER},
+    processor::{current_process, SumGuard},
+    signal::SIGALRM,
     stack_trace,
     timer::{
-        current_time_ms, posix::current_time_spec, posix::TimeSpec, posix::TimeVal, posix::Tms,
-        timed_task::ksleep, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
+        current_time_duration, current_time_ms,
+        posix::current_time_spec,
+        posix::TimeVal,
+        posix::Tms,
+        posix::{ITimerval, TimeSpec},
+        timed_task::TimedTaskFuture,
+        timeout_task::ksleep,
+        TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -115,14 +122,96 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
     };
     ksleep(Duration::from_millis(sleep_ms as u64)).await;
     Ok(0)
-    // let start_ms = current_time_ms();
-    // let end_ms = sleep_ms + start_ms;
+}
 
-    // loop {
-    //     let now_ms = current_time_ms();
-    //     if now_ms >= end_ms {
-    //         return Ok(0);
-    //     }
-    //     thread::yield_now().await;
-    // }
+const ITIMER_REAL: i32 = 0;
+const ITIMER_VIRTUAL: i32 = 1;
+const ITIMER_PROF: i32 = 2;
+
+pub fn sys_settimer(
+    which: i32,
+    new_value: *const ITimerval,
+    old_value: *mut ITimerval,
+) -> SyscallRet {
+    stack_trace!();
+
+    let current_pid = current_process().pid();
+
+    UserCheck::new()
+        .check_readable_slice(new_value as *const u8, core::mem::size_of::<ITimerval>())?;
+
+    let _sum_guard = SumGuard::new();
+
+    let new_value = unsafe { &*new_value };
+    let interval = Duration::from(new_value.it_interval);
+    let next_timeout = Duration::from(new_value.it_value);
+    debug!(
+        "[sys_settimer]: which {}, new_value{{ interval:{:?}, value:{:?} }}",
+        which, interval, next_timeout
+    );
+
+    let idx = match which {
+        ITIMER_REAL => {
+            let callback = move || {
+                if let Some(process) = PROCESS_MANAGER.get_process_by_pid(current_pid) {
+                    let mut proc = process.inner.lock();
+                    let timer = &mut proc.timers[ITIMER_REAL as usize];
+                    if Duration::from(timer.it_value).is_zero() {
+                        timer.it_value = Duration::ZERO.into();
+                        return false;
+                    } else {
+                        let expired_time = current_time_duration() + interval;
+                        timer.it_value = expired_time.into();
+                        proc.pending_sigs.send_signal(SIGALRM)
+                    }
+                    if interval.is_zero() {
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            };
+            if next_timeout.is_zero() {
+                // Disarm the old timer
+                current_process().inner_handler(|proc| {
+                    proc.timers[ITIMER_REAL as usize].it_value = Duration::ZERO.into();
+                });
+            } else {
+                current_process().inner_handler(|proc| {
+                    proc.timers[ITIMER_REAL as usize].it_value = (current_time_duration() + next_timeout).into();
+                });
+                spawn_kernel_thread(async move {
+                    TimedTaskFuture::new(interval, callback, Some(next_timeout)).await
+                });
+            }
+            which
+        }
+        ITIMER_VIRTUAL => {
+            todo!()
+        }
+        ITIMER_PROF => {
+            todo!()
+        }
+        _ => {
+            return Err(SyscallErr::EINVAL);
+        }
+    };
+
+    if old_value as usize != 0 {
+        UserCheck::new()
+            .check_writable_slice(old_value as *mut u8, core::mem::size_of::<ITimerval>())?;
+        let old_value = unsafe { &mut *old_value };
+        *old_value = current_process().inner_handler(|proc| {
+            let next_trigger_ts = Duration::from(proc.timers[idx as usize].it_value);
+            let mut value = next_trigger_ts;
+            if !value.is_zero() {
+                value -= current_time_duration();
+            }
+            proc.timers[idx as usize].it_value = value.into();
+            proc.timers[idx as usize]
+        })
+    }
+    Ok(0)
 }

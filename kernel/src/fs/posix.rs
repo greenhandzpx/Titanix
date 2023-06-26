@@ -312,6 +312,7 @@ pub struct Sysinfo {
 }
 
 impl Sysinfo {
+    #[allow(unused)]
     pub fn collect() -> Self {
         // Self {
         //     uptime: current_time_duration().as_secs() as i64,
@@ -330,5 +331,27 @@ impl Sysinfo {
         //     _f: [0; _F_SIZE],
         // }
         todo!()
+    }
+}
+
+pub const FD_SET_SIZE: usize = 1024;
+pub const FD_SET_LEN: usize = FD_SET_SIZE / (8 * core::mem::size_of::<usize>());
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct FdSet {
+    pub fds_bits: [usize; FD_SET_LEN],
+}
+
+impl FdSet {
+    pub fn clear_all(&mut self) {
+        self.fds_bits.fill(0);
+    }
+    pub fn mark_fd(&mut self, fd: usize) {
+        if fd >= FD_SET_SIZE {
+            return;
+        }
+        let offset = fd % FD_SET_LEN;
+        self.fds_bits[fd / FD_SET_LEN] |= 1 << offset;
     }
 }

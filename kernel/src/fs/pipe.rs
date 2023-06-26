@@ -1,11 +1,15 @@
+use core::future::Future;
+use core::task::{Poll, Waker};
+
 use alloc::boxed::Box;
 use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
 use log::debug;
 
-use crate::process;
+use crate::config::fs::PIPE_BUF_CAPACITY;
 use crate::processor::SumGuard;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::utils::error::AsyscallRet;
+use crate::utils::error::{AsyscallRet, GeneralRet, SyscallRet};
 
 use super::file::{File, FileMeta};
 
@@ -31,84 +35,120 @@ impl File for Pipe {
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         assert!(self.readable());
-        Box::pin(async move {
+        let buf_addr = buf.as_ptr() as usize;
+        Box::pin(
             // debug!("start to pipe read {} bytes", buf.len());
-            let _sum_guard = SumGuard::new();
-            let want_to_read = buf.len();
-            let mut buf_iter = buf.into_iter();
-            let mut already_read = 0usize;
-            loop {
-                if let Some(ret) = self.inner_handler(|ring_buffer| {
-                    let loop_read = ring_buffer.available_read();
-                    if loop_read == 0 {
-                        if ring_buffer.all_write_ends_closed() {
-                            // all of the buffer's write ends have
-                            // been closed, then just end reading
-                            return Some(already_read);
-                        }
-                        return None;
-                    }
-                    for _ in 0..loop_read {
-                        if let Some(byte_ref) = buf_iter.next() {
-                            *byte_ref = ring_buffer.read_byte();
-                            already_read += 1;
-                            if already_read == want_to_read {
-                                return Some(want_to_read);
-                            }
-                        } else {
-                            // TODO: Some error happened?
-                            return Some(already_read);
-                        }
-                    }
-                    return None;
-                }) {
-                    // debug!("read {} bytes over", ret);
-                    return Ok(ret as isize);
-                } else {
-                    process::yield_now().await;
-                }
-            }
-        })
+            PipeFuture::new(
+                self.buffer.clone(),
+                buf_addr,
+                buf.len(),
+                PipeOperation::Read,
+            ), // loop {
+               //     if let Some(ret) = self.inner_handler(|ring_buffer| {
+               //         let loop_read = ring_buffer.available_read();
+               //         if loop_read == 0 {
+               //             if ring_buffer.all_write_ends_closed() {
+               //                 // all of the buffer's write ends have
+               //                 // been closed, then just end reading
+               //                 return Some(already_read);
+               //             }
+               //             return None;
+               //         }
+               //         for _ in 0..loop_read {
+               //             if let Some(byte_ref) = buf_iter.next() {
+               //                 *byte_ref = ring_buffer.read_byte();
+               //                 already_read += 1;
+               //                 if already_read == want_to_read {
+               //                     return Some(want_to_read);
+               //                 }
+               //             } else {
+               //                 // TODO: Some error happened?
+               //                 return Some(already_read);
+               //             }
+               //         }
+               //         return None;
+               //     }) {
+               //         // debug!("read {} bytes over", ret);
+               //         return Ok(ret as isize);
+               //     } else {
+               //         process::yield_now().await;
+               //     }
+               // }
+        )
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         assert!(self.writable());
         debug!("start to pipe write {} bytes", buf.len());
-        Box::pin(async move {
-            // debug!("satp(1) {:#x}", satp::read().bits());
-            let _sum_guard = SumGuard::new();
-            let want_to_write = buf.len();
-            let mut buf_iter = buf.into_iter();
-            let mut already_write = 0usize;
-            loop {
-                if let Some(ret) = self.inner_handler(|ring_buffer| {
-                    let loop_write = ring_buffer.available_write();
-                    if loop_write == 0 {
-                        return None;
-                        // drop(ring_buffer);
-                        // suspend_current_and_run_next();
-                        // continue;
-                    }
-                    // write at most loop_write bytes
-                    for _ in 0..loop_write {
-                        if let Some(byte_ref) = buf_iter.next() {
-                            ring_buffer.write_byte(*byte_ref);
-                            already_write += 1;
-                            if already_write == want_to_write {
-                                return Some(want_to_write);
-                            }
-                        } else {
-                            return Some(already_write);
-                        }
-                    }
-                    return None;
-                }) {
-                    debug!("pipe write {} bytes over", ret);
-                    return Ok(ret as isize);
-                } else {
-                    debug!("no available write slots");
-                    process::yield_now().await;
+        let buf_addr = buf.as_ptr() as usize;
+        Box::pin(
+            PipeFuture::new(
+                self.buffer.clone(),
+                buf_addr,
+                buf.len(),
+                PipeOperation::Write,
+            ), // debug!("satp(1) {:#x}", satp::read().bits());
+               // let _sum_guard = SumGuard::new();
+               // let want_to_write = buf.len();
+               // let mut buf_iter = buf.into_iter();
+               // let mut already_write = 0usize;
+               // loop {
+               //     if let Some(ret) = self.inner_handler(|ring_buffer| {
+               //         let loop_write = ring_buffer.available_write();
+               //         if loop_write == 0 {
+               //             return None;
+               //             // drop(ring_buffer);
+               //             // suspend_current_and_run_next();
+               //             // continue;
+               //         }
+               //         // write at most loop_write bytes
+               //         for _ in 0..loop_write {
+               //             if let Some(byte_ref) = buf_iter.next() {
+               //                 ring_buffer.write_byte(*byte_ref);
+               //                 already_write += 1;
+               //                 if already_write == want_to_write {
+               //                     return Some(want_to_write);
+               //                 }
+               //             } else {
+               //                 return Some(already_write);
+               //             }
+               //         }
+               //         return None;
+               //     }) {
+               //         debug!("pipe write {} bytes over", ret);
+               //         return Ok(ret as isize);
+               //     } else {
+               //         debug!("no available write slots");
+               //         process::yield_now().await;
+               //     }
+               // }
+        )
+    }
+
+    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        self.inner_handler(|ring_buffer| {
+            if ring_buffer.available_read() > 0 {
+                Ok(true)
+            } else {
+                debug!("[Pipe::pollin]: no available read");
+                if let Some(waker) = waker {
+                    ring_buffer.wait_for_reading(waker)
                 }
+                Ok(false)
+            }
+        })
+    }
+
+    fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        self.inner_handler(|ring_buffer| {
+            if ring_buffer.available_write() > 0 {
+                Ok(true)
+            } else {
+                debug!("[Pipe::pollout]: no available write");
+                if let Some(waker) = waker {
+                    ring_buffer.wait_for_writing(waker)
+                }
+                Ok(false)
             }
         })
     }
@@ -129,12 +169,10 @@ impl Pipe {
             buffer,
         }
     }
-
     fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
         f(&mut self.buffer.lock())
     }
 }
-const RING_BUFFER_SIZE: usize = 32;
 
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
@@ -144,21 +182,25 @@ enum RingBufferStatus {
 }
 
 pub struct PipeRingBuffer {
-    arr: [u8; RING_BUFFER_SIZE],
+    arr: [u8; PIPE_BUF_CAPACITY],
     head: usize,
     tail: usize,
     status: RingBufferStatus,
     write_end: Option<Weak<Pipe>>,
+    read_waiters: Vec<Waker>,
+    write_waiters: Vec<Waker>,
 }
 
 impl PipeRingBuffer {
     pub fn new() -> Self {
         Self {
-            arr: [0; RING_BUFFER_SIZE],
+            arr: [0; PIPE_BUF_CAPACITY],
             head: 0,
             tail: 0,
             status: RingBufferStatus::EMPTY,
             write_end: None,
+            read_waiters: Vec::new(),
+            write_waiters: Vec::new(),
         }
     }
 
@@ -169,9 +211,14 @@ impl PipeRingBuffer {
     pub fn read_byte(&mut self) -> u8 {
         self.status = RingBufferStatus::NORMAL;
         let c = self.arr[self.head];
-        self.head = (self.head + 1) % RING_BUFFER_SIZE;
+        self.head = (self.head + 1) % PIPE_BUF_CAPACITY;
         if self.head == self.tail {
             self.status = RingBufferStatus::EMPTY;
+        }
+        // TODO: optimize: read all bytes and then notify
+        while !self.write_waiters.is_empty() {
+            let waker = self.write_waiters.pop().unwrap();
+            waker.wake();
         }
         c
     }
@@ -179,9 +226,14 @@ impl PipeRingBuffer {
     pub fn write_byte(&mut self, byte: u8) {
         self.status = RingBufferStatus::NORMAL;
         self.arr[self.tail] = byte;
-        self.tail = (self.tail + 1) % RING_BUFFER_SIZE;
+        self.tail = (self.tail + 1) % PIPE_BUF_CAPACITY;
         if self.tail == self.head {
             self.status = RingBufferStatus::FULL;
+        }
+        // TODO: optimize: write all bytes and then notify
+        while !self.read_waiters.is_empty() {
+            let waker = self.read_waiters.pop().unwrap();
+            waker.wake();
         }
     }
 
@@ -192,7 +244,7 @@ impl PipeRingBuffer {
             if self.tail > self.head {
                 self.tail - self.head
             } else {
-                self.tail + RING_BUFFER_SIZE - self.head
+                self.tail + PIPE_BUF_CAPACITY - self.head
             }
         }
     }
@@ -201,16 +253,24 @@ impl PipeRingBuffer {
         if self.status == RingBufferStatus::FULL {
             0
         } else {
-            RING_BUFFER_SIZE - self.available_read()
+            PIPE_BUF_CAPACITY - self.available_read()
         }
     }
 
     pub fn all_write_ends_closed(&self) -> bool {
-        debug!(
-            "writen end ref cnt {}",
-            self.write_end.as_ref().unwrap().strong_count()
-        );
+        // debug!(
+        //     "writen end ref cnt {}",
+        //     self.write_end.as_ref().unwrap().strong_count()
+        // );
         self.write_end.as_ref().unwrap().upgrade().is_none()
+    }
+
+    pub fn wait_for_reading(&mut self, waker: Waker) {
+        self.read_waiters.push(waker);
+    }
+
+    pub fn wait_for_writing(&mut self, waker: Waker) {
+        self.write_waiters.push(waker);
     }
 }
 
@@ -222,4 +282,92 @@ pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
     let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone()));
     buffer.lock().set_write_end(&write_end);
     (read_end, write_end)
+}
+
+enum PipeOperation {
+    Read,
+    Write,
+}
+
+struct PipeFuture {
+    buffer: Arc<Mutex<PipeRingBuffer>>,
+    user_buf: usize,
+    user_buf_len: usize,
+    already_put: usize,
+    operation: PipeOperation,
+}
+
+impl PipeFuture {
+    pub fn new(
+        buffer: Arc<Mutex<PipeRingBuffer>>,
+        user_buf: usize,
+        user_buf_len: usize,
+        operation: PipeOperation,
+    ) -> Self {
+        Self {
+            buffer,
+            user_buf,
+            user_buf_len,
+            already_put: 0,
+            operation,
+        }
+    }
+}
+
+impl Future for PipeFuture {
+    type Output = SyscallRet;
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        let _sum_guard = SumGuard::new();
+
+        let this = unsafe { self.get_unchecked_mut() };
+        let mut ring_buffer = this.buffer.lock();
+        match this.operation {
+            PipeOperation::Read => {
+                let buf = unsafe {
+                    core::slice::from_raw_parts_mut(this.user_buf as *mut u8, this.user_buf_len)
+                };
+                let loop_read = ring_buffer.available_read();
+                if loop_read == 0 {
+                    if ring_buffer.all_write_ends_closed() {
+                        // all of the buffer's write ends have
+                        // been closed, then just end reading
+                        return Poll::Ready(Ok(this.already_put as isize));
+                    } else {
+                        ring_buffer.wait_for_reading(cx.waker().clone());
+                        return Poll::Pending;
+                    }
+                }
+                for _ in 0..loop_read {
+                    buf[this.already_put] = ring_buffer.read_byte();
+                    this.already_put += 1;
+                    if this.already_put == this.user_buf_len {
+                        return Poll::Ready(Ok(this.already_put as isize));
+                    }
+                }
+                ring_buffer.wait_for_reading(cx.waker().clone());
+                return Poll::Pending;
+            }
+            PipeOperation::Write => {
+                let buf = unsafe {
+                    core::slice::from_raw_parts(this.user_buf as *const u8, this.user_buf_len)
+                };
+                let loop_write = ring_buffer.available_write();
+                if loop_write == 0 {
+                    return Poll::Ready(Ok(this.already_put as isize));
+                }
+                for _ in 0..loop_write {
+                    ring_buffer.write_byte(buf[this.already_put]);
+                    this.already_put += 1;
+                    if this.already_put == this.user_buf_len {
+                        return Poll::Ready(Ok(this.already_put as isize));
+                    }
+                }
+                ring_buffer.wait_for_writing(cx.waker().clone());
+                return Poll::Pending;
+            }
+        }
+    }
 }

@@ -12,7 +12,7 @@ use crate::{
     timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
-        error::{AsyscallRet, GeneralRet, SyscallRet, AgeneralRet},
+        error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet},
     },
 };
 
@@ -61,8 +61,8 @@ pub trait File: Send + Sync {
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
-        Ok(true)
-        // todo!()
+        // Ok(true)
+        todo!()
     }
 
     fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {

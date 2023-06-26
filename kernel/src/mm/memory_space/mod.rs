@@ -514,6 +514,7 @@ impl MemorySpace {
 
         let mut max_end_vpn = VirtPageNum(0);
         let mut head_va = 0;
+        debug!("[from_elf]: entry point {:#x}", elf.header.pt2.entry_point());
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -552,7 +553,7 @@ impl MemorySpace {
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
                 debug!(
-                    "from elf: {:#x}, {:#x}, map_perm: {:?}",
+                    "[from elf]: {:#x}, {:#x}, map_perm: {:?}",
                     start_va.0, end_va.0, map_perm
                 );
                 // let magic = 0x1213d0;
@@ -563,7 +564,7 @@ impl MemorySpace {
         }
 
         let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
-        debug!("from_elf: AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
+        debug!("[from_elf]: AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,
@@ -592,7 +593,7 @@ impl MemorySpace {
         memory_space.push(heap_vma, 0, None);
         memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
         debug!(
-            "from elf: map heap: {:#x}, {:#x}",
+            "[from elf]: map heap: {:#x}, {:#x}",
             heap_start_va, heap_start_va
         );
 

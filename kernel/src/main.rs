@@ -61,7 +61,7 @@ use crate::{
     process::thread,
     processor::{hart, HARTS},
     sbi::hart_start,
-    timer::timed_task::ksleep,
+    timer::{timed_task::TimedTaskFuture, timeout_task::ksleep},
 };
 
 global_asm!(include_str!("entry.S"));
@@ -150,12 +150,17 @@ pub fn rust_main(hart_id: usize) {
             process::add_initproc();
         });
 
-        // thread::spawn_kernel_thread(async move {
-        //     loop {
-        //         ksleep(Duration::from_secs(5)).await;
-        //         debug!("I'm awake!! hhh just ignore me");
-        //     }
-        // });
+        thread::spawn_kernel_thread(async move {
+            // TimedTaskFuture::new(Duration::from_secs(3), || {
+            //     debug!("I'm awake!! hhh just ignore me");
+            //     return true;
+            // }, None)
+            // .await;
+            // loop {
+            //     ksleep(Duration::from_secs(5)).await;
+            //     debug!("I'm awake!! hhh just ignore me");
+            // }
+        });
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);
