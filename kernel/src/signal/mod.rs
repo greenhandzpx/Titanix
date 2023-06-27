@@ -80,9 +80,9 @@ impl SigHandlerManager {
 pub struct SigAction {
     pub sa_handler: fn(usize),
     pub sa_mask: [SigSet; 1],
-    pub sa_flags: u32,
     // pub sa_flags: usize,
     pub sa_restorer: usize,
+    pub sa_flags: u32,
     // pub sa_sigaction: fn(i32, *const u8, *const u8),
     // pub sa_sigaction: usize,
     // pub sa_mask: [SigSet; 2],
@@ -170,13 +170,14 @@ pub fn check_signal_for_current_process() {
 }
 
 fn handle_signal(signo: usize, sig_action: KSigAction) {
-    debug!("handle signal {}", signo);
+    debug!("[handle signal] signo {}, handler {:#x}", signo, sig_action.sig_action.sa_handler as *const usize as usize);
     if sig_action.is_user_defined {
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;
         if sig_action.sig_action.sa_restorer != 0 {
             // ra
+            debug!("[handle_signal] restorer: {:#x}", sig_action.sig_action.sa_restorer);
             current_trap_cx().user_x[1] = sig_action.sig_action.sa_restorer;
         }
     } else {

@@ -90,10 +90,11 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             };
             // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
             debug!(
-                "[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}",
+                "[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}",
                 new_sigaction.sig_action.sa_handler as *const usize as usize,
                 new_sigaction.sig_action.sa_mask[0],
-                new_sigaction.sig_action.sa_flags
+                new_sigaction.sig_action.sa_flags,
+                new_sigaction.sig_action.sa_restorer,
             );
             proc.sig_handler
                 .lock()

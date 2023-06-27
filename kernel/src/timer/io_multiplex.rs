@@ -1,7 +1,7 @@
 use core::{future::Future, task::Poll};
 
 use alloc::vec::Vec;
-use log::{debug, warn};
+use log::{debug, warn, trace};
 
 use crate::{
     fs::posix::FdSet,
@@ -143,7 +143,7 @@ impl Future for IOMultiplexFuture {
             }
         }
         if cnt > 0 {
-            debug!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
+            trace!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
             // TODO: can we use user addr directly without copy overhead
             let _sum_guard = SumGuard::new();
             match &mut this.user_format {

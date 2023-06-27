@@ -129,11 +129,12 @@ impl File for TtyFile {
             if PRINT_LOCKED {
                 let _locked = PRINT_MUTEX.lock().await;
                 // info!("[test]:{:?}", buf);
-                if let Some(ch) = core::str::from_utf8(buf).ok() {
-                    print!("{}", ch);
-                } else {
-                    warn!("cannot transfer to utf8: {:?}", buf);
-                }
+                // if let Some(ch) = core::str::from_utf8(buf).ok() {
+                //     print!("{}", ch);
+                // } else {
+                //     warn!("cannot transfer to utf8: {:?}", buf);
+                // }
+                print!("{}", unsafe { core::str::from_utf8_unchecked(buf)});
             } else {
                 print!("{}", core::str::from_utf8(buf).unwrap());
             }
@@ -141,7 +142,7 @@ impl File for TtyFile {
         })
     }
 
-    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+    fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
         Ok(true)
         // if self.buf.load(Ordering::Acquire) != 255 {
         //     return Ok(true);

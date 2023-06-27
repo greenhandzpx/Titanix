@@ -562,7 +562,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_write]: fd {}, len {}", fd, len);
+    trace!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -580,7 +580,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    debug!(
+    trace!(
         "[sys_writev] fd: {}, iov: {:#x}, iovcnt:{}",
         fd, iov, iovcnt
     );
@@ -669,7 +669,7 @@ fn test() -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_read]: fd {}, len {}", fd, len);
+    trace!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -1200,11 +1200,11 @@ pub async fn sys_ppoll(
     let mut fds: Vec<PollFd> = Vec::new();
     fds.extend_from_slice(raw_fds);
 
-    debug!("[sys_ppoll]: fds {:?}", fds);
+    trace!("[sys_ppoll]: fds {:?}", fds);
 
     let timeout = match timeout_ptr {
         0 => {
-            debug!("[sys_ppoll]: infinite timeout");
+            trace!("[sys_ppoll]: infinite timeout");
             None
         }
         _ => {
@@ -1241,7 +1241,7 @@ pub async fn sys_ppoll(
         }
     } else {
         let ret = poll_future.await;
-        debug!("[sys_ppoll]: ready");
+        trace!("[sys_ppoll]: ready");
         ret
     }
 }
