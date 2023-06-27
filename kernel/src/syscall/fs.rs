@@ -15,7 +15,10 @@ use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::posix::{Dirent, StatFlags, Statfs, STAT, STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE, FdSet, FD_SET_LEN};
+use crate::fs::posix::{
+    Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, STAT, STATFS_SIZE, STAT_SIZE,
+    SYSINFO_SIZE,
+};
 use crate::fs::HashKey;
 use crate::fs::{
     inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
@@ -582,7 +585,9 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
     trace!(
         "[sys_writev] fd: {}, iov: {:#x}, iovcnt:{}",
-        fd, iov, iovcnt
+        fd,
+        iov,
+        iovcnt
     );
     let _sum_guard = SumGuard::new();
 
@@ -1156,6 +1161,12 @@ pub fn sys_sysinfo(info: usize) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_writable_slice(info as *mut u8, SYSINFO_SIZE)?;
+    let sysinfo = Sysinfo::collect();
+    let buf_ptr = info as *mut Sysinfo;
+    unsafe {
+        stack_trace!();
+        ptr::write(buf_ptr, sysinfo);
+    }
     Ok(0)
 }
 
@@ -1218,7 +1229,7 @@ pub async fn sys_ppoll(
         stack_trace!();
         UserCheck::new()
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
-        let sigmask = unsafe { *(sigmask_ptr as *const usize) };
+        let sigmask = unsafe { *(sigmask_ptr as *const u32) };
         current_process().inner_handler(|proc| {
             if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
                 proc.pending_sigs.blocked_sigs |= new_sig_mask;
@@ -1366,7 +1377,7 @@ pub async fn sys_pselect6(
         stack_trace!();
         UserCheck::new()
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
-        let sigmask = unsafe { *(sigmask_ptr as *const usize) };
+        let sigmask = unsafe { *(sigmask_ptr as *const u32) };
         current_process().inner_handler(|proc| {
             if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
                 proc.pending_sigs.blocked_sigs |= new_sig_mask;

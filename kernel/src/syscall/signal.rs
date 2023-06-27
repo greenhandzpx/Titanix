@@ -5,7 +5,7 @@ use crate::{
     mm::user_check::UserCheck,
     process::PROCESS_MANAGER,
     processor::{current_process, current_task, current_trap_cx, SumGuard},
-    signal::{KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_IGN, ign_sig_handler, SIG_ERR},
+    signal::{ign_sig_handler, KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_ERR, SIG_IGN},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -110,7 +110,7 @@ enum SigProcmaskHow {
     SigSetmask = 2,
 }
 
-pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> SyscallRet {
+pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> SyscallRet {
     stack_trace!();
     current_process().inner_handler(|proc| {
         if old_set as usize != 0 {
@@ -119,6 +119,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const usize, old_set: *mut SigSet) -> 
             let _sum_guard = SumGuard::new();
             unsafe {
                 *old_set = proc.pending_sigs.blocked_sigs;
+                debug!("[sys_rt_sigprocmask] old set: {:#x}", *old_set);
             }
         }
         if set as usize == 0 {
