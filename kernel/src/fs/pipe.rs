@@ -35,6 +35,7 @@ impl File for Pipe {
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         assert!(self.readable());
+        debug!("start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
             // debug!("start to pipe read {} bytes", buf.len());
@@ -129,6 +130,8 @@ impl File for Pipe {
         self.inner_handler(|ring_buffer| {
             if ring_buffer.available_read() > 0 {
                 Ok(true)
+            } else if ring_buffer.all_write_ends_closed() {
+                Ok(true)
             } else {
                 debug!("[Pipe::pollin]: no available read");
                 if let Some(waker) = waker {
@@ -142,6 +145,8 @@ impl File for Pipe {
     fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         self.inner_handler(|ring_buffer| {
             if ring_buffer.available_write() > 0 {
+                Ok(true)
+            } else if ring_buffer.all_read_ends_closed() {
                 Ok(true)
             } else {
                 debug!("[Pipe::pollout]: no available write");
@@ -174,6 +179,20 @@ impl Pipe {
     }
 }
 
+impl Drop for Pipe {
+    fn drop(&mut self) {
+        if self.writable {
+            // Write end,
+            // we should wake up all read waiters(if any)
+            let mut buffer = self.buffer.lock();
+            while !buffer.read_waiters.is_empty() {
+                let waker = buffer.read_waiters.pop().unwrap();
+                waker.wake();
+            }
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq)]
 enum RingBufferStatus {
     FULL,
@@ -187,6 +206,7 @@ pub struct PipeRingBuffer {
     tail: usize,
     status: RingBufferStatus,
     write_end: Option<Weak<Pipe>>,
+    read_end: Option<Weak<Pipe>>,
     read_waiters: Vec<Waker>,
     write_waiters: Vec<Waker>,
 }
@@ -199,6 +219,7 @@ impl PipeRingBuffer {
             tail: 0,
             status: RingBufferStatus::EMPTY,
             write_end: None,
+            read_end: None,
             read_waiters: Vec::new(),
             write_waiters: Vec::new(),
         }
@@ -206,6 +227,10 @@ impl PipeRingBuffer {
 
     pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
         self.write_end = Some(Arc::downgrade(write_end));
+    }
+
+    pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+        self.read_end = Some(Arc::downgrade(read_end));
     }
 
     pub fn read_byte(&mut self) -> u8 {
@@ -258,11 +283,19 @@ impl PipeRingBuffer {
     }
 
     pub fn all_write_ends_closed(&self) -> bool {
-        // debug!(
-        //     "writen end ref cnt {}",
-        //     self.write_end.as_ref().unwrap().strong_count()
-        // );
+        debug!(
+            "writen end ref cnt {}",
+            self.write_end.as_ref().unwrap().strong_count()
+        );
         self.write_end.as_ref().unwrap().upgrade().is_none()
+    }
+
+    pub fn all_read_ends_closed(&self) -> bool {
+        debug!(
+            "read end ref cnt {}",
+            self.read_end.as_ref().unwrap().strong_count()
+        );
+        self.read_end.as_ref().unwrap().upgrade().is_none()
     }
 
     pub fn wait_for_reading(&mut self, waker: Waker) {
@@ -281,6 +314,7 @@ pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
     let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone()));
     let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone()));
     buffer.lock().set_write_end(&write_end);
+    buffer.lock().set_read_end(&read_end);
     (read_end, write_end)
 }
 
@@ -321,7 +355,9 @@ impl Future for PipeFuture {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         let _sum_guard = SumGuard::new();
-
+        if self.user_buf_len == 0 {
+            return Poll::Ready(Ok(0));
+        }
         let this = unsafe { self.get_unchecked_mut() };
         let mut ring_buffer = this.buffer.lock();
         match this.operation {
@@ -356,7 +392,14 @@ impl Future for PipeFuture {
                 };
                 let loop_write = ring_buffer.available_write();
                 if loop_write == 0 {
-                    return Poll::Ready(Ok(this.already_put as isize));
+                    if ring_buffer.all_read_ends_closed() {
+                        // all of the buffer's read ends have
+                        // been closed, then just end reading
+                        return Poll::Ready(Ok(this.already_put as isize));
+                    } else {
+                        ring_buffer.wait_for_writing(cx.waker().clone());
+                        return Poll::Pending;
+                    }
                 }
                 for _ in 0..loop_write {
                     ring_buffer.write_byte(buf[this.already_put]);

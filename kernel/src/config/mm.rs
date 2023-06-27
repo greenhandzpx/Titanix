@@ -18,7 +18,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 pub const KERNEL_DIRECT_OFFSET: usize = 0xffff_ffc0_0000_0;
 // pub const KERNEL_DIRECT_OFFSET: usize = 0x0;
 
-pub const USER_SPACE_SIZE: usize = 0x80000000;
+pub const USER_SPACE_SIZE: usize = 0x30_0000_0000;
 
 /// Mmap area toppest address
 pub const MMAP_TOP: usize = USER_SPACE_SIZE;

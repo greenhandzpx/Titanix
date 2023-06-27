@@ -104,7 +104,7 @@ impl From<usize> for VirtAddr {
         if tmp != 0 && tmp != -1 {
             warn!("v {:#x}, tmp {:#x}", v, tmp);
         }
-        assert!(tmp == 0 || tmp == -1);
+        assert!(tmp == 0 || tmp == -1, "invalid va: {:#x}", v);
         Self(v)
     }
 }

@@ -22,7 +22,7 @@ pub fn init() {
         Some("debug") => LevelFilter::Debug,
         Some("trace") => LevelFilter::Trace,
         // _ => LevelFilter::Off,
-        _ => LevelFilter::Warn,
+        _ => LevelFilter::Error,
     });
 }
 

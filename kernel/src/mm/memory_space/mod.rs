@@ -109,7 +109,7 @@ impl MemorySpace {
         }
         let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
-            page_table: page_table,
+            page_table,
             areas: SyncUnsafeCell::new(BTreeMap::new()),
             heap_range: None,
             cow_pages: CowPageManager::new(),

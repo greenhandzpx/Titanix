@@ -324,11 +324,15 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 let found_pid = child.pid();
                 // get child's exit code
                 let exit_code = child.exit_code();
-                debug!("waitpid: found pid {} exit code {}", found_pid, exit_code);
+                debug!("[sys_waitpid] found pid {} exit code {}", found_pid, exit_code);
 
                 Ok(Some((false, found_pid as isize, exit_code as i32)))
             } else {
                 // the child still alive
+                debug!("[sys_waitpid] no such pid, children size {}", proc.children.len());
+                if proc.children.len() > 0 {
+                    debug!("[sys_waitpid] first child pid {}", proc.children[0].pid());
+                }
                 // Ok((-1 as isize, 0))
                 Ok(None)
             }
