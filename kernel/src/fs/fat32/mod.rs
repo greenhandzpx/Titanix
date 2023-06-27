@@ -1,17 +1,18 @@
-use crate::driver::block::BlockDevice;
-use alloc::sync::Arc;
-use log::debug;
-
+use crate::{driver::{block::BlockDevice, BLOCK_DEVICE}, utils::error::GeneralRet, fs::FileSystemType};
+use alloc::{sync::Arc, vec::Vec};
+use log::info;
+use lazy_static::lazy_static;
 use self::{
     bpb::BootSector,
     fat::FileAllocTable,
     fat32info::FAT32Info,
-    inode::{FAT32Inode, FAT32InodeMeta},
+    inode::FAT32Inode
 };
+
+use super::{FileSystem, file_system::FileSystemMeta};
 
 mod bpb;
 mod dentry;
-mod disk_dentry;
 mod fat;
 mod fat32info;
 mod file;
@@ -21,9 +22,8 @@ mod time;
 mod util;
 
 const SECTOR_SIZE:          usize = 512;
-const SHORTNAME_LEN:        usize = 11;
-const SHORTNAME_MAX_LEN:    usize = 12;
-const LONGNAME_MAX_LEN:     usize = 256;
+const SNAME_LEN:        usize = 11;
+const LNAME_MAXLEN:     usize = 256;
 const BOOT_SECTOR_ID:       usize = 0;
 const FATENTRY_PER_SECTOR:  usize = 128;
 const FAT_CACHE_SIZE:       usize = 16;
@@ -34,19 +34,13 @@ const FSI_RESERVED1_SIZE:   usize = 480;
 const FSI_RESERVED2_SIZE:   usize = 12;
 const FSI_NOT_AVAILABLE:    u32 = 0xFFFFFFFF;
 
-pub struct FAT32FileSystemMeta {
-    info: Arc<FAT32Info>,
-    fat: Arc<FileAllocTable>,
-    root_inode: Arc<FAT32Inode>,
-}
-
 pub struct FAT32FileSystem {
     block_device: Arc<dyn BlockDevice>,
-    meta: Option<FAT32FileSystemMeta>,
+    meta: Option<FileSystemMeta>,
 }
 
 impl FAT32FileSystem {
-    /// 传入一个 Block Device，但是不做任何事情。
+    /// do nothing but store block device.
     pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
         Self {
             block_device: Arc::clone(&block_device),
@@ -54,11 +48,11 @@ impl FAT32FileSystem {
         }
     }
 
-    pub fn mount(&mut self) -> Option<()> {
-        if self.meta.is_some() {
-            debug!("尝试挂载一个已挂载的FAT32文件系统");
-            return None;
-        }
+    pub fn do_nothing(&self) {
+
+    }
+
+    pub fn rootfs_mount(&mut self) -> Option<()> {
         let mut bs_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
         self.block_device
             .read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
@@ -76,52 +70,45 @@ impl FAT32FileSystem {
             Arc::clone(&self.block_device),
             Arc::clone(&info),
         ));
-        let root_inode = Arc::new(FAT32Inode::new(
-            Arc::clone(&fat),
-            None,
-            info.root_cluster_id,
-            0,
-            inode::FAT32FileType::Directory,
-            FAT32InodeMeta::default(),
-        ));
-        self.meta = Some(FAT32FileSystemMeta {
-            info: Arc::clone(&info),
-            fat,
-            root_inode: Arc::clone(&root_inode),
+        let root_inode = FAT32Inode::new_root_dentry(Arc::clone(&fat), None, "/", info.root_cluster_id);
+        self.meta = Some(FileSystemMeta {
+            ftype: FileSystemType::VFAT,
+            root_inode: Some(Arc::new(root_inode)),
+            mnt_flags: false,
+            s_dirty: Vec::new()
         });
         Some(())
     }
 
-    pub fn unmount(&mut self) -> Option<()> {
-        if self.meta.is_none() {
-            debug!("尝试卸载一个未挂载的FAT32文件系统");
-            None
-        } else if self.sync_fs().is_some() {
-            self.meta = None;
-            Some(())
-        } else {
-            debug!("卸载失败了！");
-            None
-        }
-    }
+}
 
-    pub fn root_inode(&self) -> Option<Arc<FAT32Inode>> {
-        if self.meta.is_none() {
-            debug!("FAT32文件系统没有挂载");
-            None
-        } else {
-            Some(Arc::clone(&self.meta.as_ref().unwrap().root_inode))
-        }
+impl FileSystem for FAT32FileSystem {
+    fn create_root(
+            &self,
+            _parent: Option<Arc<dyn super::Inode>>,
+            _mount_point: &str,
+        ) -> GeneralRet<Arc<dyn super::Inode>> {
+        todo!();
     }
+    fn set_metadata(&mut self, _metadata: FileSystemMeta) {
+        todo!();
+    }
+    fn metadata(&self) -> FileSystemMeta {
+        self.meta.as_ref().unwrap().clone()
+    }
+}
 
-    pub fn sync_fs(&self) -> Option<()> {
-        if self.meta.is_none() {
-            debug!("尝试同步一个未挂载的FAT32文件系统");
-            None
-        } else {
-            self.meta.as_ref().unwrap().fat.sync_fat();
-            self.meta.as_ref().unwrap().root_inode.sync_inode();
-            Some(())
-        }
-    }
+lazy_static! {
+    pub static ref ROOT_FS: FAT32FileSystem = {
+        let mut ret = FAT32FileSystem::new(Arc::clone(&BLOCK_DEVICE));
+        ret.rootfs_mount();
+        ret
+    };
+}
+
+pub fn init() -> GeneralRet<()> {
+    info!("start to init FAT32(rootfs):");
+    ROOT_FS.do_nothing();
+    info!("FAT32 init ok!");
+    Ok(())
 }

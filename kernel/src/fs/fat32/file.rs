@@ -4,7 +4,7 @@ use core::cmp::{max, min};
 use super::{fat::FileAllocTable, SECTOR_SIZE};
 
 pub struct FAT32File {
-    fat: Arc<FileAllocTable>,
+    pub fat: Arc<FileAllocTable>,
     clusters: Vec<usize>,
     size: Option<usize>,
 }
@@ -33,7 +33,7 @@ impl FAT32File {
     fn get_clusters(&mut self) {
         if self.clusters.is_empty() == false {
             loop {
-                let mut nxt_cluster = self.fat.read_fat(*self.clusters.last().unwrap()).unwrap();
+                let nxt_cluster = self.fat.read_fat(*self.clusters.last().unwrap()).unwrap();
                 if nxt_cluster >= 0x0FFFFFF8 {
                     break;
                 }
@@ -45,7 +45,6 @@ impl FAT32File {
         }
     }
 
-    /// 调整一个文件的大小
     pub fn modify_size(&mut self, delta: isize) -> usize {
         self.get_clusters();
         if delta < 0 && (self.size.unwrap() as isize) + delta >= 0 {

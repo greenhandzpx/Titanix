@@ -1,4 +1,4 @@
-use super::SHORTNAME_LEN;
+use super::SNAME_LEN;
 
 pub fn load_fn<T: Copy>(dst: &mut T, src: &[u8], offset: &mut usize) {
     unsafe {
@@ -16,10 +16,9 @@ pub fn store_fn<T: Copy>(src: &T, dst: &mut [u8], offset: &mut usize) {
     }
 }
 
-/// rust 整数溢出会报错，因此我们只能使用 u16 累积。
 pub fn shortname_checksum(data: &[u8]) -> u8 {
     let mut ret: u16 = 0;
-    for i in 0..SHORTNAME_LEN {
+    for i in 0..SNAME_LEN {
         ret = (match ret & 1 {
             1 => 0x80,
             _ => 0,

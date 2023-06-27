@@ -1,5 +1,7 @@
 use alloc::vec;
 
+use crate::timer::TimeSpec;
+
 #[derive(Copy, Clone, Default)]
 pub struct FAT32Timestamp {
     pub date: u16,
@@ -33,10 +35,11 @@ fn year_to_day_count(year: i64) -> i64 {
     leap_year + (year - 1970) * DAY_PER_YEAR
 }
 
-/// 将 Unix 时间戳转化为 FAT32 时间戳
-/// unix_time: 19700101 到当前经过的毫秒数
+/// convert Unix timestamp to FAT32 timestamp
+/// unix_time: 19700101 00:00:00 to now (millisecond)
+#[allow(non_snake_case)]
 pub fn unix_time_to_FAT32(unix_time: i64) -> FAT32Timestamp {
-    let day_count: i64 = unix_time / MILLISEC_PER_DAY; // 时间距离1970.1.1的天数
+    let day_count: i64 = unix_time / MILLISEC_PER_DAY;
     let maybe_year: i64 = 1970 + day_count * 400 / (DAY_PER_400YEAR);
     let maybe_years = vec![maybe_year, maybe_year - 1, maybe_year + 1];
     let mut year: i64 = -1;
@@ -75,7 +78,6 @@ pub fn unix_time_to_FAT32(unix_time: i64) -> FAT32Timestamp {
     let min = (millisec_in_day % MILLISEC_PER_HR) / MILLISEC_PER_MIN;
     let sec = (millisec_in_day % MILLISEC_PER_MIN) / MILLISEC_PER_SEC;
     let millisec = millisec_in_day % MILLISEC_PER_SEC;
-    //    println!("year={}, month={}, day={}, hr={}, min={}, sec={}, millisec={}", year, month, day, hr, min, sec, millisec);
     FAT32Timestamp {
         date: ((day + 1) + ((month + 1) << 5) + (((year - 1980) & 0x7F) << 9)) as u16,
         time: ((sec / 2) + (min << 5) + (hr << 11)) as u16,
@@ -95,8 +97,9 @@ fn month_to_day_count(month: i64, leap: bool) -> i64 {
     ret
 }
 
-/// 将 FAT32 时间戳转化为 Unix 时间戳
-/// 返回值：当前距 19700101 的毫秒数
+/// convert FAT32 timestamp to Unix timestamp
+/// unix_time: 19700101 00:00:00 to now (millisecond)
+#[allow(non_snake_case)]
 pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
     let year = (1980 + (fat32_time.date >> 9)) as i64;
     let month = (((fat32_time.date >> 5) & 0x0F) - 1) as i64;
@@ -109,4 +112,13 @@ pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
     (year_to_day_count(year) + month_to_day_count(month, leap_year(year)) + day) * MILLISEC_PER_DAY
         + (((hr * MIN_PER_HR + min) * SEC_PER_MIN + sec * 2) * MILLISEC_PER_SEC)
         + millisec
+}
+
+pub fn unix_time_to_timespec(unix_time: i64) -> TimeSpec {
+    if unix_time < 0 {
+        TimeSpec { sec: 0, nsec: 0 }
+    //    TimeSpec { sec: (unix_time + 1) / 1000 - 1, nsec: (unix_time + 1) % 1000 + 999 }
+    } else {
+        TimeSpec { sec: (unix_time as usize) / 1000, nsec: (unix_time as usize) % 1000 }
+    }
 }

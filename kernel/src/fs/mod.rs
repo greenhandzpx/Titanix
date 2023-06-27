@@ -36,14 +36,14 @@ pub use uio::*;
 pub use utsname::UtsName;
 pub use utsname::UTSNAME_SIZE;
 
-use crate::fs::fat32_tmp::ROOT_FS;
+use crate::fs::fat32::ROOT_FS;
 use crate::mm::MapPermission;
 use crate::sync::mutex::SpinNoIrqLock;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub fn init() {
-    fat32_tmp::init().expect("fat32 init fail");
+    fat32::init().expect("fat32 init fail");
     // // first mount root fs
     // testfs::init().expect("testfs init fail");
     // todo!();

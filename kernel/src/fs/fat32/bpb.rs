@@ -85,6 +85,8 @@ impl BootSector {
         load!(self.BS_FileSysType);
     }
 
+    /*
+    (maybe is's not useful)
     pub fn store(&mut self, dest: &mut [u8; 512]) {
         let mut offset: usize = 0;
         macro_rules! store {
@@ -122,4 +124,5 @@ impl BootSector {
         store!(self.BS_VolLabel);
         store!(self.BS_FileSysType);
     }
+    */
 }

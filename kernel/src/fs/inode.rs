@@ -24,7 +24,7 @@ use crate::{
 
 use super::{
     devfs::DevWrapper,
-    fat32_tmp::ROOT_FS,
+    fat32::ROOT_FS,
     file::{DefaultFile, FileMeta, FileMetaInner},
     file_system::FILE_SYSTEM_MANAGER,
     hash_name::HashName,
