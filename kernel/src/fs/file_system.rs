@@ -207,7 +207,7 @@ pub trait FileSystem: Send + Sync {
         todo!()
     }
     fn set_metadata(&mut self, metadata: FileSystemMeta);
-    fn set_metadata_ref(&self, metadata: FileSystemMeta) {
+    fn set_metadata_ref(&self, _metadata: FileSystemMeta) {
         todo!()
     }
     fn metadata(&self) -> FileSystemMeta;
@@ -231,12 +231,12 @@ pub struct FileSystemMeta {
     pub flags: StatFlags,
 }
 
-pub struct FileSystemMetaInner {
-    /// flag of the filesystem whether mount
-    mnt_flags: bool,
-    /// list of dirty inodes
-    pub s_dirty: Vec<Arc<dyn Inode>>,
-}
+// pub struct FileSystemMetaInner {
+//     /// flag of the filesystem whether mount
+//     mnt_flags: bool,
+//     /// list of dirty inodes
+//     pub s_dirty: Vec<Arc<dyn Inode>>,
+// }
 
 pub struct FileSystemManager {
     /// `mount point` -> concrete file system

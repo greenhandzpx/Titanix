@@ -1,7 +1,7 @@
 use core::{future::Future, task::Poll};
 
 use alloc::vec::Vec;
-use log::{debug, warn, trace};
+use log::{debug, trace, warn};
 
 use crate::{
     fs::posix::FdSet,

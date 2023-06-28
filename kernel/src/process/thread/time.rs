@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use log::info;
+use log::{debug, info};
 
 use crate::timer::current_time_duration;
 
@@ -64,6 +64,7 @@ impl ThreadTimeInfo {
     pub fn when_trap_in(&mut self) {
         let current_ts = current_time_duration();
         self.user_time += current_ts - self.last_user_ret_ts.unwrap();
+        // debug!("[when_trap_in] current ts {:?}, user time {:?}", current_ts, self.user_time);
         self.last_user_ret_ts = None;
         self.last_user_trap_ts = Some(current_ts);
     }

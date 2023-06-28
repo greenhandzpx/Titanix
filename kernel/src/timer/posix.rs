@@ -19,7 +19,7 @@ impl From<Duration> for TimeVal {
     fn from(duration: Duration) -> Self {
         Self {
             sec: duration.as_secs() as usize,
-            usec: duration.as_micros() as usize,
+            usec: duration.subsec_micros() as usize,
         }
     }
 }

@@ -59,22 +59,23 @@ pub trait File: Send + Sync {
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
-    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+    fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
         // Ok(true)
         todo!()
     }
 
-    fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+    fn pollout(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
         todo!()
     }
 
     /// For default file, data must be read from page cache first
-    fn sync_read(&self, _buf: &mut [u8]) -> SyscallRet {
-        todo!()
+    fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
+        block_on(self.read(buf))
     }
-    fn sync_write(&self, _buf: &[u8]) -> SyscallRet {
-        todo!()
+    /// For default file, data must be written to page cache first
+    fn sync_write(&self, buf: &[u8]) -> SyscallRet {
+        block_on(self.write(buf))
     }
 
     fn seek(&self, _offset: usize) -> SyscallRet {

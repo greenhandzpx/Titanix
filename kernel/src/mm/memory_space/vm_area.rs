@@ -1,5 +1,5 @@
 use alloc::{collections::BTreeMap, sync::Arc};
-use log::{warn, debug};
+use log::{debug, warn};
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
@@ -259,12 +259,17 @@ impl VmArea {
 
     /// Clip the vm area.
     pub fn clip(&mut self, new_vpn_range: VPNRange) {
-        debug!("[VmArea::clip] old range {:?}, new range {:?}", self.vpn_range, new_vpn_range);
-        self.data_frames.get_mut().0.retain(|vpn, _| {
-            *vpn >= new_vpn_range.start() && *vpn <= new_vpn_range.end()
-        });
+        debug!(
+            "[VmArea::clip] old range {:?}, new range {:?}",
+            self.vpn_range, new_vpn_range
+        );
+        self.data_frames
+            .get_mut()
+            .0
+            .retain(|vpn, _| *vpn >= new_vpn_range.start() && *vpn <= new_vpn_range.end());
         if let Some(backup_file) = self.backup_file.as_mut() {
-            backup_file.offset += VirtAddr::from(new_vpn_range.start()).0 - VirtAddr::from(self.vpn_range.start()).0;
+            backup_file.offset +=
+                VirtAddr::from(new_vpn_range.start()).0 - VirtAddr::from(self.vpn_range.start()).0;
         }
         self.vpn_range = new_vpn_range;
     }

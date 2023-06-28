@@ -180,7 +180,8 @@ pub fn sys_settimer(
                 });
             } else {
                 current_process().inner_handler(|proc| {
-                    proc.timers[ITIMER_REAL as usize].it_value = (current_time_duration() + next_timeout).into();
+                    proc.timers[ITIMER_REAL as usize].it_value =
+                        (current_time_duration() + next_timeout).into();
                 });
                 spawn_kernel_thread(async move {
                     TimedTaskFuture::new(interval, callback, Some(next_timeout)).await

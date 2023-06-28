@@ -4,7 +4,7 @@ use crate::{
         inode::InodeMeta,
         File, Inode, Mutex, OpenFlags,
     },
-    utils::error::{AsyscallRet, GeneralRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
@@ -66,11 +66,19 @@ impl File for NullFile {
         &self.meta
     }
     fn read<'a>(&'a self, _buf: &'a mut [u8]) -> AsyscallRet {
-        debug!("read /dev/null");
+        debug!("[read] /dev/null");
         Box::pin(async move { Ok(0) })
     }
-    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
-        debug!("write /dev/null");
-        Box::pin(async move { Ok(0) })
+    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+        debug!("[write] /dev/null");
+        Box::pin(async move { Ok(buf.len() as isize) })
+    }
+    fn sync_read(&self, _buf: &mut [u8]) -> SyscallRet {
+        debug!("[sync_read] /dev/null");
+        Ok(0)
+    }
+    fn sync_write(&self, buf: &[u8]) -> SyscallRet {
+        debug!("[sync_write] /dev/null");
+        Ok(buf.len() as isize)
     }
 }

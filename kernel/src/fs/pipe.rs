@@ -44,7 +44,7 @@ impl File for Pipe {
                 buf_addr,
                 buf.len(),
                 PipeOperation::Read,
-            ) 
+            ),
         )
     }
 
@@ -52,14 +52,12 @@ impl File for Pipe {
         assert!(self.writable());
         debug!("start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
-        Box::pin(
-            PipeFuture::new(
-                self.buffer.clone(),
-                buf_addr,
-                buf.len(),
-                PipeOperation::Write,
-            )
-        )
+        Box::pin(PipeFuture::new(
+            self.buffer.clone(),
+            buf_addr,
+            buf.len(),
+            PipeOperation::Write,
+        ))
     }
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {

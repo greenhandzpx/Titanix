@@ -573,12 +573,19 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     if !file.writable() {
         return Err(SyscallErr::EPERM);
     }
+    if len == 0 {
+        return Ok(0);
+    }
 
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    file.write(buf).await
+    if buf.len() < 2 {
+        file.sync_write(buf)
+    } else {
+        file.write(buf).await
+    }
 }
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
@@ -682,10 +689,17 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     if !file.readable() {
         return Err(SyscallErr::EPERM);
     }
+    if len == 0 {
+        return Ok(0);
+    }
 
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
-    file.read(buf).await
+    if buf.len() < 2 {
+        file.sync_read(buf)
+    } else {
+        file.read(buf).await
+    }
 }
 
 pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
@@ -1041,7 +1055,7 @@ pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usiz
     UserCheck::new().check_c_str(path_name as *const u8)?;
     let path = c_str_to_string(path_name as *const u8);
     info!(
-        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}",
+        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}, this should be modified",
         dirfd, path, buf, buf_size
     );
     UserCheck::new().check_writable_slice(buf as *mut u8, buf_size)?;

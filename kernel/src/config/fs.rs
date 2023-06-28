@@ -10,5 +10,4 @@ pub const RADIX_TREE_MAP_SHIFT: usize = 4;
 /// max num file descriptors
 pub const RLIMIT_NOFILE: usize = 128;
 
-
 pub const PIPE_BUF_CAPACITY: usize = PAGE_SIZE;

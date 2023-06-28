@@ -5,7 +5,7 @@ use crate::{
         File, Inode, Mutex, OpenFlags,
     },
     processor::SumGuard,
-    utils::error::{AsyscallRet, GeneralRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
@@ -67,7 +67,7 @@ impl File for ZeroFile {
         &self.meta
     }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        debug!("read /dev/zero");
+        debug!("[read] /dev/zero");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
             buf.fill(0);
@@ -76,7 +76,20 @@ impl File for ZeroFile {
         })
     }
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
-        debug!("write /dev/zero");
+        debug!("[write] /dev/zero");
         Box::pin(async move { Ok(buf.len() as isize) })
+    }
+
+    fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
+        debug!("[sync_read] /dev/zero");
+        let _sum_guard = SumGuard::new();
+        buf.fill(0);
+        debug!("[sync_read] /dev/zero: fill 0");
+        Ok(buf.len() as isize)
+    }
+
+    fn sync_write(&self, buf: &[u8]) -> SyscallRet {
+        debug!("[sync_write] /dev/zero");
+        Ok(buf.len() as isize)
     }
 }

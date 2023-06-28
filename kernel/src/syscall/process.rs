@@ -9,6 +9,7 @@ use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thr
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::sync::Event;
+use crate::timer::current_time_duration;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -237,7 +238,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             envs = envs.add(1);
         }
     }
-    envs_vec.push("PATH=/".to_string());
+    envs_vec.push("PATH=/:".to_string());
     // UserCheck::new().readable_slice(path, len);
     UserCheck::new().check_c_str(path)?;
     // let path = c_str_to_string(path);
@@ -324,12 +325,18 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 let found_pid = child.pid();
                 // get child's exit code
                 let exit_code = child.exit_code();
-                debug!("[sys_waitpid] found pid {} exit code {}", found_pid, exit_code);
+                debug!(
+                    "[sys_waitpid] found pid {} exit code {}",
+                    found_pid, exit_code
+                );
 
                 Ok(Some((false, found_pid as isize, exit_code as i32)))
             } else {
                 // the child still alive
-                debug!("[sys_waitpid] no such pid, children size {}", proc.children.len());
+                debug!(
+                    "[sys_waitpid] no such pid, children size {}",
+                    proc.children.len()
+                );
                 if proc.children.len() > 0 {
                     debug!("[sys_waitpid] first child pid {}", proc.children[0].pid());
                 }
@@ -552,8 +559,10 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
         }
     }
     debug!(
-        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}",
-        usage.ru_utime, usage.ru_stime
+        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}, current ts {:?}",
+        usage.ru_utime,
+        usage.ru_stime,
+        current_time_duration(),
     );
     Ok(0)
 }

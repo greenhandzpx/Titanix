@@ -58,6 +58,7 @@ const SYSCALL_SETPGID: usize = 154;
 const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GETRUSAGE: usize = 165;
+const SYSCALL_UMASK: usize = 166;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
@@ -114,7 +115,7 @@ use crate::{
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    info!(
+    trace!(
         "syscall id: {}, sepc {:#x}",
         syscall_id,
         current_trap_cx().sepc
