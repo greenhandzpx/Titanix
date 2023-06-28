@@ -13,6 +13,7 @@ mod procfs;
 mod testfs;
 
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;
@@ -38,6 +39,8 @@ use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
 
+use self::inode::INODE_CACHE;
+
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub fn init() {
@@ -47,6 +50,13 @@ pub fn init() {
     // todo!();
     devfs::init().expect("devfs init fail");
     procfs::init().expect("procfs init fail");
+    // create tmp dir
+    let root_inode = ROOT_FS.metadata().root_inode.clone().unwrap();
+    let tmp = root_inode
+        .mkdir(root_inode.clone(), "/tmp", InodeMode::FileDIR)
+        .unwrap();
+    let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
+    INODE_CACHE.lock().insert(key, tmp);
 }
 
 pub const AT_FDCWD: isize = -100;

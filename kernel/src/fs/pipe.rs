@@ -37,15 +37,12 @@ impl File for Pipe {
         assert!(self.readable());
         debug!("start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
-        Box::pin(
-            // debug!("start to pipe read {} bytes", buf.len());
-            PipeFuture::new(
-                self.buffer.clone(),
-                buf_addr,
-                buf.len(),
-                PipeOperation::Read,
-            ),
-        )
+        Box::pin(PipeFuture::new(
+            self.buffer.clone(),
+            buf_addr,
+            buf.len(),
+            PipeOperation::Read,
+        ))
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
