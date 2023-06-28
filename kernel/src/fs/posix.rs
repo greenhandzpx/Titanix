@@ -8,6 +8,7 @@ use log::debug;
 
 use super::fat32::SECTOR_SIZE;
 use super::Inode;
+use crate::timer::current_time_duration;
 use crate::timer::posix::TimeSpec;
 
 /// STAT
@@ -312,25 +313,23 @@ pub struct Sysinfo {
 }
 
 impl Sysinfo {
-    #[allow(unused)]
     pub fn collect() -> Self {
-        // Self {
-        //     uptime: current_time_duration().as_secs() as i64,
-        //     loads: (),
-        //     totalram: (),
-        //     freeram: (),
-        //     sharedram: (),
-        //     bufferram: (),
-        //     totalswap: (),
-        //     freeswap: (),
-        //     procs: (),
-        //     pad: (),
-        //     totalhigh: (),
-        //     freehigh: (),
-        //     mem_uint: (),
-        //     _f: [0; _F_SIZE],
-        // }
-        todo!()
+        Self {
+            uptime: current_time_duration().as_secs() as i64,
+            loads: [0; 3],
+            totalram: 0,
+            freeram: 0,
+            sharedram: 0,
+            bufferram: 0,
+            totalswap: 0,
+            freeswap: 0,
+            procs: 0,
+            pad: 0,
+            totalhigh: 0,
+            freehigh: 0,
+            mem_uint: 0,
+            _f: [0; _F_SIZE],
+        }
     }
 }
 

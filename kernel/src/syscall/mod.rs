@@ -114,7 +114,7 @@ use crate::{
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!(
+    info!(
         "syscall id: {}, sepc {:#x}",
         syscall_id,
         current_trap_cx().sepc
@@ -206,7 +206,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(
             args[0] as i32,
-            args[1] as *const usize,
+            args[1] as *const u32,
             args[2] as *mut SigSet,
         ),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
