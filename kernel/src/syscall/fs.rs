@@ -436,7 +436,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     //     return Err(SyscallErr::EACCES);
     // }
 
-    info!("[_fstat]: fd {}", fd);
+    debug!("[_fstat]: fd {}", fd);
     let inode = file.metadata().inner.lock().inode.as_ref().unwrap().clone();
     let inode_meta = inode.metadata().clone();
     if let Some(dev) = inode_meta.device.as_ref() {
@@ -1310,9 +1310,20 @@ pub async fn sys_pselect6(
         }
     };
 
+    let timeout = match timeout_ptr {
+        0 => {
+            debug!("[sys_pselect]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
+        }
+    };
     debug!(
-        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}",
-        readfds, writefds, exceptfds
+        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
+        readfds, writefds, exceptfds, timeout
     );
 
     let mut fds: Vec<PollFd> = Vec::new();
@@ -1375,17 +1386,6 @@ pub async fn sys_pselect6(
         fds.clear_all();
     }
 
-    let timeout = match timeout_ptr {
-        0 => {
-            debug!("[sys_pselect]: infinite timeout");
-            None
-        }
-        _ => {
-            UserCheck::new()
-                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
-            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
-        }
-    };
 
     if sigmask_ptr != 0 {
         stack_trace!();
@@ -1411,7 +1411,7 @@ pub async fn sys_pselect6(
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {
-                warn!("[sys_pselect]: timeout");
+                debug!("[sys_pselect]: timeout");
                 return Ok(0);
             }
         }
