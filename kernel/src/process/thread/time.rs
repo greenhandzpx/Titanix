@@ -7,7 +7,7 @@ use crate::timer::current_time_duration;
 /// Used for sys_getrusage
 ///                                                  -- user --                -user-
 /// ---kernel---(switch to other thread) ---kernel---          --- kernel --          --- (switch)
-///                                   enter          ret      trap          ret     trap     leave
+///         leave                      enter          ret      trap          ret     trap     leave
 pub struct ThreadTimeInfo {
     pub start_ts: Duration,
     pub user_time: Duration,

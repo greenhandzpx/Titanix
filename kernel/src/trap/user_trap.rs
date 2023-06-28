@@ -27,9 +27,6 @@ pub async fn trap_handler() {
     //     info!("other hart trap");
     // }
 
-    unsafe {
-        (*current_task().inner.get()).time_info.when_trap_in();
-    }
     let scause = scause::read();
     let stval = stval::read();
     match scause.cause() {
@@ -52,7 +49,6 @@ pub async fn trap_handler() {
             .await;
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
-            stack_trace!();
             cx.user_x[10] = match result {
                 Ok(ret) => ret as usize,
                 Err(err) => -(err as isize) as usize,
@@ -159,7 +155,7 @@ pub async fn trap_handler() {
 /// Back to user mode.
 /// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
-pub fn trap_return(trap_context: &mut TrapContext) {
+pub fn trap_return() {
     set_user_trap_entry();
     extern "C" {
         // fn __alltraps();
@@ -170,8 +166,9 @@ pub fn trap_return(trap_context: &mut TrapContext) {
 
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
-    }
-    unsafe {
-        __return_to_user(trap_context);
+
+        __return_to_user(current_trap_cx());
+
+        (*current_task().inner.get()).time_info.when_trap_in();
     }
 }
