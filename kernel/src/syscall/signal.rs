@@ -184,6 +184,10 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     Ok(0)
 }
 
+pub fn sys_rt_sigtimedwait(set: *const u32, info: *const u8, timeout: *const u8) -> SyscallRet {
+    Ok(0)
+}
+
 pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
     stack_trace!();
     warn!("[sys_tgkill]: tgid {}, tid {}, sig {}", tgid, tid, sig);

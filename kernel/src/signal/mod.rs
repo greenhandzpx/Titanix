@@ -1,11 +1,9 @@
 use alloc::collections::VecDeque;
-use lazy_static::*;
 use log::debug;
 
 use crate::{
     config::signal::SIG_NUM,
     processor::{current_process, current_task, current_trap_cx},
-    signal::signal_handler::default_sig_handler,
     trap::UserContext,
 };
 
@@ -212,7 +210,7 @@ pub fn check_signal_for_current_process() {
 
 fn handle_signal(signo: usize, sig_action: KSigAction) {
     debug!(
-        "[handle signal] signo {}, handler {:#x}",
+        "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
     );
     if sig_action.is_user_defined {

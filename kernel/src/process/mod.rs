@@ -12,6 +12,8 @@ pub use thread::yield_now;
 pub mod aux;
 mod manager;
 mod pid;
+/// System resource
+pub mod resource;
 // #[allow(clippy::module_inception)]
 // mod task;
 
@@ -68,7 +70,7 @@ pub fn add_initproc() {
     PROCESS_MANAGER.add_process(init_proc.pid(), &spin_proc);
 }
 
-use self::thread::TidHandle;
+use self::{resource::RLimit, thread::TidHandle};
 
 /// Process control block inner
 pub struct ProcessInner {
@@ -101,6 +103,8 @@ pub struct ProcessInner {
     pub cwd: String,
     /// REAL, VIRTUAL, PROF timer
     pub timers: [ITimerval; 3],
+    /// Process Resource
+    pub rlimit: RLimit,
 }
 
 impl ProcessInner {
@@ -222,6 +226,7 @@ impl Process {
                 exit_code: 0,
                 cwd: String::from("/"),
                 timers: [ITimerval::default(); 3],
+                rlimit: RLimit::new(0, 0),
             }),
         });
         let trap_context =
@@ -533,6 +538,7 @@ impl Process {
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),
                     timers: [ITimerval::default(); 3],
+                    rlimit: parent_inner.rlimit.clone(),
                 }),
             });
             // add child
