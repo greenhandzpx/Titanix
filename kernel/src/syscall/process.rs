@@ -546,14 +546,19 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
         RUSAGE_SELF => current_process().inner_handler(|proc| {
             let mut user_time = Duration::ZERO;
             let mut sys_time = Duration::ZERO;
+            let mut start_ts = Duration::ZERO;
             for thread in proc.threads.iter() {
                 if let Some(thread) = thread.upgrade() {
                     user_time += unsafe { (*thread.inner.get()).time_info.user_time };
                     sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
+                    if start_ts.is_zero() {
+                        start_ts = unsafe { (*thread.inner.get()).time_info.start_ts };
+                    }
                 }
             }
             usage.ru_utime = user_time.into();
             usage.ru_stime = sys_time.into();
+            debug!("[sys_getrusage]: process real time {:?}", current_time_duration() - start_ts);
         }),
         _ => {
             panic!()

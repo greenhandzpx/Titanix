@@ -1,3 +1,4 @@
 - 适配busybox时在解析elf时没有将各个段对齐到页，导致页表映射出现问题
 - 在将内核页表映射到高地址的过程中，忘记将sp指针进行映射，导致构造新页表时发生pagefault，因为旧的地址空间(0x80200000段)在新页表中没有相关映射
 - Vec的copy_from_raw_parts不能从用户态地址拷贝？
+- libc测试时waitpid结果不对？原因是sigreturn的时候返回值写成了0，导致在trap_handler中将0覆盖了x10寄存器，解决：sigreturn应该返回x10寄存器的值。

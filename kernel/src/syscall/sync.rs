@@ -14,7 +14,7 @@ use crate::{
 
 pub async fn sys_futex(uaddr: usize, futex_op: usize, val: usize) -> SyscallRet {
     stack_trace!();
-    warn!("[sys_futex]: not yet implemented!");
+    todo!("[sys_futex]: not yet implemented!");
     match futex_op {
         _ if futex_op == FutexOperations::FutexWait as usize => {
             UserCheck::new()

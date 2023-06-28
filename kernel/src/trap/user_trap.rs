@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::{debug, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -9,11 +9,9 @@ use crate::{
     process::{self, thread::exit_and_terminate_all_threads},
     processor::{current_process, current_task, current_trap_cx, hart::local_hart},
     signal::check_signal_for_current_process,
-    stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
     trap::set_user_trap_entry,
-    FIRST_HART_ID,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -104,22 +102,16 @@ pub async fn trap_handler() {
             // 5. execve elf file
             // 6. dynamic link
             // 7. illegal page fault
-
-            // todo!("Exit current process when encounting illegal addr");
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             warn!(
                 "[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}",
                 stval
             );
-            // // illegal instruction exit code
-            // current_process().set_zombie();
             #[cfg(feature = "stack_trace")]
             warn!("backtrace:");
             local_hart().env().stack_tracker.print_stacks();
             exit_and_terminate_all_threads(-2);
-            // exit_current_and_run_next(-3);
-            // todo!("Exit current process when encounting illegal instruction");
         }
         Trap::Exception(Exception::Breakpoint) => {
             warn!(
