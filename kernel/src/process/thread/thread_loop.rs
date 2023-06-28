@@ -15,8 +15,8 @@ use log::{debug, info};
 use crate::{
     process::thread::exit::handle_exit,
     processor::{close_interrupt, current_task, open_interrupt},
-    stack_trace,
     trap::{self, TrapContext},
+    utils::async_tools,
 };
 
 use super::Thread;
@@ -27,6 +27,7 @@ pub async fn threadloop(thread: Arc<Thread>) {
         current_task().trap_context_ref().sepc,
         current_task().trap_context_ref() as *const TrapContext as usize
     );
+    thread.set_waker(async_tools::take_waker().await);
     loop {
         // let trap_context = unsafe {
         //     // TODO: figure out why we can't use in this way

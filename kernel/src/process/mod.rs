@@ -27,7 +27,7 @@ use crate::{
         thread::terminate_all_threads_except_main,
     },
     processor::{current_process, current_task, hart::local_hart, SumGuard},
-    signal::{SigHandlerManager, SigInfo, SigQueue},
+    signal::{SigHandlerManager, SigInfo, SigQueue, SIGKILL},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
     timer::posix::ITimerval,
@@ -178,6 +178,16 @@ impl Process {
 
     /// Send signal to this process
     pub fn send_signal(&self, sig_info: SigInfo) {
+        if sig_info.signo == SIGKILL {
+            self.inner_handler(|proc| {
+                for thread in proc.threads.iter() {
+                    if let Some(thread) = thread.upgrade() {
+                        thread.terminate();
+                        thread.wake_up();
+                    }
+                }
+            })
+        }
         self.inner.lock().pending_sigs.sig_queue.push_back(sig_info);
     }
 
@@ -196,7 +206,6 @@ impl Process {
 impl Drop for Process {
     fn drop(&mut self) {
         debug!("process {} died!", self.pid());
-        // println!("\u{1B}[31m process [pid {}] died! \u{1B}[0m", self.get_pid());
     }
 }
 

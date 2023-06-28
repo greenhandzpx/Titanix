@@ -61,12 +61,13 @@ pub trait File: Send + Sync {
 
     fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
-        // Ok(true)
-        todo!()
+        Ok(true)
+        // todo!()
     }
 
     fn pollout(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
-        todo!()
+        Ok(true)
+        // todo!()
     }
 
     /// For default file, data must be read from page cache first

@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use log::debug;
 
 use crate::config::fs::PIPE_BUF_CAPACITY;
-use crate::processor::SumGuard;
+use crate::processor::{SumGuard, current_task};
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::utils::error::{AsyscallRet, GeneralRet, SyscallRet};
 
@@ -288,6 +288,9 @@ impl Future for PipeFuture {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        if current_task().is_zombie() {
+            return Poll::Ready(Ok(0));
+        }
         let _sum_guard = SumGuard::new();
         if self.user_buf_len == 0 {
             return Poll::Ready(Ok(0));

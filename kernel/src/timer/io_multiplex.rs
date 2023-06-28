@@ -5,7 +5,7 @@ use log::{debug, trace, warn};
 
 use crate::{
     fs::posix::FdSet,
-    processor::{current_process, SumGuard},
+    processor::{current_process, SumGuard, current_task},
     syscall::{PollEvents, PollFd},
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -101,6 +101,9 @@ impl Future for IOMultiplexFuture {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        if current_task().is_zombie() {
+            return Poll::Ready(Ok(0));
+        }
         let waker = cx.waker().clone();
         let mut cnt = 0;
         let this = unsafe { self.get_unchecked_mut() };
