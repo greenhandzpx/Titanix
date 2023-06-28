@@ -1386,7 +1386,6 @@ pub async fn sys_pselect6(
         fds.clear_all();
     }
 
-
     if sigmask_ptr != 0 {
         stack_trace!();
         UserCheck::new()
