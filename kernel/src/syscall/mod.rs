@@ -51,7 +51,7 @@ const SYSCALL_KILL: usize = 129;
 const SYSCALL_TGKILL: usize = 131;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
-const SYSCALL_RT_SIGTIMERDWAIT: usize = 137;
+const SYSCALL_RT_SIGTIMEDWAIT: usize = 137;
 const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
 const SYSCALL_SETPGID: usize = 154;
@@ -83,6 +83,7 @@ mod dev;
 mod fs;
 mod mm;
 mod process;
+mod resource;
 mod signal;
 mod sync;
 mod time;
@@ -102,8 +103,10 @@ use time::*;
 use crate::{
     fs::posix::{Statfs, Sysinfo},
     mm::MapPermission,
+    process::resource::RLimit,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
+    syscall::resource::sys_prlimit64,
     timer::{
         posix::{ITimerval, TimeSpec, TimeVal, Tms},
         *,
@@ -209,6 +212,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[1] as *const u32,
             args[2] as *mut SigSet,
         ),
+        SYSCALL_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(
+            args[0] as *const u32,
+            args[1] as *const u8,
+            args[2] as *const u8,
+        ),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
         SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
@@ -247,6 +255,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
         SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
+        SYSCALL_PRLIMIT64 => sys_prlimit64(
+            args[0],
+            args[1] as u32,
+            args[2] as *const RLimit,
+            args[3] as *mut RLimit,
+        ),
         SYSCALL_REMANEAT2 => sys_renameat2(
             args[0] as isize,
             args[1] as *const u8,
