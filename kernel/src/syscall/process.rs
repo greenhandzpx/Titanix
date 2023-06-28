@@ -492,6 +492,12 @@ pub fn sys_geteuid() -> SyscallRet {
     Ok(0)
 }
 
+pub fn sys_getegid() -> SyscallRet {
+    stack_trace!();
+    info!("[sys_getegid] get egid");
+    Ok(0)
+}
+
 pub fn sys_gettid() -> SyscallRet {
     stack_trace!();
     let tid = current_task().tid();
@@ -558,7 +564,10 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
             }
             usage.ru_utime = user_time.into();
             usage.ru_stime = sys_time.into();
-            debug!("[sys_getrusage]: process real time {:?}", current_time_duration() - start_ts);
+            debug!(
+                "[sys_getrusage]: process real time {:?}",
+                current_time_duration() - start_ts
+            );
         }),
         _ => {
             panic!()
