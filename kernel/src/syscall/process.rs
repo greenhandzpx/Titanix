@@ -193,6 +193,7 @@ pub fn sys_clone(
         // info!("fork return, sepc: {:#x} addr: {:#x}", sepc, trap_cx as *mut TrapContext as usize);
         // // add new task to scheduler
         // add_task(new_task);
+        debug!("[sys_clone] return new pid: {}", new_pid);
         Ok(new_pid as isize)
     } else {
         // clone(i.e. create a new thread)
@@ -372,7 +373,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                         );
                     }
                 }
-                // info!("ret {}", found_pid);
+                debug!("[sys_wait4] ret {}", found_pid);
                 return Ok(found_pid);
             }
         } else {

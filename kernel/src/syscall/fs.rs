@@ -12,7 +12,7 @@ use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use super::PollFd;
-use crate::config::fs::RLIMIT_NOFILE;
+use crate::config::fs::RLIMIT_OFILE;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::posix::{
@@ -78,7 +78,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SyscallRet {
     current_process().inner_handler(move |proc| {
         if let Some(file) = proc.fd_table.get(oldfd) {
             if proc.fd_table.take(newfd).is_none() {
-                if newfd >= RLIMIT_NOFILE {
+                if newfd >= RLIMIT_OFILE {
                     return Err(SyscallErr::EINVAL);
                 } else {
                     proc.fd_table.alloc_spec_fd(newfd);
