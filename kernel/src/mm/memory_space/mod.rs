@@ -1,13 +1,15 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, trace, warn};
+use xmas_elf::ElfFile;
 
 use crate::{
     config::{
         board::MEMORY_END,
-        mm::PAGE_SIZE,
+        mm::{DL_INTERP_OFFSET, PAGE_SIZE},
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
     driver::block::MMIO_VIRT,
+    fs::{resolve_path, OpenFlags},
     mm::memory_space::page_fault_handler::SBrkPageFaultHandler,
     process::aux::*,
     processor::current_process,
@@ -25,7 +27,8 @@ pub use self::{
 };
 
 use super::{
-    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, VirtAddr, VirtPageNum,
+    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, VPNRange, VirtAddr,
+    VirtPageNum,
 };
 
 ///
@@ -50,8 +53,7 @@ extern "C" {
     fn ekernel();
 }
 
-// lazy_static! {
-// }
+const DL_INTERP: &str = "libc/libc.so";
 
 /// Kernel Space for all processes
 pub static mut KERNEL_SPACE: Option<MemorySpace> = None;
@@ -121,6 +123,47 @@ impl MemorySpace {
         self.page_table.get_unchecked_mut().token()
     }
 
+    /// Clip the map areas overlapping with the given vpn range.
+    /// Note that there may exist more than one area.
+    pub fn clip_vm_areas_overlapping(&mut self, vpn_range: VPNRange) -> GeneralRet<()> {
+        stack_trace!();
+        let mut removed_areas: Vec<VirtPageNum> = Vec::new();
+        let mut clipped_area: Option<VirtPageNum> = None;
+        for (start_vpn, vma) in self
+            .areas
+            .get_mut()
+            .range_mut(vpn_range.start()..vpn_range.end())
+        {
+            if vma.end_vpn() <= vpn_range.end() {
+                // The vma is totally included by the given vpn range.
+                // We should just remove it.
+                removed_areas.push(*start_vpn);
+                debug!("[clip_vm_areas_overlapping] remove vma {:?}", vma.vpn_range);
+            } else {
+                // Else, clip it.
+                vma.clip(VPNRange::new(vpn_range.end(), vma.end_vpn()));
+                debug!("[clip_vm_areas_overlapping] clip vma {:?}", vma.vpn_range);
+                clipped_area = Some(*start_vpn);
+            }
+        }
+        if let Some(clipped_area) = clipped_area {
+            let vma = self.areas.get_mut().remove(&clipped_area).unwrap();
+            self.areas.get_mut().insert(vma.start_vpn(), vma);
+        }
+        for start_vpn in removed_areas {
+            self.areas.get_mut().remove(&start_vpn);
+        }
+
+        if let Some((_, vma)) = self.areas.get_mut().range_mut(..vpn_range.start()).last() {
+            if vma.end_vpn() > vpn_range.start() {
+                debug!("[clip_vm_areas_overlapping] clip vma {:?}", vma.vpn_range);
+                vma.clip(VPNRange::new(vma.start_vpn(), vpn_range.start()));
+            }
+        }
+
+        Ok(())
+    }
+
     /// Find the immutable ref of map area by the given vpn
     pub fn find_vm_area_by_vpn(&self, vpn: VirtPageNum) -> Option<&VmArea> {
         // Range query to find the map area that this vpn belongs to
@@ -159,7 +202,7 @@ impl MemorySpace {
     pub fn find_vm_area_mut_by_vpn_included(&mut self, vpn: VirtPageNum) -> Option<&mut VmArea> {
         // Range query to find the map area that this vpn belongs to
         // debug!("len before {}", self.areas.len());
-        if let Some((_, vm_area)) = self.areas.get_unchecked_mut().range_mut(..=vpn).next_back() {
+        if let Some((_, vm_area)) = self.areas.get_mut().range_mut(..=vpn).next_back() {
             if vm_area.end_vpn() < vpn {
                 return None;
             }
@@ -421,14 +464,61 @@ impl MemorySpace {
         }
         memory_space
     }
-    /// Include sections in elf and trampoline and TrapContext and user stack,
+
+    /// Map the sections in the elf.
+    /// Return the max end vpn and the first section's va.
+    fn map_elf(&mut self, elf: &ElfFile, offset: VirtAddr) -> (VirtPageNum, VirtAddr) {
+        let elf_header = elf.header;
+        let ph_count = elf_header.pt2.ph_count();
+
+        let mut max_end_vpn = offset.floor();
+        let mut head_va = 0;
+        debug!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
+                let start_va: VirtAddr = (ph.virtual_addr() as usize + offset.0).into();
+                let end_va: VirtAddr =
+                    ((ph.virtual_addr() + ph.mem_size()) as usize + offset.0).into();
+                if head_va == 0 {
+                    head_va = start_va.0;
+                }
+                let mut map_perm = MapPermission::U;
+                let ph_flags = ph.flags();
+                if ph_flags.is_read() {
+                    map_perm |= MapPermission::R;
+                }
+                if ph_flags.is_write() {
+                    map_perm |= MapPermission::W;
+                }
+                if ph_flags.is_execute() {
+                    map_perm |= MapPermission::X;
+                }
+                let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
+                max_end_vpn = vm_area.vpn_range.end();
+
+                let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
+                self.push(
+                    vm_area,
+                    offset,
+                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+                );
+                debug!(
+                    "[map_elf]: {:#x}, {:#x}, map_perm: {:?}",
+                    start_va.0, end_va.0, map_perm
+                );
+            }
+        }
+
+        (max_end_vpn, head_va.into())
+    }
+
+    /// Include sections in elf and TrapContext and user stack,
     /// also returns user_sp and entry point.
     /// TODO: resolve elf file lazily
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
-        // let mut memory_space = Self::new_bare();
         let mut memory_space = Self::new_from_global();
-        // // map trampoline
-        // memory_space.map_trampoline();
 
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
@@ -436,6 +526,8 @@ impl MemorySpace {
         let magic = elf_header.pt1.magic;
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
+
+        let mut entry_point = elf_header.pt2.entry_point() as usize;
 
         let mut auxv: Vec<AuxHeader> = Vec::with_capacity(64);
 
@@ -452,13 +544,20 @@ impl MemorySpace {
             aux_type: AT_PAGESZ,
             value: PAGE_SIZE as usize,
         });
-        auxv.push(AuxHeader {
-            aux_type: AT_BASE,
-            value: 0 as usize,
-        });
 
+        if let Some(interp_entry_point) = memory_space.load_dl_interp_if_needed(&elf) {
+            auxv.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: DL_INTERP_OFFSET,
+            });
+            entry_point = interp_entry_point;
+        } else {
+            auxv.push(AuxHeader {
+                aux_type: AT_BASE,
+                value: 0,
+            });
+        }
         // _at_base = memory_space.load_dl(&elf);
-
         // if _at_base != 0 {
         //     auxv.push(AuxHeader {
         //         aux_type: AT_BASE,
@@ -512,59 +611,10 @@ impl MemorySpace {
             value: 0x112d as usize,
         });
 
-        let mut max_end_vpn = VirtPageNum(0);
-        let mut head_va = 0;
-        debug!("[from_elf]: entry point {:#x}", elf.header.pt2.entry_point());
-        for i in 0..ph_count {
-            let ph = elf.program_header(i).unwrap();
-            if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
-                let start_va: VirtAddr = (ph.virtual_addr() as usize).into();
-                let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
-                if head_va == 0 {
-                    head_va = start_va.0;
-                }
-                let mut map_perm = MapPermission::U;
-                let ph_flags = ph.flags();
-                if ph_flags.is_read() {
-                    map_perm |= MapPermission::R;
-                }
-                if ph_flags.is_write() {
-                    map_perm |= MapPermission::W;
-                }
-                if ph_flags.is_execute() {
-                    map_perm |= MapPermission::X;
-                }
-                let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
-                max_end_vpn = vm_area.vpn_range.end();
+        let (max_end_vpn, head_va) = memory_space.map_elf(&elf, 0.into());
 
-                // let seg_size = (end_va.ceil().0 - start_va.floor().0) * PAGE_SIZE;
-                // let mut raw_data = vec![0 as u8; seg_size];
-                // let _ = &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize].iter().enumerate().for_each(|(i, byte)| {
-                //     raw_data[i + start_va.0 - start_va.floor().0 * PAGE_SIZE] = *byte;
-                // });
-                // memory_space.push(
-                //     vm_area,
-                //     Some(&raw_data),
-                // );
-                let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
-                memory_space.push(
-                    vm_area,
-                    offset,
-                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
-                );
-                debug!(
-                    "[from elf]: {:#x}, {:#x}, map_perm: {:?}",
-                    start_va.0, end_va.0, map_perm
-                );
-                // let magic = 0x1213d0;
-                // if start_va.0 < magic && magic < end_va.0 {
-                //     trace!("{:#x}: raw value: {:#x}", magic, )
-                // }
-            }
-        }
-
-        let ph_head_addr = head_va + elf.header.pt2.ph_offset() as usize;
-        debug!("[from_elf]: AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
+        let ph_head_addr = head_va.0 + elf.header.pt2.ph_offset() as usize;
+        debug!("[from_elf] AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,
@@ -593,37 +643,47 @@ impl MemorySpace {
         memory_space.push(heap_vma, 0, None);
         memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
         debug!(
-            "[from elf]: map heap: {:#x}, {:#x}",
+            "[from_elf] map heap: {:#x}, {:#x}",
             heap_start_va, heap_start_va
         );
 
-        // let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        // memory_space.push(
-        //     VmArea::new(
-        //         user_stack_bottom.into(),
-        //         user_stack_top.into(),
-        //         MapType::Framed,
-        //         MapPermission::R | MapPermission::W | MapPermission::U,
-        //     ),
-        //     None,
-        // );
-        // // map TrapContext
-        // memory_space.push(
-        //     VmArea::new(
-        //         TRAP_CONTEXT.into(),
-        //         TRAMPOLINE.into(),
-        //         MapType::Framed,
-        //         MapPermission::R | MapPermission::W,
-        //     ),
-        //     None,
-        // );
-        (
-            memory_space,
-            user_stack_bottom,
-            elf.header.pt2.entry_point() as usize,
-            auxv,
-        )
+        (memory_space, user_stack_bottom, entry_point, auxv)
     }
+
+    /// Check whether the elf file is dynamic linked and
+    /// if so, load the dl interpreter.
+    /// Return the interpreter's entry point(at the base of DL_INTERP_OFFSET) if so.
+    fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> Option<usize> {
+        let elf_header = elf.header;
+        let ph_count = elf_header.pt2.ph_count();
+
+        let mut is_dl = false;
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
+                is_dl = true;
+                break;
+            }
+        }
+
+        if is_dl {
+            info!("[load_dl] encounter a dl elf");
+            let interp_inode = resolve_path(DL_INTERP, OpenFlags::RDONLY).unwrap();
+            let interp_file = interp_inode
+                .open(interp_inode.clone(), OpenFlags::RDONLY)
+                .ok()
+                .unwrap();
+            let interp_elf_data = interp_file.sync_read_all().ok().unwrap();
+            let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
+            self.map_elf(&interp_elf, DL_INTERP_OFFSET.into());
+
+            Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET)
+        } else {
+            debug!("[load_dl] encounter a static elf");
+            None
+        }
+    }
+
     ///Clone a same `MemorySpace`
     pub fn from_existed_user(user_space: &Self) -> Self {
         // let mut memory_space = Self::new_bare();
@@ -740,9 +800,47 @@ impl MemorySpace {
         self.areas.get_unchecked_mut().clear();
     }
 
-    /// Allocate an unused area(mostly for mmap)
-    /// Note that length is counted by byte
-    pub fn find_unused_area(&self, length: usize, map_permission: MapPermission) -> Option<VmArea> {
+    /// Allocate an unused area by specific start va.
+    /// Note that length is counted by byte.
+    pub fn allocate_spec_area(
+        &mut self,
+        length: usize,
+        map_permission: MapPermission,
+        start_va: VirtAddr,
+    ) -> GeneralRet<Option<VmArea>> {
+        if length == 0 {
+            return Ok(None);
+        }
+        let length_rounded = (length - 1 + PAGE_SIZE) / PAGE_SIZE * PAGE_SIZE;
+        let end_va: VirtAddr = (start_va.0 + length_rounded).into();
+        debug!(
+            "[allocate_spec_area] start va {:#x}, end va {:#x}",
+            start_va.0, end_va.0
+        );
+        if start_va.0 % PAGE_SIZE != 0 {
+            return Err(SyscallErr::EINVAL);
+        }
+        // TODO: just sanity check, should find a safer way
+        // TODO: check more carefully
+        self.clip_vm_areas_overlapping(VPNRange::new(start_va.floor(), end_va.ceil()))?;
+        // if self.find_vm_area_by_vpn(start_va.floor()).is_some() {
+        //     warn!("[allocate_spec_area] conflicted vm area!");
+        //     return None;
+        // }
+
+        Ok(Some(VmArea::new(
+            start_va,
+            end_va,
+            MapType::Framed,
+            map_permission,
+            None,
+            None,
+        )))
+    }
+
+    /// Allocate an unused area(mostly for mmap).
+    /// Note that length is counted by byte.
+    pub fn allocate_area(&self, length: usize, map_permission: MapPermission) -> Option<VmArea> {
         if length == 0 {
             return None;
         }
@@ -754,7 +852,7 @@ impl MemorySpace {
             let curr_end = vma.1.end_vpn().0 * PAGE_SIZE;
             if last_start - curr_end >= length_rounded {
                 let new_start = last_start - length_rounded;
-                debug!("find an unused area: [{:#x}, {:#x}]", new_start, last_start);
+                debug!("[allocate_area] [{:#x}, {:#x}]", new_start, last_start);
                 return Some(VmArea::new(
                     new_start.into(),
                     last_start.into(),
@@ -766,7 +864,7 @@ impl MemorySpace {
             }
             last_start = vma.1.start_vpn().0 * PAGE_SIZE;
         }
-        error!("Cannot find any unused vm area!!");
+        error!("[allocate area] cannot find any unused vm area!!");
         None
     }
 

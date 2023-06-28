@@ -44,37 +44,7 @@ impl File for Pipe {
                 buf_addr,
                 buf.len(),
                 PipeOperation::Read,
-            ), // loop {
-               //     if let Some(ret) = self.inner_handler(|ring_buffer| {
-               //         let loop_read = ring_buffer.available_read();
-               //         if loop_read == 0 {
-               //             if ring_buffer.all_write_ends_closed() {
-               //                 // all of the buffer's write ends have
-               //                 // been closed, then just end reading
-               //                 return Some(already_read);
-               //             }
-               //             return None;
-               //         }
-               //         for _ in 0..loop_read {
-               //             if let Some(byte_ref) = buf_iter.next() {
-               //                 *byte_ref = ring_buffer.read_byte();
-               //                 already_read += 1;
-               //                 if already_read == want_to_read {
-               //                     return Some(want_to_read);
-               //                 }
-               //             } else {
-               //                 // TODO: Some error happened?
-               //                 return Some(already_read);
-               //             }
-               //         }
-               //         return None;
-               //     }) {
-               //         // debug!("read {} bytes over", ret);
-               //         return Ok(ret as isize);
-               //     } else {
-               //         process::yield_now().await;
-               //     }
-               // }
+            ) 
         )
     }
 
@@ -88,41 +58,7 @@ impl File for Pipe {
                 buf_addr,
                 buf.len(),
                 PipeOperation::Write,
-            ), // debug!("satp(1) {:#x}", satp::read().bits());
-               // let _sum_guard = SumGuard::new();
-               // let want_to_write = buf.len();
-               // let mut buf_iter = buf.into_iter();
-               // let mut already_write = 0usize;
-               // loop {
-               //     if let Some(ret) = self.inner_handler(|ring_buffer| {
-               //         let loop_write = ring_buffer.available_write();
-               //         if loop_write == 0 {
-               //             return None;
-               //             // drop(ring_buffer);
-               //             // suspend_current_and_run_next();
-               //             // continue;
-               //         }
-               //         // write at most loop_write bytes
-               //         for _ in 0..loop_write {
-               //             if let Some(byte_ref) = buf_iter.next() {
-               //                 ring_buffer.write_byte(*byte_ref);
-               //                 already_write += 1;
-               //                 if already_write == want_to_write {
-               //                     return Some(want_to_write);
-               //                 }
-               //             } else {
-               //                 return Some(already_write);
-               //             }
-               //         }
-               //         return None;
-               //     }) {
-               //         debug!("pipe write {} bytes over", ret);
-               //         return Ok(ret as isize);
-               //     } else {
-               //         debug!("no available write slots");
-               //         process::yield_now().await;
-               //     }
-               // }
+            )
         )
     }
 
@@ -394,7 +330,7 @@ impl Future for PipeFuture {
                 if loop_write == 0 {
                     if ring_buffer.all_read_ends_closed() {
                         // all of the buffer's read ends have
-                        // been closed, then just end reading
+                        // been closed, then just end writing
                         return Poll::Ready(Ok(this.already_put as isize));
                     } else {
                         ring_buffer.wait_for_writing(cx.waker().clone());

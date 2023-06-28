@@ -18,7 +18,7 @@ use crate::{
 
 /// Note that we just ignore the `addr`
 pub fn sys_mmap(
-    _addr: *const u8,
+    addr: usize,
     length: usize,
     prot: i32,
     flags: i32,
@@ -26,20 +26,27 @@ pub fn sys_mmap(
     offset: usize,
 ) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_mmap]: start... len {}, fd {}", length, fd);
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
     let map_permission: MapPermission = prot.into();
+    debug!("[sys_mmap]: start...  addr {:#x}, len {}, fd {}, offset {}, flags {:?}, prot {:?}", addr, length, fd, offset, flags, prot);
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
         if offset != 0 {
             return Err(SyscallErr::EINVAL);
         }
         current_process().inner_handler(|proc| {
-            let mut vma = proc
-                .memory_space
-                .find_unused_area(length, map_permission)
-                .ok_or(SyscallErr::ENOMEM)?;
+            let mut vma = {
+                if flags.contains(MmapFlags::MAP_FIXED) {
+                    proc.memory_space
+                        .allocate_spec_area(length, map_permission, addr.into())?
+                        .ok_or(SyscallErr::ENOMEM)?
+                } else {
+                    proc.memory_space
+                        .allocate_area(length, map_permission)
+                        .ok_or(SyscallErr::ENOMEM)?
+                }
+            };
             vma.mmap_flags = Some(flags);
             let handler = SBrkPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
@@ -58,25 +65,23 @@ pub fn sys_mmap(
     } else {
         current_process().inner_handler(|proc| {
             let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-            // let mut buf: [u8; 36] = [0; 36];
-            // file.seek(0)?;
-            // file.sync_read(&mut buf)?;
-            let mut vma = proc
-                .memory_space
-                .find_unused_area(length, map_permission)
-                .ok_or(SyscallErr::ENOMEM)?;
+            let mut vma = {
+                if flags.contains(MmapFlags::MAP_FIXED) {
+                    proc.memory_space
+                        .allocate_spec_area(length, map_permission, addr.into())?
+                        .ok_or(SyscallErr::ENOMEM)?
+                } else {
+                    proc.memory_space
+                        .allocate_area(length, map_permission)
+                        .ok_or(SyscallErr::ENOMEM)?
+                }
+            };
             vma.mmap_flags = Some(flags);
             let handler = MmapPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
             vma.backup_file = Some(BackupFile {
                 offset,
-                file: file.clone(), // .metadata()
-                                    // .inner
-                                    // .lock()
-                                    // .inode
-                                    // .as_ref()
-                                    // .cloned()
-                                    // .unwrap(),
+                file: file.clone(),
             });
             let start_va: VirtAddr = vma.start_vpn().into();
             proc.memory_space.insert_area(vma);
@@ -96,12 +101,12 @@ pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
 
 pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_mprotect]: addr {:#x} len {:#x}", addr, len);
     if addr % PAGE_SIZE != 0 {
         return Err(SyscallErr::EINVAL);
     }
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let map_permission: MapPermission = prot.into();
+    debug!("[sys_mprotect]: addr {:#x} len {:#x}, prot {:?}", addr, len, prot);
     current_process().inner_handler(|proc| {
         let vma = proc
             .memory_space

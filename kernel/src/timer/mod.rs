@@ -12,7 +12,7 @@ use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::{BTreeMap, BinaryHeap};
 use lazy_static::*;
-use log::{debug, info};
+use log::info;
 use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;

@@ -6,6 +6,7 @@ impl<T> SyncUnsafeCell<T> {
         Self(core::cell::SyncUnsafeCell::new(value))
     }
 
+    /// This method is unsafe.
     #[inline]
     pub fn get_unchecked_mut(&self) -> &mut T {
         unsafe { &mut *self.0.get() }

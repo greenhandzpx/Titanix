@@ -51,6 +51,7 @@ const SYSCALL_KILL: usize = 129;
 const SYSCALL_TGKILL: usize = 131;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
+const SYSCALL_RT_SIGTIMERDWAIT: usize = 137;
 const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
 const SYSCALL_SETPGID: usize = 154;
@@ -71,6 +72,7 @@ const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAIT4: usize = 260;
+const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
 
 const SEEK_SET: u8 = 0;
@@ -236,7 +238,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as *const usize,
         ),
         SYSCALL_MMAP => sys_mmap(
-            args[0] as *const u8,
+            args[0],
             args[1],
             args[2] as i32,
             args[3] as i32,
@@ -312,6 +314,8 @@ bitflags! {
         const MAP_SHARED = 1;
         /// Private
         const MAP_PRIVATE = 1 << 1;
+        /// Fixed
+        const MAP_FIXED = 1 << 4;
         /// Anonymous
         const MAP_ANONYMOUS = 1 << 5;
     }

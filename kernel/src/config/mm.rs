@@ -22,3 +22,6 @@ pub const USER_SPACE_SIZE: usize = 0x30_0000_0000;
 
 /// Mmap area toppest address
 pub const MMAP_TOP: usize = USER_SPACE_SIZE;
+
+/// Dynamic linked interpreter address range in user space
+pub const DL_INTERP_OFFSET: usize = 0x20_0000_0000;

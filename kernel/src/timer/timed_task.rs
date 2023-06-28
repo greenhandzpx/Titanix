@@ -5,8 +5,6 @@ use core::{
     time::Duration,
 };
 
-use crate::processor::current_process;
-
 use super::{current_time_duration, Timer, TIMER_QUEUE};
 
 pub struct TimedTaskFuture<F: Fn() -> bool> {
