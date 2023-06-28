@@ -1,44 +1,42 @@
 mod devfs;
-pub mod dirent;
 pub mod fat32;
 mod fd_table;
 mod file;
 mod file_system;
-mod hash_name;
+mod hash_key;
 pub mod inode;
-pub mod stat;
-pub mod utsname;
 // pub mod inode_fat32_tmp;
 pub mod fat32_tmp;
 pub mod pipe;
+pub mod posix;
 mod procfs;
-mod stdio;
 mod testfs;
-mod uio;
 
+use alloc::string::String;
 use alloc::sync::Arc;
-// pub use dentry::Dentry;
-pub use dirent::Dirent;
-pub use dirent::DIRENT_SIZE;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;
 pub use file::File;
 pub use file_system::FileSystem;
 pub use file_system::FileSystemType;
 pub use file_system::FILE_SYSTEM_MANAGER;
+pub use hash_key::HashKey;
 pub use inode::Inode;
 pub use inode::InodeMode;
 pub use inode::InodeState;
+use log::debug;
 use log::info;
-pub use stdio::Stdin;
-pub use stdio::Stdout;
-pub use uio::*;
-pub use utsname::UtsName;
-pub use utsname::UTSNAME_SIZE;
+use log::warn;
 
 use crate::fs::fat32::ROOT_FS;
 use crate::mm::MapPermission;
+use crate::processor::current_process;
+use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
+use crate::timer::posix::current_time_spec;
+use crate::utils::error::SyscallErr;
+use crate::utils::error::SyscallRet;
+use crate::utils::path;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -48,6 +46,7 @@ pub fn init() {
     // testfs::init().expect("testfs init fail");
     // todo!();
     devfs::init().expect("devfs init fail");
+    procfs::init().expect("procfs init fail");
 }
 
 pub const AT_FDCWD: isize = -100;
@@ -85,7 +84,7 @@ bitflags! {
     }
 
     /// fcntl flags
-    pub struct FnctlFlags: u32 {
+    pub struct FcntlFlags: u32 {
         const AT_EMPTY_PATH = 1 << 0;
         const AT_NO_AUTOMOUNT = 1 << 11;
         const AT_SYMLINK_NOFOLLOW = 1 << 8;
@@ -156,5 +155,90 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
         }
         println!("{}", child.0);
         print_dir_recursively(child.1, level + 1);
+    }
+}
+
+pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
+    debug!("[resolve_path]: name {}, flags {:?}", name, flags);
+    let inode = <dyn Inode>::lookup_from_root_tmp(name);
+    // inode
+    if flags.contains(OpenFlags::CREATE) {
+        if inode.is_some() {
+            return inode;
+        }
+        let parent_path = path::get_parent_dir(name).unwrap();
+        let parent = <dyn Inode>::lookup_from_root_tmp(&parent_path);
+        let child_name = path::get_name(name);
+        if let Some(parent) = parent {
+            debug!("create file {}", name);
+            if flags.contains(OpenFlags::DIRECTORY) {
+                parent
+                    .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
+                    .unwrap();
+            } else {
+                // TODO dev id
+                parent
+                    .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
+                    .unwrap();
+            }
+            let res = <dyn Inode>::lookup_from_root_tmp(name);
+            if let Some(inode) = res.as_ref() {
+                <dyn Inode>::create_page_cache_if_needed(inode.clone());
+            }
+            res
+        } else {
+            warn!("parent dir {} doesn't exist", parent_path);
+            return None;
+        }
+    } else {
+        inode
+    }
+}
+
+/// We should give the absolute path (Or None) to open_file function.
+pub fn open_file(absolute_path: Option<String>, flags: u32) -> SyscallRet {
+    stack_trace!();
+    debug!(
+        "[open_file] absolute path: {:?}, flags: {}",
+        absolute_path, flags
+    );
+    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    match absolute_path {
+        Some(absolute_path) => {
+            debug!("[open_file] file name {}", absolute_path);
+            if let Some(inode) = resolve_path(&absolute_path, flags) {
+                stack_trace!();
+                let mut inner_lock = inode.metadata().inner.lock();
+                inner_lock.st_atim = current_time_spec();
+                match inner_lock.state {
+                    InodeState::Synced => {
+                        inner_lock.state = InodeState::DirtyInode;
+                    }
+                    _ => {}
+                }
+                debug!(
+                    "[open_file] inode ino: {}, name: {}",
+                    inode.metadata().ino,
+                    inode.metadata().name
+                );
+                // TODO: add to fs's dirty list
+                let fd = current_process().inner_handler(|proc| {
+                    let fd = proc.fd_table.alloc_fd();
+                    let file = inode.open(inode.clone(), flags)?;
+
+                    proc.fd_table.put(fd, file);
+                    Ok(fd)
+                })?;
+                debug!("[open_file] find fd: {}", fd);
+                Ok(fd as isize)
+            } else {
+                debug!("file {} doesn't exist", absolute_path);
+                Err(SyscallErr::ENOENT)
+            }
+        }
+        None => {
+            debug!("cannot find the file, absolute_path is none");
+            Err(SyscallErr::ENOENT)
+        }
     }
 }

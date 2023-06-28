@@ -1,5 +1,5 @@
 use alloc::{collections::BTreeMap, sync::Arc};
-use log::warn;
+use log::{warn, debug};
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
@@ -62,8 +62,14 @@ pub struct VmArea {
     pub backup_file: Option<BackupFile>,
 }
 
+impl Drop for VmArea {
+    fn drop(&mut self) {
+        // TODO: flush the mmap areas if needed
+    }
+}
+
 impl VmArea {
-    ///
+    /// Construct a new vma
     pub fn new(
         start_va: VirtAddr,
         end_va: VirtAddr,
@@ -88,7 +94,7 @@ impl VmArea {
             backup_file,
         }
     }
-    ///
+    /// Construct a vma from another vma
     pub fn from_another(another: &Self) -> Self {
         let mut ret = Self {
             vpn_range: VPNRange::new(another.vpn_range.start(), another.vpn_range.end()),
@@ -105,16 +111,16 @@ impl VmArea {
         ret
     }
 
-    ///
+    /// Start vpn
     pub fn start_vpn(&self) -> VirtPageNum {
         self.vpn_range.start()
     }
 
-    ///
+    /// End vpn
     pub fn end_vpn(&self) -> VirtPageNum {
         self.vpn_range.end()
     }
-    ///
+    /// Page fault handler
     pub fn page_fault_handler(
         &self,
         va: VirtAddr,
@@ -133,7 +139,7 @@ impl VmArea {
         }
     }
 
-    /// alloc a new physical frame and add the given va to the pagetable
+    /// Alloc a new physical frame and add the given va to the pagetable
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) -> PhysPageNum {
         let ppn: PhysPageNum;
         match self.map_type {
@@ -162,7 +168,7 @@ impl VmArea {
         ppn
     }
 
-    ///
+    /// Unmap a page
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         if self.map_type == MapType::Framed {
             self.data_frames.get_mut().0.remove(&vpn);
@@ -178,18 +184,20 @@ impl VmArea {
             page_table.unmap(vpn);
         }
     }
-    ///
+    /// Map all pages this vma owns
     pub fn map(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.map_one(page_table, vpn);
         }
     }
-    ///
+
+    /// Unmap all pages this vma owns
     pub fn unmap(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.unmap_one(page_table, vpn);
         }
     }
+
     /// Some of the pages don't have correlated phyiscal frame
     pub fn unmap_lazily(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
@@ -197,8 +205,8 @@ impl VmArea {
         }
     }
 
-    /// data: at the offset of the start va
-    /// assume that all frames were cleared before
+    /// Data: at the offset of the start va.
+    /// Assume that all frames were cleared before.
     pub fn copy_data_with_offset(
         &mut self,
         page_table: &mut PageTable,
@@ -226,8 +234,8 @@ impl VmArea {
             current_vpn.step();
         }
     }
-    /// data: start-aligned but maybe with shorter length
-    /// assume that all frames were cleared before
+    /// Data: start-aligned but maybe with shorter length.
+    /// Assume that all frames were cleared before.
     pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8]) {
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;
@@ -247,5 +255,17 @@ impl VmArea {
             }
             current_vpn.step();
         }
+    }
+
+    /// Clip the vm area.
+    pub fn clip(&mut self, new_vpn_range: VPNRange) {
+        debug!("[VmArea::clip] old range {:?}, new range {:?}", self.vpn_range, new_vpn_range);
+        self.data_frames.get_mut().0.retain(|vpn, _| {
+            *vpn >= new_vpn_range.start() && *vpn <= new_vpn_range.end()
+        });
+        if let Some(backup_file) = self.backup_file.as_mut() {
+            backup_file.offset += VirtAddr::from(new_vpn_range.start()).0 - VirtAddr::from(self.vpn_range.start()).0;
+        }
+        self.vpn_range = new_vpn_range;
     }
 }

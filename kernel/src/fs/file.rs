@@ -1,3 +1,5 @@
+use core::task::Waker;
+
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use log::trace;
 
@@ -7,10 +9,10 @@ use crate::{
     mm::memory_space::VmArea,
     processor::SumGuard,
     stack_trace,
-    timer::get_time_spec,
+    timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
-        error::{AsyscallRet, GeneralRet, SyscallRet},
+        error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallRet},
     },
 };
 
@@ -42,20 +44,28 @@ pub struct FileMetaInner {
 
 // #[async_trait]
 pub trait File: Send + Sync {
-    fn readable(&self) -> bool;
-    fn writable(&self) -> bool;
+    fn readable(&self) -> bool {
+        let flags = self.metadata().inner.lock().flags;
+        flags.contains(OpenFlags::RDONLY) || flags.contains(OpenFlags::RDWR)
+    }
+
+    fn writable(&self) -> bool {
+        let flags = self.metadata().inner.lock().flags;
+        flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
+    }
+
     /// For default file, data must be read from page cache first
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
-    fn pollin(&self) -> GeneralRet<bool> {
+    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
-        Ok(true)
-        // todo!()
+        // Ok(true)
+        todo!()
     }
 
-    fn pollout(&self) -> GeneralRet<bool> {
+    fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         todo!()
     }
 
@@ -110,16 +120,6 @@ impl DefaultFile {
 
 // #[async_trait]
 impl File for DefaultFile {
-    fn readable(&self) -> bool {
-        let flags = self.metadata().inner.lock().flags;
-        flags.contains(OpenFlags::RDONLY) || flags.contains(OpenFlags::RDWR)
-    }
-
-    fn writable(&self) -> bool {
-        let flags = self.metadata().inner.lock().flags;
-        flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
-    }
-
     fn metadata(&self) -> &FileMeta {
         &self.metadata
     }
@@ -172,7 +172,7 @@ impl File for DefaultFile {
             }
 
             let mut inner_lock = inode.metadata().inner.lock();
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             inner_lock.st_mtim = inner_lock.st_atim;
             inner_lock.st_ctim = inner_lock.st_atim;
             match inner_lock.state {
@@ -243,7 +243,7 @@ impl File for DefaultFile {
             }
 
             let mut inner_lock = inode.metadata().inner.lock();
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             inner_lock.st_ctim = inner_lock.st_atim;
             inner_lock.st_mtim = inner_lock.st_atim;
             match inner_lock.state {

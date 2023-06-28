@@ -1,22 +1,24 @@
 use core::cell::UnsafeCell;
 use core::panic;
 
+use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use alloc::{boxed::Box, vec::Vec};
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
 use log::{debug, error, info, trace, warn};
+use xmas_elf::dynamic;
 
 use crate::fs::file::DefaultFile;
-use crate::fs::inode::INODE_CACHE;
+use crate::fs::posix::StatFlags;
+use crate::fs::{InodeState, FILE_SYSTEM_MANAGER};
 use crate::stack_trace;
-use crate::utils::error::{self, AgeneralRet, AsyscallRet, SyscallErr};
+use crate::utils::error::{AgeneralRet, SyscallErr};
 use crate::utils::path;
 use crate::{
     driver::{block::IoDevice, BLOCK_DEVICE},
     sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallRet},
+    utils::error::GeneralRet,
 };
 
 use super::file::FileMetaInner;
@@ -109,6 +111,7 @@ impl Inode for Fat32RootInode {
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
         debug!("[Fat32RootInode]: load children");
         let mut meta_inner = self.meta.as_ref().unwrap().inner.lock();
+        let children = meta_inner.children.clone();
         for dentry in self.fs.fat_fs.root_dir().iter() {
             let inode_mode = {
                 if dentry.as_ref().unwrap().is_dir() {
@@ -126,11 +129,27 @@ impl Inode for Fat32RootInode {
                 &file_name,
                 inode_mode,
                 data_len as usize,
+                None,
             );
             let file_name = dentry.as_ref().unwrap().file_name();
+            // If the child is already exist, and stat is Synced, don't cover it.
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
+            let child_name = child.metadata().name.clone();
+            if let Some(v) = children.get(child_name.as_str()) {
+                match v.metadata().inner.lock().state {
+                    InodeState::Synced => {
+                        debug!(
+                            "[Fat32RootInode] {} has already synced",
+                            child.metadata().name
+                        );
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
             <dyn Inode>::create_page_cache_if_needed(child.clone());
             meta_inner.children.insert(file_name, child);
+            debug!("[Fat32RootInode] load child {}", child_name);
         }
     }
 
@@ -147,7 +166,7 @@ impl Inode for Fat32RootInode {
         pathname: &str,
         mode: InodeMode,
         dev_id: usize,
-    ) -> GeneralRet<()> {
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32RootInode mknod] fatfs mknod: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -163,18 +182,21 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32RootInode mkdir] fatfs mkdir: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -192,15 +214,13 @@ impl Inode for Fat32RootInode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 }
 
@@ -290,6 +310,7 @@ impl Inode for Fat32Inode {
                 &file_name,
                 inode_mode,
                 data_len as usize,
+                None,
             );
             let file_name = dentry.as_ref().unwrap().file_name();
             let child = Arc::new(Fat32Inode::new(dentry.unwrap(), Some(meta)));
@@ -311,8 +332,8 @@ impl Inode for Fat32Inode {
         pathname: &str,
         mode: InodeMode,
         _dev_id: usize,
-    ) -> GeneralRet<()> {
-        debug!("[Fat32Inode mknod] fatfs mknod: {}", pathname);
+    ) -> GeneralRet<Arc<dyn Inode>> {
+        debug!("[Fat32Inode::mknod] fatfs mknod: {}", pathname);
 
         let name = path::get_name(pathname);
         if self.dentry.is_file() {
@@ -330,18 +351,21 @@ impl Inode for Fat32Inode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+    ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[Fat32Inode mkdir] fatfs mkdir: {}", pathname);
 
         let name = path::get_name(pathname);
@@ -360,15 +384,13 @@ impl Inode for Fat32Inode {
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
         new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
         let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(new_inode.metadata().name.clone(), new_inode);
-        Ok(())
+            .insert(new_inode.metadata().name.clone(), new_inode.clone());
+        Ok(new_inode)
     }
 
     fn read<'a>(&'a self, offset: usize, buf: &'a mut [u8]) -> AgeneralRet<usize> {
@@ -435,18 +457,19 @@ pub fn list_apps_fat32() {
 pub fn init() -> GeneralRet<()> {
     info!("start to init fatfs...");
 
-    // unsafe {
-    //     let root_fs = &mut (*(&ROOT_FS as *const Fat32FileSystem as *mut Fat32FileSystem));
-    //     ROOT_FS.init("/", FileSystemType::VFAT).unwrap();
-    // }
-    ROOT_FS.init_ref("/", FileSystemType::VFAT)?;
+    ROOT_FS.init_ref(
+        "/dev/sda1".to_string(),
+        "/",
+        FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
     let root_inode = ROOT_FS.metadata().root_inode.unwrap();
-    root_inode.mkdir(root_inode.clone(), "mnt", InodeMode::FileDIR)?;
 
     // FILE_SYSTEM_MANAGER
     //     .fs_mgr
     //     .lock()
-    //     .insert("/".to_string(), Arc::new(test_fs));
+    //     .insert("/".to_string(), Arc::new(ROOT_FS));
+
     info!("init fatfs success");
 
     Ok(())
@@ -508,16 +531,16 @@ pub fn init() -> GeneralRet<()> {
 // }
 
 // ///Open file with flags
-// pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
+// pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<Fat32File>> {
 //     stack_trace!();
 //     // TODO support different kinds of files dispatching
 //     // (e.g. /dev/sda, /proc/1234, /usr/bin)
-//     debug!("[open_file] name: {}", name);
+//     debug!("[resolve_path] name: {}", name);
 
 //     let (readable, writable) = flags.read_write();
 //     let root_dir = ROOT_FS.fat_fs.root_dir();
 //     if flags.contains(OpenFlags::CREATE) {
-//         if let Some(inode) = root_dir.open_file(name).ok() {
+//         if let Some(inode) = root_dir.resolve_path(name).ok() {
 //             Some(Arc::new(Fat32File::new(
 //                 Fat32NodeType::File(inode),
 //                 None,
@@ -534,7 +557,7 @@ pub fn init() -> GeneralRet<()> {
 //             )))
 //         }
 //     } else {
-//         if let Some(inode) = root_dir.open_file(name).ok() {
+//         if let Some(inode) = root_dir.resolve_path(name).ok() {
 //             Some(Arc::new(Fat32File::new(
 //                 Fat32NodeType::File(inode),
 //                 None,

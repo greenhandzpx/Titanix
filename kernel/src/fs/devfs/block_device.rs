@@ -1,7 +1,12 @@
 use alloc::sync::Arc;
 
 use crate::{
-    fs::{file::FileMeta, inode::InodeMeta, File, Inode, OpenFlags},
+    driver::block::BlockDevice,
+    fs::{
+        file::FileMeta,
+        inode::{DevWrapper, InodeDevice, InodeMeta},
+        File, Inode, OpenFlags,
+    },
     utils::error::GeneralRet,
 };
 
@@ -36,8 +41,22 @@ impl Inode for BlockDeviceInode {
 }
 
 impl BlockDeviceInode {
-    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
-        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0);
+    pub fn new(
+        parent: Arc<dyn Inode>,
+        path: &str,
+        block_device: Arc<dyn BlockDevice>,
+        dev_id: usize,
+    ) -> Self {
+        let metadata = InodeMeta::new(
+            Some(parent),
+            path,
+            crate::fs::InodeMode::FileBLK,
+            0,
+            Some(InodeDevice::Device(DevWrapper {
+                block_device,
+                dev_id,
+            })),
+        );
         Self {
             metadata,
             dev_fs: None,

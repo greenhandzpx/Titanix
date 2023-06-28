@@ -12,6 +12,7 @@
 #![feature(linked_list_remove)]
 #![feature(core_intrinsics)]
 #![feature(const_mut_refs)]
+#![feature(poll_ready)]
 // #![feature(custom_test_frameworks)]
 // #![test_runner(crate::test_runner)]
 
@@ -47,21 +48,20 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering},
     time::Duration,
 };
 
-use log::{debug, info, warn};
-use riscv::register::sstatus;
+use log::debug;
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     process::thread,
-    processor::{hart, open_interrupt, HARTS},
+    processor::{hart, HARTS},
     sbi::hart_start,
-    timer::ksleep,
+    timer::{timed_task::TimedTaskFuture, timeout_task::ksleep},
 };
 
 global_asm!(include_str!("entry.S"));
@@ -85,6 +85,8 @@ fn clear_bss() {
 //         test();
 //     }
 // }
+///
+pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
@@ -116,14 +118,13 @@ pub fn rust_main(hart_id: usize) {
         hart::init(hart_id);
         utils::logging::init();
 
-        info!(r#"  _______ __              _     "#);
-        info!(r#" /_  __(_) /_____ _____  (_)  __"#);
-        info!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);
-        info!(r#" / / / / /_/ /_/ / / / / />  <  "#);
-        info!(r#"/_/ /_/\__/\__,_/_/ /_/_/_/|_|  "#);
-        info!("[kernel] Hello, world!");
-
-        info!(
+        println!(r#"  _______ __              _     "#);
+        println!(r#" /_  __(_) /_____ _____  (_)  __"#);
+        println!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);
+        println!(r#" / / / / /_/ /_/ / / / / />  <  "#);
+        println!(r#"/_/ /_/\__/\__,_/_/ /_/_/_/|_|  "#);
+        println!("[kernel] Hello, world!");
+        println!(
             "[kernel] ---------- main hart {} started ---------- ",
             hart_id
         );
@@ -149,15 +150,21 @@ pub fn rust_main(hart_id: usize) {
             process::add_initproc();
         });
 
-        // thread::spawn_kernel_thread(async move {
-        //     loop {
-        //         ksleep(Duration::from_secs(5)).await;
-        //         debug!("I'm awake!! hhh just ignore me");
-        //     }
-        // });
+        thread::spawn_kernel_thread(async move {
+            // TimedTaskFuture::new(Duration::from_secs(3), || {
+            //     debug!("I'm awake!! hhh just ignore me");
+            //     return true;
+            // }, None)
+            // .await;
+            // loop {
+            //     ksleep(Duration::from_secs(5)).await;
+            //     debug!("I'm awake!! hhh just ignore me");
+            // }
+        });
 
         // INIT_FINISHED.store(true, Ordering::Release);
         INIT_FINISHED.store(true, Ordering::SeqCst);
+        FIRST_HART_ID.store(hart_id as u8, Ordering::SeqCst);
 
         let hart_num = unsafe { HARTS.len() };
         for i in 0..hart_num {
@@ -172,6 +179,9 @@ pub fn rust_main(hart_id: usize) {
         // while !INIT_FINISHED.load(Ordering::Acquire) {}
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+
         hart::init(hart_id);
         unsafe {
             KERNEL_SPACE
@@ -179,14 +189,14 @@ pub fn rust_main(hart_id: usize) {
                 .expect("KERNEL SPACE not init yet")
                 .activate();
         }
-        info!("[kernel] ---------- hart {} started ---------- ", hart_id);
+        println!("[kernel] ---------- hart {} started ---------- ", hart_id);
 
         // return;
     }
 
-    loop {
-        executor::run_until_idle();
-    }
-    // executor::run_until_idle();
+    // loop {
+    //     executor::run_until_idle();
+    // }
+    executor::run_forever();
     // panic!("Unreachable in rust_main!");
 }

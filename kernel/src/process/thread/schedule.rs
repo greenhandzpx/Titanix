@@ -6,13 +6,7 @@ use core::{
 };
 use log::{debug, warn};
 
-use crate::{
-    processor::{
-        self,
-        context::{EnvContext, UserTaskContext},
-    },
-    utils::debug::stack_tracker::StackTracker,
-};
+use crate::processor::{self, context::UserTaskContext};
 // use crate::process::context::TaskContext;
 use crate::processor::context::LocalContext;
 
@@ -72,6 +66,8 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         // let this = self.get_mut();
         let hart = processor::local_hart();
         hart.push_task(&mut this.task_ctx);
+
+        // debug!("[poll]: run task");
 
         // run the `threadloop`
         // SAFETY:

@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec, vec::Vec};
 
-use super::{file::File, Stdin, Stdout};
+use super::{file::File, resolve_path, OpenFlags};
 
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,
@@ -8,14 +8,24 @@ pub struct FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
+        let tty_inode = resolve_path("/dev/tty", OpenFlags::empty()).unwrap();
+        let stdin = tty_inode
+            .open(tty_inode.clone(), OpenFlags::RDONLY)
+            .unwrap();
+        let stdout = tty_inode
+            .open(tty_inode.clone(), OpenFlags::WRONLY)
+            .unwrap();
+        let stderr = tty_inode
+            .open(tty_inode.clone(), OpenFlags::WRONLY)
+            .unwrap();
         Self {
             fd_table: vec![
                 // 0 -> stdin
-                Some(Arc::new(Stdin::new())),
+                Some(stdin),
                 // 1 -> stdout
-                Some(Arc::new(Stdout)),
+                Some(stdout),
                 // 2 -> stderr
-                Some(Arc::new(Stdout)),
+                Some(stderr),
             ],
         }
     }

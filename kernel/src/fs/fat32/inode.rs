@@ -21,7 +21,7 @@ pub struct FAT32Inode {
 impl FAT32Inode {
     pub fn new_root_dentry(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, path: &str, first_cluster: usize) -> Self {
         let mode = InodeMode::FileDIR;
-        let meta = InodeMeta::new(fa_inode, path, mode, 0);
+        let meta = InodeMeta::new(fa_inode, path, mode, 0, None);
         let file = FAT32File::new(fat, first_cluster, None);
         Self {
             meta: Some(meta),
@@ -32,7 +32,7 @@ impl FAT32Inode {
     pub fn new(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, dentry: &FAT32DirEntry) -> Self {
         let mode = if (dentry.attr & ATTR_DIRECTORY) == ATTR_DIRECTORY {InodeMode::FileDIR} else {InodeMode::FileREG};
         let meta = InodeMeta::new(fa_inode, &dentry.fname(), mode,
-            if mode == InodeMode::FileREG {dentry.filesize as usize} else {0});
+            if mode == InodeMode::FileREG {dentry.filesize as usize} else {0}, None);
         {
             let mut inner_lock = meta.inner.lock();
             inner_lock.st_atim = unix_time_to_timespec(FAT32_to_unix_time(dentry.acc_time));
@@ -91,7 +91,7 @@ impl Inode for FAT32Inode {
         })
     }
 
-    fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<()> {
+    fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
     }
 
@@ -101,7 +101,7 @@ impl Inode for FAT32Inode {
             _pathname: &str,
             _mode: InodeMode,
             _dev_id: usize,
-        ) -> GeneralRet<()> {
+        ) -> GeneralRet<Arc<dyn Inode>> {
             todo!()
     }
 

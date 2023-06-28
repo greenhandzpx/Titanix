@@ -28,9 +28,12 @@ const SYSCALL_GETDENTS: usize = 61;
 const SYSCALL_LSEEK: usize = 62;
 const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
+const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
 const SYSCALL_SENDFILE: usize = 71;
+const SYSCALL_PSELECT6: usize = 72;
 const SYSCALL_PPOLL: usize = 73;
+const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
 const SYSCALL_UTIMENSAT: usize = 88;
@@ -39,22 +42,29 @@ const SYSCALL_EXIT_GROUP: usize = 94;
 const SYSCALL_SET_TID_ADDRESS: usize = 96;
 const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_NANOSLEEP: usize = 101;
+const SYSCALL_SETTIMER: usize = 103;
 const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
+const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
+const SYSCALL_TGKILL: usize = 131;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
+const SYSCALL_RT_SIGTIMERDWAIT: usize = 137;
 const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
 const SYSCALL_SETPGID: usize = 154;
 const SYSCALL_GETPGID: usize = 155;
 const SYSCALL_UNAME: usize = 160;
+const SYSCALL_GETRUSAGE: usize = 165;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
+const SYSCALL_GETTID: usize = 178;
+const SYSCALL_SYSINFO: usize = 179;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -62,6 +72,7 @@ const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_WAIT4: usize = 260;
+const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
 
 const SEEK_SET: u8 = 0;
@@ -74,30 +85,36 @@ mod mm;
 mod process;
 mod signal;
 mod sync;
+mod time;
 
 use core::arch::asm;
 
 use dev::*;
 use fs::*;
-use log::{debug, error, info, trace};
+use log::{error, info, trace};
 use mm::*;
 use process::*;
 use signal::*;
 pub use sync::futex_wake;
 use sync::*;
+use time::*;
 
 use crate::{
+    fs::posix::{Statfs, Sysinfo},
     mm::MapPermission,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
-    timer::*,
+    timer::{
+        posix::{ITimerval, TimeSpec, TimeVal, Tms},
+        *,
+    },
     utils::error::SyscallRet,
 };
 
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!(
+    info!(
         "syscall id: {}, sepc {:#x}",
         syscall_id,
         current_trap_cx().sepc
@@ -115,9 +132,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[0] as *const u8,
             args[1] as *const u8,
             args[2] as *const u8,
-            args[3],
+            args[3] as u32,
             args[4] as *const u8,
         ),
+        SYSCALL_STATFS => sys_statfs(args[0] as *const u8, args[1] as *mut Statfs),
         SYSCALL_FACCESSAT => sys_faccessat(
             args[0] as isize,
             args[1] as *const u8,
@@ -137,6 +155,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_LSEEK => sys_lseek(args[0], args[1] as isize, args[2] as u8),
         SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
         SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
+        SYSCALL_READV => sys_readv(args[0], args[1], args[2]).await,
         SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
         SYSCALL_SENDFILE => {
             sys_sendfile(
@@ -147,7 +166,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
             .await
         }
+        SYSCALL_PSELECT6 => {
+            sys_pselect6(args[0] as i32, args[1], args[2], args[3], args[4], args[5]).await
+        }
         SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
+        SYSCALL_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
         SYSCALL_NEWFSTATAT => sys_newfstatat(
             args[0] as isize,
             args[1] as *const u8,
@@ -166,8 +189,14 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
         SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
+        SYSCALL_SETTIMER => sys_settimer(
+            args[0] as i32,
+            args[1] as *const ITimerval,
+            args[2] as *mut ITimerval,
+        ),
         SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0], args[1] as *const TimeSpec),
         SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
+        SYSCALL_SYSLOG => sys_syslog(args[0] as u32, args[1] as *mut u8, args[2] as u32),
         SYSCALL_YIELD => sys_yield().await,
         SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
         SYSCALL_RT_SIGACTION => sys_rt_sigaction(
@@ -177,7 +206,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(
             args[0] as i32,
-            args[1] as *const usize,
+            args[1] as *const u32,
             args[2] as *mut SigSet,
         ),
         SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
@@ -185,11 +214,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
         SYSCALL_GETPGID => sys_getpgid(args[0]),
         SYSCALL_UNAME => sys_uname(args[0]),
+        SYSCALL_GETRUSAGE => sys_getrusage(args[0] as i32, args[1]),
         SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
         SYSCALL_GETPID => sys_getpid(),
         SYSCALL_GETPPID => sys_getppid(),
         SYSCALL_GETUID => sys_getuid(),
         SYSCALL_GETEUID => sys_geteuid(),
+        SYSCALL_GETTID => sys_gettid(),
+        SYSCALL_SYSINFO => sys_sysinfo(args[0]),
+        SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
         SYSCALL_BRK => sys_brk(args[0]),
         SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
         SYSCALL_CLONE => sys_clone(
@@ -205,7 +238,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[2] as *const usize,
         ),
         SYSCALL_MMAP => sys_mmap(
-            args[0] as *const u8,
+            args[0],
             args[1],
             args[2] as i32,
             args[3] as i32,
@@ -281,6 +314,8 @@ bitflags! {
         const MAP_SHARED = 1;
         /// Private
         const MAP_PRIVATE = 1 << 1;
+        /// Fixed
+        const MAP_FIXED = 1 << 4;
         /// Anonymous
         const MAP_ANONYMOUS = 1 << 5;
     }
@@ -296,7 +331,7 @@ pub enum FutexOperations {
 
 /// Poll Fd
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct PollFd {
     /// Fd
     pub fd: i32,
@@ -304,4 +339,22 @@ pub struct PollFd {
     pub events: i16,
     /// Returned events
     pub revents: i16,
+}
+
+bitflags! {
+    /// Poll events
+    pub struct PollEvents: i16 {
+        /// There is data to read
+        const POLLIN = 1 << 0;
+        /// Execption about fd
+        const POLLPRI = 1 << 1;
+        /// There is data to write
+        const POLLOUT = 1 << 2;
+        /// Error condition
+        const POLLERR = 1 << 3;
+        /// Hang up
+        const POLLHUP = 1 << 4;
+        /// Invalid request: fd not open
+        const POLLNVAL = 1 << 5;
+    }
 }

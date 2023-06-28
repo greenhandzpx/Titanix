@@ -1,15 +1,14 @@
+use core::time::Duration;
+
 use crate::config::process::INITPROC_PID;
-use crate::fs::inode::open_file;
-use crate::fs::{OpenFlags, AT_FDCWD};
+use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::mm::{VPNRange, VirtAddr};
-use crate::process::thread::{self, exit_and_terminate_all_threads, terminate_given_thread};
+use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
-use crate::signal::Signal;
 use crate::sync::Event;
-use crate::timer::{get_time_ms, get_time_spec, TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -19,7 +18,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{debug, info, trace, warn};
 
-use super::{TimeSpec, TimeVal, Tms};
+use super::TimeVal;
 
 // pub fn sys_exit(exit_code: i32) -> SyscallRet {
 //     stack_trace!();
@@ -68,117 +67,6 @@ pub async fn sys_yield() -> SyscallRet {
     Ok(0)
 }
 
-pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
-    stack_trace!();
-    UserCheck::new()
-        .check_writable_slice(time_val_ptr as *mut u8, core::mem::size_of::<TimeVal>())?;
-    let _sum_guard = SumGuard::new();
-    let current_time = get_time_ms();
-    let time_val = TimeVal {
-        sec: current_time / 1000,
-        usec: current_time % 1000 * 1000,
-    };
-    // debug!("get time of day, time(ms): {}", current_time);
-    unsafe {
-        time_val_ptr.write_volatile(time_val);
-    }
-    Ok(0)
-}
-
-pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> SyscallRet {
-    stack_trace!();
-    UserCheck::new()
-        .check_readable_slice(time_spec_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
-    let _sum_guard = SumGuard::new();
-    let time_spec = unsafe { &*time_spec_ptr };
-    if (time_spec.sec as isize) < 0 {
-        debug!("Cannot set time. sec is negative");
-        return Err(SyscallErr::EINVAL);
-    } else if (time_spec.nsec as isize) < 0 || time_spec.nsec > 999999999 {
-        debug!("Cannot set time. nsec is invalid");
-        return Err(SyscallErr::EINVAL);
-    } else if clock_id == CLOCK_REALTIME && time_spec.sec < get_time_ms() / 1000 {
-        debug!("set the time to a value less than the current value of the CLOCK_MONOTONIC clock.");
-        return Err(SyscallErr::EINVAL);
-    }
-
-    // calculate the diff
-    // arg_timespec - device_timespec = diff
-    let dev_spec = get_time_spec();
-    let diff_spec = TimeDiff {
-        sec: time_spec.sec as isize - dev_spec.sec as isize,
-        nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
-    };
-
-    let mut manager_unlock = CLOCK_MANAGER.lock();
-    manager_unlock.0.insert(clock_id, diff_spec);
-
-    Ok(0)
-}
-
-pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> SyscallRet {
-    stack_trace!();
-    UserCheck::new()
-        .check_writable_slice(time_spec_ptr as *mut u8, core::mem::size_of::<TimeSpec>())?;
-    let _sum_guard = SumGuard::new();
-    let manager_unlock = CLOCK_MANAGER.lock();
-    let clock = manager_unlock.0.get(&clock_id);
-    match clock {
-        Some(clock) => {
-            debug!("Find the clock");
-            let dev_spec = get_time_spec();
-            let time_spec = TimeSpec {
-                sec: (dev_spec.sec as isize + clock.sec) as usize,
-                nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
-            };
-            unsafe {
-                time_spec_ptr.write_volatile(time_spec);
-            }
-            Ok(0)
-        }
-        None => {
-            debug!("Cannot find the clock: {}", clock_id);
-            Err(SyscallErr::EINVAL)
-        }
-    }
-}
-
-pub fn sys_times(buf: *mut Tms) -> SyscallRet {
-    stack_trace!();
-    UserCheck::new().check_writable_slice(buf as *mut u8, core::mem::size_of::<Tms>())?;
-    let _sum_guard = SumGuard::new();
-    let tms = unsafe { &mut *buf };
-    // TODO: need to modify
-    tms.stime = 1;
-    tms.utime = 1;
-    tms.cstime = 1;
-    tms.cutime = 1;
-    Ok(0)
-}
-
-pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
-    stack_trace!();
-    let sleep_ms = {
-        UserCheck::new()
-            .check_readable_slice(time_val_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
-        let _sum_guard = SumGuard::new();
-
-        let time_val_ptr = time_val_ptr as *const TimeSpec;
-        let time_val = unsafe { &(*time_val_ptr) };
-        time_val.sec * 1000 + time_val.nsec / 1000000
-    };
-    let start_ms = get_time_ms();
-    let end_ms = sleep_ms + start_ms;
-
-    loop {
-        let now_ms = get_time_ms();
-        if now_ms >= end_ms {
-            return Ok(0);
-        }
-        thread::yield_now().await;
-    }
-}
-
 pub fn sys_getpid() -> SyscallRet {
     stack_trace!();
     Ok(current_task().as_ref().process.pid() as isize)
@@ -197,12 +85,22 @@ pub fn sys_getppid() -> SyscallRet {
 bitflags! {
     ///Open file flags
     pub struct CloneFlags: u32 {
-        const CLONE_THREAD = 1 << 4;
-        const CLONE_CHILD_CLEARTID = 1 << 5;
+        const SIGCHLD = (1 << 4) | (1 << 0);
         const CLONE_VM = 1 << 8;
         const CLONE_FS = 1 << 9;
         const CLONE_FILES = 1 << 10;
-        const CLONE_CHILD_SETTID = 1 << 12;
+        const CLONE_SIGHAND = 1 << 11;
+        const CLONE_PTRACE = 1 << 13;
+        const CLONE_VFORK = 1 << 14;
+        const CLONE_PARENT = 1 << 15;
+        const CLONE_THREAD = 1 << 16;
+        const CLONE_PARENT_SETTID = 1 << 20;
+        const CLONE_CHILD_CLEARTID = 1 << 21;
+        const CLONE_UNTRACED = 1 << 23;
+        const CLONE_CHILD_SETTID = 1 << 24;
+        const CLONE_NEWIPC = 1 << 27;
+        const CLONE_NEWPID = 1 << 29;
+        const CLONE_IO = 1 << 31;
     }
 }
 
@@ -250,21 +148,23 @@ pub fn sys_clone(
 
     let clone_flags = CloneFlags::from_bits(flags.try_into().unwrap());
 
-    if clone_flags.is_none() && flags != Signal::SIGCHLD as usize {
+    if clone_flags.is_none() {
         warn!("Invalid clone flags {}", flags);
         return Err(SyscallErr::EINVAL);
     }
 
-    let clone_flags = {
-        // TODO: This is just a workaround for preliminary test
-        if flags == Signal::SIGCHLD as usize {
-            CloneFlags::from_bits(0).unwrap()
-        } else {
-            clone_flags.unwrap()
-        }
-    };
+    let clone_flags = clone_flags.unwrap();
+    // let clone_flags = {
+    //     // TODO: This is just a workaround for preliminary test
+    //     if flags == Signal::SIGCHLD as usize {
+    //         CloneFlags::from_bits(0).unwrap()
+    //     } else {
+    //         clone_flags.unwrap()
+    //     }
+    // };
 
-    if !clone_flags.contains(CloneFlags::CLONE_THREAD) {
+    if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_THREAD)
+    {
         // fork
 
         // TODO: maybe we should take more flags into account?
@@ -345,7 +245,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     debug!("sys exec {}", path);
     // print_dir_tree();
 
-    if path == "shell" {
+    if path == "/shell" {
         if let Some(elf_data) = get_app_data_by_name("shell") {
             current_process().exec(elf_data, args_vec, envs_vec)
         } else {
@@ -353,7 +253,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             Err(SyscallErr::EACCES)
         }
     } else {
-        if let Some(app_inode) = open_file(&path, OpenFlags::RDONLY) {
+        if let Some(app_inode) = resolve_path(&path, OpenFlags::RDONLY) {
             let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
             trace!("try to read all data in file {}", path);
             let elf_data = app_file.sync_read_all()?;
@@ -398,7 +298,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 .iter()
                 .any(|p| pid == -1 || pid as usize == p.pid())
             {
-                warn!(
+                info!(
                     "proc[{}] no such pid {} exit code addr {:#x}",
                     current_process().pid(),
                     pid,
@@ -424,11 +324,15 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 let found_pid = child.pid();
                 // get child's exit code
                 let exit_code = child.exit_code();
-                debug!("waitpid: found pid {} exit code {}", found_pid, exit_code);
+                debug!("[sys_waitpid] found pid {} exit code {}", found_pid, exit_code);
 
                 Ok(Some((false, found_pid as isize, exit_code as i32)))
             } else {
                 // the child still alive
+                debug!("[sys_waitpid] no such pid, children size {}", proc.children.len());
+                if proc.children.len() > 0 {
+                    debug!("[sys_waitpid] first child pid {}", proc.children[0].pid());
+                }
                 // Ok((-1 as isize, 0))
                 Ok(None)
             }
@@ -516,7 +420,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     "new heap end {:#x}",
                     proc.memory_space.heap_range.unwrap().end().0
                 );
-                Ok(0)
+                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
             }
         } else {
             // deallocate memory
@@ -545,7 +449,8 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     .heap_range
                     .unwrap()
                     .modify_right_bound(new_heap_end);
-                Ok(0)
+                // Ok(0)
+                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
             }
         }
     })
@@ -576,5 +481,79 @@ pub fn sys_geteuid() -> SyscallRet {
     stack_trace!();
     info!("get euid");
     // TODO
+    Ok(0)
+}
+
+pub fn sys_gettid() -> SyscallRet {
+    stack_trace!();
+    let tid = current_task().tid();
+    Ok(tid as isize)
+}
+
+#[repr(C)]
+struct RUsage {
+    /// user CPU time used
+    ru_utime: TimeVal,
+    /// system CPU time used
+    ru_stime: TimeVal,
+    /// maximum resident set size
+    ru_maxrss: usize,
+    /// integral shared memory size
+    ru_ixrss: usize,
+    /// integral unshared data size
+    ru_idrss: usize,
+    /// integral unshared stack size
+    ru_isrss: usize,
+    /// page reclaims (soft page faults)
+    ru_minflt: usize,
+    /// page faults (hard page faults)
+    ru_majflt: usize,
+    /// swaps
+    ru_nswap: usize,
+    /// block input operations
+    ru_inblock: usize,
+    /// block output operations
+    ru_oublock: usize,
+    /// IPC messages sent
+    ru_msgsnd: usize,
+    /// IPC messages received
+    ru_msgrcv: usize,
+    /// signals received
+    ru_nsignals: usize,
+    /// voluntary context switches
+    ru_nvcsw: usize,
+    /// involuntary context switches
+    ru_nivcsw: usize,
+}
+
+const RUSAGE_SELF: i32 = 0;
+
+pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(usage as *mut u8, core::mem::size_of::<RUsage>())?;
+    let usage = unsafe { &mut *(usage as *mut RUsage) };
+
+    match who {
+        RUSAGE_SELF => current_process().inner_handler(|proc| {
+            let mut user_time = Duration::ZERO;
+            let mut sys_time = Duration::ZERO;
+            for thread in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    user_time += unsafe { (*thread.inner.get()).time_info.user_time };
+                    sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
+                }
+            }
+            usage.ru_utime = user_time.into();
+            usage.ru_stime = sys_time.into();
+        }),
+        _ => {
+            panic!()
+        }
+    }
+    debug!(
+        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}",
+        usage.ru_utime, usage.ru_stime
+    );
     Ok(0)
 }

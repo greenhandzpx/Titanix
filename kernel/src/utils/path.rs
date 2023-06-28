@@ -11,7 +11,7 @@ use crate::{
 
 use super::error::{GeneralRet, SyscallErr};
 use super::string::c_str_to_string;
-use log::{debug, info};
+use log::{debug, trace};
 
 pub fn path2vec(path_name: &str) -> Vec<&str> {
     path_name.split('/').filter(|name| *name != "").collect()
@@ -19,7 +19,7 @@ pub fn path2vec(path_name: &str) -> Vec<&str> {
 pub fn get_name(path_name: &str) -> &str {
     let dentry_vec = path2vec(path_name);
     let len = dentry_vec.len();
-    debug!("[get_name] dentry_vec: {:?}, len: {}", dentry_vec, len);
+    trace!("[get_name] dentry_vec: {:?}, len: {}", dentry_vec, len);
     if len == 0 {
         ""
     } else {
@@ -68,7 +68,7 @@ pub fn path_process(dirfd: isize, path: *const u8) -> Option<String> {
     debug!("[path_process] dirfd {}, path name {}", dirfd, path_str);
     let absolute_path;
     if judge_is_relative(path_str) {
-        debug!("[path_process] It is a relative path");
+        debug!("[path_process] A relative path");
         if dirfd == AT_FDCWD {
             debug!("[path_process] dirfd is AT_FDCWD");
             let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
@@ -79,7 +79,7 @@ pub fn path_process(dirfd: isize, path: *const u8) -> Option<String> {
             absolute_path = path_with_dirfd(dirfd, path);
         }
     } else {
-        debug!("[path_process] It is a absolute path");
+        debug!("[path_process] An absolute path");
         absolute_path = Some(path_str.clone());
     }
     absolute_path
@@ -99,13 +99,15 @@ pub fn path_with_dirfd(dirfd: isize, path: *const u8) -> Option<String> {
     });
     absolute_path
 }
-pub fn user_path(file_system: Arc<dyn FileSystem>, path: &str) -> GeneralRet<Arc<dyn Inode>> {
+
+#[allow(unused)]
+pub fn user_path(_file_system: Arc<dyn FileSystem>, path: &str) -> GeneralRet<Arc<dyn Inode>> {
     // need to find the dentry which is associated with this path
     // should call d_lookup_from_root_tmp() to get the dentry
     // also should prepare the filesystem (init it first)
     let path_vec = path2vec(path);
     if path_vec[0].starts_with('/') {
-        let mut target = <dyn Inode>::lookup_from_root_tmp(path);
+        let target = <dyn Inode>::lookup_from_root_tmp(path);
         match target {
             Some(target) => Ok(target),
             None => Err(SyscallErr::ENOENT),
@@ -130,12 +132,14 @@ pub fn get_parent_dir(path_name: &str) -> Option<String> {
     }
     Some(res)
 }
+#[allow(unused)]
 pub fn merge(p1: &str, p2: &str) -> String {
     let mut res = p1.to_string();
     res += "/";
     res += p2;
     res
 }
+#[allow(unused)]
 pub fn exchange_prefix(p1: &str, p2: &str) -> (String, String) {
     let p1_prefix = get_parent_dir(p1).unwrap();
     let p1_name = get_name(p1);

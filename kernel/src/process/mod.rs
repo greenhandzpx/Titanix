@@ -5,7 +5,7 @@
 ///
 pub mod thread;
 
-use log::debug;
+use log::{debug, info};
 pub use thread::yield_now;
 
 /// Aux header
@@ -28,6 +28,7 @@ use crate::{
     signal::{SigHandlerManager, SigInfo, SigQueue},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
+    timer::posix::ITimerval,
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
@@ -51,13 +52,20 @@ pub use pid::{pid_alloc, PidHandle};
 // }
 
 ///
-pub static mut INITPROC: Option<Arc<Process>> = None;
+// pub static mut INITPROC: Option<Arc<Process>> = None;
 
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();
     let elf_data = get_app_data_by_name("initproc").unwrap();
-    unsafe { INITPROC = Some(Process::new(elf_data)) }
+    let init_proc = Process::new(elf_data);
+    PROCESS_MANAGER.add_process(init_proc.pid(), &init_proc);
+
+    #[cfg(feature = "user_spin")]
+    let elf_data = get_app_data_by_name("user_spin").unwrap();
+    let spin_proc = Process::new(elf_data);
+    info!("[add_initproc]: add user spin, pid {}", spin_proc.pid());
+    PROCESS_MANAGER.add_process(init_proc.pid(), &spin_proc);
 }
 
 use self::thread::TidHandle;
@@ -90,8 +98,9 @@ pub struct ProcessInner {
     /// Note that we may need to put this member in every thread
     pub exit_code: i8,
     /// Current Work Directory
-    /// Maybe change to Dentry later.
     pub cwd: String,
+    /// REAL, VIRTUAL, PROF timer
+    pub timers: [ITimerval; 3],
 }
 
 impl ProcessInner {
@@ -107,7 +116,7 @@ pub struct Process {
     /// mailbox,
     pub mailbox: Arc<Mailbox>,
     /// mutable
-    inner: SpinNoIrqLock<ProcessInner>,
+    pub inner: SpinNoIrqLock<ProcessInner>,
 }
 
 impl Process {
@@ -212,6 +221,7 @@ impl Process {
                 addr_to_condvar_map: BTreeMap::new(),
                 exit_code: 0,
                 cwd: String::from("/"),
+                timers: [ITimerval::default(); 3],
             }),
         });
         let trap_context =
@@ -228,10 +238,7 @@ impl Process {
         process.inner.lock().threads.push(Arc::downgrade(&thread));
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
-        PROCESS_MANAGER
-            .lock()
-            .0
-            .insert(process.pid(), Arc::downgrade(&process));
+        PROCESS_MANAGER.add_process(process.pid(), &process);
         debug!("create a new process, pid {}", process.pid());
         process
     }
@@ -525,6 +532,7 @@ impl Process {
                     addr_to_condvar_map: BTreeMap::new(),
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),
+                    timers: [ITimerval::default(); 3],
                 }),
             });
             // add child
@@ -544,10 +552,8 @@ impl Process {
             .lock()
             .threads
             .push(Arc::downgrade(&main_thread));
-        PROCESS_MANAGER
-            .lock()
-            .0
-            .insert(child.pid(), Arc::downgrade(&child));
+
+        PROCESS_MANAGER.add_process(child.pid(), &child);
         // add this thread to scheduler
         main_thread.trap_context_mut().user_x[10] = 0;
         // info!("fork return1, sepc: {:#x}", main_thread.trap_context_mut().sepc);

@@ -15,15 +15,15 @@ impl TaskQueue {
             queue: SpinNoIrqLock::new(VecDeque::new()),
         }
     }
-    pub fn init(&self) {
-        // *self.queue.lock() = Some(VecDeque::new());
-    }
+    // pub fn init(&self) {
+    //     *self.queue.lock() = Some(VecDeque::new());
+    // }
     pub fn push_task(&self, runnable: Runnable) {
         // self.queue.lock().as_mut().unwrap().push_back(runnable);
         self.queue.lock().push_back(runnable);
     }
     pub fn fetch_task(&self) -> Option<Runnable> {
-        // println!("fetch a task inside");
+        // debug!("fetch a task inside");
         self.queue.lock().pop_front()
     }
 }
@@ -49,6 +49,7 @@ where
 }
 
 /// Return the number of the tasks executed
+#[allow(unused)]
 pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
@@ -61,4 +62,15 @@ pub fn run_until_idle() -> usize {
         }
     }
     n
+}
+
+pub fn run_forever() -> ! {
+    loop {
+        if let Some(task) = TASK_QUEUE.fetch_task() {
+            // info!("fetch a task");
+            task.run();
+            // } else {
+            // debug!("no task");
+        }
+    }
 }

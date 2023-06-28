@@ -1,69 +1,55 @@
 use core::sync::atomic::AtomicUsize;
 
-use alloc::boxed::Box;
-use alloc::{
-    collections::BTreeMap,
-    string::{String, ToString},
-    sync::{Arc, Weak},
-};
+use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
-use crate::utils::error::AsyscallRet;
+use crate::fs::hash_key::HashKey;
+use crate::fs::inode::INODE_CACHE;
+use crate::fs::posix::StatFlags;
+use crate::utils::error::GeneralRet;
 use crate::utils::path;
-use crate::{
-    driver::block::{BlockDevice, BlockDeviceImpl},
-    sync::mutex::SpinNoIrqLock,
-    utils::error::{GeneralRet, SyscallRet},
-};
 
-use self::{block_device::BlockDeviceInode, zero::ZeroInode};
+use self::null::NullInode;
+use self::rtc::RtcInode;
+use self::{tty::TtyInode, zero::ZeroInode};
 
-use super::file::FileMetaInner;
-use super::OpenFlags;
+use super::testfs::TestRootInode;
 use super::{
-    file::FileMeta,
     // dentry::DentryMeta,
     file_system::{FileSystem, FileSystemMeta, FILE_SYSTEM_MANAGER},
-    inode::{InodeDevice, InodeMeta, InodeMode},
-    File,
+    inode::{InodeMeta, InodeMode},
     Inode,
 };
 
 mod block_device;
 mod null;
+mod rtc;
+mod tty;
 mod zero;
-
-type Mutex<T> = SpinNoIrqLock<T>;
 
 /// i.e. /dev
 pub struct DevRootInode {
     metadata: Option<InodeMeta>,
-    dev_mgr: Arc<DevManager>,
 }
 
 impl Inode for DevRootInode {
-    /// Look up for target like 'sda' 'null' etc
-    // fn lookup(&self, target_name: &str) -> Option<Arc<dyn Inode>> {
-    //     let dev_mgr = self.dev_mgr.0.lock();
-    //     let dev_wrapper = dev_mgr.get(target_name);
-    //     match dev_wrapper {
-    //         Some(dev_wrapper) => Some(dev_wrapper.inode.clone()),
-    //         None => None,
-    //     }
-    // }
-
-    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn super::File>> {
-        Ok(Arc::new(DevRootDir {
-            meta: FileMeta {
-                path: self.metadata().path.clone(),
-                inner: Mutex::new(FileMetaInner {
-                    flags,
-                    inode: Some(this),
-                    pos: 0,
-                    dirent_index: 0,
-                }),
-            },
-        }))
+    fn mknod(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+        dev_id: usize,
+    ) -> GeneralRet<Arc<dyn Inode>> {
+        debug!("[DevRootInode::mknod]: mknod: {}", pathname);
+        debug_assert!(dev_id < DEV_NAMES.len());
+        let creator = DEV_NAMES[dev_id].2;
+        let inode = creator(this.clone(), DEV_NAMES[dev_id].0);
+        this.metadata()
+            .inner
+            .lock()
+            .children
+            .insert(inode.metadata().name.clone(), inode.clone());
+        Ok(inode)
     }
 
     fn set_metadata(&mut self, meta: InodeMeta) {
@@ -75,77 +61,33 @@ impl Inode for DevRootInode {
     }
 
     /// Load children like 'sda' 'null' etc
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
-        let mut meta = self.metadata().inner.lock();
-        let dev_mgr = self.dev_mgr.dev_map.lock();
-        for dev in dev_mgr.iter() {
-            meta.children.insert(dev.0.clone(), dev.1.inode.clone());
-        }
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        debug!("[DevRootInode::load_children_from_disk]: there is nothing we should do.");
     }
 
     /// Delete inode in disk
-    fn delete_child(&self, child_name: &str) {}
+    fn delete_child(&self, _child_name: &str) {
+        todo!()
+    }
 }
 
 impl DevRootInode {
-    pub fn new(dev_mgr: Arc<DevManager>) -> Self {
-        Self {
-            metadata: None,
-            dev_mgr,
-        }
-    }
-}
-
-/// i.e. /dev dir
-pub struct DevRootDir {
-    meta: FileMeta,
-}
-
-// #[async_trait]
-impl File for DevRootDir {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        false
-    }
-    fn metadata(&self) -> &FileMeta {
-        &self.meta
-    }
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        todo!("how to read dir file?")
-        // buf.fill(0);
-        // Ok(buf.len() as isize)
-    }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
-        todo!("how to write dir file?")
+    pub fn new() -> Self {
+        Self { metadata: None }
     }
 }
 
 pub struct DevFs {
     metadata: Option<FileSystemMeta>,
-    dev_mgr: Arc<DevManager>,
-}
-
-pub struct DevManager {
-    pub dev_map: Mutex<BTreeMap<String, DevWrapper>>,
-    pub id_allocator: AtomicUsize,
-}
-
-pub struct DevWrapper {
-    pub dev_id: usize,
-    inode: Arc<dyn Inode>,
-    dev: Option<Arc<dyn BlockDevice>>,
+    id_allocator: AtomicUsize,
+    // dev_mgr: Arc<DevManager>,
 }
 
 impl DevFs {
     pub fn new() -> Self {
         Self {
             metadata: None,
-            dev_mgr: Arc::new(DevManager {
-                dev_map: Mutex::new(BTreeMap::new()),
-                id_allocator: AtomicUsize::new(1),
-            }),
+            id_allocator: AtomicUsize::new(0),
         }
     }
 }
@@ -157,7 +99,7 @@ impl FileSystem for DevFs {
         parent: Option<Arc<dyn Inode>>,
         mount_point: &str,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        let mut root_inode = DevRootInode::new(self.dev_mgr.clone());
+        let mut root_inode = DevRootInode::new();
         root_inode.init(parent.clone(), mount_point, InodeMode::FileDIR, 0)?;
         let res = Arc::new(root_inode);
         // TODO: should we add a flag to indicate that this dentry(i.e dev) is no need to be flushed
@@ -179,48 +121,61 @@ impl FileSystem for DevFs {
     }
 }
 
+const DEV_NAMES: [(
+    &str,
+    InodeMode,
+    fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
+); 5] = [
+    ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
+        Arc::new(TestRootInode::new(parent, path))
+    }),
+    ("/dev/zero", InodeMode::FileCHR, |parent, path| {
+        Arc::new(ZeroInode::new(parent, path))
+    }),
+    ("/dev/null", InodeMode::FileCHR, |parent, path| {
+        Arc::new(NullInode::new(parent, path))
+    }),
+    ("/dev/tty", InodeMode::FileCHR, |parent, path| {
+        Arc::new(TtyInode::new(parent, path))
+    }),
+    ("/dev/rtc", InodeMode::FileCHR, |parent, path| {
+        Arc::new(RtcInode::new(parent, path))
+    }),
+];
+
 pub fn init() -> GeneralRet<()> {
     info!("start to init devfs...");
 
     let mut dev_fs = DevFs::new();
 
-    dev_fs.init("/dev", crate::fs::FileSystemType::VFAT)?;
+    dev_fs.init(
+        "udev".to_string(),
+        "/dev",
+        crate::fs::FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
     // dev_fs.init("/")?;
 
     let dev_fs = Arc::new(dev_fs);
 
     let dev_root_inode = dev_fs.metadata().root_inode.as_ref().cloned().unwrap();
 
-    let dev_name = "vda2";
-    let dev_path = "/dev/".to_string() + dev_name;
-    dev_fs.dev_mgr.dev_map.lock().insert(
-        dev_name.to_string(),
-        DevWrapper {
-            dev_id: dev_fs
-                .dev_mgr
+    let mut cache_lock = INODE_CACHE.lock();
+    let parent_ino = dev_root_inode.metadata().ino;
+    for (dev_name, inode_mode, _) in DEV_NAMES {
+        let child = dev_root_inode.mknod(
+            dev_root_inode.clone(),
+            dev_name,
+            inode_mode,
+            dev_fs
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-            inode: Arc::new(BlockDeviceInode::new(dev_root_inode.clone(), &dev_path)),
-            // dev: Some(Arc::new(BlockDeviceImpl::new())),
-            dev: None,
-        },
-    );
-    debug!("insert {} finished", dev_name);
-
-    let dev_name = "zero";
-    let dev_path = "/dev/".to_string() + dev_name;
-    dev_fs.dev_mgr.dev_map.lock().insert(
-        dev_name.to_string(),
-        DevWrapper {
-            dev_id: dev_fs
-                .dev_mgr
-                .id_allocator
-                .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-            inode: Arc::new(ZeroInode::new(dev_root_inode.clone(), &dev_path)),
-            dev: None,
-        },
-    );
-    debug!("insert {} finished", dev_name);
+        )?;
+        let child_name = child.metadata().name.clone();
+        let key = HashKey::new(parent_ino, child_name);
+        cache_lock.insert(key, child);
+        debug!("insert {} finished", dev_name);
+    }
 
     FILE_SYSTEM_MANAGER
         .fs_mgr

@@ -1,5 +1,5 @@
 use crate::{driver::{block::BlockDevice, BLOCK_DEVICE}, utils::error::GeneralRet, fs::FileSystemType};
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{sync::Arc, vec::Vec, string::ToString};
 use log::info;
 use lazy_static::lazy_static;
 use self::{
@@ -9,7 +9,7 @@ use self::{
     inode::FAT32Inode
 };
 
-use super::{FileSystem, file_system::FileSystemMeta};
+use super::{FileSystem, file_system::FileSystemMeta, posix::StatFlags};
 
 mod bpb;
 mod dentry;
@@ -21,7 +21,7 @@ mod inode;
 mod time;
 mod util;
 
-const SECTOR_SIZE:          usize = 512;
+pub const SECTOR_SIZE:          usize = 512;
 const SNAME_LEN:        usize = 11;
 const LNAME_MAXLEN:     usize = 256;
 const BOOT_SECTOR_ID:       usize = 0;
@@ -72,10 +72,12 @@ impl FAT32FileSystem {
         ));
         let root_inode = FAT32Inode::new_root_dentry(Arc::clone(&fat), None, "/", info.root_cluster_id);
         self.meta = Some(FileSystemMeta {
+            dev_name: "/dev/mmcblk".to_string(),
             ftype: FileSystemType::VFAT,
             root_inode: Some(Arc::new(root_inode)),
             mnt_flags: false,
-            s_dirty: Vec::new()
+            s_dirty: Vec::new(),
+            flags: StatFlags::ST_NOSUID,
         });
         Some(())
     }

@@ -5,7 +5,7 @@ use crate::{
         File, Inode, Mutex, OpenFlags,
     },
     processor::SumGuard,
-    utils::error::{AsyscallRet, GeneralRet, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet},
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
@@ -15,11 +15,18 @@ pub struct ZeroInode {
     // dev_fs: SyncUnsafeCell<Option<Arc<DevFs>>>,
 }
 
+impl ZeroInode {
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
+        Self { metadata }
+    }
+}
+
 impl Inode for ZeroInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(ZeroFile {
             meta: FileMeta {
-                path: "todo_here()".to_string(),
+                path: "/dev/zero".to_string(),
                 // path: self.metadata().path.clone(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
@@ -36,18 +43,11 @@ impl Inode for ZeroInode {
     fn metadata(&self) -> &InodeMeta {
         &self.metadata
     }
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         panic!("Unsupported operation load_children")
     }
-    fn delete_child(&self, child_name: &str) {
+    fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation delete")
-    }
-}
-
-impl ZeroInode {
-    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
-        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0);
-        Self { metadata }
     }
 }
 

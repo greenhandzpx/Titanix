@@ -1,9 +1,10 @@
 use alloc::{string::String, vec::Vec};
 
-use crate::fs::dirent::MAX_NAME_LEN;
+use crate::{fs::posix::MAX_NAME_LEN, stack_trace};
 
 /// Convert C-style string(end with '\0') to rust string
 pub fn c_str_to_string(ptr: *const u8) -> String {
+    stack_trace!();
     let mut ptr = ptr as usize;
     let mut ret = String::new();
     loop {

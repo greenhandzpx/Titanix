@@ -23,8 +23,6 @@ use super::{
 /// The processor has several `Hart`s
 pub struct Hart {
     hart_id: usize,
-    // /// Spare env ctx when in need(e.g. kernel thread or idle thread)
-    // spare_env_ctx: EnvContext,
     local_ctx: Option<Box<LocalContext>>,
     /// Every hart has its own kernel stack
     kstack_bottom: usize,
@@ -39,6 +37,7 @@ impl Hart {
         self.local_ctx.as_mut().unwrap().env_mut()
     }
 
+    #[allow(unused)]
     pub fn local_ctx(&self) -> &LocalContext {
         &self.local_ctx.as_ref().unwrap()
     }
@@ -111,6 +110,13 @@ impl Hart {
                 (*task.task_ctx().page_table.get()).activate();
             }
         }
+        if !task.is_idle() {
+            unsafe {
+                (*task.task_ctx().thread.inner.get())
+                    .time_info
+                    .when_entering()
+            }
+        }
         core::mem::swap(self.local_ctx_mut(), task);
         if sie {
             open_interrupt();
@@ -132,6 +138,13 @@ impl Hart {
         // task.task_ctx().page_table.activate();
         core::mem::swap(self.local_ctx_mut(), task);
 
+        if !task.is_idle() {
+            unsafe {
+                (*task.task_ctx().thread.inner.get())
+                    .time_info
+                    .when_leaving()
+            }
+        }
         if sie {
             open_interrupt();
         }

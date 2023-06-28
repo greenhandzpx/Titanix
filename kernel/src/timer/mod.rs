@@ -1,20 +1,23 @@
 //! RISC-V timer-related functionality
 
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll, Waker};
-use core::time::Duration;
+pub mod io_multiplex;
+pub mod posix;
+pub mod timed_task;
+pub mod timeout_task;
+
+use core::{cmp::Reverse, task::Waker, time::Duration};
 
 use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
-use alloc::collections::{BTreeMap, LinkedList};
+use alloc::collections::{BTreeMap, BinaryHeap};
 use lazy_static::*;
 use log::info;
 use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
+const USEC_PER_SEC: usize = 1000000;
 
 /// for clock_gettime
 pub const CLOCK_REALTIME: usize = 0;
@@ -25,30 +28,6 @@ pub const UTIME_NOW: usize = 1073741823;
 pub const UTIME_OMIT: usize = 1073741822;
 
 /// Used for get time
-#[repr(C)]
-pub struct TimeVal {
-    pub sec: usize,
-    pub usec: usize,
-}
-
-/// Used for nanosleep
-#[derive(Clone, Copy)]
-#[repr(C)]
-pub struct TimeSpec {
-    pub sec: usize,
-    pub nsec: usize,
-}
-
-impl TimeSpec {
-    pub fn new() -> Self {
-        // new a time spec with machine time
-        let current_time = get_time_ms();
-        Self {
-            sec: current_time / 1000,
-            nsec: current_time % 1000000 * 1000000,
-        }
-    }
-}
 
 /// Used for clock_gettime
 /// arg_timespec - device_timespec = diff
@@ -57,39 +36,28 @@ pub struct TimeDiff {
     pub nsec: isize,
 }
 
-/// Used for times
-#[repr(C)]
-pub struct Tms {
-    pub utime: usize,
-    pub stime: usize,
-    pub cutime: usize,
-    pub cstime: usize,
-}
-
 /// get current time
 fn get_time() -> usize {
     time::read()
 }
-/// get current time in microseconds
-pub fn get_time_ms() -> usize {
+/// get current time in milliseconds
+pub fn current_time_ms() -> usize {
     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
 }
+/// get current time in microseconds
+pub fn current_time_us() -> usize {
+    time::read() / (CLOCK_FREQ / USEC_PER_SEC)
+}
 /// get current time in `Duration`
-pub fn get_time_duration() -> Duration {
-    Duration::from_millis(get_time_ms() as u64)
+pub fn current_time_duration() -> Duration {
+    Duration::from_micros(current_time_us() as u64)
 }
-/// get current time as TimeSpec
-pub fn get_time_spec() -> TimeSpec {
-    let current_time = get_time_ms();
-    let time_spec = TimeSpec {
-        sec: current_time / MSEC_PER_SEC,
-        nsec: (current_time % MSEC_PER_SEC) * 1000000,
-    };
-    time_spec
-}
+
 /// set the next timer interrupt
 pub fn set_next_trigger() {
-    set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
+    let next_trigger = get_time() + CLOCK_FREQ / TICKS_PER_SEC;
+    // debug!("next trigger {}", next_trigger);
+    set_timer(next_trigger);
 }
 
 pub struct ClockManager(pub BTreeMap<usize, TimeDiff>);
@@ -115,27 +83,42 @@ pub fn init() {
 }
 
 pub fn handle_timeout_events() {
-    let mut timers = TIMER_LIST.timers.lock();
-    let current_time = get_time_duration();
-    let mut timeout_cnt = 0;
-    for timer in timers.iter_mut() {
-        if current_time >= timer.expired_time {
-            timer.waker.take().unwrap().wake();
-            timeout_cnt += 1;
+    // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
+    let current_time = current_time_duration();
+    let mut timers = TIMER_QUEUE.timers.lock();
+    // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time
+    // may be a little long.
+    loop {
+        if let Some(timer) = timers.peek() {
+            if current_time >= timer.0.expired_time {
+                let mut timer = timers.pop().unwrap();
+                //// Drop timers because the timer callback may lock the timer inside
+                //// TODO: is it low efficiency?
+                //// drop(timers);
+                timer.0.waker.take().unwrap().wake();
+                // timer.0.waker.as_ref().unwrap().wake_by_ref();
+            } else {
+                break;
+            }
+        } else {
+            break;
         }
-    }
-    for _ in 0..timeout_cnt {
-        timers.pop_front();
     }
 }
 
-struct TimerList {
-    timers: SpinNoIrqLock<LinkedList<Timer>>,
+struct TimerQueue {
+    timers: SpinNoIrqLock<BinaryHeap<Reverse<Timer>>>,
+}
+
+impl TimerQueue {
+    fn add_timer(&self, timer: Timer) {
+        self.timers.lock().push(Reverse(timer))
+    }
 }
 
 lazy_static! {
-    static ref TIMER_LIST: TimerList = TimerList {
-        timers: SpinNoIrqLock::new(LinkedList::new())
+    static ref TIMER_QUEUE: TimerQueue = TimerQueue {
+        timers: SpinNoIrqLock::new(BinaryHeap::new())
     };
 }
 
@@ -145,36 +128,34 @@ struct Timer {
     // waker: SyncUnsafeCell<Option<Waker>>,
 }
 
-struct SleepFuture {
-    expired_time: Duration,
-}
-
-impl SleepFuture {
-    fn new(duration: Duration) -> Self {
-        Self {
-            expired_time: get_time_duration() + duration,
-        }
+impl PartialEq for Timer {
+    fn eq(&self, other: &Self) -> bool {
+        self.expired_time == other.expired_time
     }
 }
 
-impl Future for SleepFuture {
-    type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe { self.get_unchecked_mut() };
-        if get_time_duration() >= this.expired_time {
-            Poll::Ready(())
+impl PartialOrd for Timer {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        if self.expired_time < other.expired_time {
+            Some(core::cmp::Ordering::Less)
+        } else if self.expired_time > other.expired_time {
+            Some(core::cmp::Ordering::Greater)
         } else {
-            let timer = Timer {
-                expired_time: this.expired_time,
-                waker: Some(cx.waker().clone()),
-            };
-            TIMER_LIST.timers.lock().push_back(timer);
-            Poll::Pending
+            Some(core::cmp::Ordering::Equal)
         }
     }
 }
 
-#[allow(unused)]
-pub async fn ksleep(duration: Duration) {
-    SleepFuture::new(duration).await
+impl Eq for Timer {}
+
+impl Ord for Timer {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        if self.expired_time < other.expired_time {
+            core::cmp::Ordering::Less
+        } else if self.expired_time > other.expired_time {
+            core::cmp::Ordering::Greater
+        } else {
+            core::cmp::Ordering::Equal
+        }
+    }
 }

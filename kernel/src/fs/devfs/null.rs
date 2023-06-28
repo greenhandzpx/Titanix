@@ -1,19 +1,24 @@
-use core::pin::Pin;
-
 use crate::{
     fs::{
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
         File, Inode, Mutex, OpenFlags,
     },
-    utils::error::{AsyscallRet, GeneralRet, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet},
 };
 use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
 
 pub struct NullInode {
-    metadata: Option<InodeMeta>,
+    metadata: InodeMeta,
     // dev_fs: SyncUnsafeCell<Option<Arc<DevFs>>>,
+}
+
+impl NullInode {
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
+        Self { metadata }
+    }
 }
 
 impl Inode for NullInode {
@@ -32,25 +37,16 @@ impl Inode for NullInode {
         }))
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
-        self.metadata = Some(meta);
+        self.metadata = meta;
     }
     fn metadata(&self) -> &InodeMeta {
-        &self.metadata.as_ref().unwrap()
+        &self.metadata
     }
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         panic!("Unsupported operation")
     }
-    fn delete_child(&self, child_name: &str) {
+    fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation delete")
-    }
-}
-
-impl NullInode {
-    pub fn new() -> Self {
-        Self {
-            metadata: None,
-            // dev_fs: SyncUnsafeCell::new(None),
-        }
     }
 }
 
@@ -69,11 +65,11 @@ impl File for NullFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, _buf: &'a mut [u8]) -> AsyscallRet {
         debug!("read /dev/null");
         Box::pin(async move { Ok(0) })
     }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
         debug!("write /dev/null");
         Box::pin(async move { Ok(0) })
     }

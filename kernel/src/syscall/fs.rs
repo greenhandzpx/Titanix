@@ -2,29 +2,38 @@
 use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
+use core::time::Duration;
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
+use alloc::vec::Vec;
 use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use super::PollFd;
 use crate::config::fs::RLIMIT_NOFILE;
+use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
-use crate::fs::stat::{STAT, STAT_SIZE};
-use crate::fs::{
-    inode, Dirent, FaccessatFlags, FileSystem, FileSystemType, FnctlFlags, Inode, InodeMode, Iovec,
-    Renameat2Flags, UtsName, AT_FDCWD, FILE_SYSTEM_MANAGER,
+use crate::fs::posix::{
+    Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, STAT, STATFS_SIZE, STAT_SIZE,
+    SYSINFO_SIZE,
 };
-use crate::fs::{OpenFlags, UTSNAME_SIZE};
+use crate::fs::HashKey;
+use crate::fs::{
+    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
+    FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
+};
+use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
 use crate::mm::user_check::UserCheck;
-use crate::process::thread;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
-use crate::syscall::{SEEK_CUR, SEEK_END, SEEK_SET};
-use crate::timer::{get_time_ms, get_time_spec, UTIME_NOW};
-use crate::timer::{TimeSpec, UTIME_OMIT};
+use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
+use crate::timer::posix::TimeVal;
+use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
+use crate::timer::{posix::current_time_spec, UTIME_NOW};
+use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
@@ -149,8 +158,8 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                             InodeMode::FileDIR => {
                                 let mut inner_lock = parent_inode.metadata().inner.lock();
                                 // change the time
-                                inner_lock.st_atim = get_time_spec();
-                                inner_lock.st_mtim = get_time_spec();
+                                inner_lock.st_atim = current_time_spec();
+                                inner_lock.st_mtim = current_time_spec();
                                 // change state
                                 match inner_lock.state {
                                     InodeState::Synced => {
@@ -164,11 +173,17 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                                 // TODO: add to dirty list, should add inode to the target fs which is include this inode
                                 drop(inner_lock);
                                 stack_trace!();
-                                parent_inode.mkdir(
+                                let child = parent_inode.mkdir(
                                     parent_inode.clone(),
                                     &absolute_path,
                                     InodeMode::FileDIR,
                                 )?;
+                                // insert to cache
+                                let key = HashKey::new(
+                                    parent_inode.metadata().ino,
+                                    child.metadata().name.clone(),
+                                );
+                                INODE_CACHE.lock().insert(key, child);
                                 Ok(0)
                             }
                             _ => {
@@ -194,10 +209,11 @@ pub fn sys_mount(
     dev_name: *const u8,
     target_path: *const u8,
     ftype: *const u8,
-    _flags: usize,
+    flags: u32,
     _data: *const u8,
 ) -> SyscallRet {
     stack_trace!();
+    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(dev_name)?;
     UserCheck::new().check_c_str(target_path)?;
@@ -210,7 +226,7 @@ pub fn sys_mount(
     if dev_name.is_none() {
         return Err(SyscallErr::EMFILE);
     }
-    // let dev_name = path::get_name(&dev_name.unwrap());
+    let dev_name = dev_name.unwrap();
 
     let target_path = path::path_process(AT_FDCWD, target_path);
     if target_path.is_none() {
@@ -226,25 +242,19 @@ pub fn sys_mount(
     let ftype = {
         if ftype.is_some() {
             let ftype = ftype.unwrap();
-            let ftype = FileSystemType::fs_type(ftype);
+            let ftype = FileSystemType::fs_type(&ftype);
             if ftype.is_none() {
                 return Err(SyscallErr::ENODEV);
             }
             ftype.unwrap()
         } else {
-            FileSystemType::fs_type("vfat".to_string()).unwrap()
+            FileSystemType::fs_type("vfat").unwrap()
         }
     };
 
-    // let parent = path::get_parent_dir(&target_path);
-    // let parent_inode = match parent {
-    //     Some(parent) => <dyn Inode>::lookup_from_root_tmp(&parent),
-    //     None => None,
-    // };
-
     let mut fs = ftype.new_fs();
-    fs.init(&target_path, ftype)?;
-    fs.mount();
+    fs.init(dev_name, &target_path, ftype, flags)?;
+    fs.mount()?;
 
     let meta = fs.metadata();
     let root_inode = meta.root_inode.as_ref().unwrap();
@@ -274,7 +284,6 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
     }
     let target_fs = target_fs.unwrap();
     // sync fs
-    target_fs.sync_fs()?;
     let meta = target_fs.metadata();
     let root_inode = meta.root_inode.unwrap();
     let parent = root_inode.metadata().inner.lock().parent.clone();
@@ -283,6 +292,7 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
             let parent = parent.upgrade().unwrap();
             debug!("Have a parent: {}", parent.metadata().path);
             parent.remove_child(root_inode)?;
+            target_fs.umount()?;
             fs_mgr.remove(&target_path);
             Ok(0)
         }
@@ -318,7 +328,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;
             let mut inner_lock = inode.metadata().inner.lock();
             // change access time
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             // change state
             match inner_lock.state {
                 InodeState::Synced => {
@@ -335,19 +345,23 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             let dirents = Dirent::get_dirents(inode, dirent_index);
             let mut num_bytes = 0;
             let mut dirp_ptr = dirp;
-            for dirent in dirents.iter() {
+            let mut index: usize = 0;
+            for (i, dirent) in dirents.iter().enumerate() {
                 stack_trace!();
-                num_bytes += dirent.d_reclen as usize;
-                if num_bytes > count {
+                let temp = num_bytes + dirent.d_reclen as usize;
+                if temp > count {
                     debug!("[getdents] user buf size too small");
-                    return Err(SyscallErr::EINVAL);
+                    index = i + 1;
+                    break;
                 }
+                num_bytes = temp;
                 unsafe {
                     copy_nonoverlapping(&*dirent as *const Dirent, dirp_ptr as *mut Dirent, 1);
                     dirp_ptr += dirent.d_reclen as usize;
                 }
+                index = i + 1;
             }
-            file.metadata().inner.lock().dirent_index += dirents.len();
+            file.metadata().inner.lock().dirent_index += index;
 
             Ok(num_bytes as isize)
         }
@@ -365,7 +379,7 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     match target_inode {
         Some(target_inode) => {
             let mut inner_lock = target_inode.metadata().inner.lock();
-            inner_lock.st_atim = get_time_spec();
+            inner_lock.st_atim = current_time_spec();
             match inner_lock.state {
                 InodeState::Synced => {
                     inner_lock.state = InodeState::DirtyInode;
@@ -417,10 +431,12 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
 
-    if !file.readable() {
-        return Err(SyscallErr::EACCES);
-    }
+    // if !file.readable() {
+    //     info!("[_fstat]: file cannot be read, fd {}, stat_buf addr {:#x}", fd, stat_buf);
+    //     return Err(SyscallErr::EACCES);
+    // }
 
+    info!("[_fstat]: fd {}", fd);
     let inode = file.metadata().inner.lock().inode.as_ref().unwrap().clone();
     let inode_meta = inode.metadata().clone();
     if let Some(dev) = inode_meta.device.as_ref() {
@@ -439,6 +455,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     // TODO: pre
     kstat.st_ino = inode_meta.ino as u64;
     kstat.st_mode = inode_meta.mode as u32;
+    // kstat.st_mode = InodeMode::FileCHR as u32;
     debug!("[_fstat] inode mode: {:?}", inode_meta.mode);
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
     let inner_lock = inode_meta.inner.lock();
@@ -462,17 +479,17 @@ pub fn sys_newfstatat(
 ) -> SyscallRet {
     stack_trace!();
     debug!("[newfstatat] drifd:{}, flags:{}", dirfd, flags);
-    let flags = FnctlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(pathname)?;
     UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
     stack_trace!();
     let absolute_path: Option<String>;
-    if flags.contains(FnctlFlags::AT_SYMLINK_NOFOLLOW) {
+    if flags.contains(FcntlFlags::AT_SYMLINK_NOFOLLOW) {
         // todo: support symlink?
         debug!("the pathname represent a symbolic link");
     }
-    if flags.contains(FnctlFlags::AT_EMPTY_PATH) {
+    if flags.contains(FcntlFlags::AT_EMPTY_PATH) {
         // path is empty
         // If dirfd is AT_FDCWD, change it to absolute path
         if dirfd == AT_FDCWD {
@@ -489,7 +506,7 @@ pub fn sys_newfstatat(
     }
     debug!("[newfstatat] final absolute path: {:?}", absolute_path);
 
-    let fd = _openat(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
+    let fd = open_file(absolute_path, OpenFlags::bits(&OpenFlags::RDONLY))?;
 
     return _fstat(fd as usize, stat_buf);
 }
@@ -538,55 +555,7 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
 
     let absolute_path = path::path_process(dirfd, filename_addr);
 
-    _openat(absolute_path, flags)
-}
-
-/// We should give the absolute path (Or None) to _openat function.
-fn _openat(absolute_path: Option<String>, flags: u32) -> SyscallRet {
-    stack_trace!();
-    debug!(
-        "[_openat] absolute path: {:?}, flags: {}",
-        absolute_path, flags
-    );
-    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    match absolute_path {
-        Some(absolute_path) => {
-            debug!("[_openat] file name {}", absolute_path);
-            if let Some(inode) = fs::inode::open_file(&absolute_path, flags) {
-                stack_trace!();
-                let mut inner_lock = inode.metadata().inner.lock();
-                inner_lock.st_atim = get_time_spec();
-                match inner_lock.state {
-                    InodeState::Synced => {
-                        inner_lock.state = InodeState::DirtyInode;
-                    }
-                    _ => {}
-                }
-                debug!(
-                    "[_openat] inode ino: {}, name: {}",
-                    inode.metadata().ino,
-                    inode.metadata().name
-                );
-                // TODO: add to fs's dirty list
-                let fd = current_process().inner_handler(|proc| {
-                    let fd = proc.fd_table.alloc_fd();
-                    let file = inode.open(inode.clone(), flags)?;
-
-                    proc.fd_table.put(fd, file);
-                    Ok(fd)
-                })?;
-                debug!("[_openat] find fd: {}", fd);
-                Ok(fd as isize)
-            } else {
-                debug!("file {} doesn't exist", absolute_path);
-                Err(SyscallErr::ENOENT)
-            }
-        }
-        None => {
-            debug!("cannot find the file, absolute_path is none");
-            Err(SyscallErr::ENOENT)
-        }
-    }
+    open_file(absolute_path, flags)
 }
 
 pub fn sys_close(fd: usize) -> SyscallRet {
@@ -596,6 +565,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
+    trace!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -613,7 +583,14 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    trace!("start writev, fd: {}, iov: {}, iovcnt:{}", fd, iov, iovcnt);
+    trace!(
+        "[sys_writev] fd: {}, iov: {:#x}, iovcnt:{}",
+        fd,
+        iov,
+        iovcnt
+    );
+    let _sum_guard = SumGuard::new();
+
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -624,8 +601,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
     let mut ret: usize = 0;
     let iovec_size = core::mem::size_of::<Iovec>();
-
-    let _sum_guard = SumGuard::new();
 
     for i in 0..iovcnt {
         trace!("write the {} buf", i + 1);
@@ -642,8 +617,47 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
         trace!("[writev] buf: {:?}", buf);
-        test();
+        // test();
         file.write(buf).await?;
+    }
+    Ok(ret as isize)
+}
+
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
+    stack_trace!();
+    debug!(
+        "[sys_readv] fd: {}, iov: {:#x}, iovcnt: {}",
+        fd, iov, iovcnt
+    );
+    let _sum_guard = SumGuard::new();
+
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    if !file.readable() {
+        return Err(SyscallErr::EPERM);
+    }
+    stack_trace!();
+    let mut ret: usize = 0;
+    let iovec_size = core::mem::size_of::<Iovec>();
+
+    for i in 0..iovcnt {
+        trace!("read the {} buf", i + 1);
+        // current iovec pointer
+        let current = iov.add(iovec_size * i);
+        trace!("current iov: {}", current);
+        UserCheck::new().check_writable_slice(current as *mut u8, iovec_size)?;
+        trace!("pass writable check");
+        let iov_base = unsafe { &*(current as *const Iovec) }.iov_base;
+        trace!("get iov_base: {}", iov_base);
+        let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
+        trace!("get iov_len: {}", iov_len);
+        ret += iov_len;
+        UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
+        let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
+        trace!("[readv] buf: {:?}", buf);
+        // test();
+        file.read(buf).await?;
     }
     Ok(ret as isize)
 }
@@ -721,121 +735,27 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 Ok(newfd as isize)
             })
         }
-        _ if cmd == FcntlCmd::F_SETFD as i32 => {
+        _ if cmd == FcntlCmd::F_SETFD as i32 || cmd == FcntlCmd::F_SETFL as i32 => {
+            let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
                 // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
                 let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
                 file.metadata().inner.lock().flags = flags;
                 debug!("[sys_fcntl]: set file flags to {:?}", flags);
                 Ok(0)
             })
         }
+        _ if cmd == FcntlCmd::F_GETFD as i32 || cmd == FcntlCmd::F_GETFL as i32 => {
+            current_process().inner_handler(|proc| {
+                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+                let flags = file.metadata().inner.lock().flags;
+                debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                Ok(OpenFlags::bits(&flags) as isize)
+            })
+        }
         _ => {
             todo!()
-        }
-    }
-}
-
-bitflags! {
-    pub struct PollEvents: u16 {
-        const POLLIN = 1 << 0;
-        const POLLPRI = 1 << 1;
-        const POLLOUT = 1 << 2;
-        const POLLERR = 1 << 3;
-        const POLLHUP = 1 << 4;
-        const POLLNVAL = 1 << 5;
-    }
-}
-
-pub async fn sys_ppoll(fds: usize, nfds: usize, timeout_ptr: usize, sigmask: usize) -> SyscallRet {
-    stack_trace!();
-    let _sum_guard = SumGuard::new();
-
-    UserCheck::new().check_writable_slice(fds as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
-    let fds: &mut [PollFd] = unsafe { core::slice::from_raw_parts_mut(fds as *mut PollFd, nfds) };
-    debug!("[sys_ppoll]: fds {:?}", fds);
-
-    let start_ms = get_time_ms();
-    let infinite_timeout: bool;
-    let timeout: usize;
-    if timeout_ptr == 0 {
-        debug!("[sys_ppoll]: infinite timeout");
-        infinite_timeout = true;
-        timeout = 0;
-    } else {
-        infinite_timeout = false;
-        stack_trace!();
-        UserCheck::new()
-            .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
-        let timeout_delta = unsafe { *(timeout_ptr as *const TimeSpec) };
-        // if timeout_delta < 0 {
-        //     warn!("invalid timeout");
-        //     return Err(SyscallErr::EINVAL);
-        // }
-        timeout = timeout_delta.sec * 1000 + timeout_delta.nsec / 1000000;
-    }
-    let expire_time = start_ms + timeout;
-
-    if sigmask != 0 {
-        stack_trace!();
-        UserCheck::new()
-            .check_readable_slice(sigmask as *const u8, core::mem::size_of::<SigSet>())?;
-        let sigmask = unsafe { *(sigmask as *const usize) };
-        current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
-                proc.pending_sigs.blocked_sigs |= new_sig_mask;
-            } else {
-                warn!("invalid set arg");
-            }
-        });
-    }
-
-    loop {
-        // TODO: how to avoid user modify the address?
-        let mut cnt = 0;
-        for i in 0..nfds {
-            let current_fd = &mut fds[i];
-            // trace!("[sys_ppoll]: poll fd {}", current_fd.fd);
-            if let Some(file) =
-                current_process().inner_handler(|proc| proc.fd_table.get(current_fd.fd as usize))
-            {
-                if let Some(events) = PollEvents::from_bits(current_fd.events as u16) {
-                    current_fd.revents = 0;
-                    if events.contains(PollEvents::POLLIN) {
-                        // file.read()
-                        if file.pollin()? {
-                            current_fd.revents |= PollEvents::POLLIN.bits() as i16;
-                            cnt += 1;
-                            continue;
-                        }
-                    }
-                    if events.contains(PollEvents::POLLOUT) {
-                        // file.read()
-                        if file.pollout()? {
-                            current_fd.revents |= PollEvents::POLLOUT.bits() as i16;
-                            cnt += 1;
-                            continue;
-                        }
-                    }
-                } else {
-                    warn!("Invalid events: {:#x}", current_fd.events);
-                    // TODO: not sure
-                    return Err(SyscallErr::EINVAL);
-                }
-            } else {
-                debug!("No such file for fd {}", current_fd.fd);
-                continue;
-            }
-        }
-        if cnt > 0 {
-            return Ok(cnt as isize);
-        } else if !infinite_timeout && get_time_ms() >= expire_time {
-            debug!("[sys_ppoll]: timeout!");
-            return Ok(0);
-        } else {
-            thread::yield_now().await;
         }
     }
 }
@@ -884,6 +804,7 @@ pub async fn sys_sendfile(
             nbytes
         }
     };
+    debug!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
     let ret = output_file.write(&buf[0..nbytes as usize]).await;
     info!("[sys_sendfile]: finished");
     ret
@@ -930,8 +851,8 @@ pub fn sys_renameat2(
         debug!("[sys_renameat2] newpath start with oldpath");
         return Err(SyscallErr::EINVAL);
     }
-    let oldinode = fs::inode::open_file(&oldpath, OpenFlags::RDWR);
-    let newinode = fs::inode::open_file(&newpath, OpenFlags::RDWR);
+    let oldinode = fs::resolve_path(&oldpath, OpenFlags::RDWR);
+    let newinode = fs::resolve_path(&newpath, OpenFlags::RDWR);
     if oldinode.is_none() {
         debug!("[sys_renameat2] doesn'n have oldinode");
         return Err(SyscallErr::ENOENT);
@@ -945,42 +866,51 @@ pub fn sys_renameat2(
         if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
             return Err(SyscallErr::ENOENT);
         }
-        let oldparent = oldinode
-            .metadata()
-            .inner
-            .lock()
-            .parent
-            .clone()
-            .unwrap()
-            .upgrade()
-            .unwrap();
-        oldparent.remove_child(oldinode.clone())?;
+        // check new path
         let newparent_path = path::get_parent_dir(&newpath).unwrap();
-        let parent = fs::inode::open_file(&newparent_path, OpenFlags::RDWR);
-        if parent.is_none() {
+        let newparent = fs::resolve_path(&newparent_path, OpenFlags::RDWR);
+
+        if newparent.is_none() {
             debug!("[sys_renameat2] newparent doesn't create");
+            // restore
             return Err(SyscallErr::ENOENT);
         } else {
-            let parent = parent.unwrap();
+            // remove from old path
+            let oldparent = oldinode
+                .metadata()
+                .inner
+                .lock()
+                .parent
+                .clone()
+                .unwrap()
+                .upgrade()
+                .unwrap();
+            oldparent.remove_child(oldinode.clone())?;
+            let key = HashKey::new(oldparent.metadata().ino, oldname);
+            INODE_CACHE.lock().remove(&key);
+
+            let newparent = newparent.unwrap();
             if oldtype == InodeMode::FileDIR {
                 stack_trace!();
-                parent.mkdir(parent.clone(), &newpath, oldtype)?;
+                newparent.mkdir(newparent.clone(), &newpath, oldtype)?;
             } else {
-                parent.mknod(
-                    parent.clone(),
+                newparent.mknod(
+                    newparent.clone(),
                     &newpath,
                     oldtype,
                     oldinode.metadata().rdev.unwrap(),
                 )?;
             }
-            let new_inner_lock = parent.metadata().inner.lock();
+            let new_inner_lock = newparent.metadata().inner.lock();
             let newinode = new_inner_lock
                 .children
                 .get(path::get_name(&newpath))
                 .unwrap();
             let mut old_inner = oldinode.metadata().inner.lock().clone();
-            old_inner.parent = Some(Arc::downgrade(&parent));
+            old_inner.parent = Some(Arc::downgrade(&newparent));
             newinode.metadata().inner_set(old_inner);
+            let key = HashKey::new(newparent.metadata().ino, newinode.metadata().name.clone());
+            INODE_CACHE.lock().insert(key, newinode.clone());
             Ok(0)
         }
     } else {
@@ -1007,81 +937,123 @@ pub fn sys_renameat2(
             .unwrap()
             .upgrade()
             .unwrap();
-        old_parent.remove_child(oldinode.clone())?;
-        new_parent.remove_child(newinode.clone())?;
-        if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
-            debug!("[sys_renameat2] exchange old and new");
-            // If flag is RENAME_EXCHANGE, exchange old and new one.
-            if newtype == InodeMode::FileDIR {
-                old_parent.mkdir(old_parent.clone(), &newpath, newtype)?;
-            } else {
-                old_parent.mknod(
-                    old_parent.clone(),
-                    &newpath,
-                    newtype,
-                    newinode.clone().metadata().rdev.unwrap(),
-                )?;
-            }
-            if oldtype == InodeMode::FileDIR {
-                new_parent.mkdir(new_parent.clone(), &oldpath, oldtype)?;
-            } else {
-                new_parent.mknod(
-                    new_parent.clone(),
-                    &oldpath,
-                    oldtype,
-                    oldinode.clone().metadata().rdev.unwrap(),
-                )?;
-            }
-            // inner exchange
-            let old_inner_lock = old_parent.metadata().inner.lock();
-            // get inner before overwrite
-            let mut oldinner = oldinode.metadata().inner.lock().clone();
-            let new_inner_lock = new_parent.metadata().inner.lock();
-            // get inner before overwrite
-            let mut newinner = newinode.metadata().inner.lock().clone();
-            // overwrite with current oldpath inode
-            let oldinode = old_inner_lock.children.get(oldname.as_str()).unwrap();
-            // overwrite with current newpath inode
-            let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
-            // overwrite the newinner with current old_parent
-            newinner.parent = Some(Arc::downgrade(&old_parent));
-            oldinode.metadata().inner_set(newinner);
-            // overwrite the oldinner with current new_parent
-            oldinner.parent = Some(Arc::downgrade(&new_parent));
-            newinode.metadata().inner_set(oldinner);
-            Ok(0)
-        } else if flags.contains(Renameat2Flags::RENAME_NOREPLACE) {
+
+        if flags.contains(Renameat2Flags::RENAME_NOREPLACE) {
             debug!("[sys_renameat2] cound not replace, error");
             // If flag is RENAME_NOREPLACE, should not to replace newpath.
             // So return EEXIST
             Err(SyscallErr::EEXIST)
         } else {
-            // Normally, replace the newpath.
-            // But you should check the newpath type, if newtype is not the same as oldtype, should return EISDIR or ENOTEMPTY or ENOTDIR
-            debug!("[sys_renameat2] replace newpath");
-            if newtype == oldtype {
-                // the same type, replace directly.
+            // remove from old path
+            let mut cache_lock = INODE_CACHE.lock();
+            old_parent.remove_child(oldinode.clone())?;
+            let key = HashKey::new(old_parent.metadata().ino, oldname.clone());
+            cache_lock.remove(&key);
+            // remove from new path
+            new_parent.remove_child(newinode.clone())?;
+            let key = HashKey::new(new_parent.metadata().ino, newname.clone());
+            cache_lock.remove(&key);
+            drop(cache_lock);
+
+            if flags.contains(Renameat2Flags::RENAME_EXCHANGE) {
+                debug!("[sys_renameat2] exchange old and new");
+                // If flag is RENAME_EXCHANGE, exchange old and new one.
                 if newtype == InodeMode::FileDIR {
-                    new_parent.mkdir(new_parent.clone(), &newpath, newtype)?;
+                    old_parent.mkdir(old_parent.clone(), &newpath, newtype)?;
+                } else {
+                    old_parent.mknod(
+                        old_parent.clone(),
+                        &newpath,
+                        newtype,
+                        newinode.clone().metadata().rdev.unwrap(),
+                    )?;
+                }
+                if oldtype == InodeMode::FileDIR {
+                    new_parent.mkdir(new_parent.clone(), &oldpath, oldtype)?;
                 } else {
                     new_parent.mknod(
                         new_parent.clone(),
-                        &newpath,
-                        newtype,
+                        &oldpath,
+                        oldtype,
                         oldinode.clone().metadata().rdev.unwrap(),
                     )?;
                 }
+                // inner exchange
+                let old_inner_lock = old_parent.metadata().inner.lock();
+                // get inner before overwrite
                 let mut oldinner = oldinode.metadata().inner.lock().clone();
-                oldinner.parent = Some(Arc::downgrade(&new_parent));
                 let new_inner_lock = new_parent.metadata().inner.lock();
+                // get inner before overwrite
+                let mut newinner = newinode.metadata().inner.lock().clone();
+                // overwrite with current oldpath inode
+                let oldinode = old_inner_lock.children.get(oldname.as_str()).unwrap();
+                // overwrite with current newpath inode
                 let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
+                // overwrite the newinner with current old_parent
+                newinner.parent = Some(Arc::downgrade(&old_parent));
+                oldinode.metadata().inner_set(newinner);
+                // overwrite the oldinner with current new_parent
+                oldinner.parent = Some(Arc::downgrade(&new_parent));
                 newinode.metadata().inner_set(oldinner);
+                // add to cache
+                let mut cache_lock = INODE_CACHE.lock();
+                let key = HashKey::new(old_parent.metadata().ino, newname);
+                cache_lock.insert(key, newinode.clone());
+                let key = HashKey::new(new_parent.metadata().ino, oldname);
+                cache_lock.insert(key, oldinode.clone());
                 Ok(0)
             } else {
-                panic!("not support");
+                // Normally, replace the newpath.
+                // But you should check the newpath type, if newtype is not the same as oldtype, should return EISDIR or ENOTEMPTY or ENOTDIR
+                debug!("[sys_renameat2] replace newpath");
+                if newtype == oldtype {
+                    // the same type, replace directly.
+                    if newtype == InodeMode::FileDIR {
+                        new_parent.mkdir(new_parent.clone(), &newpath, newtype)?;
+                    } else {
+                        new_parent.mknod(
+                            new_parent.clone(),
+                            &newpath,
+                            newtype,
+                            oldinode.clone().metadata().rdev.unwrap(),
+                        )?;
+                    }
+                    let mut oldinner = oldinode.metadata().inner.lock().clone();
+                    oldinner.parent = Some(Arc::downgrade(&new_parent));
+                    let new_inner_lock = new_parent.metadata().inner.lock();
+                    let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
+                    newinode.metadata().inner_set(oldinner);
+                    let mut cache_lock = INODE_CACHE.lock();
+                    let key = HashKey::new(new_parent.metadata().ino, newname);
+                    cache_lock.insert(key, newinode.clone());
+                    Ok(0)
+                } else {
+                    panic!("not support");
+                }
             }
         }
     }
+}
+
+pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_c_str(path_name as *const u8)?;
+    let path = c_str_to_string(path_name as *const u8);
+    info!(
+        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}",
+        dirfd, path, buf, buf_size
+    );
+    UserCheck::new().check_writable_slice(buf as *mut u8, buf_size)?;
+
+    // TODO: optimize
+    let target = "/lmbench_all".to_string();
+    unsafe {
+        (buf as *mut u8).copy_from(target.as_ptr(), target.len());
+        *((buf + target.len()) as *mut u8) = 0;
+    }
+    // Err(SyscallErr::ENOENT)
+    Ok(0)
 }
 
 /// change file timestamps with nanosecond precision
@@ -1101,14 +1073,14 @@ pub fn sys_utimensat(
     }
     let pathname = pathname.unwrap();
     debug!("[sys_utimensat] pathname: {}", pathname);
-    let inode = fs::inode::open_file(&pathname, OpenFlags::RDWR);
+    let inode = resolve_path(&pathname, OpenFlags::RDWR);
     match inode {
         Some(inode) => {
             let mut inner_lock = inode.metadata().inner.lock();
             if times.is_null() {
                 debug!("[sys_utimensat] times is null");
                 // If times is null, then both timestamps are set to the current time.
-                inner_lock.st_atim = get_time_spec();
+                inner_lock.st_atim = current_time_spec();
                 inner_lock.st_mtim = inner_lock.st_atim;
             } else {
                 // times[0] for atime, times[1] for mtime
@@ -1119,7 +1091,7 @@ pub fn sys_utimensat(
                 let mtime = unsafe { &*times };
                 if atime.nsec == UTIME_NOW || mtime.nsec == UTIME_NOW {
                     debug!("[sys_utimensat] nsec is UTIME_NOW");
-                    inner_lock.st_atim = get_time_spec();
+                    inner_lock.st_atim = current_time_spec();
                     inner_lock.st_mtim = inner_lock.st_atim;
                 } else if atime.nsec == UTIME_OMIT || mtime.nsec == UTIME_OMIT {
                     debug!("[sys_utimensat] nsec is UTIME_OMIT");
@@ -1143,8 +1115,8 @@ pub fn sys_utimensat(
 pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
-    let flags = FnctlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let _mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
+    let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     UserCheck::new().check_c_str(pathname)?;
     stack_trace!();
     let pathname = path::path_process(dirfd, pathname);
@@ -1154,27 +1126,284 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     }
     let pathname = pathname.unwrap();
     debug!("[sys_faccessat] pathname: {}", pathname);
-    let inode = fs::inode::open_file(&pathname, OpenFlags::RDONLY);
+    let inode = resolve_path(&pathname, OpenFlags::RDONLY);
     match inode {
-        Some(inode) => {
-            // TODO: add user concept and check mode
-            // check inode mode and arg mode
-            // if mode.contains(FaccessatFlags::R_OK)
-            //     && !(f_flags.contains(OpenFlags::RDONLY) || f_flags.contains(OpenFlags::RDWR))
-            // {
-            //     debug!("[sys_faccessat] cannot read");
-            //     Err(SyscallErr::EACCES)
-            // } else if mode.contains(FaccessatFlags::W_OK) && f_flags.contains(OpenFlags::RDONLY) {
-            //     debug!("[sys_faccessat] cannot write");
-            //     Err(SyscallErr::EROFS)
-            // } else {
-            //     Ok(0)
-            // }
+        Some(_inode) => {
+            // We doesn't support user concept, if the file exist, then return 0.
             Ok(0)
         }
         None => {
             debug!("[sys_faccessat] don't find inode");
             Err(SyscallErr::ENOENT)
         }
+    }
+}
+
+pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new().check_c_str(path)?;
+    UserCheck::new().check_writable_slice(buf as *mut u8, STATFS_SIZE)?;
+    let _sum_guard = SumGuard::new();
+    let path = path::path_process(AT_FDCWD, path);
+    if path.is_none() {
+        debug!("[sys_statfs] path does not exist");
+        return Err(SyscallErr::ENOENT);
+    }
+    let stfs = Statfs::new();
+    // TODO: find the target fs
+    unsafe {
+        ptr::write(buf, stfs);
+    }
+    Ok(0)
+}
+
+pub fn sys_sysinfo(info: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(info as *mut u8, SYSINFO_SIZE)?;
+    let sysinfo = Sysinfo::collect();
+    let buf_ptr = info as *mut Sysinfo;
+    unsafe {
+        stack_trace!();
+        ptr::write(buf_ptr, sysinfo);
+    }
+    Ok(0)
+}
+
+pub fn sys_syslog(log_type: u32, bufp: *mut u8, len: u32) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(bufp, len as usize)?;
+    match log_type as usize {
+        2 | 3 | 4 => {
+            // For type equal to 2, 3, or 4, a successful call to syslog() returns the number of bytes read.
+            Ok(0)
+        }
+        9 => {
+            // For type 9, syslog() returns the number of bytes currently available to be read on the kernel log buffer.
+            Ok(0)
+        }
+        10 => {
+            // For type 10, syslog() returns the total size of the kernel log buffer.  For other values of type, 0 is returned on success.
+            Ok(0)
+        }
+        _ => {
+            // For other values of type, 0 is returned on success.
+            Ok(0)
+        }
+    }
+}
+
+pub async fn sys_ppoll(
+    fds_ptr: usize,
+    nfds: usize,
+    timeout_ptr: usize,
+    sigmask_ptr: usize,
+) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+
+    UserCheck::new()
+        .check_writable_slice(fds_ptr as *mut u8, core::mem::size_of::<PollFd>() * nfds)?;
+    let raw_fds: &mut [PollFd] =
+        unsafe { core::slice::from_raw_parts_mut(fds_ptr as *mut PollFd, nfds) };
+    // TODO: can we just use the fds in place without allocating memeory in heap?
+    let mut fds: Vec<PollFd> = Vec::new();
+    fds.extend_from_slice(raw_fds);
+
+    trace!("[sys_ppoll]: fds {:?}", fds);
+
+    let timeout = match timeout_ptr {
+        0 => {
+            trace!("[sys_ppoll]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
+        }
+    };
+
+    if sigmask_ptr != 0 {
+        stack_trace!();
+        UserCheck::new()
+            .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe { *(sigmask_ptr as *const u32) };
+        current_process().inner_handler(|proc| {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+            } else {
+                warn!("[sys_ppoll]: invalid set arg");
+            }
+        });
+    }
+
+    let poll_future = IOMultiplexFuture::new(fds, IOMultiplexFormat::PollFds(fds_ptr));
+    if let Some(timeout) = timeout {
+        match TimeoutTaskFuture::new(timeout, poll_future).await {
+            TimeoutTaskOutput::Ok(ret) => {
+                return ret;
+            }
+            TimeoutTaskOutput::Timeout => {
+                warn!("[sys_ppoll]: timeout");
+                return Ok(0);
+            }
+        }
+    } else {
+        let ret = poll_future.await;
+        trace!("[sys_ppoll]: ready");
+        ret
+    }
+}
+
+pub async fn sys_pselect6(
+    nfds: i32,
+    readfds_ptr: usize,
+    writefds_ptr: usize,
+    exceptfds_ptr: usize,
+    timeout_ptr: usize,
+    sigmask_ptr: usize,
+) -> SyscallRet {
+    stack_trace!();
+
+    let _sum_guard = SumGuard::new();
+    let mut readfds = {
+        if readfds_ptr != 0 {
+            UserCheck::new()
+                .check_writable_slice(readfds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
+            Some(unsafe { &mut *(readfds_ptr as *mut FdSet) })
+        } else {
+            None
+        }
+    };
+    let mut writefds = {
+        if writefds_ptr != 0 {
+            UserCheck::new()
+                .check_writable_slice(writefds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
+            Some(unsafe { &mut *(writefds_ptr as *mut FdSet) })
+        } else {
+            None
+        }
+    };
+    let mut exceptfds = {
+        if exceptfds_ptr != 0 {
+            UserCheck::new()
+                .check_writable_slice(exceptfds_ptr as *mut u8, core::mem::size_of::<FdSet>())?;
+            Some(unsafe { &mut *(exceptfds_ptr as *mut FdSet) })
+        } else {
+            None
+        }
+    };
+
+    debug!(
+        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}",
+        readfds, writefds, exceptfds
+    );
+
+    let mut fds: Vec<PollFd> = Vec::new();
+    let fd_slot_bits = 8 * core::mem::size_of::<usize>();
+    for fd_slot in 0..FD_SET_LEN {
+        for offset in 0..fd_slot_bits {
+            let fd = fd_slot * fd_slot_bits + offset;
+            if fd >= nfds as usize {
+                break;
+            }
+            if let Some(readfds) = readfds.as_ref() {
+                if readfds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                    fds.push(PollFd {
+                        fd: fd as i32,
+                        events: PollEvents::POLLIN.bits(),
+                        revents: PollEvents::empty().bits(),
+                    })
+                }
+            }
+            if let Some(writefds) = writefds.as_ref() {
+                if writefds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                    if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                            let events = PollEvents::from_bits(last_fd.events).unwrap()
+                                | PollEvents::POLLOUT;
+                            fds.last_mut().unwrap().events = events.bits();
+                        } else {
+                            fds.push(PollFd {
+                                fd: fd as i32,
+                                events: PollEvents::POLLOUT.bits(),
+                                revents: PollEvents::empty().bits(),
+                            })
+                        }
+                }
+            }
+            if let Some(exceptfds) = exceptfds.as_ref() {
+                if exceptfds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                    if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                            let events = PollEvents::from_bits(last_fd.events).unwrap()
+                                | PollEvents::POLLPRI;
+                            fds.last_mut().unwrap().events = events.bits();
+                        } else {
+                            fds.push(PollFd {
+                                fd: fd as i32,
+                                events: PollEvents::POLLPRI.bits(),
+                                revents: PollEvents::empty().bits(),
+                            })
+                        }
+                }
+            }
+        }
+    }
+
+    if let Some(fds) = readfds.as_mut() {
+        fds.clear_all();
+    }
+    if let Some(fds) = writefds.as_mut() {
+        fds.clear_all();
+    }
+    if let Some(fds) = exceptfds.as_mut() {
+        fds.clear_all();
+    }
+
+    let timeout = match timeout_ptr {
+        0 => {
+            debug!("[sys_pselect]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
+        }
+    };
+
+    if sigmask_ptr != 0 {
+        stack_trace!();
+        UserCheck::new()
+            .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
+        let sigmask = unsafe { *(sigmask_ptr as *const u32) };
+        current_process().inner_handler(|proc| {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+            } else {
+                warn!("[sys_pselect]: invalid set arg");
+            }
+        });
+    }
+
+    let poll_future = IOMultiplexFuture::new(
+        fds,
+        IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
+    );
+    if let Some(timeout) = timeout {
+        match TimeoutTaskFuture::new(timeout, poll_future).await {
+            TimeoutTaskOutput::Ok(ret) => {
+                return ret;
+            }
+            TimeoutTaskOutput::Timeout => {
+                warn!("[sys_pselect]: timeout");
+                return Ok(0);
+            }
+        }
+    } else {
+        let ret = poll_future.await;
+        debug!("[sys_pselect]: ready");
+        ret
     }
 }

@@ -1,29 +1,32 @@
-use core::cell::{SyncUnsafeCell, UnsafeCell};
+use core::cell::SyncUnsafeCell;
 
 use alloc::boxed::Box;
-use alloc::{
-    string::{String, ToString},
-    sync::Arc,
-};
-use log::{debug, info, warn};
+use alloc::{string::ToString, sync::Arc};
+use log::{debug, info};
 
-use crate::mm::memory_space::VmArea;
+use crate::fs::posix::StatFlags;
 use crate::utils::error::AsyscallRet;
-use crate::{
-    fs::file_system::FILE_SYSTEM_MANAGER,
-    utils::error::{GeneralRet, SyscallErr, SyscallRet},
-};
+use crate::{fs::file_system::FILE_SYSTEM_MANAGER, utils::error::GeneralRet};
 
 use super::file::{FileMeta, FileMetaInner};
 use super::Mutex;
 use super::{
     file_system::{FileSystem, FileSystemMeta},
-    inode::{InodeMeta, INODE_CACHE},
+    inode::InodeMeta,
     File, Inode, InodeMode, OpenFlags,
 };
 
 pub struct TestRootInode {
-    metadata: Option<InodeMeta>,
+    pub metadata: Option<InodeMeta>,
+}
+
+impl TestRootInode {
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0, None);
+        Self {
+            metadata: Some(metadata),
+        }
+    }
 }
 
 impl Inode for TestRootInode {
@@ -45,19 +48,25 @@ impl Inode for TestRootInode {
         };
         Ok(Arc::new(file))
     }
-    fn mkdir(&self, this: Arc<dyn Inode>, pathname: &str, mode: InodeMode) -> GeneralRet<()> {
-        debug!("testfs mkdir: {}", pathname);
-        let mut new_inode = TestRootInode { metadata: None };
-        new_inode.init(Some(this.clone()), pathname, mode, 0)?;
-        // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
-        let new_inode = Arc::new(new_inode);
-        // INODE_CACHE.lock().insert(key, new_inode.clone());
-        this.metadata()
-            .inner
-            .lock()
-            .children
-            .insert(new_inode.metadata.as_ref().unwrap().name.clone(), new_inode);
-        Ok(())
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+    ) -> GeneralRet<Arc<dyn Inode>> {
+        todo!()
+        // debug!("testfs mkdir: {}", pathname);
+        // let mut new_inode = TestRootInode { metadata: None };
+        // new_inode.init(Some(this.clone()), pathname, mode, 0)?;
+        // // let key = new_inode.metadata().inner.lock().hash_name.name_hash as usize;
+        // let new_inode = Arc::new(new_inode);
+        // // INODE_CACHE.lock().insert(key, new_inode.clone());
+        // this.metadata()
+        //     .inner
+        //     .lock()
+        //     .children
+        //     .insert(new_inode.metadata.as_ref().unwrap().name.clone(), new_inode);
+        // Ok(())
     }
 
     fn metadata(&self) -> &super::inode::InodeMeta {
@@ -146,7 +155,12 @@ pub fn init() -> GeneralRet<()> {
     let mut test_fs = TestFs {
         metadata: SyncUnsafeCell::new(None),
     };
-    test_fs.init("/", crate::fs::FileSystemType::VFAT)?;
+    test_fs.init(
+        "/dev/sda1".to_string(),
+        "/",
+        crate::fs::FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    )?;
 
     FILE_SYSTEM_MANAGER
         .fs_mgr
