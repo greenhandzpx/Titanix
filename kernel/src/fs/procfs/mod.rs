@@ -1,6 +1,6 @@
 use core::sync::atomic::AtomicUsize;
 
-use alloc::{string::ToString, sync::Arc};
+use alloc::{string::ToString, sync::Arc, vec::Vec};
 use log::{debug, info};
 
 use crate::{
@@ -60,6 +60,10 @@ impl Inode for ProcRootInode {
     fn delete_child(&self, child_name: &str) {
         todo!()
     }
+
+    fn sync(&self) {
+        
+    }
 }
 
 impl ProcRootInode {
@@ -82,85 +86,66 @@ const PROC_NAME: [(
 ];
 
 pub struct ProcFs {
-    metadata: Option<FileSystemMeta>,
+    metadata: FileSystemMeta,
     id_allocator: AtomicUsize,
 }
 
 impl ProcFs {
-    pub fn new() -> Self {
-        Self {
-            metadata: None,
-            id_allocator: AtomicUsize::new(0),
+    pub fn new(
+        mount_point: &str,
+        dev_name: &str,
+        fstype: FileSystemType,
+        flags: StatFlags,
+        fa_inode: Option<Arc<dyn Inode>>,
+        covered_inode: Option<Arc<dyn Inode>>,
+    ) -> GeneralRet<Self> {
+        let mut raw_root_inode = ProcRootInode::new();
+        raw_root_inode.init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
+        let root_inode = Arc::new(raw_root_inode);
+
+        let id_allocator = AtomicUsize::new(0);
+
+        let mut cache_lock = INODE_CACHE.lock();
+        let parent_ino = root_inode.metadata().ino;
+        for (proc_name, inode_mode, _) in PROC_NAME {
+            let child = root_inode.mknod(
+                root_inode.clone(),
+                proc_name,
+                inode_mode,
+                id_allocator
+                    .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
+            )?;
+            let child_name = child.metadata().name.clone();
+            let key = HashKey::new(parent_ino, child_name);
+            cache_lock.insert(key, child);
+            debug!("insert {} finished", proc_name);
         }
+
+        Ok(Self {
+            metadata: FileSystemMeta {
+                dev_name: dev_name.to_string(),
+                mount_point: mount_point.to_string(),
+                fstype,
+                flags,
+                root_inode,
+                fa_inode,
+                covered_inode,
+                s_dirty: Vec::new(),
+            }, 
+            id_allocator,
+        })
     }
 }
+
 
 impl FileSystem for ProcFs {
-    fn create_root(
-        &self,
-        parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
-    ) -> GeneralRet<Arc<dyn Inode>> {
-        let mut root_inode = ProcRootInode::new();
-        root_inode.init(parent.clone(), mount_point, InodeMode::FileDIR, 0)?;
-        let res = Arc::new(root_inode);
-        let name = path::get_name(mount_point);
-        let parent = parent.expect("No pareny");
-        parent
-            .metadata()
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), res.clone());
-        Ok(res)
+
+
+    fn metadata(&self) -> &FileSystemMeta {
+        &self.metadata
     }
 
-    fn set_metadata(&mut self, metadata: FileSystemMeta) {
-        self.metadata = Some(metadata);
+    fn sync_fs(&self) {
+        
     }
-
-    fn metadata(&self) -> FileSystemMeta {
-        self.metadata.as_ref().unwrap().clone()
-    }
-}
-
-pub fn init() -> GeneralRet<()> {
-    info!("start to init procfs...");
-    let mut proc_fs = ProcFs::new();
-    proc_fs.init(
-        "proc".to_string(),
-        "/proc",
-        FileSystemType::VFAT,
-        StatFlags::ST_NOSUID | StatFlags::ST_NODEV | StatFlags::ST_NOEXEC,
-    )?;
-    let proc_fs = Arc::new(proc_fs);
-    let proc_root_inode = proc_fs.metadata().root_inode.as_ref().cloned().unwrap();
-
-    let mut cache_lock = INODE_CACHE.lock();
-    let parent_ino = proc_root_inode.metadata().ino;
-
-    for (proc_name, inode_mode, _) in PROC_NAME {
-        let child = proc_root_inode.mknod(
-            proc_root_inode.clone(),
-            proc_name,
-            inode_mode,
-            proc_fs
-                .id_allocator
-                .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-        )?;
-        let child_name = child.metadata().name.clone();
-        let key = HashKey::new(parent_ino, child_name);
-        cache_lock.insert(key, child);
-        debug!("[procfs] insert {} finished", proc_name);
-    }
-
-    FILE_SYSTEM_MANAGER
-        .fs_mgr
-        .lock()
-        .insert("/proc".to_string(), proc_fs);
-    info!("[procfs] init procfs success");
-
-    proc_root_inode.metadata().inner.lock().state = InodeState::Synced;
-
-    Ok(())
 }

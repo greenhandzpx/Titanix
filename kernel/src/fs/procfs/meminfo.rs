@@ -126,6 +126,10 @@ impl Inode for MeminfoInode {
     fn delete_child(&self, child_name: &str) {
         panic!("Unsupported operation")
     }
+
+    fn sync(&self) {
+        
+    }
 }
 
 pub struct MeminfoFile {

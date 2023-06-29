@@ -6,13 +6,14 @@ mod file_system;
 mod hash_key;
 pub mod inode;
 // pub mod inode_fat32_tmp;
-pub mod fat32_tmp;
+// pub mod fat32_tmp;
 pub mod pipe;
 pub mod posix;
 mod procfs;
 mod testfs;
 
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;
@@ -28,7 +29,7 @@ use log::debug;
 use log::info;
 use log::warn;
 
-use crate::fs::fat32::ROOT_FS;
+use crate::driver::BLOCK_DEVICE;
 use crate::mm::MapPermission;
 use crate::processor::current_process;
 use crate::stack_trace;
@@ -38,17 +39,46 @@ use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
 
+use self::file_system::FsDevice;
+use self::inode::INODE_CACHE;
+use self::posix::StatFlags;
+
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub fn init() {
-    fat32::init().expect("fat32 init fail");
-    // // first mount root fs
-    // testfs::init().expect("testfs init fail");
-    // todo!();
-    devfs::init().expect("devfs init fail");
-    procfs::init().expect("procfs init fail");
-}
+    FILE_SYSTEM_MANAGER.mount(
+        "/",
+        "/dev/mmcblk0",
+        file_system::FsDevice::BlockDevice(Arc::clone(&BLOCK_DEVICE)),
+        FileSystemType::VFAT,
+        StatFlags::ST_NOSUID
+    ).expect("rootfs init fail!");
+    // FILE_SYSTEM_MANAGER.mount("/", "/dev/vda2", FsDevice::None, FileSystemType::VFAT, StatFlags::ST_NOSUID);
 
+    let root_inode = FILE_SYSTEM_MANAGER.root_inode();
+    
+    let dev_dir = root_inode.mkdir(
+        Arc::clone(&root_inode),
+        "/dev",
+        InodeMode::FileDIR
+    ).expect("mkdir /dev fail!");
+
+    let key = HashKey::new(
+        root_inode.metadata().ino,
+        "dev".to_string()
+    );
+    INODE_CACHE.lock().insert(key, dev_dir);
+
+    FILE_SYSTEM_MANAGER.mount(
+        "/dev",
+        "udev",
+        FsDevice::None,
+        FileSystemType::DevTmpFS,
+        StatFlags::ST_NOSUID
+    ).expect("devfs init fail!");
+
+    list_rootfs();
+}
 pub const AT_FDCWD: isize = -100;
 
 bitflags! {
@@ -143,7 +173,7 @@ impl From<MapPermission> for OpenFlags {
 #[allow(unused)]
 pub fn print_dir_tree() {
     info!("------------ dir tree: ------------");
-    let parent = ROOT_FS.metadata().root_inode.clone().unwrap();
+    let parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
     print_dir_recursively(parent, 1);
 }
 
@@ -240,5 +270,12 @@ pub fn open_file(absolute_path: Option<String>, flags: u32) -> SyscallRet {
             debug!("cannot find the file, absolute_path is none");
             Err(SyscallErr::ENOENT)
         }
+    }
+}
+
+pub fn list_rootfs() {
+    FILE_SYSTEM_MANAGER.root_inode().load_children_from_disk(FILE_SYSTEM_MANAGER.root_inode());
+    for sb in FILE_SYSTEM_MANAGER.root_inode().metadata().inner.lock().children.iter() {
+        println!("-- {}", sb.0);
     }
 }

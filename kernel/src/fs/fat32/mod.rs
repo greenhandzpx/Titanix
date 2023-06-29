@@ -1,4 +1,4 @@
-use crate::{driver::{block::BlockDevice, BLOCK_DEVICE}, utils::error::GeneralRet, fs::FileSystemType};
+use crate::{driver::{block::BlockDevice, BLOCK_DEVICE}, utils::error::{GeneralRet, SyscallErr}, fs::FileSystemType};
 use alloc::{sync::Arc, vec::Vec, string::ToString};
 use log::info;
 use lazy_static::lazy_static;
@@ -9,7 +9,7 @@ use self::{
     inode::FAT32Inode
 };
 
-use super::{FileSystem, file_system::FileSystemMeta, posix::StatFlags};
+use super::{FileSystem, file_system::FileSystemMeta, posix::StatFlags, Inode, FILE_SYSTEM_MANAGER};
 
 mod bpb;
 mod dentry;
@@ -36,26 +36,22 @@ const FSI_NOT_AVAILABLE:    u32 = 0xFFFFFFFF;
 
 pub struct FAT32FileSystem {
     block_device: Arc<dyn BlockDevice>,
-    meta: Option<FileSystemMeta>,
+    meta: FileSystemMeta,
 }
 
 impl FAT32FileSystem {
     /// do nothing but store block device.
-    pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        Self {
-            block_device: Arc::clone(&block_device),
-            meta: None,
-        }
-    }
-
-    pub fn do_nothing(&self) {
-
-    }
-
-    pub fn rootfs_mount(&mut self) -> Option<()> {
+    pub fn new(
+        block_device: Arc<dyn BlockDevice>,
+        mount_point: &str,
+        dev_name: &str,
+        fstype: FileSystemType,
+        flags: StatFlags,
+        fa_inode: Option<Arc<dyn Inode>>,
+        covered_inode: Option<Arc<dyn Inode>>,
+    ) -> GeneralRet<Self> {
         let mut bs_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
-        self.block_device
-            .read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
+        block_device.read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
         let raw_bs: BootSector = BootSector::new(&bs_data);
         if raw_bs.BPB_BytesPerSector as usize != SECTOR_SIZE
             || raw_bs.BPB_RootEntryCount != 0
@@ -63,54 +59,50 @@ impl FAT32FileSystem {
             || raw_bs.BPB_FATsize16 != 0
             || raw_bs.BPB_FSVer != 0
         {
-            return None;
+            return Err(SyscallErr::EINVAL);
         }
         let info = Arc::new(FAT32Info::new(raw_bs));
         let fat = Arc::new(FileAllocTable::new(
-            Arc::clone(&self.block_device),
+            Arc::clone(&block_device),
             Arc::clone(&info),
         ));
-        let root_inode = FAT32Inode::new_root_dentry(Arc::clone(&fat), None, "/", info.root_cluster_id);
-        self.meta = Some(FileSystemMeta {
-            dev_name: "/dev/mmcblk".to_string(),
-            ftype: FileSystemType::VFAT,
-            root_inode: Some(Arc::new(root_inode)),
-            mnt_flags: false,
+        let root_inode = FAT32Inode::new_root(
+            Arc::clone(&fat),
+            Option::clone(&fa_inode),
+            mount_point,
+            info.root_cluster_id
+        );
+        let root_inode: Arc<dyn Inode> = Arc::new(root_inode);
+        let meta = FileSystemMeta {
+            dev_name: dev_name.to_string(),
+            mount_point: mount_point.to_string(),
+            fstype,
+            flags,
+            root_inode,
+            fa_inode,
+            covered_inode,
             s_dirty: Vec::new(),
-            flags: StatFlags::ST_NOSUID,
-        });
-        Some(())
+        };
+        let ret = Self {
+            block_device: Arc::clone(&block_device),
+            meta,
+        };
+        Ok(ret)
     }
-
 }
 
 impl FileSystem for FAT32FileSystem {
-    fn create_root(
-            &self,
-            _parent: Option<Arc<dyn super::Inode>>,
-            _mount_point: &str,
-        ) -> GeneralRet<Arc<dyn super::Inode>> {
-        todo!();
+    fn sync_fs(&self) {
+        self.metadata().root_inode.sync();
     }
-    fn set_metadata(&mut self, _metadata: FileSystemMeta) {
-        todo!();
-    }
-    fn metadata(&self) -> FileSystemMeta {
-        self.meta.as_ref().unwrap().clone()
+
+    fn metadata(&self) -> &FileSystemMeta {
+        &self.meta
     }
 }
 
-lazy_static! {
-    pub static ref ROOT_FS: FAT32FileSystem = {
-        let mut ret = FAT32FileSystem::new(Arc::clone(&BLOCK_DEVICE));
-        ret.rootfs_mount();
-        ret
-    };
-}
-
-pub fn init() -> GeneralRet<()> {
-    info!("start to init FAT32(rootfs):");
-    ROOT_FS.do_nothing();
-    info!("FAT32 init ok!");
-    Ok(())
+impl Drop for FAT32FileSystem {
+    fn drop(&mut self) {
+        self.sync_fs();
+    }
 }

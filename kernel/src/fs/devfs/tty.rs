@@ -52,6 +52,9 @@ impl Inode for TtyInode {
     fn delete_child(&self, _child_name: &str) {
         panic!()
     }
+    fn sync(&self) {
+        
+    }
 }
 
 const PRINT_LOCKED: bool = true;

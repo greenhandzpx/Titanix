@@ -1,10 +1,10 @@
-use alloc::{sync::Arc, boxed::Box};
+use alloc::{sync::Arc, boxed::Box, string::ToString};
 use crate::{
     fs::{
         inode::{Inode, InodeMeta, InodeMode},
         Mutex, fat32::dentry::FAT32DentryContent,
     },
-    utils::error::GeneralRet,
+    utils::{error::{GeneralRet, SyscallErr}, path},
 };
 
 use log::info;
@@ -19,7 +19,7 @@ pub struct FAT32Inode {
 }
 
 impl FAT32Inode {
-    pub fn new_root_dentry(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, path: &str, first_cluster: usize) -> Self {
+    pub fn new_root(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, path: &str, first_cluster: usize) -> Self {
         let mode = InodeMode::FileDIR;
         let meta = InodeMeta::new(fa_inode, path, mode, 0, None);
         let file = FAT32File::new(fat, first_cluster, None);
@@ -29,7 +29,7 @@ impl FAT32Inode {
         }
     }
 
-    pub fn new(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, dentry: &FAT32DirEntry) -> Self {
+    pub fn from_dentry(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, dentry: &FAT32DirEntry) -> Self {
         let mode = if (dentry.attr & ATTR_DIRECTORY) == ATTR_DIRECTORY {InodeMode::FileDIR} else {InodeMode::FileREG};
         let meta = InodeMeta::new(fa_inode, &dentry.fname(), mode,
             if mode == InodeMode::FileREG {dentry.filesize as usize} else {0}, None);
@@ -46,6 +46,17 @@ impl FAT32Inode {
             file: Mutex::new(file),
         }
     }
+
+    pub fn new(fat: Arc<FileAllocTable>, fa_inode: Arc<dyn Inode>, filename: &str, mode: InodeMode) -> Self {
+        let meta = InodeMeta::new(Some(fa_inode), filename, mode, 0, None);
+        let file = FAT32File::new(Arc::clone(&fat), 0, if mode == InodeMode::FileREG {Some(0)} else {None});
+        Self {
+            meta: Some(meta),
+            file: Mutex::new(file),
+        }
+    }
+
+
 }
 
 impl Inode for FAT32Inode {
@@ -72,7 +83,7 @@ impl Inode for FAT32Inode {
         let fat = Arc::clone(&content.fat);
         let mut dentry_content = FAT32DentryContent::new(&mut content);
         while let Some(dentry) = FAT32DirEntry::read_dentry(&mut dentry_content) {
-            let inode = FAT32Inode::new(Arc::clone(&fat), Some(Arc::clone(&this)), &dentry);
+            let inode = FAT32Inode::from_dentry(Arc::clone(&fat), Some(Arc::clone(&this)), &dentry);
             let inode_rc: Arc<dyn Inode> = Arc::new(inode);
             <dyn Inode>::create_page_cache_if_needed(Arc::clone(&inode_rc));
             meta_inner.children.insert(dentry.fname(), Arc::clone(&inode_rc));
@@ -91,33 +102,46 @@ impl Inode for FAT32Inode {
         })
     }
 
-    fn mkdir(&self, _this: Arc<dyn Inode>, _pathname: &str, _mode: InodeMode) -> GeneralRet<Arc<dyn Inode>> {
-        todo!()
+    fn mkdir(
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode
+    ) -> GeneralRet<Arc<dyn Inode>> {
+        let name = path::get_name(pathname);
+        if self.metadata().mode != InodeMode::FileDIR {
+            return Err(SyscallErr::ENOTDIR);
+        }
+        let fat = Arc::clone(&self.file.lock().fat);
+        let s_inode = FAT32Inode::new(fat, this, name, mode);
+        let inode = Arc::new(s_inode);
+        Ok(inode)
     }
 
     fn mknod(
-            &self,
-            _this: Arc<dyn Inode>,
-            _pathname: &str,
-            _mode: InodeMode,
-            _dev_id: usize,
-        ) -> GeneralRet<Arc<dyn Inode>> {
-            todo!()
-    }
+        &self,
+        this: Arc<dyn Inode>,
+        pathname: &str,
+        mode: InodeMode,
+        _dev_id: usize,
+    ) -> GeneralRet<Arc<dyn Inode>> {
+        let fname = path::get_name(pathname);
+        if self.metadata().mode != InodeMode::FileDIR {
+            return Err(SyscallErr::ENOTDIR);
+        }
+        let fat = Arc::clone(&self.file.lock().fat);
+        let s_inode = FAT32Inode::new(fat, this, fname, mode);
+        let inode: Arc<dyn Inode> = Arc::new(s_inode);
 
-    fn remove_child(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
-        todo!()
-    }
-
-    fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
-        todo!()
-    }
-
-    fn unlink(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
-        todo!()
+        self.metadata().inner.lock().children.insert(fname.to_string(), Arc::clone(&inode));
+        Ok(inode)
     }
 
     fn delete_child(&self, child_name: &str) {
+        self.metadata().inner.lock().children.remove(child_name);
+    }
+
+    fn sync(&self) {
         todo!()
     }
 }

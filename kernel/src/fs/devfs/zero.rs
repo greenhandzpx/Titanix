@@ -49,6 +49,9 @@ impl Inode for ZeroInode {
     fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation delete")
     }
+    fn sync(&self) {
+        
+    }
 }
 
 pub struct ZeroFile {

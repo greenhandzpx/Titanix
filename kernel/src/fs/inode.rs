@@ -23,7 +23,6 @@ use crate::{
 };
 
 use super::{
-    fat32::ROOT_FS,
     file::{DefaultFile, FileMeta, FileMetaInner},
     file_system::FILE_SYSTEM_MANAGER,
     hash_key::HashKey,
@@ -219,6 +218,9 @@ pub trait Inode: Send + Sync {
     /// You should call this function through parent inode.
     /// TODO: This function should be implemented by actual filesystem.
     fn delete_child(&self, child_name: &str);
+
+
+    fn sync(&self);
 }
 
 impl dyn Inode {
@@ -256,15 +258,7 @@ impl dyn Inode {
     ) -> Option<Arc<dyn Inode>> {
         let path_names = path::path2vec(path);
         // path_names.remove(0);
-
-        let root_fs = FILE_SYSTEM_MANAGER
-            .fs_mgr
-            .lock()
-            .get("/")
-            .cloned()
-            .expect("No root fs is mounted");
-
-        let mut parent = root_fs.metadata().root_inode.clone().unwrap();
+        let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         for name in path_names {
             match parent.lookup(parent.clone(), name) {
@@ -282,7 +276,7 @@ impl dyn Inode {
         let path_names = path::path2vec(path);
         // path_names.remove(0);
 
-        let mut parent = ROOT_FS.metadata().root_inode.clone().unwrap();
+        let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         for (i, name) in path_names.into_iter().enumerate() {
             debug!("[lookup_from_root_tmp] round: {}, name: {}", i, name);
