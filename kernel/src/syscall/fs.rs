@@ -1386,7 +1386,6 @@ pub async fn sys_pselect6(
         fds.clear_all();
     }
 
-
     if sigmask_ptr != 0 {
         stack_trace!();
         UserCheck::new()
@@ -1406,12 +1405,19 @@ pub async fn sys_pselect6(
         IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
     );
     if let Some(timeout) = timeout {
+        if !timeout.is_zero() {
+            info!("[sys_pselect]: timeout {:?}", timeout);
+        }
         match TimeoutTaskFuture::new(timeout, poll_future).await {
             TimeoutTaskOutput::Ok(ret) => {
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {
-                debug!("[sys_pselect]: timeout");
+                if !timeout.is_zero() {
+                    info!("[sys_pselect]: timeout!, {:?}", timeout);
+                } else {
+                    debug!("[sys_pselect]: timeout!");
+                }
                 return Ok(0);
             }
         }

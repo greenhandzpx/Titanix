@@ -28,7 +28,6 @@ impl StackTracker {
         for stack_info in &self.stack_info_trace {
             warn!("{}", stack_info);
         }
-        println!("");
     }
 }
 

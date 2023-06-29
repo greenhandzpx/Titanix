@@ -12,7 +12,7 @@ use crate::{
 
 pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
-    info!(
+    debug!(
         "[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}, act size {}",
         sig,
         act as usize,
@@ -35,7 +35,8 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             unsafe {
                 oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, 1);
                 debug!(
-                    "[sys_rt_sigaction]: get old sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}",
+                    "[sys_rt_sigaction]: sig {}, get old sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}",
+                    sig,
                     (*oldact).sa_handler as *const usize as usize,
                     (*oldact).sa_mask[0],
                     (*oldact).sa_flags
@@ -89,8 +90,9 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
                 }
             };
             // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
-            debug!(
-                "[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}",
+            info!(
+                "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}",
+                sig,
                 new_sigaction.sig_action.sa_handler as *const usize as usize,
                 new_sigaction.sig_action.sa_mask[0],
                 new_sigaction.sig_action.sa_flags,
@@ -171,6 +173,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
 
 pub fn sys_rt_sigreturn() -> SyscallRet {
     stack_trace!();
+    info!("[sys_rt_sigreturn] sig return");
     let signal_context = current_task().signal_context();
     // restore the old sig mask
     current_process().inner_handler(|proc| {
@@ -245,23 +248,18 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
             if pid < 0 {
                 pid = -pid;
             }
-            if let Some(proc) = PROCESS_MANAGER.0.lock().get(&(pid as usize)) {
-                if let Some(proc) = proc.upgrade() {
-                    let sig_info = SigInfo {
-                        signo: signo as usize,
-                        errno: 0,
-                    };
-                    debug!(
-                        "proc {} send signal {} to proc {}",
-                        current_process().pid(),
-                        signo,
-                        proc.pid()
-                    );
-                    proc.send_signal(sig_info);
-                } else {
-                    // No such proc
-                    return Err(SyscallErr::ESRCH);
-                }
+            if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid as usize) {
+                let sig_info = SigInfo {
+                    signo: signo as usize,
+                    errno: 0,
+                };
+                debug!(
+                    "proc {} send signal {} to proc {}",
+                    current_process().pid(),
+                    signo,
+                    proc.pid()
+                );
+                proc.send_signal(sig_info);
             } else {
                 // No such proc
                 return Err(SyscallErr::ESRCH);

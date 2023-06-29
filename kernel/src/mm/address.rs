@@ -1,5 +1,5 @@
 //! Implementation of physical and virtual address and page number.
-use log::warn;
+use log::{warn, error};
 
 use super::PageTableEntry;
 use crate::config::{
@@ -111,8 +111,13 @@ impl From<usize> for VirtAddr {
 impl From<usize> for VirtPageNum {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << VPN_WIDTH_SV39) - 1))
-        let tmp = (v as isize >> VPN_WIDTH_SV39) as isize;
-        assert!(tmp == 0 || tmp == -1);
+        let tmp = v >> (VPN_WIDTH_SV39 - 1);
+        assert!(tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1);
+        // let tmp = ((v as isize) >> VPN_WIDTH_SV39) as isize;
+        // if tmp != 0 && tmp != -1 {
+        //     error!("tmp {:#x}, v {:#x}", tmp, v);
+        // }
+        // assert!(tmp == 0 || tmp == -1);
         Self(v)
     }
 }
@@ -201,15 +206,15 @@ impl From<PhysPageNum> for PhysAddr {
 }
 
 impl VirtPageNum {
-    ///Return VPN 3 level index
-    pub fn indexes(&self) -> [usize; PAGE_TABLE_LEVEL_NUM] {
+    ///Return VPN 3 level indices
+    pub fn indices(&self) -> [usize; PAGE_TABLE_LEVEL_NUM] {
         let mut vpn = self.0;
-        let mut idx = [0usize; PAGE_TABLE_LEVEL_NUM];
+        let mut indices = [0usize; PAGE_TABLE_LEVEL_NUM];
         for i in (0..PAGE_TABLE_LEVEL_NUM).rev() {
-            idx[i] = vpn & 511;
+            indices[i] = vpn & 511;
             vpn >>= 9;
         }
-        idx
+        indices
     }
 }
 

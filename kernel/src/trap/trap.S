@@ -5,7 +5,7 @@
 .macro LOAD_GP n
     ld x\n, \n*8(sp)
 .endm
-    .section .text.trampoline
+    .section .text
     .globl __trap_from_user
     .globl __return_to_user
     .align 2

@@ -1,3 +1,5 @@
+use core::arch::global_asm;
+
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, trace, warn};
 use xmas_elf::ElfFile;
@@ -40,12 +42,14 @@ mod cow;
 
 extern "C" {
     fn stext();
+    fn strampoline();
+    fn sigreturn_trampoline();
+    fn etrampoline();
     fn etext();
     fn srodata();
     fn erodata();
     fn sdata();
     fn edata();
-    // fn sbss_with_stack();
     fn sstack();
     fn estack();
     fn sbss();
@@ -96,19 +100,20 @@ impl MemorySpace {
 
     ///Create an empty `MemorySpace` but owns the global kernel mapping
     pub fn new_from_global() -> Self {
-        let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
         // TODO: optimize:
         // Now we copy all the kernel space's ptes one by one
         // but actually we can only copy the root ppn's corresponding ptes(i.e. level 1)
         // which may be faster (see `PageTable::from_global()`)
-        let mut new_page_table = PageTable::new();
-        for (_, area) in kernel_space.areas.get_unchecked_mut().iter() {
-            let pte_flags = PTEFlags::from_bits(area.map_perm.bits()).unwrap();
-            for vpn in area.vpn_range {
-                let ppn = kernel_space.translate(vpn).unwrap().ppn();
-                new_page_table.map(vpn, ppn, pte_flags);
-            }
-        }
+        // let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+        // let mut new_page_table = PageTable::new();
+        // for (_, area) in kernel_space.areas.get_unchecked_mut().iter() {
+        //     let pte_flags = PTEFlags::from_bits(area.map_perm.bits()).unwrap();
+        //     for vpn in area.vpn_range {
+        //         let ppn = kernel_space.translate(vpn).unwrap().ppn();
+        //         new_page_table.map(vpn, ppn, pte_flags);
+        //     }
+        // }
+        let new_page_table = PageTable::from_global();
         let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
             page_table,
@@ -341,12 +346,17 @@ impl MemorySpace {
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_space = Self::new_bare();
+        info!("[kernel] trampoline {:#x}", sigreturn_trampoline as usize);
         // // map trampoline
         // memory_space.map_trampoline();
         // map kernel sections
         info!(
-            "[kernel].text [{:#x}, {:#x})",
-            stext as usize, etext as usize
+            "[kernel].text [{:#x}, {:#x}) [{:#x}, {:#x})",
+            stext as usize, strampoline as usize, etrampoline as usize, etext as usize
+        );
+        info!(
+            "[kernel].text.trampoline [{:#x}, {:#x})",
+            strampoline as usize, etrampoline as usize, 
         );
         info!(
             "[kernel].rodata [{:#x}, {:#x})",
@@ -361,6 +371,10 @@ impl MemorySpace {
             sstack as usize, estack as usize
         );
         info!("[kernel].bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
+        // info!(
+        //     "[kernel[.trampoline [{:#x}, {:#x})",
+        //     strampoline as usize, etrampoline as usize
+        // );
         info!(
             "[kernel]physical mem [{:#x}, {:#x})",
             ekernel as usize, MEMORY_END as usize
@@ -370,6 +384,18 @@ impl MemorySpace {
         memory_space.push(
             VmArea::new(
                 (stext as usize).into(),
+                (strampoline as usize).into(),
+                MapType::Identical,
+                MapPermission::R | MapPermission::X,
+                None,
+                None,
+            ),
+            0,
+            None,
+        );
+        memory_space.push(
+            VmArea::new(
+                (etrampoline as usize).into(),
                 (etext as usize).into(),
                 MapType::Identical,
                 MapPermission::R | MapPermission::X,
@@ -432,6 +458,20 @@ impl MemorySpace {
             0,
             None,
         );
+        info!("[kernel]mapping signal-return trampoline");
+        memory_space.push(
+            VmArea::new(
+                (strampoline as usize).into(),
+                (etrampoline as usize).into(),
+                MapType::Identical,
+                MapPermission::R | MapPermission::X | MapPermission::U,
+                None,
+                None,
+            ),
+            0,
+            None,
+        );
+        // info!("{:#x}", unsafe { *(strampoline as usize as *const usize) });
         info!("[kernel]mapping physical memory");
         memory_space.push(
             VmArea::new(
@@ -473,7 +513,7 @@ impl MemorySpace {
 
         let mut max_end_vpn = offset.floor();
         let mut head_va = 0;
-        debug!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+        info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -498,13 +538,13 @@ impl MemorySpace {
                 let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
                 max_end_vpn = vm_area.vpn_range.end();
 
-                let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
+                let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
                 self.push(
                     vm_area,
-                    offset,
+                    map_offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                debug!(
+                info!(
                     "[map_elf]: {:#x}, {:#x}, map_perm: {:?}",
                     start_va.0, end_va.0, map_perm
                 );
@@ -686,8 +726,9 @@ impl MemorySpace {
 
     ///Clone a same `MemorySpace`
     pub fn from_existed_user(user_space: &Self) -> Self {
+        stack_trace!();
         // let mut memory_space = Self::new_bare();
-        let memory_space = Self::new_from_global();
+        let mut memory_space = Self::new_from_global();
         let new_pagetable = memory_space.page_table.get_unchecked_mut();
         // // map trampoline
         // memory_space.map_trampoline();
@@ -710,6 +751,7 @@ impl MemorySpace {
             }
             memory_space.push_lazily(new_area, None);
         }
+        memory_space.heap_range = user_space.heap_range;
         memory_space
     }
     ///Clone a same `MemorySpace`
@@ -721,17 +763,6 @@ impl MemorySpace {
             CowPageManager::from_another(&user_space.cow_pages, memory_space.page_table.clone());
 
         let new_pagetable = memory_space.page_table.get_unchecked_mut();
-
-        // for (_, area) in user_space.areas.iter_mut() {
-        //     // clear write bit && add cow bit
-        //     if area.map_perm.contains(MapPermission::W)
-        //         || area.map_perm.contains(MapPermission::COW)
-        //     {
-        //         area.map_perm |= MapPermission::COW;
-        //         area.map_perm.remove(MapPermission::W);
-        //         area.handler = Some(Arc::new(CowPageFaultHandler {}));
-        //     }
-        // }
 
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
@@ -782,8 +813,10 @@ impl MemorySpace {
             }
             memory_space.push_lazily(new_area, None);
         }
+        memory_space.heap_range = user_space.heap_range;
         user_space.activate();
         new_pagetable.activate();
+
         memory_space
     }
     ///Refresh TLB with `sfence.vma`

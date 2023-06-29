@@ -141,6 +141,7 @@ impl VmArea {
 
     /// Alloc a new physical frame and add the given va to the pagetable
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) -> PhysPageNum {
+        stack_trace!();
         let ppn: PhysPageNum;
         match self.map_type {
             MapType::Identical => {
@@ -225,6 +226,7 @@ impl VmArea {
                 .unwrap()
                 .ppn()
                 .bytes_array()[offset..offset + src.len()];
+            dst.fill(0);
             dst.copy_from_slice(src);
             start += PAGE_SIZE - offset;
             offset = 0;

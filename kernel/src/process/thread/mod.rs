@@ -13,7 +13,7 @@ use self::{
 };
 
 use super::Process;
-use crate::executor;
+use crate::{executor, stack_trace};
 use crate::signal::SignalContext;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -107,6 +107,7 @@ impl Thread {
 
     /// Construct a new thread from the current thread
     pub fn from_current(&self, new_process: Arc<Process>, stack: Option<usize>) -> Self {
+        stack_trace!();
         Self {
             tid: new_process.alloc_tid(),
             process: new_process.clone(),

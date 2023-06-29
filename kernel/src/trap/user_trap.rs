@@ -85,6 +85,7 @@ pub async fn trap_handler() {
                     #[cfg(feature = "stack_trace")]
                     warn!("backtrace:");
                     local_hart().env().stack_tracker.print_stacks();
+
                     exit_and_terminate_all_threads(-2);
                     // current_process().inner_handler(|proc| {
                     //     proc.exit_code = -2;
@@ -105,8 +106,9 @@ pub async fn trap_handler() {
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             warn!(
-                "[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}",
-                stval
+                "[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}, sepc {:#x}",
+                stval,
+                sepc::read(),
             );
             #[cfg(feature = "stack_trace")]
             warn!("backtrace:");

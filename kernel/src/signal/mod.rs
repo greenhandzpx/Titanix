@@ -1,5 +1,5 @@
 use alloc::collections::VecDeque;
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     config::signal::SIG_NUM,
@@ -210,8 +210,12 @@ pub fn check_signal_for_current_process() {
     // }
 }
 
+extern "C" {
+    fn sigreturn_trampoline();
+}
+
 fn handle_signal(signo: usize, sig_action: KSigAction) {
-    debug!(
+    info!(
         "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
     );
@@ -219,14 +223,16 @@ fn handle_signal(signo: usize, sig_action: KSigAction) {
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;
-        if sig_action.sig_action.sa_restorer != 0 {
-            // ra
-            debug!(
-                "[handle_signal] restorer: {:#x}",
-                sig_action.sig_action.sa_restorer
-            );
-            current_trap_cx().user_x[1] = sig_action.sig_action.sa_restorer;
-        }
+        // if sig_action.sig_action.sa_restorer != 0 {
+        // ra
+        info!(
+            "[handle_signal] restorer: {:#x}",
+            // sig_action.sig_action.sa_restorer
+            sigreturn_trampoline as usize,
+        );
+        // current_trap_cx().user_x[1] = sig_action.sig_action.sa_restorer;
+        current_trap_cx().user_x[1] = sigreturn_trampoline as usize;
+        // }
     } else {
         // Just in kernel mode
         // TODO: change to async

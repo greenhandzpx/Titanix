@@ -513,6 +513,7 @@ impl Process {
     }
 
     fn clone_process(self: &Arc<Self>, stack: Option<usize>) -> GeneralRet<Arc<Self>> {
+        stack_trace!();
         let child = self.inner_handler(move |parent_inner| {
             assert_eq!(parent_inner.thread_count(), 1);
             let pid = pid_alloc();

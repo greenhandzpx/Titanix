@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::{
     config::mm::PAGE_SIZE,
@@ -8,7 +8,7 @@ use crate::{
             vm_area::BackupFile,
             PageFaultHandler,
         },
-        MapPermission, VirtAddr,
+        MapPermission, VirtAddr, VPNRange,
     },
     processor::current_process,
     stack_trace,
@@ -122,4 +122,83 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
         Ok(())
     })?;
     Ok(0)
+}
+
+pub fn sys_brk(addr: usize) -> SyscallRet {
+    stack_trace!();
+    debug!("handle sys brk");
+    if addr == 0 {
+        debug!("[sys_brk]: addr: 0");
+        return Ok(current_process()
+            .inner_handler(|proc| proc.memory_space.heap_range.unwrap().end().0)
+            as isize);
+    }
+
+    current_process().inner_handler(|proc| {
+        let heap_start: VirtAddr = proc.memory_space.heap_range.unwrap().start();
+        let current_heap_end: VirtAddr = proc.memory_space.heap_range.unwrap().end();
+        let new_heap_end: VirtAddr = addr.into();
+        debug!(
+            "[sys_brk]: old heap end: {:#x}, new heap end: {:#x}",
+            current_heap_end.0, new_heap_end.0
+        );
+        if addr > current_heap_end.0 {
+            // allocate memory lazily
+            if proc
+                .memory_space
+                .check_vpn_range_conflict(heap_start.floor(), new_heap_end.ceil())
+            {
+                warn!("[sys_brk]: new addr invalid");
+                Err(SyscallErr::ENOMEM)
+            } else {
+                let heap_vma = proc
+                    .memory_space
+                    .find_vm_area_mut_by_vpn_included(heap_start.floor())
+                    .unwrap();
+                // modify vma
+                heap_vma.vpn_range.modify_right_bound(new_heap_end.ceil());
+                // modify process info(lazy allocation)
+                proc.memory_space
+                    .heap_range
+                    .as_mut()
+                    .unwrap()
+                    .modify_right_bound(new_heap_end);
+                debug!(
+                    "new heap end {:#x}",
+                    proc.memory_space.heap_range.unwrap().end().0
+                );
+                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
+            }
+        } else {
+            // deallocate memory
+            if addr < heap_start.0 {
+                Err(SyscallErr::ENOMEM)
+            } else {
+                let heap_vma = proc
+                    .memory_space
+                    .find_vm_area_mut_by_vpn(heap_start.floor())
+                    .unwrap();
+                heap_vma.vpn_range.modify_right_bound(new_heap_end.ceil());
+                let data_frames = unsafe { &mut (*heap_vma.data_frames.get()) };
+                // modify vma
+                heap_vma.vpn_range.modify_right_bound(new_heap_end.ceil());
+                let page_table = unsafe { &mut (*proc.memory_space.page_table.get()) };
+                let removed_vpns = VPNRange::new(new_heap_end.ceil(), current_heap_end.ceil());
+                for vpn in removed_vpns {
+                    if data_frames.0.contains_key(&vpn) {
+                        data_frames.0.remove(&vpn);
+                        page_table.unmap(vpn);
+                    }
+                }
+                page_table.activate();
+                // modify process info
+                proc.memory_space
+                    .heap_range
+                    .unwrap()
+                    .modify_right_bound(new_heap_end);
+                // Ok(0)
+                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
+            }
+        }
+    })
 }

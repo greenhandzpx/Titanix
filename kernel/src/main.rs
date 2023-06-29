@@ -86,7 +86,7 @@ fn clear_bss() {
 //     }
 // }
 ///
-pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
+// pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
@@ -163,8 +163,8 @@ pub fn rust_main(hart_id: usize) {
         });
 
         // INIT_FINISHED.store(true, Ordering::Release);
-        INIT_FINISHED.store(true, Ordering::SeqCst);
-        FIRST_HART_ID.store(hart_id as u8, Ordering::SeqCst);
+        INIT_FINISHED.store(true, Ordering::Release);
+        // FIRST_HART_ID.store(hart_id as u8, Ordering::SeqCst);
 
         let hart_num = unsafe { HARTS.len() };
         for i in 0..hart_num {
@@ -177,7 +177,7 @@ pub fn rust_main(hart_id: usize) {
         // The other harts
 
         // while !INIT_FINISHED.load(Ordering::Acquire) {}
-        while !INIT_FINISHED.load(Ordering::SeqCst) {}
+        while !INIT_FINISHED.load(Ordering::Acquire) {}
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();

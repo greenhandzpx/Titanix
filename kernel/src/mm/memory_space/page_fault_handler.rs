@@ -9,7 +9,7 @@ use crate::{
     },
     process::Process,
     processor::{current_process, SumGuard},
-    utils::error::{AgeneralRet, GeneralRet, SyscallErr},
+    utils::error::{AgeneralRet, GeneralRet, SyscallErr}, stack_trace,
 };
 
 use super::{MemorySpace, VmArea};
@@ -276,12 +276,15 @@ impl PageFaultHandler for CowPageFaultHandler {
         memory_space: &MemorySpace,
         _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
+        stack_trace!();
         debug!("handle cow page fault(cow), va {:#x}", va.0);
 
         let vpn = va.floor();
         let page_table = memory_space.page_table.get_unchecked_mut();
 
         if let Some(pte) = page_table.find_pte(vpn) {
+
+            stack_trace!();
             // the page has correlated physical frame
             debug_assert!(pte.flags().contains(PTEFlags::COW));
             debug_assert!(!pte.flags().contains(PTEFlags::W));
@@ -326,6 +329,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .unwrap()
                 }
                 _ => {
+                    stack_trace!();
                     // Else
                     // we should allocate new frame and decrease
                     // old frame's ref cnt
@@ -336,6 +340,8 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .ppn
                         .bytes_array()
                         .copy_from_slice(&shared_page.bytes_array());
+                    stack_trace!();
+                    // modify page tableray());
                     // modify page table
                     page_table.unmap(vpn);
                     page_table.map(vpn, new_frame.ppn, pte_flags);
@@ -347,6 +353,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .get_unchecked_mut()
                         .0
                         .remove(&vpn);
+                    stack_trace!();
                     Arc::new(
                         PageBuilder::new()
                             .permission(shared_page.permission)

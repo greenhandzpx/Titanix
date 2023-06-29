@@ -44,6 +44,7 @@ endif
 
 
 QFLAGS := 
+QFLAGS += -m 128M
 QFLAGS += -machine virt 
 QFLAGS += -nographic
 QFLAGS += -smp $(CPUS)

@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use log::{debug, info};
+use log::{debug, info, trace};
 
 use crate::{
     mm::user_check::UserCheck,
@@ -80,21 +80,21 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
     let clock = manager_locked.0.get(&clock_id);
     match clock {
         Some(clock) => {
-            debug!("[sys_clock_gettime] find the clock, clock id {}", clock_id);
+            trace!("[sys_clock_gettime] find the clock, clock id {}", clock_id);
             let dev_time = current_time_duration();
             let clock_time = dev_time + *clock;
             // let time_spec = TimeSpec {
             //     sec: (dev_spec.sec as isize + clock.sec) as usize,
             //     nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
             // };
-            debug!("[sys_clock_gettime] get time {:?}", clock_time);
+            trace!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {
                 time_spec_ptr.write_volatile(clock_time.into());
             }
             Ok(0)
         }
         None => {
-            debug!("[sys_clock_gettime] Cannot find the clock: {}", clock_id);
+            trace!("[sys_clock_gettime] Cannot find the clock: {}", clock_id);
             Err(SyscallErr::EINVAL)
         }
     }

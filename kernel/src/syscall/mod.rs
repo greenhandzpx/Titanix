@@ -108,10 +108,7 @@ use crate::{
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
     syscall::resource::sys_prlimit64,
-    timer::{
-        posix::{ITimerval, TimeSpec, TimeVal, Tms},
-        *,
-    },
+    timer::posix::{ITimerval, TimeSpec, TimeVal, Tms},
     utils::error::SyscallRet,
 };
 
