@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     mm::user_check::UserCheck,
@@ -58,13 +58,15 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     // calculate the diff
     // arg_timespec - device_timespec = diff
     let dev_spec = current_time_spec();
-    let diff_spec = TimeDiff {
-        sec: time_spec.sec as isize - dev_spec.sec as isize,
-        nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
-    };
+    let diff_time = Duration::from(*time_spec) - current_time_duration();
+    // let diff_spec = TimeDiff {
+    //     sec: time_spec.sec as isize - dev_spec.sec as isize,
+    //     nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
+    // };
+    info!("[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}", Duration::from(*time_spec), Duration::from(dev_spec));
 
     let mut manager_unlock = CLOCK_MANAGER.lock();
-    manager_unlock.0.insert(clock_id, diff_spec);
+    manager_unlock.0.insert(clock_id, diff_time);
 
     Ok(0)
 }
@@ -74,23 +76,25 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
     UserCheck::new()
         .check_writable_slice(time_spec_ptr as *mut u8, core::mem::size_of::<TimeSpec>())?;
     let _sum_guard = SumGuard::new();
-    let manager_unlock = CLOCK_MANAGER.lock();
-    let clock = manager_unlock.0.get(&clock_id);
+    let manager_locked = CLOCK_MANAGER.lock();
+    let clock = manager_locked.0.get(&clock_id);
     match clock {
         Some(clock) => {
-            debug!("Find the clock");
-            let dev_spec = current_time_spec();
-            let time_spec = TimeSpec {
-                sec: (dev_spec.sec as isize + clock.sec) as usize,
-                nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
-            };
+            debug!("[sys_clock_gettime] find the clock, clock id {}", clock_id);
+            let dev_time = current_time_duration();
+            let clock_time = dev_time + *clock;
+            // let time_spec = TimeSpec {
+            //     sec: (dev_spec.sec as isize + clock.sec) as usize,
+            //     nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
+            // };
+            debug!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {
-                time_spec_ptr.write_volatile(time_spec);
+                time_spec_ptr.write_volatile(clock_time.into());
             }
             Ok(0)
         }
         None => {
-            debug!("Cannot find the clock: {}", clock_id);
+            debug!("[sys_clock_gettime] Cannot find the clock: {}", clock_id);
             Err(SyscallErr::EINVAL)
         }
     }
@@ -180,7 +184,8 @@ pub fn sys_settimer(
                 });
             } else {
                 current_process().inner_handler(|proc| {
-                    proc.timers[ITIMER_REAL as usize].it_value = (current_time_duration() + next_timeout).into();
+                    proc.timers[ITIMER_REAL as usize].it_value =
+                        (current_time_duration() + next_timeout).into();
                 });
                 spawn_kernel_thread(async move {
                     TimedTaskFuture::new(interval, callback, Some(next_timeout)).await

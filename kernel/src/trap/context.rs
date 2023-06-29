@@ -22,7 +22,8 @@ pub struct TrapContext {
     /// general regs[0..31]
     pub user_x: [usize; 32],
     /// CSR sstatus      
-    pub sstatus: Sstatus, // 32
+    // pub sstatus: Sstatus, // 32
+    pub sstatus: usize, // 32
     /// CSR sepc
     pub sepc: usize, // 33
     // /// Addr of Page Table
@@ -51,7 +52,8 @@ pub struct UserContext {
     /// general regs[0..31]
     pub user_x: [usize; 32],
     /// CSR sstatus      
-    pub sstatus: Sstatus, // 32
+    // pub sstatus: Sstatus, // 32
+    pub sstatus: usize, // 32
     /// CSR sepc
     pub sepc: usize, // 33
 }
@@ -90,7 +92,7 @@ impl TrapContext {
         }
         let mut cx = Self {
             user_x: [0; 32],
-            sstatus,
+            sstatus: sstatus.bits(),
             sepc: entry,
             // The following regs will be stored in asm funciton __restore
             // So we don't need to save them here

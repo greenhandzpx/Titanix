@@ -29,7 +29,10 @@ pub fn sys_mmap(
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
     let map_permission: MapPermission = prot.into();
-    debug!("[sys_mmap]: start...  addr {:#x}, len {}, fd {}, offset {}, flags {:?}, prot {:?}", addr, length, fd, offset, flags, prot);
+    debug!(
+        "[sys_mmap]: start...  addr {:#x}, len {}, fd {}, offset {}, flags {:?}, prot {:?}",
+        addr, length, fd, offset, flags, prot
+    );
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
         if offset != 0 {
@@ -106,7 +109,10 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
     }
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let map_permission: MapPermission = prot.into();
-    debug!("[sys_mprotect]: addr {:#x} len {:#x}, prot {:?}", addr, len, prot);
+    debug!(
+        "[sys_mprotect]: addr {:#x} len {:#x}, prot {:?}",
+        addr, len, prot
+    );
     current_process().inner_handler(|proc| {
         let vma = proc
             .memory_space

@@ -137,7 +137,7 @@ impl File for TtyFile {
                 // } else {
                 //     warn!("cannot transfer to utf8: {:?}", buf);
                 // }
-                print!("{}", unsafe { core::str::from_utf8_unchecked(buf)});
+                print!("{}", unsafe { core::str::from_utf8_unchecked(buf) });
             } else {
                 print!("{}", core::str::from_utf8(buf).unwrap());
             }

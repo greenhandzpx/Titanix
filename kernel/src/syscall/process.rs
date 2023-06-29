@@ -9,6 +9,7 @@ use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thr
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::sync::Event;
+use crate::timer::current_time_duration;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -192,6 +193,7 @@ pub fn sys_clone(
         // info!("fork return, sepc: {:#x} addr: {:#x}", sepc, trap_cx as *mut TrapContext as usize);
         // // add new task to scheduler
         // add_task(new_task);
+        debug!("[sys_clone] return new pid: {}", new_pid);
         Ok(new_pid as isize)
     } else {
         // clone(i.e. create a new thread)
@@ -237,7 +239,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             envs = envs.add(1);
         }
     }
-    envs_vec.push("PATH=/".to_string());
+    envs_vec.push("PATH=/:".to_string());
     // UserCheck::new().readable_slice(path, len);
     UserCheck::new().check_c_str(path)?;
     // let path = c_str_to_string(path);
@@ -324,12 +326,18 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 let found_pid = child.pid();
                 // get child's exit code
                 let exit_code = child.exit_code();
-                debug!("[sys_waitpid] found pid {} exit code {}", found_pid, exit_code);
+                debug!(
+                    "[sys_waitpid] found pid {} exit code {}",
+                    found_pid, exit_code
+                );
 
                 Ok(Some((false, found_pid as isize, exit_code as i32)))
             } else {
                 // the child still alive
-                debug!("[sys_waitpid] no such pid, children size {}", proc.children.len());
+                debug!(
+                    "[sys_waitpid] no such pid, children size {}",
+                    proc.children.len()
+                );
                 if proc.children.len() > 0 {
                     debug!("[sys_waitpid] first child pid {}", proc.children[0].pid());
                 }
@@ -365,7 +373,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                         );
                     }
                 }
-                // info!("ret {}", found_pid);
+                debug!("[sys_wait4] ret {}", found_pid);
                 return Ok(found_pid);
             }
         } else {
@@ -538,22 +546,29 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
         RUSAGE_SELF => current_process().inner_handler(|proc| {
             let mut user_time = Duration::ZERO;
             let mut sys_time = Duration::ZERO;
+            let mut start_ts = Duration::ZERO;
             for thread in proc.threads.iter() {
                 if let Some(thread) = thread.upgrade() {
                     user_time += unsafe { (*thread.inner.get()).time_info.user_time };
                     sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
+                    if start_ts.is_zero() {
+                        start_ts = unsafe { (*thread.inner.get()).time_info.start_ts };
+                    }
                 }
             }
             usage.ru_utime = user_time.into();
             usage.ru_stime = sys_time.into();
+            debug!("[sys_getrusage]: process real time {:?}", current_time_duration() - start_ts);
         }),
         _ => {
             panic!()
         }
     }
     debug!(
-        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}",
-        usage.ru_utime, usage.ru_stime
+        "[sys_getrusage]: ru_utime {:?}, ru_stime {:?}, current ts {:?}",
+        usage.ru_utime,
+        usage.ru_stime,
+        current_time_duration(),
     );
     Ok(0)
 }

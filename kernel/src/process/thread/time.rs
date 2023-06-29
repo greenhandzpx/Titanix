@@ -1,13 +1,13 @@
 use core::time::Duration;
 
-use log::info;
+use log::{debug, info};
 
 use crate::timer::current_time_duration;
 
 /// Used for sys_getrusage
-///                                                  -- user --                -user-
-/// ---kernel---(switch to other thread) ---kernel---          --- kernel --          --- (switch)
-///                                   enter          ret      trap          ret     trap     leave
+///                                  -- user --                -user-
+/// ---kernel---(switch) ---kernel---          --- kernel --          --- (switch)
+///         leave     enter          ret      trap          ret     trap     leave
 pub struct ThreadTimeInfo {
     pub start_ts: Duration,
     pub user_time: Duration,
@@ -64,6 +64,7 @@ impl ThreadTimeInfo {
     pub fn when_trap_in(&mut self) {
         let current_ts = current_time_duration();
         self.user_time += current_ts - self.last_user_ret_ts.unwrap();
+        // debug!("[when_trap_in] current ts {:?}, user time {:?}", current_ts, self.user_time);
         self.last_user_ret_ts = None;
         self.last_user_trap_ts = Some(current_ts);
     }

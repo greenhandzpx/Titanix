@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::{debug, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -9,11 +9,9 @@ use crate::{
     process::{self, thread::exit_and_terminate_all_threads},
     processor::{current_process, current_task, current_trap_cx, hart::local_hart},
     signal::check_signal_for_current_process,
-    stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
     trap::set_user_trap_entry,
-    FIRST_HART_ID,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -27,9 +25,6 @@ pub async fn trap_handler() {
     //     info!("other hart trap");
     // }
 
-    unsafe {
-        (*current_task().inner.get()).time_info.when_trap_in();
-    }
     let scause = scause::read();
     let stval = stval::read();
     match scause.cause() {
@@ -52,7 +47,6 @@ pub async fn trap_handler() {
             .await;
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
-            stack_trace!();
             cx.user_x[10] = match result {
                 Ok(ret) => ret as usize,
                 Err(err) => -(err as isize) as usize,
@@ -108,22 +102,16 @@ pub async fn trap_handler() {
             // 5. execve elf file
             // 6. dynamic link
             // 7. illegal page fault
-
-            // todo!("Exit current process when encounting illegal addr");
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             warn!(
                 "[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}",
                 stval
             );
-            // // illegal instruction exit code
-            // current_process().set_zombie();
             #[cfg(feature = "stack_trace")]
             warn!("backtrace:");
             local_hart().env().stack_tracker.print_stacks();
             exit_and_terminate_all_threads(-2);
-            // exit_current_and_run_next(-3);
-            // todo!("Exit current process when encounting illegal instruction");
         }
         Trap::Exception(Exception::Breakpoint) => {
             warn!(
@@ -159,7 +147,7 @@ pub async fn trap_handler() {
 /// Back to user mode.
 /// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
-pub fn trap_return(trap_context: &mut TrapContext) {
+pub fn trap_return() {
     set_user_trap_entry();
     extern "C" {
         // fn __alltraps();
@@ -170,8 +158,9 @@ pub fn trap_return(trap_context: &mut TrapContext) {
 
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
-    }
-    unsafe {
-        __return_to_user(trap_context);
+
+        __return_to_user(current_trap_cx());
+
+        (*current_task().inner.get()).time_info.when_trap_in();
     }
 }

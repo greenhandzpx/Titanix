@@ -12,7 +12,7 @@ use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use super::PollFd;
-use crate::config::fs::RLIMIT_NOFILE;
+use crate::config::fs::RLIMIT_OFILE;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::posix::{
@@ -78,7 +78,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SyscallRet {
     current_process().inner_handler(move |proc| {
         if let Some(file) = proc.fd_table.get(oldfd) {
             if proc.fd_table.take(newfd).is_none() {
-                if newfd >= RLIMIT_NOFILE {
+                if newfd >= RLIMIT_OFILE {
                     return Err(SyscallErr::EINVAL);
                 } else {
                     proc.fd_table.alloc_spec_fd(newfd);
@@ -252,7 +252,7 @@ pub fn sys_mount(
         }
     };
 
-    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, todo!(), ftype, flags);
+    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, todo!(), ftype, flags)?;
 
     Ok(0)
 }
@@ -415,7 +415,7 @@ fn _fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     //     return Err(SyscallErr::EACCES);
     // }
 
-    info!("[_fstat]: fd {}", fd);
+    debug!("[_fstat]: fd {}", fd);
     let inode = file.metadata().inner.lock().inode.as_ref().unwrap().clone();
     let inode_meta = inode.metadata().clone();
     if let Some(dev) = inode_meta.device.as_ref() {
@@ -552,12 +552,19 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     if !file.writable() {
         return Err(SyscallErr::EPERM);
     }
+    if len == 0 {
+        return Ok(0);
+    }
 
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    file.write(buf).await
+    if buf.len() < 2 {
+        file.sync_write(buf)
+    } else {
+        file.write(buf).await
+    }
 }
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
@@ -661,10 +668,17 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     if !file.readable() {
         return Err(SyscallErr::EPERM);
     }
+    if len == 0 {
+        return Ok(0);
+    }
 
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
-    file.read(buf).await
+    if buf.len() < 2 {
+        file.sync_read(buf)
+    } else {
+        file.read(buf).await
+    }
 }
 
 pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
@@ -1020,7 +1034,7 @@ pub fn sys_readlinkat(dirfd: usize, path_name: usize, buf: usize, buf_size: usiz
     UserCheck::new().check_c_str(path_name as *const u8)?;
     let path = c_str_to_string(path_name as *const u8);
     info!(
-        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}",
+        "[sys_readlinkat]: dirfd {}, path_name {} buf addr {:#x} buf size {}, this should be modified",
         dirfd, path, buf, buf_size
     );
     UserCheck::new().check_writable_slice(buf as *mut u8, buf_size)?;
@@ -1275,9 +1289,20 @@ pub async fn sys_pselect6(
         }
     };
 
+    let timeout = match timeout_ptr {
+        0 => {
+            debug!("[sys_pselect]: infinite timeout");
+            None
+        }
+        _ => {
+            UserCheck::new()
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
+        }
+    };
     debug!(
-        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}",
-        readfds, writefds, exceptfds
+        "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
+        readfds, writefds, exceptfds, timeout
     );
 
     let mut fds: Vec<PollFd> = Vec::new();
@@ -1340,18 +1365,6 @@ pub async fn sys_pselect6(
         fds.clear_all();
     }
 
-    let timeout = match timeout_ptr {
-        0 => {
-            debug!("[sys_pselect]: infinite timeout");
-            None
-        }
-        _ => {
-            UserCheck::new()
-                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
-            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
-        }
-    };
-
     if sigmask_ptr != 0 {
         stack_trace!();
         UserCheck::new()
@@ -1376,7 +1389,7 @@ pub async fn sys_pselect6(
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {
-                warn!("[sys_pselect]: timeout");
+                debug!("[sys_pselect]: timeout");
                 return Ok(0);
             }
         }

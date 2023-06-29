@@ -1,11 +1,9 @@
 use alloc::collections::VecDeque;
-use lazy_static::*;
 use log::debug;
 
 use crate::{
     config::signal::SIG_NUM,
     processor::{current_process, current_task, current_trap_cx},
-    signal::signal_handler::default_sig_handler,
     trap::UserContext,
 };
 
@@ -172,47 +170,49 @@ impl KSigAction {
     }
 }
 
+/// Note that we handle only one pending signal every time
 pub fn check_signal_for_current_process() {
-    loop {
-        if let Some((sig_info, sig_action)) = current_process().inner_handler(|proc| {
-            if proc.pending_sigs.sig_queue.is_empty() {
-                return None;
-            }
-            let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
-            assert!(sig_info.signo < SIG_NUM);
+    // loop {
 
-            debug!("find a sig {}", sig_info.signo);
-
-            let signo = sig_info.signo;
-
-            let signo_shift = SigSet::from_bits(1 << sig_info.signo).unwrap();
-
-            if proc.pending_sigs.blocked_sigs.contains(signo_shift) {
-                return None;
-            }
-
-            save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
-
-            proc.pending_sigs.blocked_sigs |= signo_shift;
-            // TODO: only use the first element now
-            proc.pending_sigs.blocked_sigs |= proc.sig_handler.lock().sigactions[sig_info.signo]
-                .sig_action
-                .sa_mask[0];
-
-            Some((sig_info, proc.sig_handler.lock().sigactions[signo]))
-        }) {
-            // Note that serveral sig handlers may be executed at the same time by different threads
-            // since we don't hold the process inner lock
-            handle_signal(sig_info.signo, sig_action);
-        } else {
-            break;
+    if let Some((sig_info, sig_action)) = current_process().inner_handler(|proc| {
+        if proc.pending_sigs.sig_queue.is_empty() {
+            return None;
         }
+        let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
+        assert!(sig_info.signo < SIG_NUM);
+
+        debug!("find a sig {}", sig_info.signo);
+
+        let signo = sig_info.signo;
+
+        let signo_shift = SigSet::from_bits(1 << sig_info.signo).unwrap();
+
+        if proc.pending_sigs.blocked_sigs.contains(signo_shift) {
+            return None;
+        }
+
+        save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
+
+        proc.pending_sigs.blocked_sigs |= signo_shift;
+        // TODO: only use the first element now
+        proc.pending_sigs.blocked_sigs |= proc.sig_handler.lock().sigactions[sig_info.signo]
+            .sig_action
+            .sa_mask[0];
+
+        Some((sig_info, proc.sig_handler.lock().sigactions[signo]))
+    }) {
+        // Note that serveral sig handlers may be executed at the same time by different threads
+        // since we don't hold the process inner lock
+        handle_signal(sig_info.signo, sig_action);
+        // } else {
+        //     break;
     }
+    // }
 }
 
 fn handle_signal(signo: usize, sig_action: KSigAction) {
     debug!(
-        "[handle signal] signo {}, handler {:#x}",
+        "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
     );
     if sig_action.is_user_defined {

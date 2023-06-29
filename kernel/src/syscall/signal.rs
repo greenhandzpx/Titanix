@@ -181,6 +181,10 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     trap_context_mut.user_x = signal_context.user_context.user_x;
     trap_context_mut.sstatus = signal_context.user_context.sstatus;
     trap_context_mut.sepc = signal_context.user_context.sepc;
+    Ok(trap_context_mut.user_x[10] as isize)
+}
+
+pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const u8) -> SyscallRet {
     Ok(0)
 }
 

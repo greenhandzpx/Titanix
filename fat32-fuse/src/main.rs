@@ -80,6 +80,12 @@ fn pack_elfs(matches: ArgMatches, filename: String) -> io::Result<()> {
             // write data to fat-fs
             file.write_all(&all_data)?;
         } 
+        if app.eq("lmbench_all") {
+            // create a file in fat-fs
+            let mut file = fs.root_dir().create_file(&app)?;
+            // write data to fat-fs
+            file.write_all(&all_data)?;
+        } 
         // create a file in fat-fs
         let mut file = busybox_dir.create_file(&app)?;
         // write data to fat-fs

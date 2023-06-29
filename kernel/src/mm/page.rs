@@ -110,17 +110,6 @@ impl PageBuilder {
 }
 
 impl Page {
-    // /// Create a new page
-    // pub fn new(inode: Option<Weak<dyn Inode>>) -> Self {
-    //     Self {
-    //         inner: Mutex::new(PageInner {
-    //             data_states: core::array::from_fn(|_| DataState::Outdated),
-    //             data: [0; PAGE_SIZE],
-    //             inode,
-    //         }),
-    //     }
-    // }
-
     /// Read this page.
     /// `offset`: page offset
     pub async fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {

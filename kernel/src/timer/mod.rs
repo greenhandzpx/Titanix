@@ -15,6 +15,8 @@ use lazy_static::*;
 use log::info;
 use riscv::register::time;
 
+use self::posix::TimeSpec;
+
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
 const USEC_PER_SEC: usize = 1000000;
@@ -60,7 +62,8 @@ pub fn set_next_trigger() {
     set_timer(next_trigger);
 }
 
-pub struct ClockManager(pub BTreeMap<usize, TimeDiff>);
+/// clock stores the deviation: arg time - dev time(current_time)
+pub struct ClockManager(pub BTreeMap<usize, Duration>);
 
 lazy_static! {
     /// Clock manager that used for looking for a given process
@@ -72,12 +75,12 @@ pub fn init() {
     CLOCK_MANAGER
         .lock()
         .0
-        .insert(CLOCK_MONOTONIC, TimeDiff { sec: 0, nsec: 0 });
+        .insert(CLOCK_MONOTONIC, Duration::ZERO);
 
     CLOCK_MANAGER
         .lock()
         .0
-        .insert(CLOCK_REALTIME, TimeDiff { sec: 0, nsec: 0 });
+        .insert(CLOCK_REALTIME, Duration::ZERO);
 
     info!("init clock manager success");
 }

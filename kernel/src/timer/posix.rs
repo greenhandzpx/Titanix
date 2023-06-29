@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use super::{current_time_ms, MSEC_PER_SEC};
+use super::{current_time_ms, MSEC_PER_SEC, current_time_duration};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
@@ -19,7 +19,7 @@ impl From<Duration> for TimeVal {
     fn from(duration: Duration) -> Self {
         Self {
             sec: duration.as_secs() as usize,
-            usec: duration.as_micros() as usize,
+            usec: duration.subsec_micros() as usize,
         }
     }
 }
@@ -49,6 +49,14 @@ impl From<TimeSpec> for Duration {
     }
 }
 
+impl From<Duration> for TimeSpec {
+    fn from(duration: Duration) -> Self {
+        Self {
+            sec: duration.as_secs() as usize,
+            nsec: duration.subsec_nanos() as usize,
+        }
+    }
+}
 /// Used for times
 #[repr(C)]
 pub struct Tms {
@@ -60,12 +68,7 @@ pub struct Tms {
 
 /// get current time as TimeSpec
 pub fn current_time_spec() -> TimeSpec {
-    let current_time = current_time_ms();
-    let time_spec = TimeSpec {
-        sec: current_time / MSEC_PER_SEC,
-        nsec: (current_time % MSEC_PER_SEC) * 1000000,
-    };
-    time_spec
+    current_time_duration().into()
 }
 
 /// Process's timer
