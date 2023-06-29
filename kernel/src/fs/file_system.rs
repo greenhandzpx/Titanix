@@ -16,7 +16,7 @@ use crate::{
     }, driver::block::BlockDevice,
 };
 
-use super::{posix::StatFlags, Inode, FAT32FileSystem, devfs::DevFs};
+use super::{posix::StatFlags, Inode, FAT32FileSystem, devfs::DevFs, procfs::ProcFs};
 
 pub enum FsDevice {
     BlockDevice(Arc<dyn BlockDevice>),
@@ -27,13 +27,6 @@ impl FsDevice {
     pub fn block_device(&self) -> Option<&Arc<dyn BlockDevice>> {
         if let FsDevice::BlockDevice(ret) = &self {
             Some(ret)
-        } else {
-            None
-        }
-    }
-    pub fn none(&self) -> Option<()> {
-        if let Self::None = &self {
-            Some(())
         } else {
             None
         }
@@ -68,7 +61,6 @@ impl FileSystemType {
             Self::NFS => "nfs".to_string(),
             Self::DevTmpFS => "devtmpfs".to_string(),
             Self::Proc => "proc".to_string(),
-            _ => "".to_string(),
         }
     }
 }
@@ -124,14 +116,6 @@ impl FileSystemManager {
     pub fn new() -> Self {
         Self {
             fs_mgr: SpinNoIrqLock::new(BTreeMap::new()),
-        }
-    }
-
-    pub fn fs(&self, mount_point: &str) -> Option<Arc<dyn FileSystem>> {
-        if let Some(fs) = self.fs_mgr.lock().get(mount_point) {
-            Some(Arc::clone(fs))
-        } else {
-            None
         }
     }
 
@@ -216,7 +200,15 @@ impl FileSystemManager {
                 Arc::new(ret)
             },
             FileSystemType::Proc => {
-                todo!()
+                let ret = ProcFs::new(
+                    mount_point,
+                    dev_name,
+                    fstype,
+                    flags,
+                    fa_inode,
+                    covered_inode,
+                )?;
+                Arc::new(ret)
             }
             _ => todo!(),
         };
@@ -249,7 +241,7 @@ impl FileSystemManager {
         let fa_ino = {
             if let Some(some_fa_inode) = meta.fa_inode.as_ref() {
                 // remove root inode from fa
-                some_fa_inode.remove_child(Arc::clone(&meta.root_inode));
+                some_fa_inode.remove_child(Arc::clone(&meta.root_inode))?;
                 some_fa_inode.metadata().ino
             } else {
                 0

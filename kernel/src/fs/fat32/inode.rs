@@ -15,6 +15,7 @@ use super::{
 
 pub struct FAT32Inode {
     meta: Option<InodeMeta>,
+    fat: Arc<FileAllocTable>,
     file: Mutex<FAT32File>,
 }
 
@@ -22,9 +23,10 @@ impl FAT32Inode {
     pub fn new_root(fat: Arc<FileAllocTable>, fa_inode: Option<Arc<dyn Inode>>, path: &str, first_cluster: usize) -> Self {
         let mode = InodeMode::FileDIR;
         let meta = InodeMeta::new(fa_inode, path, mode, 0, None);
-        let file = FAT32File::new(fat, first_cluster, None);
+        let file = FAT32File::new(Arc::clone(&fat), first_cluster, None);
         Self {
             meta: Some(meta),
+            fat: Arc::clone(&fat),
             file: Mutex::new(file),
         }
     }
@@ -39,10 +41,11 @@ impl FAT32Inode {
             inner_lock.st_ctim = unix_time_to_timespec(FAT32_to_unix_time(dentry.crt_time));
             inner_lock.st_mtim = unix_time_to_timespec(FAT32_to_unix_time(dentry.wrt_time));
         }
-        let file = FAT32File::new(fat, dentry.fstcluster as usize,
+        let file = FAT32File::new(Arc::clone(&fat), dentry.fstcluster as usize,
             if mode == InodeMode::FileREG {Some(dentry.filesize as usize)} else {None});
         Self {
             meta: Some(meta),
+            fat: Arc::clone(&fat),
             file: Mutex::new(file),
         }
     }
@@ -52,6 +55,7 @@ impl FAT32Inode {
         let file = FAT32File::new(Arc::clone(&fat), 0, if mode == InodeMode::FileREG {Some(0)} else {None});
         Self {
             meta: Some(meta),
+            fat: Arc::clone(&fat),
             file: Mutex::new(file),
         }
     }
@@ -108,13 +112,14 @@ impl Inode for FAT32Inode {
         pathname: &str,
         mode: InodeMode
     ) -> GeneralRet<Arc<dyn Inode>> {
-        let name = path::get_name(pathname);
+        let fname = path::get_name(pathname);
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
-        let fat = Arc::clone(&self.file.lock().fat);
-        let s_inode = FAT32Inode::new(fat, this, name, mode);
-        let inode = Arc::new(s_inode);
+        let fat = Arc::clone(&self.fat);
+        let s_inode = FAT32Inode::new(fat, this, fname, mode);
+        let inode: Arc<dyn Inode> = Arc::new(s_inode);
+        self.metadata().inner.lock().children.insert(fname.to_string(), Arc::clone(&inode));
         Ok(inode)
     }
 
@@ -129,10 +134,9 @@ impl Inode for FAT32Inode {
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
-        let fat = Arc::clone(&self.file.lock().fat);
+        let fat = Arc::clone(&self.fat);
         let s_inode = FAT32Inode::new(fat, this, fname, mode);
         let inode: Arc<dyn Inode> = Arc::new(s_inode);
-
         self.metadata().inner.lock().children.insert(fname.to_string(), Arc::clone(&inode));
         Ok(inode)
     }

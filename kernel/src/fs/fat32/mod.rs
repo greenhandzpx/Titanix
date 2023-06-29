@@ -1,7 +1,5 @@
-use crate::{driver::{block::BlockDevice, BLOCK_DEVICE}, utils::error::{GeneralRet, SyscallErr}, fs::FileSystemType};
+use crate::{driver::{block::BlockDevice}, utils::error::{GeneralRet, SyscallErr}, fs::FileSystemType};
 use alloc::{sync::Arc, vec::Vec, string::ToString};
-use log::info;
-use lazy_static::lazy_static;
 use self::{
     bpb::BootSector,
     fat::FileAllocTable,
@@ -9,7 +7,7 @@ use self::{
     inode::FAT32Inode
 };
 
-use super::{FileSystem, file_system::FileSystemMeta, posix::StatFlags, Inode, FILE_SYSTEM_MANAGER};
+use super::{FileSystem, file_system::FileSystemMeta, posix::StatFlags, Inode};
 
 mod bpb;
 mod dentry;
@@ -35,7 +33,7 @@ const FSI_RESERVED2_SIZE:   usize = 12;
 const FSI_NOT_AVAILABLE:    u32 = 0xFFFFFFFF;
 
 pub struct FAT32FileSystem {
-    block_device: Arc<dyn BlockDevice>,
+    fat: Arc<FileAllocTable>,
     meta: FileSystemMeta,
 }
 
@@ -84,7 +82,7 @@ impl FAT32FileSystem {
             s_dirty: Vec::new(),
         };
         let ret = Self {
-            block_device: Arc::clone(&block_device),
+            fat: Arc::clone(&fat),
             meta,
         };
         Ok(ret)
@@ -93,6 +91,7 @@ impl FAT32FileSystem {
 
 impl FileSystem for FAT32FileSystem {
     fn sync_fs(&self) {
+        self.fat.sync_fat();
         self.metadata().root_inode.sync();
     }
 

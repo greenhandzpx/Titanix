@@ -2,14 +2,12 @@ use core::sync::atomic::AtomicUsize;
 
 use alloc::vec::Vec;
 use alloc::{string::ToString, sync::Arc};
-use log::{debug, info};
+use log::debug;
 
 use crate::fs::hash_key::HashKey;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::posix::StatFlags;
 use crate::utils::error::GeneralRet;
-use crate::utils::path;
-
 use self::null::NullInode;
 use self::rtc::RtcInode;
 use self::{tty::TtyInode, zero::ZeroInode};
@@ -17,8 +15,7 @@ use self::{tty::TtyInode, zero::ZeroInode};
 use super::FileSystemType;
 use super::testfs::TestRootInode;
 use super::{
-    // dentry::DentryMeta,
-    file_system::{FileSystem, FileSystemMeta, FILE_SYSTEM_MANAGER},
+    file_system::{FileSystem, FileSystemMeta},
     inode::{InodeMeta, InodeMode},
     Inode,
 };
@@ -39,7 +36,7 @@ impl Inode for DevRootInode {
         &self,
         this: Arc<dyn Inode>,
         pathname: &str,
-        mode: InodeMode,
+        _mode: InodeMode,
         dev_id: usize,
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[DevRootInode::mknod]: mknod: {}", pathname);
@@ -109,7 +106,7 @@ const DEV_NAMES: [(
 
 pub struct DevFs {
     metadata: FileSystemMeta,
-    id_allocator: AtomicUsize,
+    // _id_allocator: AtomicUsize,
     // dev_mgr: Arc<DevManager>,
 }
 
@@ -155,7 +152,7 @@ impl DevFs {
                 covered_inode,
                 s_dirty: Vec::new(),
             }, 
-            id_allocator,
+            // id_allocator: id_allocator,
         })
     }
 }

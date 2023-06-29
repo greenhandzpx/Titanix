@@ -69,6 +69,18 @@ pub fn init() {
     );
     INODE_CACHE.lock().insert(key, dev_dir);
 
+    let proc_dir = root_inode.mkdir(
+        Arc::clone(&root_inode),
+        "/proc",
+        InodeMode::FileDIR
+    ).expect("mkdir /proc fail!");
+
+    let key = HashKey::new(
+        root_inode.metadata().ino,
+        "proc".to_string()
+    );
+    INODE_CACHE.lock().insert(key, proc_dir);
+
     FILE_SYSTEM_MANAGER.mount(
         "/dev",
         "udev",
@@ -76,6 +88,14 @@ pub fn init() {
         FileSystemType::DevTmpFS,
         StatFlags::ST_NOSUID
     ).expect("devfs init fail!");
+
+    FILE_SYSTEM_MANAGER.mount(
+        "/proc",
+        "proc",
+        FsDevice::None,
+        FileSystemType::Proc,
+        StatFlags::ST_NOSUID
+    ).expect("procfs init fail!");
 
     list_rootfs();
 }

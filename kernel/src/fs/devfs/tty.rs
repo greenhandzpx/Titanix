@@ -10,7 +10,6 @@ use core::{
     task::Waker,
 };
 use lazy_static::*;
-use log::{debug, info, warn};
 
 use crate::{
     process, processor::SumGuard, sbi::console_getchar, sync::mutex::SleepLock,

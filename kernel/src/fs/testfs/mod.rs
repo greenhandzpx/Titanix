@@ -1,14 +1,10 @@
-use core::cell::SyncUnsafeCell;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use alloc::{string::ToString, sync::Arc};
-use log::{debug, info};
-
-use crate::fs::file_system::FsDevice;
+use log::debug;
 use crate::fs::posix::StatFlags;
 use crate::utils::error::AsyscallRet;
-use crate::{fs::file_system::FILE_SYSTEM_MANAGER, utils::error::GeneralRet};
+use crate::utils::error::GeneralRet;
 
 use super::file::{FileMeta, FileMetaInner};
 use super::{Mutex, FileSystemType};
