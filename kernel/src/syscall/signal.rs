@@ -12,8 +12,9 @@ use crate::{
 
 pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction) -> SyscallRet {
     stack_trace!();
-    debug!(
-        "[sys_rt_sigaction]: sig {}, new act {:#x}, old act {:#x}, act size {}",
+
+    info!(
+        "[sys_rt_sigaction]: sig {}, new act ptr {:#x}, old act ptr {:#x}, act size {}",
         sig,
         act as usize,
         oldact as usize,
@@ -173,7 +174,6 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
 
 pub fn sys_rt_sigreturn() -> SyscallRet {
     stack_trace!();
-    info!("[sys_rt_sigreturn] sig return");
     let signal_context = current_task().signal_context();
     // restore the old sig mask
     current_process().inner_handler(|proc| {
@@ -184,6 +184,7 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     trap_context_mut.user_x = signal_context.user_context.user_x;
     trap_context_mut.sstatus = signal_context.user_context.sstatus;
     trap_context_mut.sepc = signal_context.user_context.sepc;
+    info!("[sys_rt_sigreturn] sig return, sepc {:#x}", trap_context_mut.sepc);
     Ok(trap_context_mut.user_x[10] as isize)
 }
 

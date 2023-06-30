@@ -1,13 +1,11 @@
 use core::time::Duration;
 
-use crate::config::mm::USER_STACK_SIZE;
 use crate::config::process::INITPROC_PID;
 use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
-use crate::mm::{VPNRange, VirtAddr};
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
-use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
+use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard, env};
 use crate::sbi::shutdown;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
@@ -186,7 +184,7 @@ pub fn sys_clone(
         // for child process, fork returns 0
         trap_cx.user_x[10] = 0;
 
-        info!("[sys_clone] return new pid: {}", new_pid);
+        info!("[sys_clone] return new pid: {}, flags {:?}", new_pid, clone_flags);
         Ok(new_pid as isize)
     } else {
         // clone(i.e. create a new thread)
@@ -201,28 +199,35 @@ pub fn sys_clone(
 pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usize) -> SyscallRet {
     stack_trace!();
 
+    info!("[sys_execve] enter, path ptr {:#x} ,args ptr {:#x}, envs ptr {:#x}", path as usize, args as usize, envs as usize);
     // info!("path1 {:#x}", path as usize);
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
     // transfer the cmd args
     let mut args_vec: Vec<String> = Vec::new();
+    UserCheck::new().check_c_str(args as *const u8)?;
     loop {
         if unsafe { *args == 0 } {
             break;
         }
-        // TODO: add user check
+        //// TODO: add user check
+        UserCheck::new().check_c_str(unsafe { (*args) as *const u8  })?;
         args_vec.push(c_str_to_string(unsafe { (*args) as *const u8 }));
         debug!("exec get an arg {}", args_vec[args_vec.len() - 1]);
         unsafe {
             args = args.add(1);
         }
     }
+
+    stack_trace!();
     let mut envs_vec: Vec<String> = Vec::new();
+    UserCheck::new().check_c_str(envs as *const u8)?;
     loop {
         if unsafe { *envs == 0 } {
             break;
         }
-        // TODO: add user check
+        //// TODO: add user check
+        UserCheck::new().check_c_str(unsafe { (*envs) as *const u8  })?;
         envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
         debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
         unsafe {
@@ -234,7 +239,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     UserCheck::new().check_c_str(path)?;
     // let path = c_str_to_string(path);
     let path = path::path_process(AT_FDCWD, path as *const u8).unwrap();
-    debug!("sys exec {}", path);
+    info!("[sys_execve] path {}", path);
     // print_dir_tree();
 
     if path == "/shell" {

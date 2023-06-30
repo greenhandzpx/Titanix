@@ -11,7 +11,7 @@ use crate::{
     signal::check_signal_for_current_process,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
-    trap::set_user_trap_entry,
+    trap::set_user_trap_entry, stack_trace,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -65,6 +65,7 @@ pub async fn trap_handler() {
                 current_trap_cx().sepc,
                 scause.cause()
             );
+            stack_trace!();
             match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
                 Ok(()) => {
                     debug!(

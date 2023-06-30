@@ -57,7 +57,6 @@ impl PageFaultHandler for UStackPageFaultHandler {
         vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
         // Box::pin(async move {
-        debug!("handle ustack page fault, va {:#x}", va.0);
         // area.map_one(page_table, VirtPageNum::from(va));
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
@@ -68,10 +67,11 @@ impl PageFaultHandler for UStackPageFaultHandler {
             .build();
         let data_frames = unsafe { &mut *vma.as_ref().unwrap().data_frames.get() };
         data_frames.0.insert(vpn, Arc::new(page));
-        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::X | PTEFlags::U;
+        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::U;
         let page_table = memory_space.page_table.get_unchecked_mut();
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
+        info!("[UStackPageFaultHandler] handle ustack page fault, va {:#x} ppn {:#x}", va.0, ppn.0);
         Ok(true)
         // })
     }
@@ -344,8 +344,8 @@ impl PageFaultHandler for CowPageFaultHandler {
                     // modify page tableray());
                     // modify page table
                     page_table.unmap(vpn);
-                    page_table.map(vpn, new_frame.ppn, pte_flags);
                     page_table.activate();
+                    page_table.map(vpn, new_frame.ppn, pte_flags);
                     // decrease old frame's ref cnt
                     memory_space
                         .cow_pages
@@ -362,6 +362,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                     )
                 }
             };
+            stack_trace!();
             let old_vma = memory_space.find_vm_area_by_vpn(vpn).unwrap();
             let data_frames = old_vma.data_frames.get_unchecked_mut();
             data_frames.0.insert(vpn, page);

@@ -9,8 +9,8 @@ use crate::{
 use super::Thread;
 
 /// Get ustack bottom by the given tid
-fn get_ustack_by_tid(ustack_bottom: usize, tid: usize) -> usize {
-    ustack_bottom + tid * (USER_STACK_SIZE + PAGE_SIZE)
+fn get_ustack_by_tid(ustack_base: usize, tid: usize) -> usize {
+    ustack_base + tid * (USER_STACK_SIZE + PAGE_SIZE)
 }
 
 impl Thread {
@@ -26,7 +26,7 @@ impl Thread {
     pub fn alloc_ustack(&self) {
         let inner = unsafe { &mut (*self.inner.get()) };
         let ustack_bottom = get_ustack_by_tid(inner.ustack_base, self.tid.0);
-        debug!(
+        info!(
             "ustack: {:#x}, {:#x}",
             ustack_bottom,
             ustack_bottom + USER_STACK_SIZE

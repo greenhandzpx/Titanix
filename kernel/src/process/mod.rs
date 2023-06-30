@@ -450,7 +450,8 @@ impl Process {
         );
 
         task_inner.trap_context = trap_cx;
-        Ok(args.len() as isize)
+        // Ok(args.len() as isize)
+        Ok(0)
     }
 
     // /// Create a new thread

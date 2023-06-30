@@ -61,7 +61,7 @@ impl UserCheck {
         // debug!("[proc {}] check read sva {:#x} eva {:#x}", current_process().pid(), buf_start.0, buf_end.0);
         while va < buf_end {
             if let Some(scause) = self.try_read_u8(va.into()) {
-                block_on(self.handle_page_fault(&mut va, scause))?
+                block_on(self.handle_page_fault(va, scause))?
             }
             va.0 += PAGE_SIZE;
         }
@@ -77,7 +77,7 @@ impl UserCheck {
         let mut va = buf_start;
         while va < buf_end {
             if let Some(scause) = self.try_write_u8(va.into()) {
-                block_on(self.handle_page_fault(&mut va, scause))?
+                block_on(self.handle_page_fault(va, scause))?
             }
             va.0 += PAGE_SIZE;
         }
@@ -93,7 +93,7 @@ impl UserCheck {
         let mut first = true;
         loop {
             if let Some(scause) = self.try_read_u8(va.into()) {
-                block_on(self.handle_page_fault(&mut va, scause))?
+                block_on(self.handle_page_fault(va, scause))?
             }
             if first {
                 if self.check_c_str_end(VirtAddr::from(c_str as usize)) {
@@ -149,15 +149,15 @@ impl UserCheck {
         }
     }
 
-    async fn handle_page_fault(&self, va: &mut VirtAddr, scause: usize) -> GeneralRet<()> {
-        match memory_space::handle_page_fault(*va, scause).await {
+    async fn handle_page_fault(&self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
+        match memory_space::handle_page_fault(va, scause).await {
             Ok(_) => {
                 debug!(
                     "[kernel] [proc {}]handle legal page fault, addr {:#x}",
                     current_process().pid(),
                     va.0
                 );
-                va.0 += PAGE_SIZE;
+                // va.0 += PAGE_SIZE;
                 Ok(())
             }
             Err(_) => {

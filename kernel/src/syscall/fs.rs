@@ -694,7 +694,12 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     }
 
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
+
+    
+    let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+
+    stack_trace!();
     if buf.len() < 2 {
         file.sync_read(buf)
     } else {

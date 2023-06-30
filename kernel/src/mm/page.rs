@@ -6,7 +6,7 @@ use crate::{
     fs::Inode,
     mm,
     sync::mutex::SleepLock,
-    utils::error::{GeneralRet, SyscallErr},
+    utils::error::{GeneralRet, SyscallErr}, stack_trace,
 };
 
 use super::{FrameTracker, MapPermission};
@@ -56,7 +56,7 @@ impl PageBuilder {
             offset: None,
             inode: None,
             physical_frame: None,
-            permission: MapPermission::from_bits(0).unwrap(),
+            permission: MapPermission::empty(),
             is_file_page: false,
         }
     }
@@ -90,6 +90,7 @@ impl PageBuilder {
         self
     }
     pub fn build(mut self) -> Page {
+        stack_trace!();
         let frame = match self.physical_frame {
             None => mm::frame_alloc().unwrap(),
             Some(_) => self.physical_frame.take().unwrap(),

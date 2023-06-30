@@ -21,7 +21,7 @@ fat32-fs/Cargo.lock
 fat32-fuse/Cargo.lock
 tools/
 pushall.sh
-*.img
+fat32.img
 objdump/
 tmp/
 kernel-qemu

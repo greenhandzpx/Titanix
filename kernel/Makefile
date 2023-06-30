@@ -8,6 +8,7 @@ DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 FS_IMG_FAT32_PREFIX := ../fat32-src
 FS_IMG_FAT32 := $(FS_IMG_FAT32_PREFIX)/fat32.img
 FS_IMG_BUSYBOX := $(FS_IMG_FAT32_PREFIX)/busybox.img
+FS_IMG_FINAL := $(FS_IMG_FAT32_PREFIX)/final.img
 PRELIMINARY = 0
 
 # BOARD
@@ -21,7 +22,8 @@ ifeq ($(MODE), release)
 endif
 
 # FS_IMG := $(FS_IMG_BUSYBOX)
-FS_IMG := $(FS_IMG_FAT32)
+# FS_IMG := $(FS_IMG_FAT32)
+FS_IMG := $(FS_IMG_FINAL)
 
 # KERNEL ENTRY
 KERNEL_ENTRY_PA := 0x80200000
