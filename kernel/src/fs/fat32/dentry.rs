@@ -180,8 +180,8 @@ impl FAT32DirEntry {
                 s_lname!(20, lname_offset + 8);
                 s_lname!(22, lname_offset + 9);
                 s_lname!(24, lname_offset + 10);
-                s_lname!(28, lname_offset + 12);
-                s_lname!(30, lname_offset + 14);
+                s_lname!(28, lname_offset + 11);
+                s_lname!(30, lname_offset + 12);
             } else {
                 if next_id.is_some() {
                     info!("[Dentry] Expect long name but met with short!");
@@ -268,8 +268,8 @@ impl FAT32DirEntry {
             s_lname!(20, lname_offset + 8);
             s_lname!(22, lname_offset + 9);
             s_lname!(24, lname_offset + 10);
-            s_lname!(28, lname_offset + 12);
-            s_lname!(30, lname_offset + 14);
+            s_lname!(28, lname_offset + 11);
+            s_lname!(30, lname_offset + 12);
 
             write_buf[0] = (ldir_id as u8) | { if ldir_id == lname_len {0x40} else {0} };
             write_buf[11] = ATTR_LONG_NAME;
