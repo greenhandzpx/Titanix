@@ -891,7 +891,7 @@ pub fn sys_renameat2(
                     newparent.clone(),
                     &newpath,
                     oldtype,
-                    oldinode.metadata().rdev.unwrap(),
+                    oldinode.metadata().rdev,
                 )?;
             }
             let new_inner_lock = newparent.metadata().inner.lock();
@@ -958,7 +958,7 @@ pub fn sys_renameat2(
                         old_parent.clone(),
                         &newpath,
                         newtype,
-                        newinode.clone().metadata().rdev.unwrap(),
+                        newinode.clone().metadata().rdev,
                     )?;
                 }
                 if oldtype == InodeMode::FileDIR {
@@ -968,7 +968,7 @@ pub fn sys_renameat2(
                         new_parent.clone(),
                         &oldpath,
                         oldtype,
-                        oldinode.clone().metadata().rdev.unwrap(),
+                        oldinode.clone().metadata().rdev,
                     )?;
                 }
                 // inner exchange
@@ -1008,7 +1008,7 @@ pub fn sys_renameat2(
                             new_parent.clone(),
                             &newpath,
                             newtype,
-                            oldinode.clone().metadata().rdev.unwrap(),
+                            oldinode.clone().metadata().rdev,
                         )?;
                     }
                     let mut oldinner = oldinode.metadata().inner.lock().clone();

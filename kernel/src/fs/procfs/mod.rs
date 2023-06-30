@@ -27,7 +27,7 @@ impl Inode for ProcRootInode {
         this: Arc<dyn Inode>,
         pathname: &str,
         _mode: InodeMode,
-        _dev_id: usize,
+        _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[ProcRootInode mknod] mknod: {}", pathname);
         let mut index = 0;
@@ -112,8 +112,8 @@ impl ProcFs {
                 root_inode.clone(),
                 proc_name,
                 inode_mode,
-                id_allocator
-                    .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
+                Some(id_allocator
+                    .fetch_add(1, core::sync::atomic::Ordering::AcqRel)),
             )?;
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);

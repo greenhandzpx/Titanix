@@ -128,7 +128,7 @@ impl Inode for FAT32Inode {
         this: Arc<dyn Inode>,
         pathname: &str,
         mode: InodeMode,
-        _dev_id: usize,
+        _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         let fname = path::get_name(pathname);
         if self.metadata().mode != InodeMode::FileDIR {

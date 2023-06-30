@@ -120,7 +120,7 @@ pub trait Inode: Send + Sync {
         _this: Arc<dyn Inode>,
         _pathname: &str,
         _mode: InodeMode,
-        _dev_id: usize,
+        _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
     }

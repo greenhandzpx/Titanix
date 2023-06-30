@@ -228,7 +228,7 @@ pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
             } else {
                 // TODO dev id
                 parent
-                    .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
+                    .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
                     .unwrap();
             }
             let res = <dyn Inode>::lookup_from_root_tmp(name);

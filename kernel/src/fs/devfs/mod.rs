@@ -37,12 +37,12 @@ impl Inode for DevRootInode {
         this: Arc<dyn Inode>,
         pathname: &str,
         _mode: InodeMode,
-        dev_id: usize,
+        dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[DevRootInode::mknod]: mknod: {}", pathname);
-        debug_assert!(dev_id < DEV_NAMES.len());
-        let creator = DEV_NAMES[dev_id].2;
-        let inode = creator(this.clone(), DEV_NAMES[dev_id].0);
+//        debug_assert!(dev_id.unwrap() < DEV_NAMES.len());
+        let creator = DEV_NAMES[dev_id.unwrap()].2;
+        let inode = creator(this.clone(), DEV_NAMES[dev_id.unwrap()].0);
         this.metadata()
             .inner
             .lock()
@@ -132,8 +132,8 @@ impl DevFs {
                 root_inode.clone(),
                 dev_name2,
                 inode_mode,
-                id_allocator
-                    .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
+                Some(id_allocator
+                    .fetch_add(1, core::sync::atomic::Ordering::AcqRel)),
             )?;
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);
