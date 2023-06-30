@@ -56,6 +56,8 @@ pub fn init() {
     // FILE_SYSTEM_MANAGER.mount("/", "/dev/vda2", FsDevice::None, FileSystemType::VFAT, StatFlags::ST_NOSUID);
 
     let root_inode = FILE_SYSTEM_MANAGER.root_inode();
+
+    <dyn Inode>::load_children(Arc::clone(&root_inode));
     
     let dev_dir = root_inode.mkdir(
         Arc::clone(&root_inode),
@@ -294,7 +296,7 @@ pub fn open_file(absolute_path: Option<String>, flags: u32) -> SyscallRet {
 }
 
 pub fn list_rootfs() {
-    FILE_SYSTEM_MANAGER.root_inode().load_children_from_disk(FILE_SYSTEM_MANAGER.root_inode());
+    <dyn Inode>::load_children(FILE_SYSTEM_MANAGER.root_inode());
     for sb in FILE_SYSTEM_MANAGER.root_inode().metadata().inner.lock().children.iter() {
         println!("-- {}", sb.0);
     }
