@@ -22,7 +22,7 @@ use crate::fs::posix::{
 use crate::fs::HashKey;
 use crate::fs::{
     inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
-    FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
+    FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
 use crate::mm::user_check::UserCheck;
@@ -102,7 +102,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
     let absolute_path = path::path_process(dirfd, path);
     match absolute_path {
         Some(absolute_path) => {
-            let target_inode = <dyn Inode>::lookup_from_root_tmp(&absolute_path);
+            let target_inode = <dyn Inode>::lookup_from_root(&absolute_path);
             match target_inode {
                 Some(target_inode) => {
                     debug!("find target_inode");
@@ -143,7 +143,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     match absolute_path {
         Some(absolute_path) => {
             debug!("[sys_mkdirat] absolute path: {}", absolute_path);
-            let _find_inode = <dyn Inode>::lookup_from_root_tmp(&absolute_path);
+            let _find_inode = <dyn Inode>::lookup_from_root(&absolute_path);
             match _find_inode {
                 Some(_find_inode) => {
                     debug!("[sys_mkdirat] already exists");
@@ -152,7 +152,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                 None => {
                     let parent = path::get_parent_dir(&absolute_path).unwrap();
                     debug!("[sys_mkdirat] get parent name: {}", parent);
-                    let parent_inode = <dyn Inode>::lookup_from_root_tmp(&parent);
+                    let parent_inode = <dyn Inode>::lookup_from_root(&parent);
                     match parent_inode {
                         Some(parent_inode) => match parent_inode.metadata().mode {
                             InodeMode::FileDIR => {
@@ -233,7 +233,7 @@ pub fn sys_mount(
         return Err(SyscallErr::ENOENT);
     }
     let target_path = target_path.unwrap();
-    let target_inode = <dyn Inode>::lookup_from_root_tmp(&target_path);
+    let target_inode = <dyn Inode>::lookup_from_root(&target_path);
     if target_inode.is_none() {
         return Err(SyscallErr::EACCES);
     }
@@ -353,7 +353,7 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(path)?;
     let path = &c_str_to_string(path);
-    let target_inode = <dyn Inode>::lookup_from_root_tmp(path);
+    let target_inode = <dyn Inode>::lookup_from_root(path);
     match target_inode {
         Some(target_inode) => {
             let mut inner_lock = target_inode.metadata().inner.lock();

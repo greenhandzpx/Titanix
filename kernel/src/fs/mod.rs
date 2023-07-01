@@ -208,14 +208,14 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
 
 pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
     debug!("[resolve_path]: name {}, flags {:?}", name, flags);
-    let inode = <dyn Inode>::lookup_from_root_tmp(name);
+    let inode = <dyn Inode>::lookup_from_root(name);
     // inode
     if flags.contains(OpenFlags::CREATE) {
         if inode.is_some() {
             return inode;
         }
         let parent_path = path::get_parent_dir(name).unwrap();
-        let parent = <dyn Inode>::lookup_from_root_tmp(&parent_path);
+        let parent = <dyn Inode>::lookup_from_root(&parent_path);
         let child_name = path::get_name(name);
         if let Some(parent) = parent {
             debug!("create file {}", name);
@@ -229,7 +229,7 @@ pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
                     .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
                     .unwrap();
             }
-            let res = <dyn Inode>::lookup_from_root_tmp(name);
+            let res = <dyn Inode>::lookup_from_root(name);
             if let Some(inode) = res.as_ref() {
                 <dyn Inode>::create_page_cache_if_needed(inode.clone());
             }

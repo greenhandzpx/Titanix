@@ -1,7 +1,4 @@
-use core::{
-    hash::Hash,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
     collections::BTreeMap,
@@ -10,7 +7,7 @@ use alloc::{
 };
 use hashbrown::HashMap;
 use lazy_static::*;
-use log::{debug, info, warn};
+use log::debug;
 
 use crate::{
     driver::block::BlockDevice,
@@ -30,7 +27,6 @@ use super::{
     // inode::OpenFlags,
     pipe::Pipe,
     File,
-    FileSystem,
     Mutex,
     OpenFlags,
 };
@@ -259,29 +255,11 @@ impl dyn Inode {
         // path_names.remove(0);
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
-        for name in path_names {
-            match parent.lookup(parent.clone(), name) {
-                Some(p) => parent = p,
-                None => return None,
-            }
-        }
-        Some(parent)
-    }
-    /// Look up from root(e.g. "/home/oscomp/workspace")
-    pub fn lookup_from_root_tmp(
-        // file_system: Arc<dyn FileSystem>,
-        path: &str,
-    ) -> Option<Arc<dyn Inode>> {
-        let path_names = path::path2vec(path);
-        // path_names.remove(0);
-
-        let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
-
         for (i, name) in path_names.into_iter().enumerate() {
-            debug!("[lookup_from_root_tmp] round: {}, name: {}", i, name);
+            debug!("[lookup_from_root] round: {}, name: {}", i, name);
             match parent.lookup(parent.clone(), name) {
                 Some(p) => {
-                    debug!("[lookup_from_root_tmp] inode name: {}", p.metadata().name);
+                    debug!("[lookup_from_root] inode name: {}", p.metadata().name);
                     parent = p
                 }
                 None => return None,

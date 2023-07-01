@@ -102,7 +102,7 @@ use sync::*;
 use time::*;
 
 use crate::{
-    fs::posix::{Statfs, Sysinfo},
+    fs::posix::Statfs,
     mm::MapPermission,
     process::resource::RLimit,
     processor::current_trap_cx,
@@ -115,7 +115,7 @@ use crate::{
 /// handle syscall exception with `syscall_id` and other arguments
 /// return whether the process should exit or not
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    info!(
+    trace!(
         "syscall id: {}, sepc {:#x}",
         syscall_id,
         current_trap_cx().sepc

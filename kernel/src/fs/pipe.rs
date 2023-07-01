@@ -329,6 +329,7 @@ pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
     (read_end, write_end)
 }
 
+#[allow(unused)]
 enum PipeOperation {
     Read,
     Write,
@@ -343,6 +344,8 @@ struct PipeFuture {
 }
 
 impl PipeFuture {
+
+    #[allow(unused)]
     pub fn new(
         buffer: Arc<Mutex<PipeRingBuffer>>,
         user_buf: usize,

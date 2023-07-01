@@ -107,7 +107,7 @@ pub fn user_path(_file_system: Arc<dyn FileSystem>, path: &str) -> GeneralRet<Ar
     // also should prepare the filesystem (init it first)
     let path_vec = path2vec(path);
     if path_vec[0].starts_with('/') {
-        let target = <dyn Inode>::lookup_from_root_tmp(path);
+        let target = <dyn Inode>::lookup_from_root(path);
         match target {
             Some(target) => Ok(target),
             None => Err(SyscallErr::ENOENT),
