@@ -5,9 +5,6 @@ mod spi;
 mod virtio_blk;
 use core::any::Any;
 
-// pub use io_device_tmp::IoDevice;
-mod io_device;
-pub use io_device::IoDevice;
 
 use alloc::sync::Arc;
 use lazy_static::*;

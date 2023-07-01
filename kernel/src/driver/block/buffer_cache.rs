@@ -177,7 +177,3 @@ impl LruBufferCache {
         Some(buffer_queue_locked.front().unwrap().1.clone())
     }
 }
-
-impl fatfs::IoBase for LruBufferCache {
-    type Error = ();
-}

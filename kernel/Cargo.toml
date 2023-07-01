@@ -19,10 +19,6 @@ intrusive-collections = { version = "0.9", features = ["nightly"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
 async-task = { path = "../dependencies/async-task", default-features = false }
-fatfs = { path = "../dependencies/rust-fatfs", default-features = false, features = [
-    "lfn",
-    "alloc",
-] }
 fu740-pac = { path = "../dependencies/fu740-pac" }
 fu740-hal = { path = "../dependencies/fu740-hal" }
 
