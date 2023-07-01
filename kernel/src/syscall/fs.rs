@@ -565,7 +565,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    info!("[sys_write]: fd {}, len {}", fd, len);
+    debug!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -682,7 +682,7 @@ fn test() -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    info!("[sys_read]: fd {}, len {}", fd, len);
+    debug!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;

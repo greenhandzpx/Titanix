@@ -106,10 +106,10 @@ impl File for Pipe {
                 if let Some(ret) = self.inner_handler(|ring_buffer| {
                     let loop_write = ring_buffer.available_write();
                     if loop_write == 0 {
+                        if ring_buffer.all_read_ends_closed() {
+                            return Some(already_write);
+                        }
                         return None;
-                        // drop(ring_buffer);
-                        // suspend_current_and_run_next();
-                        // continue;
                     }
                     // write at most loop_write bytes
                     for _ in 0..loop_write {
