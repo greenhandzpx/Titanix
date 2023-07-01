@@ -13,6 +13,7 @@ use log::{debug, info, trace, warn};
 
 use super::PollFd;
 use crate::config::fs::RLIMIT_OFILE;
+use crate::fs::file_system::FsDevice;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::posix::{
@@ -252,7 +253,15 @@ pub fn sys_mount(
         }
     };
 
-    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, todo!(), ftype, flags)?;
+    let dev = <dyn Inode>::lookup_from_root(&dev_name);
+    let dev = match dev {
+        Some(inode) => match &inode.metadata().device {
+            Some(d) => FsDevice::from_inode_device(d.clone()),
+            None => FsDevice::None,
+        },
+        None => FsDevice::None,
+    };
+    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, dev, ftype, flags)?;
 
     Ok(0)
 }

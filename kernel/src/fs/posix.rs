@@ -3,9 +3,7 @@ use core::mem::size_of;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use easy_fs::BLOCK_SZ;
 use log::debug;
-
 use super::fat32::SECTOR_SIZE;
 use super::Inode;
 use crate::timer::current_time_duration;
@@ -46,7 +44,7 @@ impl STAT {
             st_rdev: 0,
             __pad1: 0,
             st_size: 0,
-            st_blksize: BLOCK_SZ as u32,
+            st_blksize: SECTOR_SIZE as u32,
             __pad2: 0,
             st_blocks: 0,
             st_atim: TimeSpec::new(),

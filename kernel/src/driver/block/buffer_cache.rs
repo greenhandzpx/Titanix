@@ -1,6 +1,4 @@
 use alloc::{collections::LinkedList, sync::Arc};
-// use easy_fs::{BufferCacheOperations, BlockDevice};
-// use easy_fs::BlockDevice;
 
 use crate::{
     config::board::BLOCK_SIZE,
@@ -178,8 +176,4 @@ impl LruBufferCache {
         }
         Some(buffer_queue_locked.front().unwrap().1.clone())
     }
-}
-
-impl fatfs::IoBase for LruBufferCache {
-    type Error = ();
 }

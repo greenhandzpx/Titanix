@@ -21,21 +21,6 @@ lazy_static! {
     static ref QUEUE_FRAMES: SpinNoIrqLock<Vec<FrameTracker>> = SpinNoIrqLock::new(Vec::new());
 }
 
-impl easy_fs::BlockDevice for VirtIOBlock {
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        self.0
-            .lock()
-            .read_block(block_id, buf)
-            .expect("Error when reading VirtIOBlk");
-    }
-    fn write_block(&self, block_id: usize, buf: &[u8]) {
-        self.0
-            .lock()
-            .write_block(block_id, buf)
-            .expect("Error when writing VirtIOBlk");
-    }
-}
-
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
         let res = self.0.lock().read_block(block_id, buf);
