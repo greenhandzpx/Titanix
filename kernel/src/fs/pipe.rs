@@ -14,6 +14,8 @@ use crate::utils::error::{AsyscallRet, GeneralRet, SyscallRet};
 use super::file::{File, FileMeta};
 
 type Mutex<T> = SpinNoIrqLock<T>;
+
+#[derive(Clone)]
 pub struct Pipe {
     readable: bool,
     writable: bool,

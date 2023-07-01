@@ -16,14 +16,24 @@ use crate::{
     }, driver::block::BlockDevice,
 };
 
-use super::{posix::StatFlags, Inode, FAT32FileSystem, devfs::DevFs, procfs::ProcFs};
+use super::{posix::StatFlags, Inode, FAT32FileSystem, devfs::DevFs, procfs::ProcFs, inode::InodeDevice};
 
+#[derive(Clone)]
 pub enum FsDevice {
     BlockDevice(Arc<dyn BlockDevice>),
     None,
 }
 
 impl FsDevice {
+    pub fn from_inode_device(dev: InodeDevice) -> Self {
+        match dev {
+            InodeDevice::Pipe(_) => Self::None,
+            InodeDevice::Device(d) => {
+                Self::BlockDevice(d.block_device)
+            }
+        }
+    }
+
     pub fn block_device(&self) -> Option<&Arc<dyn BlockDevice>> {
         if let FsDevice::BlockDevice(ret) = &self {
             Some(ret)

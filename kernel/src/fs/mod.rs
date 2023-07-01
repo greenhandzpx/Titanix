@@ -2,7 +2,7 @@ mod devfs;
 pub mod fat32;
 mod fd_table;
 mod file;
-mod file_system;
+pub mod file_system;
 mod hash_key;
 pub mod inode;
 // pub mod inode_fat32_tmp;

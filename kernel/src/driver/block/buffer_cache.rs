@@ -1,6 +1,4 @@
 use alloc::{collections::LinkedList, sync::Arc};
-// use easy_fs::{BufferCacheOperations, BlockDevice};
-// use easy_fs::BlockDevice;
 
 use crate::{
     config::board::BLOCK_SIZE,
