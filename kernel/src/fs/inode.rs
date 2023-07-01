@@ -381,12 +381,15 @@ impl InodeMeta {
     }
 }
 
+
+#[derive(Clone)]
 pub enum InodeDevice {
     Pipe(Pipe),
     Device(DevWrapper),
     // TODO: add more
 }
 
+#[derive(Clone)]
 pub struct DevWrapper {
     pub block_device: Arc<dyn BlockDevice>,
     pub dev_id: usize,

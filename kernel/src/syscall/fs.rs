@@ -21,7 +21,7 @@ use crate::fs::posix::{
 };
 use crate::fs::HashKey;
 use crate::fs::{
-    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
+    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags, file_system::FsDevice,
     FileSystem, FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
@@ -252,7 +252,17 @@ pub fn sys_mount(
         }
     };
 
-    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, todo!(), ftype, flags)?;
+    let dev = <dyn Inode>::lookup_from_root(&dev_name);
+    let dev = match dev {
+        Some(inode) => {
+            match &inode.metadata().device {
+                Some(d) => FsDevice::from_inode_device(d.clone()),
+                None => FsDevice::None,
+            }
+        },
+        None => FsDevice::None,
+    };
+    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, dev, ftype, flags)?;
 
     Ok(0)
 }
