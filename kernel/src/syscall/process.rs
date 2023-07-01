@@ -5,7 +5,7 @@ use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
-use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard, env};
+use crate::processor::{current_process, current_task, current_trap_cx, env, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
@@ -174,7 +174,7 @@ pub fn sys_clone(
                 info!("[sys_clone] assign the user stack {:#x}", stack);
                 // UserCheck::new().check_writable_slice(stack as *mut u8, USER_STACK_SIZE)?;
                 Some(stack as usize)
-            },
+            }
         };
         let new_process = current_process.fork(stack)?;
         let new_pid = new_process.pid();
@@ -184,7 +184,10 @@ pub fn sys_clone(
         // for child process, fork returns 0
         trap_cx.user_x[10] = 0;
 
-        info!("[sys_clone] return new pid: {}, flags {:?}", new_pid, clone_flags);
+        info!(
+            "[sys_clone] return new pid: {}, flags {:?}",
+            new_pid, clone_flags
+        );
         Ok(new_pid as isize)
     } else {
         // clone(i.e. create a new thread)
@@ -199,7 +202,10 @@ pub fn sys_clone(
 pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usize) -> SyscallRet {
     stack_trace!();
 
-    info!("[sys_execve] enter, path ptr {:#x} ,args ptr {:#x}, envs ptr {:#x}", path as usize, args as usize, envs as usize);
+    info!(
+        "[sys_execve] enter, path ptr {:#x} ,args ptr {:#x}, envs ptr {:#x}",
+        path as usize, args as usize, envs as usize
+    );
     // info!("path1 {:#x}", path as usize);
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
@@ -211,7 +217,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             break;
         }
         //// TODO: add user check
-        UserCheck::new().check_c_str(unsafe { (*args) as *const u8  })?;
+        UserCheck::new().check_c_str(unsafe { (*args) as *const u8 })?;
         args_vec.push(c_str_to_string(unsafe { (*args) as *const u8 }));
         debug!("exec get an arg {}", args_vec[args_vec.len() - 1]);
         unsafe {
@@ -227,7 +233,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             break;
         }
         //// TODO: add user check
-        UserCheck::new().check_c_str(unsafe { (*envs) as *const u8  })?;
+        UserCheck::new().check_c_str(unsafe { (*envs) as *const u8 })?;
         envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
         debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
         unsafe {
@@ -380,7 +386,6 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     }
 }
 
-
 pub fn sys_getuid() -> SyscallRet {
     stack_trace!();
     // TODO: not sure
@@ -475,7 +480,10 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
             }
             usage.ru_utime = user_time.into();
             usage.ru_stime = sys_time.into();
-            trace!("[sys_getrusage]: process real time {:?}", current_time_duration() - start_ts);
+            trace!(
+                "[sys_getrusage]: process real time {:?}",
+                current_time_duration() - start_ts
+            );
         }),
         _ => {
             panic!()

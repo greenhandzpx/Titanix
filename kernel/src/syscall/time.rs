@@ -63,7 +63,11 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     //     sec: time_spec.sec as isize - dev_spec.sec as isize,
     //     nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
     // };
-    info!("[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}", Duration::from(*time_spec), Duration::from(dev_spec));
+    info!(
+        "[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}",
+        Duration::from(*time_spec),
+        Duration::from(dev_spec)
+    );
 
     let mut manager_unlock = CLOCK_MANAGER.lock();
     manager_unlock.0.insert(clock_id, diff_time);

@@ -9,7 +9,8 @@ use crate::{
     },
     process::Process,
     processor::{current_process, SumGuard},
-    utils::error::{AgeneralRet, GeneralRet, SyscallErr}, stack_trace,
+    stack_trace,
+    utils::error::{AgeneralRet, GeneralRet, SyscallErr},
 };
 
 use super::{MemorySpace, VmArea};
@@ -71,7 +72,10 @@ impl PageFaultHandler for UStackPageFaultHandler {
         let page_table = memory_space.page_table.get_unchecked_mut();
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
-        info!("[UStackPageFaultHandler] handle ustack page fault, va {:#x} ppn {:#x}", va.0, ppn.0);
+        info!(
+            "[UStackPageFaultHandler] handle ustack page fault, va {:#x} ppn {:#x}",
+            va.0, ppn.0
+        );
         Ok(true)
         // })
     }
@@ -283,7 +287,6 @@ impl PageFaultHandler for CowPageFaultHandler {
         let page_table = memory_space.page_table.get_unchecked_mut();
 
         if let Some(pte) = page_table.find_pte(vpn) {
-
             stack_trace!();
             // the page has correlated physical frame
             debug_assert!(pte.flags().contains(PTEFlags::COW));

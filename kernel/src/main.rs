@@ -138,7 +138,7 @@ pub fn rust_main(hart_id: usize) {
         timer::set_next_trigger();
         // executor::init();
         // loader::list_apps();
-        fs::fat32_tmp::list_apps_fat32();
+        // fs::fat32::list_apps_fat32();
 
         fs::init();
 

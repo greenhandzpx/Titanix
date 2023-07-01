@@ -5,7 +5,7 @@ use log::{debug, trace, warn};
 
 use crate::{
     fs::posix::FdSet,
-    processor::{current_process, SumGuard, current_task},
+    processor::{current_process, current_task, SumGuard},
     syscall::{PollEvents, PollFd},
     utils::error::{SyscallErr, SyscallRet},
 };

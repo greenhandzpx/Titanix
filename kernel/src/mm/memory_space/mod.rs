@@ -356,7 +356,7 @@ impl MemorySpace {
         );
         info!(
             "[kernel].text.trampoline [{:#x}, {:#x})",
-            strampoline as usize, etrampoline as usize, 
+            strampoline as usize, etrampoline as usize,
         );
         info!(
             "[kernel].rodata [{:#x}, {:#x})",
@@ -767,7 +767,11 @@ impl MemorySpace {
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
             let new_area = VmArea::from_another(area);
-            info!("[from_existed_user_lazily] area range [{:#x}, {:#x})", new_area.start_vpn().0, new_area.end_vpn().0);
+            info!(
+                "[from_existed_user_lazily] area range [{:#x}, {:#x})",
+                new_area.start_vpn().0,
+                new_area.end_vpn().0
+            );
             // copy data from another space
             for vpn in area.vpn_range {
                 // SAFETY: we've locked the process inner before calling this function

@@ -4,9 +4,9 @@ use log::{trace, warn};
 use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
-    mm,
+    mm, stack_trace,
     sync::mutex::SleepLock,
-    utils::error::{GeneralRet, SyscallErr}, stack_trace,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 use super::{FrameTracker, MapPermission};

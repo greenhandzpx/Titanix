@@ -1,22 +1,21 @@
 use core::sync::atomic::AtomicUsize;
 
+use alloc::vec::Vec;
 use alloc::{string::ToString, sync::Arc};
-use log::{debug, info};
-
-use crate::fs::hash_key::HashKey;
-use crate::fs::inode::INODE_CACHE;
-use crate::fs::posix::StatFlags;
-use crate::utils::error::GeneralRet;
-use crate::utils::path;
+use log::debug;
 
 use self::null::NullInode;
 use self::rtc::RtcInode;
 use self::{tty::TtyInode, zero::ZeroInode};
+use crate::fs::hash_key::HashKey;
+use crate::fs::inode::INODE_CACHE;
+use crate::fs::posix::StatFlags;
+use crate::utils::error::GeneralRet;
 
 use super::testfs::TestRootInode;
+use super::FileSystemType;
 use super::{
-    // dentry::DentryMeta,
-    file_system::{FileSystem, FileSystemMeta, FILE_SYSTEM_MANAGER},
+    file_system::{FileSystem, FileSystemMeta},
     inode::{InodeMeta, InodeMode},
     Inode,
 };
@@ -37,13 +36,13 @@ impl Inode for DevRootInode {
         &self,
         this: Arc<dyn Inode>,
         pathname: &str,
-        mode: InodeMode,
-        dev_id: usize,
+        _mode: InodeMode,
+        dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[DevRootInode::mknod]: mknod: {}", pathname);
-        debug_assert!(dev_id < DEV_NAMES.len());
-        let creator = DEV_NAMES[dev_id].2;
-        let inode = creator(this.clone(), DEV_NAMES[dev_id].0);
+        //        debug_assert!(dev_id.unwrap() < DEV_NAMES.len());
+        let creator = DEV_NAMES[dev_id.unwrap()].2;
+        let inode = creator(this.clone(), DEV_NAMES[dev_id.unwrap()].0);
         this.metadata()
             .inner
             .lock()
@@ -69,6 +68,8 @@ impl Inode for DevRootInode {
     fn delete_child(&self, _child_name: &str) {
         todo!()
     }
+
+    fn sync(&self) {}
 }
 
 impl DevRootInode {
@@ -77,50 +78,7 @@ impl DevRootInode {
     }
 }
 
-pub struct DevFs {
-    metadata: Option<FileSystemMeta>,
-    id_allocator: AtomicUsize,
-    // dev_mgr: Arc<DevManager>,
-}
-
-impl DevFs {
-    pub fn new() -> Self {
-        Self {
-            metadata: None,
-            id_allocator: AtomicUsize::new(0),
-        }
-    }
-}
-
-impl FileSystem for DevFs {
-    /// i.e. parent: /    mount_point: /dev
-    fn create_root(
-        &self,
-        parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
-    ) -> GeneralRet<Arc<dyn Inode>> {
-        let mut root_inode = DevRootInode::new();
-        root_inode.init(parent.clone(), mount_point, InodeMode::FileDIR, 0)?;
-        let res = Arc::new(root_inode);
-        // TODO: should we add a flag to indicate that this dentry(i.e dev) is no need to be flushed
-        // to disk
-        parent
-            .expect("Need a parent")
-            .metadata()
-            .inner
-            .lock()
-            .children
-            .insert(path::get_name(mount_point).to_string(), res.clone());
-        Ok(res)
-    }
-    fn set_metadata(&mut self, metadata: super::file_system::FileSystemMeta) {
-        self.metadata = Some(metadata);
-    }
-    fn metadata(&self) -> FileSystemMeta {
-        self.metadata.as_ref().unwrap().clone()
-    }
-}
-
+/// TODO: resolve dtb instead of constant list
 const DEV_NAMES: [(
     &str,
     InodeMode,
@@ -143,45 +101,62 @@ const DEV_NAMES: [(
     }),
 ];
 
-pub fn init() -> GeneralRet<()> {
-    info!("start to init devfs...");
+pub struct DevFs {
+    metadata: FileSystemMeta,
+    // _id_allocator: AtomicUsize,
+    // dev_mgr: Arc<DevManager>,
+}
 
-    let mut dev_fs = DevFs::new();
+impl DevFs {
+    pub fn new(
+        mount_point: &str,
+        dev_name: &str,
+        fstype: FileSystemType,
+        flags: StatFlags,
+        fa_inode: Option<Arc<dyn Inode>>,
+        covered_inode: Option<Arc<dyn Inode>>,
+    ) -> GeneralRet<Self> {
+        let mut raw_root_inode = DevRootInode::new();
+        raw_root_inode.init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
+        let root_inode = Arc::new(raw_root_inode);
 
-    dev_fs.init(
-        "udev".to_string(),
-        "/dev",
-        crate::fs::FileSystemType::VFAT,
-        StatFlags::ST_NOSUID,
-    )?;
-    // dev_fs.init("/")?;
+        let id_allocator = AtomicUsize::new(0);
 
-    let dev_fs = Arc::new(dev_fs);
+        let mut cache_lock = INODE_CACHE.lock();
+        let parent_ino = root_inode.metadata().ino;
+        for (dev_name2, inode_mode, _) in DEV_NAMES {
+            let child = root_inode.mknod(
+                root_inode.clone(),
+                dev_name2,
+                inode_mode,
+                Some(id_allocator.fetch_add(1, core::sync::atomic::Ordering::AcqRel)),
+            )?;
+            let child_name = child.metadata().name.clone();
+            let key = HashKey::new(parent_ino, child_name);
+            cache_lock.insert(key, child);
+            debug!("insert {} finished", dev_name2);
+        }
 
-    let dev_root_inode = dev_fs.metadata().root_inode.as_ref().cloned().unwrap();
+        Ok(Self {
+            metadata: FileSystemMeta {
+                dev_name: dev_name.to_string(),
+                mount_point: mount_point.to_string(),
+                fstype,
+                flags,
+                root_inode,
+                fa_inode,
+                covered_inode,
+                s_dirty: Vec::new(),
+            },
+            // id_allocator: id_allocator,
+        })
+    }
+}
 
-    let mut cache_lock = INODE_CACHE.lock();
-    let parent_ino = dev_root_inode.metadata().ino;
-    for (dev_name, inode_mode, _) in DEV_NAMES {
-        let child = dev_root_inode.mknod(
-            dev_root_inode.clone(),
-            dev_name,
-            inode_mode,
-            dev_fs
-                .id_allocator
-                .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
-        )?;
-        let child_name = child.metadata().name.clone();
-        let key = HashKey::new(parent_ino, child_name);
-        cache_lock.insert(key, child);
-        debug!("insert {} finished", dev_name);
+impl FileSystem for DevFs {
+    fn metadata(&self) -> &FileSystemMeta {
+        &self.metadata
     }
 
-    FILE_SYSTEM_MANAGER
-        .fs_mgr
-        .lock()
-        .insert("/dev".to_string(), dev_fs);
-    info!("init devfs success");
-
-    Ok(())
+    fn sync_fs(&self) {}
 }

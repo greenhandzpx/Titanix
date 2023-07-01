@@ -4,7 +4,7 @@ use super::{PhysAddr, PhysPageNum};
 use crate::{
     config::{
         board::MEMORY_END,
-        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS, PAGE_SIZE},
+        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS},
     },
     sync::mutex::SpinNoIrqLock,
 };

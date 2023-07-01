@@ -1,5 +1,5 @@
 //! Implementation of physical and virtual address and page number.
-use log::{warn, error};
+use log::{error, warn};
 
 use super::PageTableEntry;
 use crate::config::{

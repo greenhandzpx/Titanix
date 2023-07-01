@@ -51,6 +51,8 @@ impl Inode for MountsInode {
     fn delete_child(&self, child_name: &str) {
         panic!("Unsupported operation")
     }
+
+    fn sync(&self) {}
 }
 
 pub struct MountsFile {

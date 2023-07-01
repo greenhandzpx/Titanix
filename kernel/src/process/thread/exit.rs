@@ -1,5 +1,6 @@
 use crate::{
-    process::PROCESS_MANAGER, processor::current_process, signal::SIGCHLD, stack_trace, sync::Event, config::process::INITPROC_PID,
+    config::process::INITPROC_PID, process::PROCESS_MANAGER, processor::current_process,
+    signal::SIGCHLD, stack_trace, sync::Event,
 };
 use alloc::{sync::Arc, vec::Vec};
 use log::{debug, info};

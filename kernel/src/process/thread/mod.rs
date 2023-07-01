@@ -13,9 +13,9 @@ use self::{
 };
 
 use super::Process;
-use crate::{executor, stack_trace};
 use crate::signal::SignalContext;
 use crate::trap::TrapContext;
+use crate::{executor, stack_trace};
 use alloc::sync::Arc;
 use core::future::Future;
 use core::{cell::UnsafeCell, task::Waker};

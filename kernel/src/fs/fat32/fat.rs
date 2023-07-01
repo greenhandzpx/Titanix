@@ -1,24 +1,19 @@
 use alloc::{collections::LinkedList, sync::Arc};
 
-use crate::{
-    driver::block::{self, BlockDevice},
-    fs::Mutex,
-    utils::debug,
-};
+use crate::{driver::block::BlockDevice, fs::Mutex};
 
-use log::debug;
+use log::info;
 
 use super::{
     fat32info::FAT32Info, fsinfo::FSInfo, FATENTRY_PER_SECTOR, FAT_CACHE_SIZE, FSI_LEADSIG,
     FSI_NOT_AVAILABLE, FSI_STRUCSIG, FSI_TRAILSIG,
 };
 
-/// 一个 FAT Sector Buffer 的状态
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum FATSectorBufferState {
-    Unassigned, // 未分配
-    Assigned,   // 已分配，未修改
-    Dirty,      // 已分配，已修改未写回
+    Unassigned,
+    Assigned,
+    Dirty,
 }
 
 impl Default for FATSectorBufferState {
@@ -134,7 +129,7 @@ impl FATBufferCache {
             if data_locked.len() == FAT_CACHE_SIZE {
                 let buffer_replaced = data_locked.pop_back().unwrap().1;
                 if Arc::strong_count(&buffer_replaced) != 1 {
-                    debug!("Fatal Error. FAT32 Run out of FAT Buffers!");
+                    info!("Fatal Error. FAT32 Run out of FAT Buffers!");
                 }
                 let mut buffer_replaced_locked = buffer_replaced.lock();
                 buffer_replaced_locked.init(
@@ -161,17 +156,17 @@ impl FATBufferCache {
             return None;
         }
         let sector_id = cluster_id / FATENTRY_PER_SECTOR;
-        let offset = cluster_id / FATENTRY_PER_SECTOR;
+        let offset = cluster_id % FATENTRY_PER_SECTOR;
         let fat_sector = self.lookup_buffer_cache(sector_id);
         let fat_sector_locked = fat_sector.lock();
         if fat_sector_locked.state == FATSectorBufferState::Unassigned {
-            debug!(
+            info!(
                 "[FAT] Got an unassigned sector buffer! require = {}",
                 sector_id
             );
         }
         if fat_sector_locked.sector_no != sector_id {
-            debug!(
+            info!(
                 "[FAT] Sector buffer is wrong! require = {}, got = {}",
                 sector_id, fat_sector_locked.sector_no
             );
@@ -184,17 +179,17 @@ impl FATBufferCache {
             return None;
         }
         let sector_id = cluster_id / FATENTRY_PER_SECTOR;
-        let offset = cluster_id / FATENTRY_PER_SECTOR;
+        let offset = cluster_id % FATENTRY_PER_SECTOR;
         let fat_sector = self.lookup_buffer_cache(sector_id);
         let mut fat_sector_locked = fat_sector.lock();
         if fat_sector_locked.state == FATSectorBufferState::Unassigned {
-            debug!(
+            info!(
                 "[FAT] Got an unassigned sector buffer! require = {}",
                 sector_id
             );
         }
         if fat_sector_locked.sector_no != sector_id {
-            debug!(
+            info!(
                 "[FAT] Sector buffer is wrong! require = {}, got = {}",
                 sector_id, fat_sector_locked.sector_no
             );
@@ -209,13 +204,13 @@ impl FATBufferCache {
             let fat_sector = self.lookup_buffer_cache(sector_id);
             let mut fat_sector_locked = fat_sector.lock();
             if fat_sector_locked.state == FATSectorBufferState::Unassigned {
-                debug!(
+                info!(
                     "[FAT] Got an unassigned sector buffer! require = {}",
                     sector_id
                 );
             }
             if fat_sector_locked.sector_no != sector_id {
-                debug!(
+                info!(
                     "[FAT] Sector buffer is wrong! require = {}, got = {}",
                     sector_id, fat_sector_locked.sector_no
                 );
@@ -263,11 +258,11 @@ impl FileAllocTable {
             || fsinfo_raw.FSI_TrailSig != FSI_TRAILSIG
             || fsinfo_raw.FSI_StrucSig != FSI_STRUCSIG
         {
-            debug!("fsinfo magic number 有误！");
+            info!("fsinfo magic number wrong!");
         }
         let free_count = fsinfo_raw.FSI_Free_Count as usize;
         let nxt_free = fsinfo_raw.FSI_Nxt_Free as usize;
-        let mut ret = Self {
+        let ret = Self {
             block_device: Arc::clone(&block_device),
             info: Arc::clone(&info),
             fatcache: FATBufferCache::new(Arc::clone(&block_device), Arc::clone(&info)),
@@ -332,7 +327,7 @@ impl FileAllocTable {
         if let Some(ret) = self.alloc_cluster_inner() {
             if let Some(pre) = prev {
                 if self.read_fat(pre).unwrap() < 0x0FFFFFF8 {
-                    debug!("尝试在非 FAT 链末尾写数据");
+                    info!("write data at non fat link tail!");
                 }
                 self.write_fat(pre, ret as u32);
             }
@@ -346,7 +341,7 @@ impl FileAllocTable {
     pub fn free_cluster(&self, cluster_id: usize, prev: Option<usize>) -> Option<()> {
         if let Some(pre) = prev {
             if self.read_fat(pre).unwrap() as usize != cluster_id {
-                debug!("给定的前驱位置不对");
+                info!("not a right pre!");
                 return None;
             }
             self.write_fat(pre, 0x0FFFFFFF);

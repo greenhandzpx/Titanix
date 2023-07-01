@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use alloc::{string::String, vec};
 use bitflags::*;
 use core::arch::asm;
-use log::{error, info, debug};
+use log::{debug, error, info};
 use riscv::register::satp;
 
 bitflags! {
@@ -138,7 +138,10 @@ impl PageTable {
         // Note that we just need shallow copy here
         let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
         let level_1_index = kernel_start_vpn.indices()[0];
-        debug!("[PageTable::from_global] kernel start vpn level 1 index {:#x}, start vpn {:#x}", level_1_index, kernel_start_vpn.0);
+        debug!(
+            "[PageTable::from_global] kernel start vpn level 1 index {:#x}, start vpn {:#x}",
+            level_1_index, kernel_start_vpn.0
+        );
         frame.ppn.pte_array()[level_1_index..]
             .copy_from_slice(&global_root_ppn.pte_array()[level_1_index..]);
 

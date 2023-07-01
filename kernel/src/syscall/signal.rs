@@ -184,7 +184,10 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     trap_context_mut.user_x = signal_context.user_context.user_x;
     trap_context_mut.sstatus = signal_context.user_context.sstatus;
     trap_context_mut.sepc = signal_context.user_context.sepc;
-    info!("[sys_rt_sigreturn] sig return, sepc {:#x}", trap_context_mut.sepc);
+    info!(
+        "[sys_rt_sigreturn] sig return, sepc {:#x}",
+        trap_context_mut.sepc
+    );
     Ok(trap_context_mut.user_x[10] as isize)
 }
 

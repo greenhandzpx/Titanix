@@ -38,6 +38,7 @@ impl Inode for BlockDeviceInode {
     fn delete_child(&self, child_name: &str) {
         panic!("Unsupported operation delete")
     }
+    fn sync(&self) {}
 }
 
 impl BlockDeviceInode {

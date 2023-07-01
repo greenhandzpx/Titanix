@@ -8,7 +8,7 @@ use crate::{
             vm_area::BackupFile,
             PageFaultHandler,
         },
-        MapPermission, VirtAddr, VPNRange,
+        MapPermission, VPNRange, VirtAddr,
     },
     processor::current_process,
     stack_trace,

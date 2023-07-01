@@ -9,9 +9,10 @@ use crate::{
     process::{self, thread::exit_and_terminate_all_threads},
     processor::{current_process, current_task, current_trap_cx, hart::local_hart},
     signal::check_signal_for_current_process,
+    stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
-    trap::set_user_trap_entry, stack_trace,
+    trap::set_user_trap_entry,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};

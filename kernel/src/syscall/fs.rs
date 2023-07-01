@@ -252,15 +252,7 @@ pub fn sys_mount(
         }
     };
 
-    let mut fs = ftype.new_fs();
-    fs.init(dev_name, &target_path, ftype, flags)?;
-    fs.mount()?;
-
-    let meta = fs.metadata();
-    let root_inode = meta.root_inode.as_ref().unwrap();
-    let path = root_inode.metadata().path.clone();
-
-    FILE_SYSTEM_MANAGER.fs_mgr.lock().insert(path, Arc::new(fs));
+    FILE_SYSTEM_MANAGER.mount(&target_path, &dev_name, todo!(), ftype, flags)?;
 
     Ok(0)
 }
@@ -284,23 +276,9 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
     }
     let target_fs = target_fs.unwrap();
     // sync fs
-    let meta = target_fs.metadata();
-    let root_inode = meta.root_inode.unwrap();
-    let parent = root_inode.metadata().inner.lock().parent.clone();
-    match parent {
-        Some(parent) => {
-            let parent = parent.upgrade().unwrap();
-            debug!("Have a parent: {}", parent.metadata().path);
-            parent.remove_child(root_inode)?;
-            target_fs.umount()?;
-            fs_mgr.remove(&target_path);
-            Ok(0)
-        }
-        None => {
-            debug!("Have no parent, this inode is a root node which cannot be unlink");
-            Err(SyscallErr::EPERM)
-        }
-    }
+
+    FILE_SYSTEM_MANAGER.unmount(&target_path)?;
+    Ok(0)
 }
 
 /// The system call getdents() reads several dirent structures from the directory pointed at by fd into the memory area pointed to by dirp.
@@ -696,7 +674,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
 
-    
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
@@ -919,7 +896,7 @@ pub fn sys_renameat2(
                     newparent.clone(),
                     &newpath,
                     oldtype,
-                    oldinode.metadata().rdev.unwrap(),
+                    oldinode.metadata().rdev,
                 )?;
             }
             let new_inner_lock = newparent.metadata().inner.lock();
@@ -986,7 +963,7 @@ pub fn sys_renameat2(
                         old_parent.clone(),
                         &newpath,
                         newtype,
-                        newinode.clone().metadata().rdev.unwrap(),
+                        newinode.clone().metadata().rdev,
                     )?;
                 }
                 if oldtype == InodeMode::FileDIR {
@@ -996,7 +973,7 @@ pub fn sys_renameat2(
                         new_parent.clone(),
                         &oldpath,
                         oldtype,
-                        oldinode.clone().metadata().rdev.unwrap(),
+                        oldinode.clone().metadata().rdev,
                     )?;
                 }
                 // inner exchange
@@ -1036,7 +1013,7 @@ pub fn sys_renameat2(
                             new_parent.clone(),
                             &newpath,
                             newtype,
-                            oldinode.clone().metadata().rdev.unwrap(),
+                            oldinode.clone().metadata().rdev,
                         )?;
                     }
                     let mut oldinner = oldinode.metadata().inner.lock().clone();
