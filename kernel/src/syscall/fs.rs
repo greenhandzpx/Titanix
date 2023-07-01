@@ -565,7 +565,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    trace!("[sys_write]: fd {}, len {}", fd, len);
+    info!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -581,11 +581,12 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    if buf.len() < 2 {
-        file.sync_write(buf)
-    } else {
-        file.write(buf).await
-    }
+    file.write(buf).await
+    // if buf.len() < 2 {
+    //     file.sync_write(buf)
+    // } else {
+    //     file.write(buf).await
+    // }
 }
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
@@ -681,7 +682,7 @@ fn test() -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    trace!("[sys_read]: fd {}, len {}", fd, len);
+    info!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -700,11 +701,12 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
     stack_trace!();
-    if buf.len() < 2 {
-        file.sync_read(buf)
-    } else {
-        file.read(buf).await
-    }
+    file.read(buf).await
+    // if buf.len() < 2 {
+    //     file.sync_read(buf)
+    // } else {
+    //     file.read(buf).await
+    // }
 }
 
 pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
@@ -1326,7 +1328,7 @@ pub async fn sys_pselect6(
             Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
         }
     };
-    debug!(
+    info!(
         "[sys_pselect]: readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
         readfds, writefds, exceptfds, timeout
     );
@@ -1415,6 +1417,11 @@ pub async fn sys_pselect6(
         }
         match TimeoutTaskFuture::new(timeout, poll_future).await {
             TimeoutTaskOutput::Ok(ret) => {
+                if !timeout.is_zero() {
+                    info!("[sys_pselect]: ready");
+                } else {
+                    debug!("[sys_pselect]: ready");
+                }
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {

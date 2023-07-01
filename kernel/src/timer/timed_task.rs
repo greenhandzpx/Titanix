@@ -46,6 +46,10 @@ impl<F: Fn() -> bool> Future for TimedTaskFuture<F> {
             waker: Some(cx.waker().clone()),
         };
         TIMER_QUEUE.add_timer(timer);
+
+        // If single core
+        cx.waker().wake_by_ref();
+
         Poll::Pending
     }
 }

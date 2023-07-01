@@ -22,8 +22,8 @@ ifeq ($(MODE), release)
 endif
 
 # FS_IMG := $(FS_IMG_BUSYBOX)
-# FS_IMG := $(FS_IMG_FAT32)
-FS_IMG := $(FS_IMG_FINAL)
+FS_IMG := $(FS_IMG_FAT32)
+# FS_IMG := $(FS_IMG_FINAL)
 
 # KERNEL ENTRY
 KERNEL_ENTRY_PA := 0x80200000

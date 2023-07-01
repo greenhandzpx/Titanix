@@ -162,9 +162,7 @@ pub fn rust_main(hart_id: usize) {
             // }
         });
 
-        // INIT_FINISHED.store(true, Ordering::Release);
-        INIT_FINISHED.store(true, Ordering::Release);
-        // FIRST_HART_ID.store(hart_id as u8, Ordering::SeqCst);
+        INIT_FINISHED.store(true, Ordering::SeqCst);
 
         let hart_num = unsafe { HARTS.len() };
         for i in 0..hart_num {
@@ -176,8 +174,7 @@ pub fn rust_main(hart_id: usize) {
     } else {
         // The other harts
 
-        // while !INIT_FINISHED.load(Ordering::Acquire) {}
-        while !INIT_FINISHED.load(Ordering::Acquire) {}
+        while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
@@ -191,7 +188,7 @@ pub fn rust_main(hart_id: usize) {
         }
         println!("[kernel] ---------- hart {} started ---------- ", hart_id);
 
-        // return;
+        return;
     }
 
     // loop {

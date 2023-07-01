@@ -5,6 +5,8 @@ use core::{
     time::Duration,
 };
 
+use log::info;
+
 use super::{current_time_duration, Timer, TIMER_QUEUE};
 
 pub enum TimeoutTaskOutput<T> {
@@ -15,6 +17,7 @@ pub enum TimeoutTaskOutput<T> {
 pub struct TimeoutTaskFuture<F: Future + Send + 'static> {
     expired_time: Duration,
     task_future: F,
+    has_added_to_timer: bool,
 }
 
 impl<F: Future + Send + 'static> TimeoutTaskFuture<F> {
@@ -22,6 +25,7 @@ impl<F: Future + Send + 'static> TimeoutTaskFuture<F> {
         Self {
             expired_time: current_time_duration() + duration,
             task_future,
+            has_added_to_timer: false,
         }
     }
 }
@@ -29,18 +33,26 @@ impl<F: Future + Send + 'static> TimeoutTaskFuture<F> {
 impl<F: Future + Send + 'static> Future for TimeoutTaskFuture<F> {
     type Output = TimeoutTaskOutput<F::Output>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        info!("[TimeoutTaskFuture::poll] enter");
         let this = unsafe { self.get_unchecked_mut() };
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
         if ret.is_pending() {
             if current_time_duration() >= this.expired_time {
                 Poll::Ready(TimeoutTaskOutput::Timeout)
             } else {
-                // TODO: avoid adding to timer list repeatly
-                let timer = Timer {
-                    expired_time: this.expired_time,
-                    waker: Some(cx.waker().clone()),
-                };
-                TIMER_QUEUE.add_timer(timer);
+                if !this.has_added_to_timer {
+                    let timer = Timer {
+                        expired_time: this.expired_time,
+                        waker: Some(cx.waker().clone()),
+                    };
+                    TIMER_QUEUE.add_timer(timer);
+                    this.has_added_to_timer = true;
+                }
+
+                info!("[TimeoutTaskFuture::poll] still not ready");
+                // if singal core
+                cx.waker().clone().wake();
+
                 Poll::Pending
             }
         } else {

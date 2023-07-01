@@ -64,10 +64,12 @@ pub fn add_initproc() {
     PROCESS_MANAGER.add_process(init_proc.pid(), &init_proc);
 
     #[cfg(feature = "user_spin")]
-    let elf_data = get_app_data_by_name("user_spin").unwrap();
-    let spin_proc = Process::new(elf_data);
-    info!("[add_initproc]: add user spin, pid {}", spin_proc.pid());
-    PROCESS_MANAGER.add_process(init_proc.pid(), &spin_proc);
+    {
+        let elf_data = get_app_data_by_name("user_spin").unwrap();
+        let spin_proc = Process::new(elf_data);
+        info!("[add_initproc]: add user spin, pid {}", spin_proc.pid());
+        PROCESS_MANAGER.add_process(spin_proc.pid(), &spin_proc);
+    }
 }
 
 use self::{resource::RLimit, thread::TidHandle};
