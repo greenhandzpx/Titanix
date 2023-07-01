@@ -39,7 +39,7 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
 #[no_mangle]
 #[link_section = ".text.entry"]
 pub extern "C" fn _start(argc: usize, argv: usize) -> ! {
-// pub extern "C" fn _start(sp: usize) -> ! {
+    // pub extern "C" fn _start(sp: usize) -> ! {
     unsafe {
         HEAP.lock()
             .init(HEAP_SPACE.as_ptr() as usize, USER_HEAP_SIZE);

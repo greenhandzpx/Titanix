@@ -346,7 +346,6 @@ struct PipeFuture {
 }
 
 impl PipeFuture {
-
     #[allow(unused)]
     pub fn new(
         buffer: Arc<Mutex<PipeRingBuffer>>,

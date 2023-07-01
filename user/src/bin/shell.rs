@@ -74,8 +74,6 @@ impl ProcessArguments {
     }
 }
 
-
-
 const PRELIMINARY_TESTS: [&str; 32] = [
     "getdents",
     "brk",

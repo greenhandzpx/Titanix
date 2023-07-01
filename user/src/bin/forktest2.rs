@@ -13,11 +13,7 @@ pub fn main() -> i32 {
     for _ in 0..NUM {
         let pid = fork();
         if pid == 0 {
-            
-            let mut current_time = TimeVal {
-                sec: 0,
-                usec: 0,
-            };
+            let mut current_time = TimeVal { sec: 0, usec: 0 };
             get_time(&mut current_time);
             let current_time = current_time.sec * 1000 + current_time.usec / 1000;
             let sleep_length =

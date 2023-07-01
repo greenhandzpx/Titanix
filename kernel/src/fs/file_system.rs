@@ -17,7 +17,9 @@ use crate::{
     },
 };
 
-use super::{posix::StatFlags, Inode, FAT32FileSystem, devfs::DevFs, procfs::ProcFs, inode::InodeDevice};
+use super::{
+    devfs::DevFs, inode::InodeDevice, posix::StatFlags, procfs::ProcFs, FAT32FileSystem, Inode,
+};
 
 #[derive(Clone)]
 pub enum FsDevice {
@@ -29,9 +31,7 @@ impl FsDevice {
     pub fn from_inode_device(dev: InodeDevice) -> Self {
         match dev {
             InodeDevice::Pipe(_) => Self::None,
-            InodeDevice::Device(d) => {
-                Self::BlockDevice(d.block_device)
-            }
+            InodeDevice::Device(d) => Self::BlockDevice(d.block_device),
         }
     }
 

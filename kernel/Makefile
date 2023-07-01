@@ -76,6 +76,7 @@ kernel:
 	# @cd ../user && make build TEST=$(TEST) 
 	@echo Platform: $(BOARD)
 	@cp src/linker64.ld src/linker.ld
+	@cargo fmt
 	@cargo build --release 
 	@rm src/linker.ld
 	@echo "build kernel finished"
@@ -93,13 +94,18 @@ fs-img: $(APPS)
 	@mkdir -p $(FS_IMG_SRC)
 	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
 	@mkfs.vfat -F 32 $(FS_IMG)
+ifeq ($(TEST), 0)
+	@echo "make empty fatfs img"
+else
 	@mkdir -p mnt
 	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
 	@cp -r $(TEST_DIR)/* mnt
 	@sudo umount mnt
 	@rm -rf mnt
 	@sudo chmod -R 777 $(FS_IMG_SRC)
+endif
 	@echo "finish pack fs-img"
+
 
 
 run: build

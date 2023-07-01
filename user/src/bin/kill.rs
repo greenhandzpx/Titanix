@@ -5,7 +5,7 @@
 extern crate user_lib;
 extern crate alloc;
 
-use user_lib::{close, exit, openat, read, OpenFlags, fork, sleep, kill, Signal};
+use user_lib::{close, exit, fork, kill, openat, read, sleep, OpenFlags, Signal};
 
 #[no_mangle]
 pub fn main(argc: usize, argv: &[&str]) -> i32 {

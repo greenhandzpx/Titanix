@@ -12,18 +12,9 @@ const N: usize = 10;
 static P: i32 = 10007;
 type Arr = [[i32; N]; N];
 
-
-
-
 /// TODO
 
-
-
-
 fn work(times: isize) {
-
-
-
     let mut a: Arr = Default::default();
     let mut b: Arr = Default::default();
     let mut c: Arr = Default::default();
@@ -61,10 +52,7 @@ pub fn main() -> i32 {
     for _ in 0..NUM {
         let pid = fork();
         if pid == 0 {
-            let mut current_time = TimeVal {
-                sec: 0,
-                usec: 0,
-            };
+            let mut current_time = TimeVal { sec: 0, usec: 0 };
             get_time(&mut current_time);
             let current_time = current_time.sec * 1000 + current_time.usec / 1000;
             let times = (current_time as i32 as isize) * (current_time as i32 as isize) % 1000;

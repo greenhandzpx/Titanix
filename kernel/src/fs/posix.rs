@@ -1,13 +1,13 @@
 use core::mem::size_of;
 
-use alloc::string::{String, ToString};
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use log::debug;
 use super::fat32::SECTOR_SIZE;
 use super::Inode;
 use crate::timer::current_time_duration;
 use crate::timer::posix::TimeSpec;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use log::debug;
 
 /// STAT
 

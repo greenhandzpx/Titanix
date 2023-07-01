@@ -5,7 +5,6 @@ mod spi;
 mod virtio_blk;
 use core::any::Any;
 
-
 use alloc::sync::Arc;
 use lazy_static::*;
 

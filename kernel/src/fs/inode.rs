@@ -359,7 +359,6 @@ impl InodeMeta {
     }
 }
 
-
 #[derive(Clone)]
 pub enum InodeDevice {
     Pipe(Pipe),
