@@ -7,16 +7,16 @@ pub mod stack_tracker;
 #[cfg(feature = "stack_trace")]
 macro_rules! stack_trace {
     () => {
-        let _stack_info_guard = $crate::utils::debug::stack_tracker::StackInfoGuard::new(
-            $crate::utils::debug::Msg::None,
+        let _stack_info_guard = $crate::utils::stack_trace::stack_tracker::StackInfoGuard::new(
+            $crate::utils::stack_trace::Msg::None,
             file!(),
             line!(),
         );
     };
     // stack_trace!("message")
     ($msg: literal) => {
-        let _stack_info_guard = $crate::utils::debug::stack_tracker::StackInfoGuard::new(
-            $crate::utils::debug::Msg::Str($msg),
+        let _stack_info_guard = $crate::utils::stack_trace::stack_tracker::StackInfoGuard::new(
+            $crate::utils::stack_trace::Msg::Str($msg),
             file!(),
             line!(),
         );
@@ -48,6 +48,7 @@ macro_rules! stack_trace {
 
 pub enum Msg {
     None,
+    #[allow(unused)]
     Str(&'static str),
 }
 

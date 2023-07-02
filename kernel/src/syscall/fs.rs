@@ -38,7 +38,7 @@ use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
-use crate::{fs, stack_trace};
+use crate::{fs, stack_trace, strace};
 
 /// get current working directory
 pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {

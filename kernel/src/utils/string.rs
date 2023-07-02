@@ -24,6 +24,7 @@ pub fn string_to_array(s: String) -> [u8; MAX_NAME_LEN] {
     bytes.try_into().unwrap()
 }
 
+#[allow(unused)]
 pub fn string_to_vec(s: String) -> Vec<u8> {
     let mut bytes = s.into_bytes();
     let len = bytes.len();

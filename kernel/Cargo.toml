@@ -31,6 +31,7 @@ board_qemu = []
 stack_trace = []
 kernel_interrupt = []
 user_spin = []
+strace = []
 
 [profile.release]
 debug = true

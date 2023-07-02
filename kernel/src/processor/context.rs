@@ -4,7 +4,7 @@ use riscv::register::{sie, sstatus};
 use crate::{
     mm::PageTable,
     process::thread::Thread,
-    utils::{cell::SyncUnsafeCell, debug::stack_tracker::StackTracker},
+    utils::{cell::SyncUnsafeCell, stack_trace::stack_tracker::StackTracker},
 };
 
 pub struct LocalContext {

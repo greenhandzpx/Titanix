@@ -12,6 +12,8 @@ FS_IMG := $(FS_IMG_SRC)/sdcard.img
 TEST := 22
 TEST_DIR := "../$(TEST)-testcases"
 
+STRACE := 
+
 
 # BOARD
 BOARD := qemu
@@ -56,7 +58,7 @@ QFLAGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 build: env user-build $(KERNEL_BIN)
 ifeq ("$(wildcard $(FS_IMG))","")
 	@echo "$(TEST_DIR)"
-	@echo "You should run: [sudo make fs-img] to build the fs img first. Note that you can add TEST=23 to build the 2023 img."
+	@echo "Cannot find the fs img. You should run: [sudo make fs-img] to build the fs img first. Note that you can add TEST=23 to build the 2023 img."
 	@exit 1
 endif
 
@@ -77,7 +79,11 @@ kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker64.ld src/linker.ld
 	@cargo fmt
+ifeq ($(STRACE), )
 	@cargo build --release 
+else
+	@cargo build --release --features strace
+endif
 	@rm src/linker.ld
 	@echo "build kernel finished"
 

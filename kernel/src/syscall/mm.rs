@@ -16,7 +16,7 @@ use crate::{
     utils::error::{SyscallErr, SyscallRet},
 };
 
-/// Note that we just ignore the `addr`
+/// Note that we just ignore the `addr` when the `MAP_FIXED` isn't specified.
 pub fn sys_mmap(
     addr: usize,
     length: usize,
@@ -66,6 +66,13 @@ pub fn sys_mmap(
         })
         // todo!("Handle anonymous mmap")
     } else {
+        if offset % PAGE_SIZE != 0 {
+            warn!(
+                "[sys_mmap] the offset {:#x} isn't a multiple of the page size",
+                offset
+            );
+            return Err(SyscallErr::EINVAL);
+        }
         current_process().inner_handler(|proc| {
             let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
             let mut vma = {
@@ -92,7 +99,6 @@ pub fn sys_mmap(
             debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
             Ok(start_va.0 as isize)
         })
-        // let vm_area = VmArea::new()
     }
 }
 
@@ -103,6 +109,7 @@ pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
         "[sys_munmap] not yet implemented, addr {:#x}, len {:#x}",
         addr, length
     );
+
     Ok(0)
     // todo!()
 }

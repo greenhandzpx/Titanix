@@ -89,10 +89,9 @@ mod signal;
 mod sync;
 mod time;
 
-use core::arch::asm;
-
 use dev::*;
 use fs::*;
+use lazy_static::*;
 use log::{error, info, trace};
 use mm::*;
 use process::*;
@@ -107,17 +106,91 @@ use crate::{
     process::resource::RLimit,
     processor::current_trap_cx,
     signal::{SigAction, SigSet},
+    strace,
     syscall::resource::sys_prlimit64,
     timer::posix::{ITimerval, TimeSpec, TimeVal, Tms},
     utils::error::SyscallRet,
 };
 
-/// handle syscall exception with `syscall_id` and other arguments
-/// return whether the process should exit or not
+lazy_static! {
+    static ref SYSCALL_NAMES: [&'static str; 277] = core::array::from_fn(|syscall_id| {
+        match syscall_id {
+            SYSCALL_GETCWD => "sys_getcwd",
+            SYSCALL_DUP => "sys_dup",
+            SYSCALL_DUP3 => "sys_dup3",
+            SYSCALL_FCNTL => "sys_fcntl",
+            SYSCALL_IOCTL => "sys_ioctl",
+            SYSCALL_UNLINK => "sys_unlinkat",
+            SYSCALL_MKDIR => "sys_mkdirat",
+            SYSCALL_UMOUNT => "sys_umount",
+            SYSCALL_MOUNT => "sys_mount",
+            SYSCALL_STATFS => "sys_statfs",
+            SYSCALL_FACCESSAT => "sys_faccessat",
+            SYSCALL_CHDIR => "sys_chdir",
+            SYSCALL_OPEN => "sys_openat",
+            SYSCALL_CLOSE => "sys_close",
+            SYSCALL_PIPE => "sys_pipe",
+            SYSCALL_GETDENTS => "sys_getdents",
+            SYSCALL_LSEEK => "sys_lseek",
+            SYSCALL_READ => "sys_read",
+            SYSCALL_WRITE => "sys_write",
+            SYSCALL_READV => "sys_readv",
+            SYSCALL_WRITEV => "sys_writev",
+            SYSCALL_SENDFILE => "sys_sendfile",
+            SYSCALL_PSELECT6 => "sys_pselect6",
+            SYSCALL_PPOLL => "sys_ppoll",
+            SYSCALL_READLINKAT => "sys_readlinkat",
+            SYSCALL_NEWFSTATAT => "sys_newfstatat",
+            SYSCALL_FSTAT => "sys_fstat",
+            SYSCALL_UTIMENSAT => "sys_utimensat",
+            SYSCALL_EXIT => "sys_exit",
+            SYSCALL_EXIT_GROUP => "sys_exit_group",
+            SYSCALL_SET_TID_ADDRESS => "sys_set_tid_address",
+            SYSCALL_FUTEX => "sys_futex",
+            SYSCALL_NANOSLEEP => "sys_nanosleep",
+            SYSCALL_SETTIMER => "sys_settimer",
+            SYSCALL_CLOCK_SETTIME => "sys_clock_settime",
+            SYSCALL_CLOCK_GETTIME => "sys_clock_gettime",
+            SYSCALL_SYSLOG => "sys_syslog",
+            SYSCALL_YIELD => "sys_yield",
+            SYSCALL_KILL => "sys_kill",
+            SYSCALL_RT_SIGACTION => "sys_rt_sigaction",
+            SYSCALL_RT_SIGPROCMASK => "sys_rt_sigprocmask",
+            SYSCALL_RT_SIGTIMEDWAIT => "sys_rt_sigtimedwait",
+            SYSCALL_RT_SIGRETURN => "sys_rt_sigreturn",
+            SYSCALL_TIMES => "sys_times",
+            SYSCALL_SETPGID => "sys_setpgid",
+            SYSCALL_GETPGID => "sys_getpgid",
+            SYSCALL_UNAME => "sys_uname",
+            SYSCALL_GETRUSAGE => "sys_getrusage",
+            SYSCALL_GET_TIME => "sys_get_time",
+            SYSCALL_GETPID => "sys_getpid",
+            SYSCALL_GETPPID => "sys_getppid",
+            SYSCALL_GETUID => "sys_getuid",
+            SYSCALL_GETEUID => "sys_geteuid",
+            SYSCALL_GETTID => "sys_gettid",
+            SYSCALL_SYSINFO => "sys_sysinfo",
+            SYSCALL_TGKILL => "sys_tgkill",
+            SYSCALL_BRK => "sys_brk",
+            SYSCALL_MUNMAP => "sys_munmap",
+            SYSCALL_CLONE => "sys_clone",
+            SYSCALL_EXECVE => "sys_execve",
+            SYSCALL_MMAP => "sys_mmap",
+            SYSCALL_MPROTECT => "sys_mprotect",
+            SYSCALL_WAIT4 => "sys_wait4",
+            SYSCALL_PRLIMIT64 => "sys_prlimit64",
+            SYSCALL_REMANEAT2 => "sys_renameat2",
+            _ => "???",
+        }
+    });
+}
+
+/// Handle syscall exception with `syscall_id` and other arguments.
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    trace!(
-        "syscall id: {}, sepc {:#x}",
-        syscall_id,
+    strace!(
+        "syscall: {}, args: {:?}, sepc: {:#x}",
+        SYSCALL_NAMES[syscall_id],
+        args,
         current_trap_cx().sepc
     );
     match syscall_id {
@@ -271,21 +344,6 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             error!("Unsupported syscall_id: {}", syscall_id);
             Ok(0)
         }
-    }
-}
-
-/// Used for sig action.
-/// Note that this function is called in user mode only
-pub fn user_sigreturn() {
-    let mut ret: isize;
-    unsafe {
-        asm!(
-            "ecall",
-            inlateout("x10") 0 as isize => ret,
-            in("x11") 0,
-            in("x12") 0,
-            in("x17") SYSCALL_RT_SIGRETURN
-        );
     }
 }
 
