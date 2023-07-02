@@ -1,4 +1,4 @@
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 
 use crate::{
     config::mm::PAGE_SIZE,
@@ -98,6 +98,11 @@ pub fn sys_mmap(
 
 pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
     // TODO
+    stack_trace!();
+    error!(
+        "[sys_munmap] not yet implemented, addr {:#x}, len {:#x}",
+        addr, length
+    );
     Ok(0)
     // todo!()
 }

@@ -42,6 +42,6 @@ jobs:
           version: latest
           use-tool-cache: true
       - name: Build Kernel
-        run: cd kernel && && make fs-img TEST=0 && make build
+        run: cd kernel && make fs-img TEST=0 && make build
         timeout-minutes: 10
       

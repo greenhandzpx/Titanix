@@ -657,7 +657,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     Ok(ret as isize)
 }
 
-fn test() -> SyscallRet {
+fn _test() -> SyscallRet {
     let iov_base = 1189160;
     let iov_len = 4;
     UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
