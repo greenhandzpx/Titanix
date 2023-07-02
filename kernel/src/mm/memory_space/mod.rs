@@ -231,6 +231,7 @@ impl MemorySpace {
         va: VirtAddr,
         _scause: usize,
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&VmArea>)> {
+        stack_trace!();
         // There are serveral kinds of page faults:
         // 1. mmap area
         // 2. sbrk area
@@ -285,7 +286,15 @@ impl MemorySpace {
         permission: MapPermission,
     ) {
         self.push(
-            VmArea::new(start_va, end_va, MapType::Framed, permission, None, None),
+            VmArea::new(
+                start_va,
+                end_va,
+                MapType::Framed,
+                permission,
+                None,
+                None,
+                self.page_table.clone(),
+            ),
             0,
             None,
         );
@@ -300,7 +309,15 @@ impl MemorySpace {
         handler: Option<Arc<dyn PageFaultHandler>>,
     ) {
         self.push_lazily(
-            VmArea::new(start_va, end_va, MapType::Framed, permission, handler, None),
+            VmArea::new(
+                start_va,
+                end_va,
+                MapType::Framed,
+                permission,
+                handler,
+                None,
+                self.page_table.clone(),
+            ),
             None,
         );
     }
@@ -389,6 +406,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -401,6 +419,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -414,6 +433,7 @@ impl MemorySpace {
                 MapPermission::R,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -427,6 +447,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -441,6 +462,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -454,6 +476,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -467,6 +490,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::X | MapPermission::U,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -481,6 +505,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -497,6 +522,7 @@ impl MemorySpace {
                     MapPermission::R | MapPermission::W,
                     None,
                     None,
+                    memory_space.page_table.clone(),
                 ),
                 0,
                 None,
@@ -535,7 +561,15 @@ impl MemorySpace {
                 if ph_flags.is_execute() {
                     map_perm |= MapPermission::X;
                 }
-                let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
+                let vm_area = VmArea::new(
+                    start_va,
+                    end_va,
+                    MapType::Framed,
+                    map_perm,
+                    None,
+                    None,
+                    self.page_table.clone(),
+                );
                 max_end_vpn = vm_area.vpn_range.end();
 
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
@@ -679,6 +713,7 @@ impl MemorySpace {
             map_perm,
             Some(Arc::new(SBrkPageFaultHandler {})),
             None,
+            memory_space.page_table.clone(),
         );
         memory_space.push(heap_vma, 0, None);
         memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
@@ -734,7 +769,7 @@ impl MemorySpace {
         // memory_space.map_trampoline();
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
-            let mut new_area = VmArea::from_another(area);
+            let mut new_area = VmArea::from_another(area, memory_space.page_table.clone());
             // memory_space.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {
@@ -766,7 +801,7 @@ impl MemorySpace {
 
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
-            let new_area = VmArea::from_another(area);
+            let new_area = VmArea::from_another(area, memory_space.page_table.clone());
             info!(
                 "[from_existed_user_lazily] area range [{:#x}, {:#x})",
                 new_area.start_vpn().0,
@@ -873,6 +908,7 @@ impl MemorySpace {
             map_permission,
             None,
             None,
+            self.page_table.clone(),
         )))
     }
 
@@ -898,6 +934,7 @@ impl MemorySpace {
                     map_permission,
                     None,
                     None,
+                    self.page_table.clone(),
                 ));
             }
             last_start = vma.1.start_vpn().0 * PAGE_SIZE;
@@ -989,6 +1026,7 @@ pub fn remap_test() {
 
 /// Handle different kinds of page fault
 pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    stack_trace!();
     if let Some(handler) = current_process().inner_handler(|proc| {
         let (handler, vma) = proc.memory_space.page_fault_handler(va, scause)?;
         if !handler.handle_page_fault(va, &proc.memory_space, vma)? {

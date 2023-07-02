@@ -56,6 +56,7 @@ pub trait File: Send + Sync {
 
     /// For default file, data must be read from page cache first
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
+
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
@@ -74,6 +75,7 @@ pub trait File: Send + Sync {
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
         block_on(self.read(buf))
     }
+
     /// For default file, data must be written to page cache first
     fn sync_write(&self, buf: &[u8]) -> SyscallRet {
         block_on(self.write(buf))
@@ -99,6 +101,12 @@ pub trait File: Send + Sync {
     }
 
     fn metadata(&self) -> &FileMeta;
+
+    /// Sync the file content to disk
+    fn sync(&self) -> GeneralRet<()> {
+        // TODO
+        Ok(())
+    }
 }
 
 impl dyn File {
@@ -262,10 +270,6 @@ impl File for DefaultFile {
             );
             Ok(res as isize)
         })
-    }
-
-    fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
-        block_on(self.read(buf))
     }
 
     fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {

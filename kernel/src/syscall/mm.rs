@@ -29,8 +29,8 @@ pub fn sys_mmap(
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
     let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
     let map_permission: MapPermission = prot.into();
-    debug!(
-        "[sys_mmap]: start...  addr {:#x}, len {}, fd {}, offset {}, flags {:?}, prot {:?}",
+    info!(
+        "[sys_mmap]: start...  addr {:#x}, len {:#x}, fd {}, offset {:#x}, flags {:?}, prot {:?}",
         addr, length, fd, offset, flags, prot
     );
 
@@ -64,7 +64,6 @@ pub fn sys_mmap(
             );
             Ok(start_va.0 as isize)
         })
-        // todo!("Handle anonymous mmap")
     } else {
         if offset % PAGE_SIZE != 0 {
             warn!(
@@ -105,13 +104,23 @@ pub fn sys_mmap(
 pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
     // TODO
     stack_trace!();
-    error!(
-        "[sys_munmap] not yet implemented, addr {:#x}, len {:#x}",
-        addr, length
-    );
-
-    Ok(0)
-    // todo!()
+    info!("[sys_munmap] addr {:#x}, len {:#x}", addr, length);
+    if addr % PAGE_SIZE != 0 {
+        return Err(SyscallErr::EINVAL);
+    }
+    current_process().inner_handler(|proc| {
+        let start_vpn = VirtAddr::from(addr).floor();
+        let end_vpn = VirtAddr::from(addr + length).ceil();
+        let vma = proc
+            .memory_space
+            .find_vm_area_mut_by_vpn(start_vpn)
+            .ok_or(SyscallErr::EINVAL)?;
+        // TODO: maybe we should check wether the user owns the permission to unmap the vma?
+        if let Some(splited_vma) = vma.unmap_area(VPNRange::new(start_vpn, end_vpn))? {
+            proc.memory_space.insert_area(splited_vma);
+        }
+        Ok(0)
+    })
 }
 
 pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
@@ -133,6 +142,15 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
         vma.map_perm = map_permission;
         Ok(())
     })?;
+    Ok(0)
+}
+
+pub fn sys_msync(addr: usize, len: usize, flags: i32) -> SyscallRet {
+    stack_trace!();
+    error!(
+        "[sys_msync] not yet implemented. addr {:#x}, len {:#x}, flags {:#x}",
+        addr, len, flags
+    );
     Ok(0)
 }
 

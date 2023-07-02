@@ -243,9 +243,18 @@ impl PageTable {
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
-    ///
+    /// Unmap a vpn but won't panic if not valid
+    pub fn unmap_nopanic(&mut self, vpn: VirtPageNum) {
+        if let Some(pte) = self.find_pte(vpn) {
+            if pte.is_valid() {
+                *pte = PageTableEntry::empty();
+            }
+        }
+    }
+    /// Unmap a vpn
     #[allow(unused)]
     pub fn unmap(&mut self, vpn: VirtPageNum) {
+        stack_trace!();
         let pte = self.find_pte(vpn).unwrap();
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
         *pte = PageTableEntry::empty();

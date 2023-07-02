@@ -72,6 +72,7 @@ const SYSCALL_CLONE: usize = 220;
 const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
+const SYSCALL_MSYNC: usize = 227;
 const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
@@ -92,7 +93,7 @@ mod time;
 use dev::*;
 use fs::*;
 use lazy_static::*;
-use log::{error, info, trace};
+use log::error;
 use mm::*;
 use process::*;
 use signal::*;
@@ -104,7 +105,6 @@ use crate::{
     fs::posix::Statfs,
     mm::MapPermission,
     process::resource::RLimit,
-    processor::current_trap_cx,
     signal::{SigAction, SigSet},
     strace,
     syscall::resource::sys_prlimit64,
@@ -177,6 +177,7 @@ lazy_static! {
             SYSCALL_EXECVE => "sys_execve",
             SYSCALL_MMAP => "sys_mmap",
             SYSCALL_MPROTECT => "sys_mprotect",
+            SYSCALL_MSYNC => "sys_msync",
             SYSCALL_WAIT4 => "sys_wait4",
             SYSCALL_PRLIMIT64 => "sys_prlimit64",
             SYSCALL_REMANEAT2 => "sys_renameat2",
@@ -191,7 +192,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         "syscall: {}, args: {:?}, sepc: {:#x}",
         SYSCALL_NAMES[syscall_id],
         args,
-        current_trap_cx().sepc
+        crate::processor::current_trap_cx().sepc
     );
     match syscall_id {
         SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
@@ -325,6 +326,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             args[5],
         ),
         SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
+        SYSCALL_MSYNC => sys_msync(args[0], args[1], args[2] as i32),
         SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
         SYSCALL_PRLIMIT64 => sys_prlimit64(
             args[0],

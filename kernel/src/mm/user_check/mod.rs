@@ -150,6 +150,7 @@ impl UserCheck {
     }
 
     async fn handle_page_fault(&self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
+        stack_trace!();
         match memory_space::handle_page_fault(va, scause).await {
             Ok(_) => {
                 debug!(
