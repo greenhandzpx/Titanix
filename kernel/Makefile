@@ -85,7 +85,7 @@ kernel:
 user-build:
 	@echo "build user..."
 	@cd ../user && make build PRELIMINARY=$(PRELIMINARY)
-	@cp ../22-testcases/busybox ../user/target/riscv64gc-unknown-none-elf/release/busybox.bin
+	@cp ../22-testcases/busybox ../user/target/riscv64gc-unknown-none-elf/release/busybox
 	@echo "build user finished"
 
 
