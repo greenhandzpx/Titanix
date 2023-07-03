@@ -272,14 +272,14 @@ impl Process {
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
         stack_trace!();
         debug!("exec pid {}", current_process().pid());
-        stack_trace!();
+
+        // memory_space with elf program headers/trampoline/trap context/user stack
+        // substitute memory_space
         let (memory_space, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
         let task_ptr: *const Thread = self.inner_handler(|proc| {
             assert_eq!(proc.thread_count(), 1);
-            // memory_space with elf program headers/trampoline/trap context/user stack
-            // substitute memory_space
-            memory_space.activate();
             // Change hart local context's pagetable (quite important!!!)
+            memory_space.activate();
             let hart = local_hart();
             hart.change_page_table(memory_space.page_table.clone());
             // process_inner.memory_space = memory_space;
@@ -456,29 +456,6 @@ impl Process {
         Ok(0)
     }
 
-    // /// Create a new thread
-    // pub fn create_thread(self: &Arc<Self>, f: usize, arg: *const u8) -> usize {
-
-    //     // Note that the user mode code will put the `func` and `arg` in
-    //     // 0(stack) and 8(stack)
-
-    //     // Here we give a dummy sp since it should be replaced in `app_init_context`
-    //     let mut trap_context = TrapContext::app_init_context(f, 0);
-    //     trap_context.user_x[10] = arg as usize;
-
-    //     let ustack_base = self.inner_handler(|proc| proc.ustack_base);
-    //     let new_thread = Arc::new(Thread::new(self.clone(), trap_context, ustack_base));
-    //     // attach the new thread to process
-    //     current_process()
-    //         .inner
-    //         .lock()
-    //         .threads
-    //         .push(Arc::downgrade(&new_thread));
-    //     let tid = new_thread.tid();
-    //     thread::spawn_thread(new_thread);
-    //     tid
-    // }
-
     /// Create a new thread
     /// TODO: take more args into account
     pub fn create_thread(self: &Arc<Self>, stack: usize) -> SyscallRet {
@@ -528,6 +505,7 @@ impl Process {
             // here we just copy on write
             let memory_space =
                 MemorySpace::from_existed_user_lazily(&mut parent_inner.memory_space);
+            parent_inner.memory_space.activate();
             // let memory_space = MemorySpace::from_existed_user(&parent_inner.memory_space);
 
             // alloc a pid

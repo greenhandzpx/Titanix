@@ -15,7 +15,7 @@ use core::arch::asm;
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 /// Trap context structure containing sstatus, sepc and registers
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct TrapContext {
     /// user-to-kernel should save:
@@ -77,6 +77,8 @@ impl TrapContext {
         let mut sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
+        sstatus.set_sie(false);
+        sstatus.set_spie(false);
         // let tp: usize;
         // unsafe {
         //     asm!("mv {}, tp", out(reg) tp);

@@ -850,8 +850,8 @@ impl MemorySpace {
             memory_space.push_lazily(new_area, None);
         }
         memory_space.heap_range = user_space.heap_range;
-        user_space.activate();
-        new_pagetable.activate();
+        // user_space.activate();
+        // new_pagetable.activate();
 
         memory_space
     }

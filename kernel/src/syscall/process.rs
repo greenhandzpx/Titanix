@@ -104,38 +104,6 @@ bitflags! {
     }
 }
 
-// pub fn sys_clone(f: usize, _stack: *const u8, flags: i32, arg: *const u8) -> SyscallRet {
-//     stack_trace!();
-//     let clone_flags = CloneFlags::from_bits(flags.try_into().unwrap()).unwrap();
-//     if !clone_flags.contains(CloneFlags::CLONE_THREAD) {
-//         // fork
-
-//         // TODO: maybe we should take more flags into account?
-
-//         let current_process = current_process();
-//         let new_process = current_process.fork();
-//         let new_pid = new_process.pid();
-//         // modify trap context of new_task, because it returns immediately after switching
-//         let trap_cx = new_process.trap_context_main();
-//         // we do not have to move to next instruction since we have done it before
-//         // for child process, fork returns 0
-//         trap_cx.user_x[10] = 0;
-//         // // add new task to scheduler
-//         // add_task(new_task);
-//         Ok(new_pid as isize)
-//     } else {
-//         // clone(i.e. create a new thread)
-
-//         debug!("clone a new thread");
-
-//         // let f = unsafe {
-//         //     core::mem::transmute::<*const (), fn(*const ())->isize>(f as *const ())
-//         // };
-//         let current_process = current_process();
-//         Ok(current_process.create_thread(f, arg) as isize)
-//     }
-// }
-
 /// TODO: consider more args
 pub fn sys_clone(
     flags: usize,

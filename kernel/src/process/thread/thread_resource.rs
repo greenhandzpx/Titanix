@@ -22,7 +22,7 @@ impl Thread {
 }
 
 impl Thread {
-    ///
+    /// Note that this method must be called by the process that owns this thread
     pub fn alloc_ustack(&self) {
         let inner = unsafe { &mut (*self.inner.get()) };
         let ustack_bottom = get_ustack_by_tid(inner.ustack_base, self.tid.0);

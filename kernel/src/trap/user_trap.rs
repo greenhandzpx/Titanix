@@ -9,7 +9,7 @@ use crate::{
     process::thread::{self, exit_and_terminate_all_threads},
     processor::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
-        open_interrupt,
+        open_interrupt, SumGuard,
     },
     signal::check_signal_for_current_process,
     stack_trace,
@@ -25,11 +25,17 @@ use super::{set_kernel_trap_entry, TrapContext};
 pub async fn trap_handler() {
     set_kernel_trap_entry();
 
-    open_interrupt();
-
     let stval = stval::read();
     let scause = scause::read();
-    // info!("trap in, sepc {:#x}", sepc::read());
+    // info!(
+    //     "trap in, sepc {:#x}, user sp {:#x}, kernel sp {:#x}",
+    //     current_trap_cx().sepc,
+    //     current_trap_cx().user_x[2],
+    //     current_trap_cx().kernel_sp,
+    // );
+
+    open_interrupt();
+
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -124,7 +130,16 @@ pub async fn trap_handler() {
             // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // info!("timer interrupt");
+            // let _sum_guard = SumGuard::new();
+            // let sepc = current_trap_cx().sepc;
+            // let inst: u32 = unsafe { *(sepc as *const u32) };
+            // info!(
+            //     "timer interrupt, sepc {:#x}, inst {:#x}, s1 {} a5 {}",
+            //     sepc,
+            //     inst,
+            //     current_trap_cx().user_x[9],
+            //     current_trap_cx().user_x[15]
+            // );
             handle_timeout_events();
             set_next_trigger();
             thread::yield_now().await;
@@ -148,6 +163,7 @@ pub async fn trap_handler() {
 /// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
 pub fn trap_return() {
+    // Important!
     close_interrupt();
 
     set_user_trap_entry();
@@ -161,7 +177,12 @@ pub fn trap_return() {
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
-        // error!("[trap_return] sepc {:#x}", current_trap_cx().sepc);
+        // error!(
+        //     "[trap_return] user sp {:#x}, sepc {:#x}, trap cx addr {:#x}",
+        //     current_trap_cx().user_x[2],
+        //     current_trap_cx().sepc,
+        //     current_trap_cx() as *mut _ as usize
+        // );
 
         __return_to_user(current_trap_cx());
 

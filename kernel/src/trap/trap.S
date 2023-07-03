@@ -107,6 +107,7 @@ __return_to_user:
 # kernel -> kernel
 __trap_from_kernel:
     # only need to save caller-saved regs
+    # note that we don't save sepc & stvec here
     addi sp, sp, -17*8
     sd  ra,  1*8(sp)
     sd  t0,  2*8(sp)

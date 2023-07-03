@@ -175,7 +175,7 @@ pub fn rust_main(hart_id: usize) {
     } else {
         // The other harts
 
-        return;
+        // return;
 
         // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
