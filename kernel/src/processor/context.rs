@@ -59,71 +59,64 @@ pub struct UserTaskContext {
 
 /// Store some permission flags
 pub struct EnvContext {
-    /// Supervisor interrupt enable
-    sie: usize,
+    /// Supervisor interrupt disable
+    sie_disabled: usize,
     /// Permit supervisor user memory access
-    sum: usize,
+    sum_enabled: usize,
     /// Stack tracker
     pub stack_tracker: StackTracker,
 }
 
 impl EnvContext {
     pub fn new() -> Self {
-        let sie = usize::MAX;
-        // if sie > 0 {
-        //     EnvContext::enable_sie();
-        // }
         Self {
-            sie,
-            sum: 0,
+            sie_disabled: 0,
+            sum_enabled: 0,
             stack_tracker: StackTracker::new(),
         }
     }
 
     pub fn sie_dec(&mut self) {
-        if self.sie == usize::MAX {
+        if self.sie_disabled == 0 {
             unsafe {
-                sstatus::clear_sum();
+                sstatus::clear_sie();
             }
         }
-        self.sie -= 1;
+        self.sie_disabled += 1;
     }
 
     pub fn sie_inc(&mut self) {
-        if self.sum == 0 {
+        if self.sie_disabled == 1 {
             unsafe {
-                sstatus::set_sum();
+                sstatus::set_sie();
             }
         }
-        self.sie += 1;
+        self.sie_disabled -= 1;
     }
 
     pub fn sum_inc(&mut self) {
-        if self.sum == 0 {
+        if self.sum_enabled == 0 {
             unsafe {
                 sstatus::set_sum();
             }
         }
-        self.sum += 1
+        self.sum_enabled += 1
     }
 
     pub fn sum_dec(&mut self) {
-        if self.sum == 1 {
+        if self.sum_enabled == 1 {
             unsafe {
                 sstatus::clear_sum();
             }
         }
-        self.sum -= 1
+        self.sum_enabled -= 1
     }
 
-    pub fn sie(&self) -> bool {
-        self.sie > 0
-    }
-
+    /// Return whether the new task should open kernel interrupt or not
     pub fn env_change(new: &Self, old: &Self) -> bool {
         unsafe {
-            if (new.sum > 0) != (old.sum > 0) {
-                if new.sum > 0 {
+            if (new.sum_enabled > 0) != (old.sum_enabled > 0) {
+                if new.sum_enabled > 0 {
                     sstatus::set_sum();
                 } else {
                     sstatus::clear_sum();
@@ -137,6 +130,6 @@ impl EnvContext {
             //     }
             // }
         }
-        return new.sie > 0;
+        return new.sie_disabled == 0;
     }
 }

@@ -47,8 +47,8 @@ impl<F: Fn() -> bool> Future for TimedTaskFuture<F> {
         };
         TIMER_QUEUE.add_timer(timer);
 
-        // If single core
-        cx.waker().wake_by_ref();
+        // // If single core
+        // cx.waker().wake_by_ref();
 
         Poll::Pending
     }

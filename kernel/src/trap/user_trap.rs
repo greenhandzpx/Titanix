@@ -6,7 +6,7 @@ use riscv::register::{
 
 use crate::{
     mm::{memory_space, VirtAddr},
-    process::{self, thread::exit_and_terminate_all_threads},
+    process::thread::{self, exit_and_terminate_all_threads},
     processor::{current_process, current_task, current_trap_cx, hart::local_hart},
     signal::check_signal_for_current_process,
     stack_trace,
@@ -21,10 +21,6 @@ use super::{set_kernel_trap_entry, TrapContext};
 /// handle an interrupt, exception, or system call from user space
 pub async fn trap_handler() {
     set_kernel_trap_entry();
-
-    // if local_hart().hart_id() as u8 != FIRST_HART_ID.load(core::sync::atomic::Ordering::Relaxed) {
-    //     info!("other hart trap");
-    // }
 
     let scause = scause::read();
     let stval = stval::read();
@@ -89,14 +85,8 @@ pub async fn trap_handler() {
                     local_hart().env().stack_tracker.print_stacks();
 
                     exit_and_terminate_all_threads(-2);
-                    // current_process().inner_handler(|proc| {
-                    //     proc.exit_code = -2;
-                    //     proc.is_zombie = true;
-                    // });
                 }
             }
-            // let sstatus = sstatus::read();
-            // debug!("sstatus {:#x}", sstatus.bits());
             // There are serveral kinds of page faults:
             // 1. mmap area
             // 2. sbrk area
@@ -131,7 +121,7 @@ pub async fn trap_handler() {
             // debug!("timer interrupt");
             handle_timeout_events();
             set_next_trigger();
-            process::yield_now().await;
+            thread::yield_now().await;
         }
         _ => {
             panic!(

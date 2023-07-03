@@ -16,7 +16,7 @@ use crate::{
         posix::{ITimerval, TimeSpec},
         timed_task::TimedTaskFuture,
         timeout_task::ksleep,
-        TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
+        CLOCK_MANAGER, CLOCK_REALTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };

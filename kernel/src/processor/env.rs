@@ -20,6 +20,7 @@ impl Drop for SumGuard {
 pub struct SieGuard {}
 
 impl SieGuard {
+    #[allow(unused)]
     pub fn new() -> Self {
         local_env().sie_dec();
         Self {}

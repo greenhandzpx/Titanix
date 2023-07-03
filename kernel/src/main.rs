@@ -52,7 +52,7 @@ use core::{
     time::Duration,
 };
 
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
@@ -133,12 +133,9 @@ pub fn rust_main(hart_id: usize) {
         mm::heap_allocator::heap_test();
         mm::remap_test();
         trap::init();
-        //trap::enable_interrupt();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
         // executor::init();
-        // loader::list_apps();
-        // fs::fat32::list_apps_fat32();
 
         fs::init();
 
@@ -151,10 +148,14 @@ pub fn rust_main(hart_id: usize) {
         });
 
         thread::spawn_kernel_thread(async move {
-            // TimedTaskFuture::new(Duration::from_secs(3), || {
-            //     debug!("I'm awake!! hhh just ignore me");
-            //     return true;
-            // }, None)
+            // TimedTaskFuture::new(
+            //     Duration::from_secs(3),
+            //     || {
+            //         info!("I'm awake!! hhh just ignore me");
+            //         return true;
+            //     },
+            //     None,
+            // )
             // .await;
             // loop {
             //     ksleep(Duration::from_secs(5)).await;
@@ -162,6 +163,7 @@ pub fn rust_main(hart_id: usize) {
             // }
         });
 
+        // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);
 
         let hart_num = unsafe { HARTS.len() };
@@ -174,8 +176,10 @@ pub fn rust_main(hart_id: usize) {
     } else {
         // The other harts
 
+        // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
+        trap::init();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
 
