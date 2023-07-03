@@ -48,11 +48,11 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering},
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
@@ -78,14 +78,6 @@ fn clear_bss() {
     }
 }
 
-// #[cfg(test)]
-// fn test_runner(tests: &[&dyn Fn()]) {
-//     println!("Running {} tests", tests.len());
-//     for test in tests {
-//         test();
-//     }
-// }
-///
 // pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
@@ -118,6 +110,12 @@ pub fn rust_main(hart_id: usize) {
         hart::init(hart_id);
         utils::logging::init();
 
+        // unsafe {
+        //     let sp: usize;
+        //     asm!("mv {}, sp", out(reg) sp);
+        //     error!("[kernel] sp {:#x}", sp);
+        // }
+
         println!(r#"  _______ __              _     "#);
         println!(r#" /_  __(_) /_____ _____  (_)  __"#);
         println!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);
@@ -133,8 +131,6 @@ pub fn rust_main(hart_id: usize) {
         mm::heap_allocator::heap_test();
         mm::remap_test();
         trap::init();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
         // executor::init();
 
         fs::init();
@@ -173,15 +169,18 @@ pub fn rust_main(hart_id: usize) {
             }
             hart_start(i, HART_START_ADDR);
         }
+
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
     } else {
         // The other harts
+
+        return;
 
         // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
         trap::init();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
 
         hart::init(hart_id);
         unsafe {
@@ -192,12 +191,14 @@ pub fn rust_main(hart_id: usize) {
         }
         println!("[kernel] ---------- hart {} started ---------- ", hart_id);
 
-        return;
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
+        // unsafe {
+        //     let sp: usize;
+        //     asm!("mv {}, sp", out(reg) sp);
+        //     error!("[kernel] sp {:#x}", sp);
+        // }
     }
 
-    // loop {
-    //     executor::run_until_idle();
-    // }
     executor::run_forever();
-    // panic!("Unreachable in rust_main!");
 }

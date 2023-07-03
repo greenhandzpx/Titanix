@@ -3,7 +3,6 @@ use alloc::collections::VecDeque;
 use async_task::{Runnable, Task};
 use core::future::Future;
 use lazy_static::*;
-use log::{debug, info};
 
 struct TaskQueue {
     queue: SpinNoIrqLock<VecDeque<Runnable>>,

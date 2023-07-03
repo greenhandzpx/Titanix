@@ -1406,7 +1406,7 @@ pub async fn sys_pselect6(
                 if !timeout.is_zero() {
                     info!("[sys_pselect]: ready");
                 } else {
-                    debug!("[sys_pselect]: ready");
+                    info!("[sys_pselect]: ready");
                 }
                 return ret;
             }

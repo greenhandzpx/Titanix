@@ -41,13 +41,13 @@ impl Drop for UserCheck {
 impl UserCheck {
     /// Create a new UserCheck
     pub fn new() -> Self {
-        unsafe {
-            stvec::write(__try_access_user_error_trap as usize, TrapMode::Direct);
-        }
         let ret = Self {
             _sum_guard: SumGuard::new(),
             _sie_guard: SieGuard::new(),
         };
+        unsafe {
+            stvec::write(__try_access_user_error_trap as usize, TrapMode::Direct);
+        }
         ret
     }
 

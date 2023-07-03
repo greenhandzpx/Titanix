@@ -14,7 +14,6 @@ TEST_DIR := "../$(TEST)-testcases"
 
 STRACE := 
 
-
 # BOARD
 BOARD := qemu
 SBI ?= rustsbi
@@ -30,12 +29,12 @@ KERNEL_ENTRY_PA := 0x80200000
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=riscv64
-OBJDUMP_PATH := ../objdump/kernel.asm
+OBJDUMP_PREFIX := ../objdump
+OBJDUMP_PATH := $(OBJDUMP_PREFIX)/kernel.asm
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
 # Disassembly
 DISASM ?= -d
-
 
 # Qemu opts
 ifndef CPUS
@@ -53,7 +52,6 @@ QFLAGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 QFLAGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 
 
 
-# build-pre: env $(KERNEL_BIN) fs-img-pre
 
 build: env user-build $(KERNEL_BIN)
 ifeq ("$(wildcard $(FS_IMG))","")
@@ -61,6 +59,7 @@ ifeq ("$(wildcard $(FS_IMG))","")
 	@echo "Cannot find the fs img. You should run: [sudo make fs-img] to build the fs img first. Note that you can add TEST=23 to build the 2023 img."
 	@exit 1
 endif
+
 
 env:
 	 (rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
@@ -124,7 +123,9 @@ clean:
 	@cargo clean
 	@rm -rf $(FS_IMG)
 
+
 objdump: 
+	@mkdir -p $(OBJDUMP_PREFIX)
 	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(OBJDUMP_PATH)
 	@echo "kernel.bin has been dumped to $(OBJDUMP_PATH)"
 
@@ -133,7 +134,6 @@ disasm-vim: kernel
 	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)
 	@vim $(DISASM_TMP)
 	@rm $(DISASM_TMP)
-
 
 
 debug: build

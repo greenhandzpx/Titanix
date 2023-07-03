@@ -14,13 +14,12 @@
 # user -> kernel
 __trap_from_user:
     csrrw sp, sscratch, sp
-    # now sp->*TrapContext in user space, sscratch->user stack
+    # now sp->*TrapContext in kernel space, sscratch->user stack
     # save other general purpose registers
     sd x1, 1*8(sp)
     # skip sp(x2), we will save it later
     sd x3, 3*8(sp)
-    # # skip tp(x4), application does not use it
-    # save x4~x31
+    # save x4~x31 (x4 is tp)
     .set n, 4
     .rept 27
         SAVE_GP %n
@@ -87,7 +86,7 @@ __return_to_user:
     sd tp, 49*8(a0)
 
     mv sp, a0
-    # now sp points to TrapContext in user space, start restoring based on it
+    # now sp points to TrapContext in kernel space, start restoring based on it
     # restore sstatus/sepc
     ld t0, 32*8(sp)
     ld t1, 33*8(sp)

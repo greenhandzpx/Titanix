@@ -388,10 +388,6 @@ impl MemorySpace {
             sstack as usize, estack as usize
         );
         info!("[kernel].bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
-        // info!(
-        //     "[kernel[.trampoline [{:#x}, {:#x})",
-        //     strampoline as usize, etrampoline as usize
-        // );
         info!(
             "[kernel]physical mem [{:#x}, {:#x})",
             ekernel as usize, MEMORY_END as usize
@@ -828,8 +824,8 @@ impl MemorySpace {
                     let mut new_flags = pte.flags() | PTEFlags::COW;
                     new_flags.remove(PTEFlags::W);
                     pte.set_flags(new_flags);
-                    debug_assert!(pte.flags().contains(PTEFlags::COW));
-                    debug_assert!(!pte.flags().contains(PTEFlags::W));
+                    assert!(pte.flags().contains(PTEFlags::COW));
+                    assert!(!pte.flags().contains(PTEFlags::W));
 
                     user_space
                         .cow_pages

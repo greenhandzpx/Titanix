@@ -5,7 +5,7 @@
 ///
 pub mod thread;
 
-use log::{debug, info};
+use log::{debug, error, info};
 pub use thread::yield_now;
 
 /// Aux header
@@ -60,15 +60,15 @@ pub use pid::{pid_alloc, PidHandle};
 pub fn add_initproc() {
     stack_trace!();
     let elf_data = get_app_data_by_name("initproc").unwrap();
-    let init_proc = Process::new(elf_data);
-    PROCESS_MANAGER.add_process(init_proc.pid(), &init_proc);
+    let _init_proc = Process::new_initproc(elf_data);
+    // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
 
     #[cfg(feature = "user_spin")]
     {
         let elf_data = get_app_data_by_name("user_spin").unwrap();
-        let spin_proc = Process::new(elf_data);
+        let spin_proc = Process::new_initproc(elf_data);
         info!("[add_initproc]: add user spin, pid {}", spin_proc.pid());
-        PROCESS_MANAGER.add_process(spin_proc.pid(), &spin_proc);
+        // PROCESS_MANAGER.add_process(spin_proc.pid(), &spin_proc);
     }
 }
 
@@ -213,7 +213,7 @@ impl Drop for Process {
 
 impl Process {
     /// Create a new process
-    pub fn new(elf_data: &[u8]) -> Arc<Self> {
+    pub fn new_initproc(elf_data: &[u8]) -> Arc<Self> {
         let (memory_space, user_sp_base, entry_point, auxv) = MemorySpace::from_elf(elf_data);
         // let debug_pa = memory_space.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
         // println!("entry pa {:#x}", debug_pa);
@@ -252,9 +252,9 @@ impl Process {
         // thread.alloc_ustack();
 
         process.inner.lock().threads.push(Arc::downgrade(&thread));
+        PROCESS_MANAGER.add_process(process.pid(), &process);
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
-        PROCESS_MANAGER.add_process(process.pid(), &process);
         debug!("create a new process, pid {}", process.pid());
         process
     }

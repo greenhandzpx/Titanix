@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::{debug, error, info, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -7,7 +7,10 @@ use riscv::register::{
 use crate::{
     mm::{memory_space, VirtAddr},
     process::thread::{self, exit_and_terminate_all_threads},
-    processor::{current_process, current_task, current_trap_cx, hart::local_hart},
+    processor::{
+        close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
+        open_interrupt,
+    },
     signal::check_signal_for_current_process,
     stack_trace,
     syscall::syscall,
@@ -22,8 +25,11 @@ use super::{set_kernel_trap_entry, TrapContext};
 pub async fn trap_handler() {
     set_kernel_trap_entry();
 
-    let scause = scause::read();
+    open_interrupt();
+
     let stval = stval::read();
+    let scause = scause::read();
+    // info!("trap in, sepc {:#x}", sepc::read());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -118,7 +124,7 @@ pub async fn trap_handler() {
             // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // debug!("timer interrupt");
+            // info!("timer interrupt");
             handle_timeout_events();
             set_next_trigger();
             thread::yield_now().await;
@@ -142,6 +148,8 @@ pub async fn trap_handler() {
 /// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
 pub fn trap_return() {
+    close_interrupt();
+
     set_user_trap_entry();
     extern "C" {
         // fn __alltraps();
@@ -153,7 +161,18 @@ pub fn trap_return() {
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
+        // error!("[trap_return] sepc {:#x}", current_trap_cx().sepc);
+
         __return_to_user(current_trap_cx());
+
+        // Open interrupt in `trap_handler`
+
+        // error!(
+        //     "[trap_in] sepc {:#x}, x10 {:#x} x11 {:#x}",
+        //     current_trap_cx().sepc,
+        //     current_trap_cx().user_x[10],
+        //     current_trap_cx().user_x[11],
+        // );
 
         (*current_task().inner.get()).time_info.when_trap_in();
     }

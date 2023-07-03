@@ -76,6 +76,10 @@ impl PageFaultHandler for UStackPageFaultHandler {
         let page_table = memory_space.page_table.get_unchecked_mut();
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
+        info!(
+            "[UStackPageFaultHandler] handle ustack page fault finished, pa {:#x}",
+            ppn.0,
+        );
         Ok(true)
         // })
     }
