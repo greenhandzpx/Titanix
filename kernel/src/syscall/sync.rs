@@ -1,6 +1,6 @@
 use core::{intrinsics::atomic_load_acquire, time::Duration};
 
-use log::{debug, info, error};
+use log::{debug, error, info};
 
 use crate::{
     mm::user_check::UserCheck,
@@ -31,6 +31,10 @@ pub async fn sys_futex(uaddr: usize, futex_op: usize, val: u32, timeout_ptr: usi
         error!("[sys_futex] unsupported operation");
         return Ok(0);
     }
+    info!(
+        "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}",
+        uaddr, futex_op, val
+    );
     match futex_op {
         _ if futex_op == FutexOperations::FutexWait as usize => {
             let _sum_guard = SumGuard::new();

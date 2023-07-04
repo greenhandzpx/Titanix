@@ -1,8 +1,9 @@
 use core::{
+    cell::UnsafeCell,
     future::Future,
     intrinsics::atomic_load_acquire,
     pin::Pin,
-    task::{Context, Poll, Waker}, cell::UnsafeCell,
+    task::{Context, Poll, Waker},
 };
 
 use alloc::collections::{BTreeMap, VecDeque};
@@ -13,13 +14,12 @@ use crate::{mm::VirtAddr, processor::current_process};
 pub struct FutexQueue(pub BTreeMap<VirtAddr, VecDeque<FutexWaiter>>);
 
 impl FutexQueue {
-
     /// Construct a futex queue
     pub fn new() -> Self {
         Self(BTreeMap::new())
     }
 
-    /// Wait 
+    /// Wait
     pub fn add_waiter(&mut self, addr: VirtAddr, waker: Waker) {
         let waiter = FutexWaiter::new(waker);
         if let Some(queue) = self.0.get_mut(&addr) {
@@ -87,7 +87,9 @@ impl Future for FutexFuture {
             current_process().inner_handler(|proc| {
                 proc.futex_queue.add_waiter(self.addr, cx.waker().clone());
             });
-            unsafe { *self.has_added_waiter.get() = true; }
+            unsafe {
+                *self.has_added_waiter.get() = true;
+            }
         }
         if unsafe { atomic_load_acquire(self.addr.0 as *const u32) } != self.expected_val {
             Poll::Ready(())

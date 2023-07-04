@@ -19,6 +19,7 @@ const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UMOUNT: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
 const SYSCALL_STATFS: usize = 43;
+const SYSCALL_FTRUNCATE: usize = 46;
 const SYSCALL_FACCESSAT: usize = 48;
 const SYSCALL_CHDIR: usize = 49;
 const SYSCALL_OPEN: usize = 56;
@@ -36,6 +37,8 @@ const SYSCALL_PPOLL: usize = 73;
 const SYSCALL_READLINKAT: usize = 78;
 const SYSCALL_NEWFSTATAT: usize = 79;
 const SYSCALL_FSTAT: usize = 80;
+const SYSCALL_SYNC: usize = 81;
+const SYSCALL_FSYNC: usize = 82;
 const SYSCALL_UTIMENSAT: usize = 88;
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_EXIT_GROUP: usize = 94;
@@ -66,6 +69,9 @@ const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
 const SYSCALL_GETTID: usize = 178;
 const SYSCALL_SYSINFO: usize = 179;
+const SYSCALL_SHMGET: usize = 194;
+const SYSCALL_SHMCTL: usize = 195;
+const SYSCALL_SHMAT: usize = 196;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -92,7 +98,6 @@ mod time;
 
 use dev::*;
 use fs::*;
-use lazy_static::*;
 use log::error;
 use mm::*;
 use process::*;
@@ -112,234 +117,247 @@ use crate::{
     utils::error::SyscallRet,
 };
 
-lazy_static! {
-    static ref SYSCALL_NAMES: [&'static str; 277] = core::array::from_fn(|syscall_id| {
-        match syscall_id {
-            SYSCALL_GETCWD => "sys_getcwd",
-            SYSCALL_DUP => "sys_dup",
-            SYSCALL_DUP3 => "sys_dup3",
-            SYSCALL_FCNTL => "sys_fcntl",
-            SYSCALL_IOCTL => "sys_ioctl",
-            SYSCALL_UNLINK => "sys_unlinkat",
-            SYSCALL_MKDIR => "sys_mkdirat",
-            SYSCALL_UMOUNT => "sys_umount",
-            SYSCALL_MOUNT => "sys_mount",
-            SYSCALL_STATFS => "sys_statfs",
-            SYSCALL_FACCESSAT => "sys_faccessat",
-            SYSCALL_CHDIR => "sys_chdir",
-            SYSCALL_OPEN => "sys_openat",
-            SYSCALL_CLOSE => "sys_close",
-            SYSCALL_PIPE => "sys_pipe",
-            SYSCALL_GETDENTS => "sys_getdents",
-            SYSCALL_LSEEK => "sys_lseek",
-            SYSCALL_READ => "sys_read",
-            SYSCALL_WRITE => "sys_write",
-            SYSCALL_READV => "sys_readv",
-            SYSCALL_WRITEV => "sys_writev",
-            SYSCALL_SENDFILE => "sys_sendfile",
-            SYSCALL_PSELECT6 => "sys_pselect6",
-            SYSCALL_PPOLL => "sys_ppoll",
-            SYSCALL_READLINKAT => "sys_readlinkat",
-            SYSCALL_NEWFSTATAT => "sys_newfstatat",
-            SYSCALL_FSTAT => "sys_fstat",
-            SYSCALL_UTIMENSAT => "sys_utimensat",
-            SYSCALL_EXIT => "sys_exit",
-            SYSCALL_EXIT_GROUP => "sys_exit_group",
-            SYSCALL_SET_TID_ADDRESS => "sys_set_tid_address",
-            SYSCALL_FUTEX => "sys_futex",
-            SYSCALL_NANOSLEEP => "sys_nanosleep",
-            SYSCALL_SETTIMER => "sys_settimer",
-            SYSCALL_CLOCK_SETTIME => "sys_clock_settime",
-            SYSCALL_CLOCK_GETTIME => "sys_clock_gettime",
-            SYSCALL_SYSLOG => "sys_syslog",
-            SYSCALL_YIELD => "sys_yield",
-            SYSCALL_KILL => "sys_kill",
-            SYSCALL_RT_SIGACTION => "sys_rt_sigaction",
-            SYSCALL_RT_SIGPROCMASK => "sys_rt_sigprocmask",
-            SYSCALL_RT_SIGTIMEDWAIT => "sys_rt_sigtimedwait",
-            SYSCALL_RT_SIGRETURN => "sys_rt_sigreturn",
-            SYSCALL_TIMES => "sys_times",
-            SYSCALL_SETPGID => "sys_setpgid",
-            SYSCALL_GETPGID => "sys_getpgid",
-            SYSCALL_UNAME => "sys_uname",
-            SYSCALL_GETRUSAGE => "sys_getrusage",
-            SYSCALL_GET_TIME => "sys_get_time",
-            SYSCALL_GETPID => "sys_getpid",
-            SYSCALL_GETPPID => "sys_getppid",
-            SYSCALL_GETUID => "sys_getuid",
-            SYSCALL_GETEUID => "sys_geteuid",
-            SYSCALL_GETTID => "sys_gettid",
-            SYSCALL_SYSINFO => "sys_sysinfo",
-            SYSCALL_TGKILL => "sys_tgkill",
-            SYSCALL_BRK => "sys_brk",
-            SYSCALL_MUNMAP => "sys_munmap",
-            SYSCALL_CLONE => "sys_clone",
-            SYSCALL_EXECVE => "sys_execve",
-            SYSCALL_MMAP => "sys_mmap",
-            SYSCALL_MPROTECT => "sys_mprotect",
-            SYSCALL_MSYNC => "sys_msync",
-            SYSCALL_WAIT4 => "sys_wait4",
-            SYSCALL_PRLIMIT64 => "sys_prlimit64",
-            SYSCALL_REMANEAT2 => "sys_renameat2",
-            _ => "???",
+macro_rules! sys_handler {
+    ($handler: ident, $args: tt) => {
+        {
+            strace!(
+                "{}, args: {:?}, sepc: {:#x}",
+                stringify!($handler),
+                $args,
+                crate::processor::current_trap_cx().sepc
+            );
+            $handler$args
         }
-    });
+    };
+    ($handler: ident, $args: tt, $await: tt) => {
+        {
+            strace!(
+                "syscall: {}, args: {:?}, sepc: {:#x}",
+                stringify!($handler),
+                $args,
+                crate::processor::current_trap_cx().sepc
+            );
+            $handler$args.$await
+        }
+    };
 }
 
 /// Handle syscall exception with `syscall_id` and other arguments.
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    strace!(
-        "syscall: {}, args: {:?}, sepc: {:#x}",
-        SYSCALL_NAMES[syscall_id],
-        args,
-        crate::processor::current_trap_cx().sepc
-    );
+    // strace!(
+    //     "syscall: {}, args: {:?}, sepc: {:#x}",
+    //     SYSCALL_NAMES[syscall_id],
+    //     args,
+    //     crate::processor::current_trap_cx().sepc
+    // );
     match syscall_id {
-        SYSCALL_GETCWD => sys_getcwd(args[0], args[1]),
-        SYSCALL_DUP => sys_dup(args[0]),
-        SYSCALL_DUP3 => sys_dup3(args[0], args[1], args[2] as u32),
-        SYSCALL_FCNTL => sys_fcntl(args[0], args[1] as i32, args[2] as usize),
-        SYSCALL_IOCTL => sys_ioctl(args[0], args[1] as isize, args[2]),
-        SYSCALL_UNLINK => sys_unlinkat(args[0] as isize, args[1] as *const u8, args[2] as u32),
-        SYSCALL_MKDIR => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2]),
-        SYSCALL_UMOUNT => sys_umount(args[0] as *const u8, args[1] as u32),
-        SYSCALL_MOUNT => sys_mount(
-            args[0] as *const u8,
-            args[1] as *const u8,
-            args[2] as *const u8,
-            args[3] as u32,
-            args[4] as *const u8,
+        SYSCALL_GETCWD => sys_handler!(sys_getcwd, (args[0], args[1])),
+        SYSCALL_DUP => sys_handler!(sys_dup, (args[0])),
+        SYSCALL_DUP3 => sys_handler!(sys_dup3, (args[0], args[1], args[2] as u32)),
+        SYSCALL_FCNTL => sys_handler!(sys_fcntl, (args[0], args[1] as i32, args[2] as usize)),
+        SYSCALL_IOCTL => sys_handler!(sys_ioctl, (args[0], args[1] as isize, args[2])),
+        SYSCALL_UNLINK => sys_handler!(
+            sys_unlinkat,
+            (args[0] as isize, args[1] as *const u8, args[2] as u32)
         ),
-        SYSCALL_STATFS => sys_statfs(args[0] as *const u8, args[1] as *mut Statfs),
-        SYSCALL_FACCESSAT => sys_faccessat(
-            args[0] as isize,
-            args[1] as *const u8,
-            args[2] as u32,
-            args[3] as u32,
+        SYSCALL_MKDIR => sys_handler!(
+            sys_mkdirat,
+            (args[0] as isize, args[1] as *const u8, args[2])
         ),
-        SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
-        SYSCALL_OPEN => sys_openat(
-            args[0] as isize,
-            args[1] as *const u8,
-            args[2] as u32,
-            args[3] as u32,
+        SYSCALL_UMOUNT => sys_handler!(sys_umount, (args[0] as *const u8, args[1] as u32)),
+        SYSCALL_MOUNT => sys_handler!(
+            sys_mount,
+            (
+                args[0] as *const u8,
+                args[1] as *const u8,
+                args[2] as *const u8,
+                args[3] as u32,
+                args[4] as *const u8,
+            )
         ),
-        SYSCALL_CLOSE => sys_close(args[0]),
-        SYSCALL_PIPE => sys_pipe(args[0] as *mut i32),
-        SYSCALL_GETDENTS => sys_getdents(args[0], args[1], args[2]),
-        SYSCALL_LSEEK => sys_lseek(args[0], args[1] as isize, args[2] as u8),
-        SYSCALL_READ => sys_read(args[0], args[1], args[2]).await,
-        SYSCALL_WRITE => sys_write(args[0], args[1], args[2]).await,
-        SYSCALL_READV => sys_readv(args[0], args[1], args[2]).await,
-        SYSCALL_WRITEV => sys_writev(args[0], args[1], args[2]).await,
-        SYSCALL_SENDFILE => {
-            sys_sendfile(
+        SYSCALL_STATFS => sys_handler!(sys_statfs, (args[0] as *const u8, args[1] as *mut Statfs)),
+        SYSCALL_FACCESSAT => sys_handler!(
+            sys_faccessat,
+            (
+                args[0] as isize,
+                args[1] as *const u8,
+                args[2] as u32,
+                args[3] as u32,
+            )
+        ),
+        SYSCALL_CHDIR => sys_handler!(sys_chdir, (args[0] as *const u8)),
+        SYSCALL_OPEN => sys_handler!(
+            sys_openat,
+            (
+                args[0] as isize,
+                args[1] as *const u8,
+                args[2] as u32,
+                args[3] as u32,
+            )
+        ),
+        SYSCALL_CLOSE => sys_handler!(sys_close, (args[0])),
+        SYSCALL_PIPE => sys_handler!(sys_pipe, (args[0] as *mut i32)),
+        SYSCALL_GETDENTS => sys_handler!(sys_getdents, (args[0], args[1], args[2])),
+        SYSCALL_LSEEK => sys_handler!(sys_lseek, (args[0], args[1] as isize, args[2] as u8)),
+        SYSCALL_READ => sys_handler!(sys_read, (args[0], args[1], args[2]), await),
+        SYSCALL_WRITE => sys_handler!(sys_write, (args[0], args[1], args[2]), await),
+        SYSCALL_READV => sys_handler!(sys_readv, (args[0], args[1], args[2]), await),
+        SYSCALL_WRITEV => sys_handler!(sys_writev, (args[0], args[1], args[2]), await),
+        SYSCALL_SENDFILE => sys_handler!(
+            sys_sendfile, (
                 args[0] as isize,
                 args[1] as isize,
                 args[2],
                 args[3] as usize,
             )
-            .await
+            , await
+        ),
+        SYSCALL_PSELECT6 => sys_handler!(
+            sys_pselect6, (args[0] as i32, args[1], args[2], args[3], args[4], args[5]), await
+        ),
+        SYSCALL_PPOLL => sys_handler!(sys_ppoll, (args[0], args[1], args[2], args[3]), await),
+        SYSCALL_READLINKAT => sys_handler!(sys_readlinkat, (args[0], args[1], args[2], args[3])),
+        SYSCALL_NEWFSTATAT => sys_handler!(
+            sys_newfstatat,
+            (
+                args[0] as isize,
+                args[1] as *const u8,
+                args[2],
+                args[3] as u32,
+            )
+        ),
+        SYSCALL_FSTAT => sys_handler!(sys_fstat, (args[0], args[1])),
+        SYSCALL_UTIMENSAT => sys_handler!(
+            sys_utimensat,
+            (
+                args[0] as isize,
+                args[1] as *const u8,
+                args[2] as *const TimeSpec,
+                args[3] as u32,
+            )
+        ),
+        SYSCALL_EXIT => sys_handler!(sys_exit, (args[0] as i8)),
+        SYSCALL_EXIT_GROUP => sys_handler!(sys_exit_group, (args[0] as i8)),
+        SYSCALL_SET_TID_ADDRESS => sys_handler!(sys_set_tid_address, (args[0])),
+        SYSCALL_FUTEX => {
+            sys_handler!(sys_futex, (args[0], args[1], args[2] as u32, args[3]), await)
         }
-        SYSCALL_PSELECT6 => {
-            sys_pselect6(args[0] as i32, args[1], args[2], args[3], args[4], args[5]).await
+        SYSCALL_NANOSLEEP => sys_handler!(sys_nanosleep, (args[0]), await),
+        SYSCALL_SETTIMER => sys_handler!(
+            sys_settimer,
+            (
+                args[0] as i32,
+                args[1] as *const ITimerval,
+                args[2] as *mut ITimerval,
+            )
+        ),
+        SYSCALL_CLOCK_SETTIME => {
+            sys_handler!(sys_clock_settime, (args[0], args[1] as *const TimeSpec))
         }
-        SYSCALL_PPOLL => sys_ppoll(args[0], args[1], args[2], args[3]).await,
-        SYSCALL_READLINKAT => sys_readlinkat(args[0], args[1], args[2], args[3]),
-        SYSCALL_NEWFSTATAT => sys_newfstatat(
-            args[0] as isize,
-            args[1] as *const u8,
-            args[2],
-            args[3] as u32,
+        SYSCALL_CLOCK_GETTIME => {
+            sys_handler!(sys_clock_gettime, (args[0], args[1] as *mut TimeSpec))
+        }
+        SYSCALL_SYSLOG => sys_handler!(
+            sys_syslog,
+            (args[0] as u32, args[1] as *mut u8, args[2] as u32)
         ),
-        SYSCALL_FSTAT => sys_fstat(args[0], args[1]),
-        SYSCALL_UTIMENSAT => sys_utimensat(
-            args[0] as isize,
-            args[1] as *const u8,
-            args[2] as *const TimeSpec,
-            args[3] as u32,
+        SYSCALL_YIELD => sys_handler!(sys_yield, (), await),
+        SYSCALL_KILL => sys_handler!(sys_kill, (args[0] as isize, args[1] as i32)),
+        SYSCALL_RT_SIGACTION => sys_handler!(
+            sys_rt_sigaction,
+            (
+                args[0] as i32,
+                args[1] as *const SigAction,
+                args[2] as *mut SigAction,
+            )
         ),
-        SYSCALL_EXIT => sys_exit(args[0] as i8),
-        SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
-        SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
-        SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2] as u32, args[3]).await,
-        SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
-        SYSCALL_SETTIMER => sys_settimer(
-            args[0] as i32,
-            args[1] as *const ITimerval,
-            args[2] as *mut ITimerval,
+        SYSCALL_RT_SIGPROCMASK => sys_handler!(
+            sys_rt_sigprocmask,
+            (
+                args[0] as i32,
+                args[1] as *const u32,
+                args[2] as *mut SigSet,
+            )
         ),
-        SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0], args[1] as *const TimeSpec),
-        SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0], args[1] as *mut TimeSpec),
-        SYSCALL_SYSLOG => sys_syslog(args[0] as u32, args[1] as *mut u8, args[2] as u32),
-        SYSCALL_YIELD => sys_yield().await,
-        SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as i32),
-        SYSCALL_RT_SIGACTION => sys_rt_sigaction(
-            args[0] as i32,
-            args[1] as *const SigAction,
-            args[2] as *mut SigAction,
+        SYSCALL_RT_SIGTIMEDWAIT => sys_handler!(
+            sys_rt_sigtimedwait,
+            (
+                args[0] as *const u32,
+                args[1] as *const u8,
+                args[2] as *const u8,
+            )
         ),
-        SYSCALL_RT_SIGPROCMASK => sys_rt_sigprocmask(
-            args[0] as i32,
-            args[1] as *const u32,
-            args[2] as *mut SigSet,
+        SYSCALL_RT_SIGRETURN => sys_handler!(sys_rt_sigreturn, ()),
+        SYSCALL_TIMES => sys_handler!(sys_times, (args[0] as *mut Tms)),
+        SYSCALL_SETPGID => sys_handler!(sys_setpgid, (args[0], args[1])),
+        SYSCALL_GETPGID => sys_handler!(sys_getpgid, (args[0])),
+        SYSCALL_UNAME => sys_handler!(sys_uname, (args[0])),
+        SYSCALL_GETRUSAGE => sys_handler!(sys_getrusage, (args[0] as i32, args[1])),
+        SYSCALL_GET_TIME => sys_handler!(sys_get_time, (args[0] as *mut TimeVal)),
+        SYSCALL_GETPID => sys_handler!(sys_getpid, ()),
+        SYSCALL_GETPPID => sys_handler!(sys_getppid, ()),
+        SYSCALL_GETUID => sys_handler!(sys_getuid, ()),
+        SYSCALL_GETEUID => sys_handler!(sys_geteuid, ()),
+        SYSCALL_GETTID => sys_handler!(sys_gettid, ()),
+        SYSCALL_SYSINFO => sys_handler!(sys_sysinfo, (args[0])),
+        SYSCALL_TGKILL => sys_handler!(
+            sys_tgkill,
+            (args[0] as usize, args[1] as usize, args[2] as i32)
         ),
-        SYSCALL_RT_SIGTIMEDWAIT => sys_rt_sigtimedwait(
-            args[0] as *const u32,
-            args[1] as *const u8,
-            args[2] as *const u8,
+        SYSCALL_BRK => sys_handler!(sys_brk, (args[0])),
+        SYSCALL_MUNMAP => sys_handler!(sys_munmap, (args[0] as usize, args[1] as usize)),
+        SYSCALL_CLONE => sys_handler!(
+            sys_clone,
+            (
+                args[0],
+                args[1] as *const u8,
+                args[2] as *const u8,
+                args[3] as *const u8,
+                args[4] as *const u8,
+            )
         ),
-        SYSCALL_RT_SIGRETURN => sys_rt_sigreturn(),
-        SYSCALL_TIMES => sys_times(args[0] as *mut Tms),
-        SYSCALL_SETPGID => sys_setpgid(args[0], args[1]),
-        SYSCALL_GETPGID => sys_getpgid(args[0]),
-        SYSCALL_UNAME => sys_uname(args[0]),
-        SYSCALL_GETRUSAGE => sys_getrusage(args[0] as i32, args[1]),
-        SYSCALL_GET_TIME => sys_get_time(args[0] as *mut TimeVal),
-        SYSCALL_GETPID => sys_getpid(),
-        SYSCALL_GETPPID => sys_getppid(),
-        SYSCALL_GETUID => sys_getuid(),
-        SYSCALL_GETEUID => sys_geteuid(),
-        SYSCALL_GETTID => sys_gettid(),
-        SYSCALL_SYSINFO => sys_sysinfo(args[0]),
-        SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
-        SYSCALL_BRK => sys_brk(args[0]),
-        SYSCALL_MUNMAP => sys_munmap(args[0] as usize, args[1] as usize),
-        SYSCALL_CLONE => sys_clone(
-            args[0],
-            args[1] as *const u8,
-            args[2] as *const u8,
-            args[3] as *const u8,
-            args[4] as *const u8,
+        SYSCALL_EXECVE => sys_handler!(
+            sys_execve,
+            (
+                args[0] as *const u8,
+                args[1] as *const usize,
+                args[2] as *const usize,
+            )
         ),
-        SYSCALL_EXECVE => sys_execve(
-            args[0] as *const u8,
-            args[1] as *const usize,
-            args[2] as *const usize,
+        SYSCALL_MMAP => sys_handler!(
+            sys_mmap,
+            (
+                args[0],
+                args[1],
+                args[2] as i32,
+                args[3] as i32,
+                args[4],
+                args[5],
+            )
         ),
-        SYSCALL_MMAP => sys_mmap(
-            args[0],
-            args[1],
-            args[2] as i32,
-            args[3] as i32,
-            args[4],
-            args[5],
+        SYSCALL_MPROTECT => sys_handler!(sys_mprotect, (args[0], args[1], args[2] as i32)),
+        SYSCALL_MSYNC => sys_handler!(sys_msync, (args[0], args[1], args[2] as i32)),
+        SYSCALL_WAIT4 => {
+            sys_handler!(sys_wait4, (args[0] as isize, args[1], args[2] as i32), await)
+        }
+        SYSCALL_PRLIMIT64 => sys_handler!(
+            sys_prlimit64,
+            (
+                args[0],
+                args[1] as u32,
+                args[2] as *const RLimit,
+                args[3] as *mut RLimit,
+            )
         ),
-        SYSCALL_MPROTECT => sys_mprotect(args[0], args[1], args[2] as i32),
-        SYSCALL_MSYNC => sys_msync(args[0], args[1], args[2] as i32),
-        SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1], args[2] as i32).await,
-        SYSCALL_PRLIMIT64 => sys_prlimit64(
-            args[0],
-            args[1] as u32,
-            args[2] as *const RLimit,
-            args[3] as *mut RLimit,
-        ),
-        SYSCALL_REMANEAT2 => sys_renameat2(
-            args[0] as isize,
-            args[1] as *const u8,
-            args[2] as isize,
-            args[3] as *const u8,
-            args[4] as u32,
+        SYSCALL_REMANEAT2 => sys_handler!(
+            sys_renameat2,
+            (
+                args[0] as isize,
+                args[1] as *const u8,
+                args[2] as isize,
+                args[3] as *const u8,
+                args[4] as u32,
+            )
         ),
         _ => {
             // panic!("Unsupported syscall_id: {}", syscall_id);
@@ -392,8 +410,6 @@ bitflags! {
         const MAP_ANONYMOUS = 1 << 5;
     }
 }
-
-
 
 /// Poll Fd
 #[repr(C)]

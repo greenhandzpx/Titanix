@@ -46,8 +46,6 @@ use thread::Thread;
 pub use manager::PROCESS_MANAGER;
 pub use pid::{pid_alloc, PidHandle};
 
-
-
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();

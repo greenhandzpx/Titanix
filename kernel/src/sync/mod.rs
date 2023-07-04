@@ -2,8 +2,8 @@
 
 mod futex;
 
-pub use futex::FutexQueue;
 pub use futex::FutexFuture;
+pub use futex::FutexQueue;
 
 mod mailbox;
 /// Different kinds of mutex

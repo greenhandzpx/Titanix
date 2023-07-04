@@ -53,29 +53,6 @@ impl Log for SimpleLogger {
             return;
         }
 
-        /*
-        if let Some(tid) = processor().tid_option() {
-            print_in_color(
-                format_args!(
-                    "[{:>5}][{},{}] {}\n",
-                    record.level(),
-                    crate::arch::cpu::id(),
-                    tid,
-                    record.args()
-                ),
-                level_to_color_code(record.level()),
-            );
-        } else {
-            */
-        // print_in_color(
-        //     format_args!(
-        //         "[{:>5}][{},-] {}\n",
-        //         record.level(),
-        //         crate::arch::cpu::id(),
-        //         record.args()
-        //     ),
-        //     level_to_color_code(record.level()),
-        // );
         if hart_idle_now() {
             print_in_color(
                 format_args!(
@@ -85,8 +62,6 @@ impl Log for SimpleLogger {
                     record.line().unwrap(),
                     local_hart().hart_id(),
                     current_time_duration(),
-                    // current_process().pid.0,
-                    // current_task().tid.0,
                     record.args()
                 ),
                 level_to_color_code(record.level()),
@@ -130,7 +105,18 @@ pub const STRACE_COLOR_CODE: u8 = 35; // Purple
 #[cfg(feature = "strace")]
 macro_rules! strace {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::utils::logging::print_in_color(format_args!(concat!($fmt, "\n") $(, $($arg)+)?), crate::utils::logging::STRACE_COLOR_CODE);
+        use crate::{
+            processor::{current_process, current_task, local_hart},
+            timer::current_time_duration,
+        };
+        $crate::utils::logging::print_in_color(
+            format_args!(concat!("[SYSCALL][{},{},{}][{:?}] ", $fmt, "\n"),
+            local_hart().hart_id(),
+            current_process().pid(),
+            current_task().tid(),
+            current_time_duration()
+            $(, $($arg)+)?),
+            crate::utils::logging::STRACE_COLOR_CODE);
     }
 }
 /// Syscall trace
