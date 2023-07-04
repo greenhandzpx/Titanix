@@ -89,9 +89,9 @@ impl FAT32FileSystem {
 }
 
 impl FileSystem for FAT32FileSystem {
-    fn sync_fs(&self) {
-        todo!()
-    }
+    // fn sync_fs(&self) {
+    //     todo!()
+    // }
 
     fn metadata(&self) -> &FileSystemMeta {
         &self.meta

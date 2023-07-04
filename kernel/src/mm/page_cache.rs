@@ -1,6 +1,7 @@
 use alloc::{
     collections::BTreeMap,
     sync::{Arc, Weak},
+    vec::Vec,
 };
 use log::trace;
 
@@ -72,9 +73,16 @@ impl PageCache {
             Ok(page)
         }
     }
-    /// Flush all pages to disk
-    pub fn sync(&self) {
-        todo!()
+    /// Flush all pages to disk if needed
+    pub async fn sync(&self) -> GeneralRet<()> {
+        let mut page_set: Vec<Arc<Page>> = Vec::new();
+        for (_, page) in self.pages.lock().iter() {
+            page_set.push(page.clone());
+        }
+        for page in page_set {
+            page.sync().await?;
+        }
+        Ok(())
     }
 }
 

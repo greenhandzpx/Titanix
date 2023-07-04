@@ -147,9 +147,25 @@ impl Page {
         }
     }
 
-    /// Sync all buffers
-    pub fn sync(&self) {
-        todo!()
+    /// Sync all buffers if needed
+    pub async fn sync(&self) -> GeneralRet<()> {
+        let file_info = self.file_info.as_ref().unwrap().lock().await;
+        let inode = file_info.inode.upgrade().ok_or(SyscallErr::EBADF)?;
+        for idx in 0..PAGE_SIZE / BLOCK_SIZE {
+            match file_info.data_states[idx] {
+                DataState::Dirty => {
+                    let page_offset = idx * BLOCK_SIZE;
+                    inode
+                        .write(
+                            file_info.file_offset + page_offset,
+                            &self.bytes_array()[page_offset..page_offset + BLOCK_SIZE],
+                        )
+                        .await?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Load all buffers

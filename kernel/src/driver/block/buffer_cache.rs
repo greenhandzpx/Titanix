@@ -1,7 +1,6 @@
 use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::{
-    config::board::BLOCK_SIZE,
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };

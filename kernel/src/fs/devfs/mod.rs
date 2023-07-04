@@ -156,5 +156,5 @@ impl FileSystem for DevFs {
         &self.metadata
     }
 
-    fn sync_fs(&self) {}
+    // fn sync_fs(&self) {}
 }

@@ -134,5 +134,5 @@ impl FileSystem for ProcFs {
         &self.metadata
     }
 
-    fn sync_fs(&self) {}
+    // fn sync_fs(&self) {}
 }

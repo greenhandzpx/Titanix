@@ -146,10 +146,6 @@ impl TestFs {
 }
 
 impl FileSystem for TestFs {
-    fn sync_fs(&self) {
-        todo!()
-    }
-
     fn metadata(&self) -> &FileSystemMeta {
         &self.metadata
     }

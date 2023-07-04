@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
@@ -6,13 +8,16 @@ use alloc::{
 };
 
 use lazy_static::*;
+use log::info;
 
 use crate::{
     driver::block::BlockDevice,
     fs::{hash_key::HashKey, inode::INODE_CACHE},
+    process::thread::spawn_kernel_thread,
     sync::mutex::SpinNoIrqLock,
+    timer::timeout_task::ksleep,
     utils::{
-        error::{GeneralRet, SyscallErr},
+        error::{AgeneralRet, GeneralRet, SyscallErr},
         path,
     },
 };
@@ -93,8 +98,13 @@ pub trait FileSystem: Send + Sync {
             + " 0 0\n";
         buf_str
     }
+
     fn metadata(&self) -> &FileSystemMeta;
-    fn sync_fs(&self);
+
+    fn sync_fs<'a>(&self) -> AgeneralRet<'a, ()> {
+        let root_inode = self.metadata().root_inode.clone();
+        <dyn Inode>::sync(root_inode)
+    }
 }
 
 #[derive(Clone)]
@@ -230,8 +240,23 @@ impl FileSystemManager {
             .lock()
             .insert(key.clone(), Arc::clone(&meta.root_inode));
         // insert file system into file system manager
-        let mut fss = self.fs_mgr.lock();
-        fss.insert(mount_point.to_string(), Arc::clone(&fs));
+        let mut fs_locked = self.fs_mgr.lock();
+        fs_locked.insert(mount_point.to_string(), Arc::clone(&fs));
+
+        // Write back in background
+        let fs_moved = fs.clone();
+        spawn_kernel_thread(async move {
+            loop {
+                ksleep(Duration::from_secs(5)).await;
+                if fs_moved.clone().sync_fs().await.is_err() {
+                    info!(
+                        "[fs write back] fs {} must have already been umounted",
+                        fs_moved.metadata().mount_point
+                    );
+                    break;
+                }
+            }
+        });
 
         Ok(fs)
     }

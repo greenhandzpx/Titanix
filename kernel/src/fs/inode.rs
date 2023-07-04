@@ -1,9 +1,11 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use alloc::boxed::Box;
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
     sync::{Arc, Weak},
+    vec::Vec,
 };
 use hashbrown::HashMap;
 use lazy_static::*;
@@ -290,28 +292,38 @@ impl dyn Inode {
     /// Sync this inode.
     /// If the inode is a dir, sync it and all of its children recursively.
     /// If the inode is a regular file, sync its content.
-    pub fn sync(this: Arc<dyn Inode>) {
-        match this.metadata().mode {
-            InodeMode::FileDIR => {
-                this.sync_if_dir();
-                let children = this.metadata().inner.lock().children.clone();
-                for (_, child) in children.iter() {
-                    <dyn Inode>::sync(child.clone());
+    // #[async_recursion]
+    pub fn sync<'a>(this: Arc<dyn Inode>) -> AgeneralRet<'a, ()> {
+        Box::pin(async move {
+            match this.metadata().mode {
+                InodeMode::FileDIR => {
+                    this.sync_if_dir();
+                    let mut children_set: Vec<Arc<dyn Inode>> = Vec::new();
+                    for (_, child) in this.metadata().inner.lock().children.iter() {
+                        children_set.push(child.clone());
+                    }
+
+                    for child in children_set {
+                        <dyn Inode>::sync(child).await?;
+                    }
                 }
+                InodeMode::FileREG => {
+                    <dyn Inode>::sync_reg_file(this).await?;
+                }
+                _ => {}
             }
-            InodeMode::FileREG => {
-                <dyn Inode>::sync_reg_file(this);
-            }
-            _ => {}
-        }
+            Ok(())
+        })
     }
 
-    fn sync_reg_file(this: Arc<dyn Inode>) {
-        if let Some(page_cache) = this.metadata().inner.lock().page_cache.as_ref() {
-            page_cache.sync();
+    async fn sync_reg_file(this: Arc<dyn Inode>) -> GeneralRet<()> {
+        let page_cache = this.metadata().inner.lock().page_cache.clone();
+        if let Some(page_cache) = page_cache {
+            page_cache.sync().await?;
         } else {
             info!("[sync_reg_file] {} no page cache yet", this.metadata().path);
         }
+        Ok(())
     }
 }
 
