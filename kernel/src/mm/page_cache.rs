@@ -1,4 +1,7 @@
-use alloc::sync::{Arc, Weak};
+use alloc::{
+    collections::BTreeMap,
+    sync::{Arc, Weak},
+};
 use log::trace;
 
 use crate::{
@@ -7,36 +10,39 @@ use crate::{
 
 use super::{
     page::{Page, PageBuilder},
-    radix_tree::RadixTree,
+    // radix_tree::RadixTree,
     MapPermission,
 };
-
-type Mutex<T> = SpinNoIrqLock<T>;
 
 /// i.e. linux's `address_space`
 /// TODO: add lru policy?
 pub struct PageCache {
     inode: Option<Weak<dyn Inode>>,
-    pages: Mutex<RadixTree<Arc<Page>>>,
+    /// TODO: compare the performance between Radix tree and B tree map.
+    // pages: Mutex<RadixTree<Arc<Page>>>,
+    /// Page number -> Page
+    pages: SpinNoIrqLock<BTreeMap<usize, Arc<Page>>>,
 }
 
 impl PageCache {
     /// Create a new page cache
-    pub fn new(inode: Arc<dyn Inode>, level_num: usize) -> Self {
+    pub fn new(inode: Arc<dyn Inode>, _level_num: usize) -> Self {
         Self {
             inode: Some(Arc::downgrade(&inode)),
-            pages: Mutex::new(RadixTree::new(level_num)),
+            pages: SpinNoIrqLock::new(BTreeMap::new()),
         }
     }
     /// Lookup a page according to the given file offset
     pub fn lookup(&self, offset: usize) -> Option<Arc<Page>> {
-        self.pages.lock().lookup(offset >> PAGE_SIZE_BITS)
+        self.pages.lock().get(&(offset >> PAGE_SIZE_BITS)).cloned()
     }
     /// Insert a new page
     pub fn insert(&self, offset: usize, page: Page) {
-        self.pages
+        debug_assert!(self
+            .pages
             .lock()
             .insert(offset >> PAGE_SIZE_BITS, Arc::new(page))
+            .is_none())
     }
     /// Get a page according to the given file offset
     pub fn get_page(

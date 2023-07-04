@@ -1,4 +1,4 @@
-use crate::fs::posix::StatFlags;
+use crate::fs::ffi::StatFlags;
 use crate::utils::error::AsyscallRet;
 use crate::utils::error::GeneralRet;
 use alloc::boxed::Box;
@@ -82,11 +82,6 @@ impl Inode for TestRootInode {
         debug!("try to delete inode in disk");
         // todo!()
     }
-
-    fn sync(&self) {
-        debug!("try to sync inode to disk");
-        // todo!()
-    }
 }
 
 pub struct TestRootFile {
@@ -152,7 +147,7 @@ impl TestFs {
 
 impl FileSystem for TestFs {
     fn sync_fs(&self) {
-        self.metadata().root_inode.sync();
+        todo!()
     }
 
     fn metadata(&self) -> &FileSystemMeta {

@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use log::{debug, trace, warn};
 
 use crate::{
-    fs::posix::FdSet,
+    fs::ffi::FdSet,
     processor::{current_process, current_task, SumGuard},
     syscall::{PollEvents, PollFd},
     utils::error::{SyscallErr, SyscallRet},

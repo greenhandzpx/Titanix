@@ -7,8 +7,8 @@ mod hash_key;
 pub mod inode;
 // pub mod inode_fat32_tmp;
 // pub mod fat32_tmp;
+pub mod ffi;
 pub mod pipe;
-pub mod posix;
 mod procfs;
 mod testfs;
 
@@ -39,9 +39,9 @@ use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
 
+use self::ffi::StatFlags;
 use self::file_system::FsDevice;
 use self::inode::INODE_CACHE;
-use self::posix::StatFlags;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 

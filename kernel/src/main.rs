@@ -104,12 +104,6 @@ pub fn rust_main(hart_id: usize) {
         hart::init(hart_id);
         utils::logging::init();
 
-        // unsafe {
-        //     let sp: usize;
-        //     asm!("mv {}, sp", out(reg) sp);
-        //     error!("[kernel] sp {:#x}", sp);
-        // }
-
         println!(r#"  _______ __              _     "#);
         println!(r#" /_  __(_) /_____ _____  (_)  __"#);
         println!(r#"  / / / / __/ __ `/ __ \/ / |/_/"#);

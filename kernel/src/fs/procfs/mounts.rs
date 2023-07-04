@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
 
 use crate::{
@@ -51,8 +51,6 @@ impl Inode for MountsInode {
     fn delete_child(&self, child_name: &str) {
         panic!("Unsupported operation")
     }
-
-    fn sync(&self) {}
 }
 
 pub struct MountsFile {

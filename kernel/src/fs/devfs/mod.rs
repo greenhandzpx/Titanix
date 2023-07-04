@@ -7,9 +7,9 @@ use log::debug;
 use self::null::NullInode;
 use self::rtc::RtcInode;
 use self::{tty::TtyInode, zero::ZeroInode};
+use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
 use crate::fs::inode::INODE_CACHE;
-use crate::fs::posix::StatFlags;
 use crate::utils::error::GeneralRet;
 
 use super::testfs::TestRootInode;
@@ -68,8 +68,6 @@ impl Inode for DevRootInode {
     fn delete_child(&self, _child_name: &str) {
         todo!()
     }
-
-    fn sync(&self) {}
 }
 
 impl DevRootInode {

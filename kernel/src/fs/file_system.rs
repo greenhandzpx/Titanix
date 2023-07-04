@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    devfs::DevFs, inode::InodeDevice, posix::StatFlags, procfs::ProcFs, FAT32FileSystem, Inode,
+    devfs::DevFs, ffi::StatFlags, inode::InodeDevice, procfs::ProcFs, FAT32FileSystem, Inode,
 };
 
 #[derive(Clone)]
@@ -232,6 +232,7 @@ impl FileSystemManager {
         // insert file system into file system manager
         let mut fss = self.fs_mgr.lock();
         fss.insert(mount_point.to_string(), Arc::clone(&fs));
+
         Ok(fs)
     }
 

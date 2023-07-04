@@ -1,7 +1,9 @@
 use alloc::{sync::Arc, vec, vec::Vec};
 use log::{debug, trace};
 
-use crate::{config::fs::RADIX_TREE_MAP_SHIFT, sync::mutex::SpinNoIrqLock};
+use crate::{
+    config::fs::RADIX_TREE_MAP_SHIFT, sync::mutex::SpinNoIrqLock, utils::cell::SyncUnsafeCell,
+};
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -11,13 +13,13 @@ struct RadixTreeLeafNode<T: Clone> {
 }
 
 struct RadixTreeInternalNode<T: Clone> {
-    children: Mutex<[Option<RadixTreeNode<T>>; 2 << RADIX_TREE_MAP_SHIFT]>,
+    children: SyncUnsafeCell<[Option<RadixTreeNode<T>>; 2 << RADIX_TREE_MAP_SHIFT]>,
 }
 
 impl<T: Clone> RadixTreeInternalNode<T> {
     pub fn new() -> Self {
         Self {
-            children: Mutex::new(core::array::from_fn(|_| None)),
+            children: SyncUnsafeCell::new(core::array::from_fn(|_| None)),
         }
     }
 }
@@ -28,7 +30,8 @@ enum RadixTreeNode<T: Clone> {
     LeafNode(RadixTreeLeafNode<T>),
 }
 
-/// To simplify, this struct only fits for those whose Key type is `usize`
+/// To simplify, this struct only fits for those whose Key type is `usize`.
+/// All of the mutual exclusion should be guaranteed by user.
 pub struct RadixTree<T: Clone> {
     level_num: usize,
     root: Arc<RadixTreeInternalNode<T>>,
@@ -51,7 +54,7 @@ impl<T: Clone> RadixTree<T> {
         let indice = self.indice(key);
         let mut parent = self.root.clone();
         for index in indice {
-            let children = parent.children.lock();
+            let children = parent.children.get_unchecked_mut();
             if let Some(node) = children[index].as_ref() {
                 match node {
                     RadixTreeNode::InternalNode(node) => {
@@ -78,7 +81,7 @@ impl<T: Clone> RadixTree<T> {
         let indice = self.indice(key);
         let mut parent = self.root.clone();
         for (i, index) in indice.iter().enumerate() {
-            let mut children = parent.children.lock();
+            let children = parent.children.get_unchecked_mut();
             if children[*index].is_none() {
                 if i == indice.len() - 1 {
                     trace!("[Radix tree]: insert a new leaf, key: {:#x}", key);

@@ -7,7 +7,7 @@ use alloc::{
 };
 use hashbrown::HashMap;
 use lazy_static::*;
-use log::debug;
+use log::{debug, info};
 
 use crate::{
     driver::block::BlockDevice,
@@ -108,9 +108,11 @@ pub trait Inode: Send + Sync {
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
     }
+
     fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
         todo!()
     }
+
     fn mknod(
         &self,
         _this: Arc<dyn Inode>,
@@ -124,12 +126,14 @@ pub trait Inode: Send + Sync {
     fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AgeneralRet<usize> {
         todo!()
     }
+
     /// Write data to the given file offset in block device
     fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AgeneralRet<usize> {
         todo!()
     }
 
     fn metadata(&self) -> &InodeMeta;
+
     fn set_metadata(&mut self, meta: InodeMeta);
 
     fn lookup(&self, this: Arc<dyn Inode>, name: &str) -> Option<Arc<dyn Inode>> {
@@ -184,8 +188,9 @@ pub trait Inode: Send + Sync {
             }
         }
     }
+
     /// unlink() system call will call this function.
-    /// This function will delete the inode in inode cache and call delete() function to delete inode in disk.
+    /// This method will delete the inode in inode cache and call delete() function to delete inode in disk.
     fn unlink(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         debug!("Try to delete child in INODE_CACHE");
@@ -195,7 +200,8 @@ pub trait Inode: Send + Sync {
         self.delete_child(&child_name);
         Ok(0)
     }
-    /// This function will delete the inode in cache (which means delete inode in parent's children list).
+
+    /// This method will delete the inode in cache (which means deleting inode in parent's children list).
     fn remove_child(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         debug!("Try to delete child in INODE_CACHE");
@@ -211,11 +217,17 @@ pub trait Inode: Send + Sync {
     fn load_children_from_disk(&self, this: Arc<dyn Inode>);
 
     /// Delete inode in disk.
-    /// You should call this function through parent inode.
+    /// This method should be called by parent inode.
     /// TODO: This function should be implemented by actual filesystem.
     fn delete_child(&self, child_name: &str);
 
-    fn sync(&self);
+    // fn sync(&self);
+
+    /// Sync the inode if it is a dir.
+    /// Note that this method only sync this inode itself, not including its children.
+    fn sync_if_dir(&self) {
+        // TODO: not yet implement
+    }
 }
 
 impl dyn Inode {
@@ -272,6 +284,33 @@ impl dyn Inode {
         let mut meta_locked = this.metadata().inner.lock();
         if meta_locked.page_cache.is_none() {
             meta_locked.page_cache = Some(Arc::new(PageCache::new(this.clone(), 3)));
+        }
+    }
+
+    /// Sync this inode.
+    /// If the inode is a dir, sync it and all of its children recursively.
+    /// If the inode is a regular file, sync its content.
+    pub fn sync(this: Arc<dyn Inode>) {
+        match this.metadata().mode {
+            InodeMode::FileDIR => {
+                this.sync_if_dir();
+                let children = this.metadata().inner.lock().children.clone();
+                for (_, child) in children.iter() {
+                    <dyn Inode>::sync(child.clone());
+                }
+            }
+            InodeMode::FileREG => {
+                <dyn Inode>::sync_reg_file(this);
+            }
+            _ => {}
+        }
+    }
+
+    fn sync_reg_file(this: Arc<dyn Inode>) {
+        if let Some(page_cache) = this.metadata().inner.lock().page_cache.as_ref() {
+            page_cache.sync();
+        } else {
+            info!("[sync_reg_file] {} no page cache yet", this.metadata().path);
         }
     }
 }

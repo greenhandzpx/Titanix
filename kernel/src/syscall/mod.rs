@@ -102,7 +102,7 @@ use sync::*;
 use time::*;
 
 use crate::{
-    fs::posix::Statfs,
+    fs::ffi::Statfs,
     mm::MapPermission,
     process::resource::RLimit,
     signal::{SigAction, SigSet},

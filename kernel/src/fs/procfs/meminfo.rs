@@ -2,7 +2,6 @@ use alloc::{
     boxed::Box,
     string::{String, ToString},
     sync::Arc,
-    vec::Vec,
 };
 use lazy_static::*;
 use log::debug;
@@ -126,8 +125,6 @@ impl Inode for MeminfoInode {
     fn delete_child(&self, child_name: &str) {
         panic!("Unsupported operation")
     }
-
-    fn sync(&self) {}
 }
 
 pub struct MeminfoFile {

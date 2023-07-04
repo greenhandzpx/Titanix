@@ -6,7 +6,7 @@ use crate::{
 };
 use alloc::{string::ToString, sync::Arc, vec::Vec};
 
-use super::{file_system::FileSystemMeta, posix::StatFlags, FileSystem, Inode};
+use super::{ffi::StatFlags, file_system::FileSystemMeta, FileSystem, Inode};
 
 mod bpb;
 mod dentry;
@@ -90,8 +90,7 @@ impl FAT32FileSystem {
 
 impl FileSystem for FAT32FileSystem {
     fn sync_fs(&self) {
-        self.fat.sync_fat();
-        self.metadata().root_inode.sync();
+        todo!()
     }
 
     fn metadata(&self) -> &FileSystemMeta {

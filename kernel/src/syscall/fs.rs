@@ -13,19 +13,19 @@ use log::{debug, info, trace, warn};
 
 use super::PollFd;
 use crate::config::fs::RLIMIT_OFILE;
-use crate::fs::file_system::FsDevice;
-use crate::fs::inode::INODE_CACHE;
-use crate::fs::pipe::make_pipe;
-use crate::fs::posix::{
+use crate::fs::ffi::{
     Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, STAT, STATFS_SIZE, STAT_SIZE,
     SYSINFO_SIZE,
 };
+use crate::fs::file_system::FsDevice;
+use crate::fs::inode::INODE_CACHE;
+use crate::fs::pipe::make_pipe;
 use crate::fs::HashKey;
 use crate::fs::{
-    inode, open_file, posix::Iovec, posix::UtsName, resolve_path, FaccessatFlags, FcntlFlags,
+    ffi::Iovec, ffi::UtsName, inode, open_file, resolve_path, FaccessatFlags, FcntlFlags,
     FileSystemType, Inode, InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
-use crate::fs::{posix::UTSNAME_SIZE, OpenFlags};
+use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;

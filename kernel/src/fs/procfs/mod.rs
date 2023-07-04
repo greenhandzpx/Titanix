@@ -1,13 +1,10 @@
 use core::sync::atomic::AtomicUsize;
 
 use alloc::{string::ToString, sync::Arc, vec::Vec};
-use log::{debug, info};
+use log::debug;
 
 use crate::{
-    fs::{
-        hash_key::HashKey, inode::INODE_CACHE, posix::StatFlags, FileSystemType, InodeState,
-        FILE_SYSTEM_MANAGER,
-    },
+    fs::{ffi::StatFlags, hash_key::HashKey, inode::INODE_CACHE, FileSystemType},
     utils::{error::GeneralRet, path},
 };
 
@@ -60,8 +57,6 @@ impl Inode for ProcRootInode {
     fn delete_child(&self, child_name: &str) {
         todo!()
     }
-
-    fn sync(&self) {}
 }
 
 impl ProcRootInode {
