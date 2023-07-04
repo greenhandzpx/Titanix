@@ -13,8 +13,6 @@
 #![feature(core_intrinsics)]
 #![feature(const_mut_refs)]
 #![feature(poll_ready)]
-// #![feature(custom_test_frameworks)]
-// #![test_runner(crate::test_runner)]
 
 extern crate alloc;
 // extern crate intrusive_collections;
@@ -49,10 +47,7 @@ mod utils;
 use core::{
     arch::{asm, global_asm},
     sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
 };
-
-use log::{debug, error, info};
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
@@ -61,7 +56,6 @@ use crate::{
     process::thread,
     processor::{hart, HARTS},
     sbi::hart_start,
-    timer::{timed_task::TimedTaskFuture, timeout_task::ksleep},
 };
 
 global_asm!(include_str!("entry.S"));
@@ -144,18 +138,20 @@ pub fn rust_main(hart_id: usize) {
         });
 
         thread::spawn_kernel_thread(async move {
+            // use crate::timer::{timed_task::TimedTaskFuture, timeout_task::ksleep};
+            // let timeout = core::time::Duration::from_secs(3);
             // TimedTaskFuture::new(
-            //     Duration::from_secs(3),
+            //     timeout,
             //     || {
-            //         info!("I'm awake!! hhh just ignore me");
+            //         log::info!("I'm awake!! hhh just ignore me");
             //         return true;
             //     },
-            //     None,
+            //     crate::timer::current_time_duration() + timeout,
             // )
             // .await;
             // loop {
-            //     ksleep(Duration::from_secs(5)).await;
-            //     debug!("I'm awake!! hhh just ignore me");
+            //     ksleep(core::time::Duration::from_secs(5)).await;
+            //     log::debug!("I'm awake!! hhh just ignore me");
             // }
         });
 
@@ -175,7 +171,8 @@ pub fn rust_main(hart_id: usize) {
     } else {
         // The other harts
 
-        // return;
+        #[cfg(not(feature = "multi_hart"))]
+        return;
 
         // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
@@ -193,11 +190,6 @@ pub fn rust_main(hart_id: usize) {
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-        // unsafe {
-        //     let sp: usize;
-        //     asm!("mv {}, sp", out(reg) sp);
-        //     error!("[kernel] sp {:#x}", sp);
-        // }
     }
 
     executor::run_forever();

@@ -192,7 +192,7 @@ pub fn sys_settimer(
                         (current_time_duration() + next_timeout).into();
                 });
                 spawn_kernel_thread(async move {
-                    TimedTaskFuture::new(interval, callback, Some(next_timeout)).await
+                    TimedTaskFuture::new(interval, callback, next_timeout).await
                 });
             }
             which

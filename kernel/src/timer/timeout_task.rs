@@ -52,8 +52,9 @@ impl<F: Future + Send + 'static> Future for TimeoutTaskFuture<F> {
 
                 trace!("[TimeoutTaskFuture::poll] still not ready");
 
-                // // if singal core
-                // cx.waker().clone().wake();
+                // If single core
+                #[cfg(not(feature = "kernel_interrupt"))]
+                cx.waker().wake_by_ref();
 
                 Poll::Pending
             }

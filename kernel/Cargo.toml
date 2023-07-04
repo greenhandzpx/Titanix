@@ -23,15 +23,15 @@ fu740-pac = { path = "../dependencies/fu740-pac" }
 fu740-hal = { path = "../dependencies/fu740-hal" }
 
 [features]
-# default = []
 # default = ["stack_trace", "board_qemu", "kernel_interrupt"]
 # default = ["stack_trace", "board_qemu", "user_spin"]
-default = ["stack_trace", "board_qemu", "kernel_interrupt"]
+default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 board_qemu = []
 stack_trace = []
 kernel_interrupt = []
 user_spin = []
 strace = []
+multi_hart = []
 
 [profile.release]
 debug = true
