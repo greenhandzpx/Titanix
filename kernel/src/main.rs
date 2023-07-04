@@ -125,8 +125,6 @@ pub fn rust_main(hart_id: usize) {
 
         timer::init();
 
-        mm::page_cache_test();
-
         thread::spawn_kernel_thread(async move {
             process::add_initproc();
         });

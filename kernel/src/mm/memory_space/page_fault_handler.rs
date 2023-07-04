@@ -3,10 +3,7 @@ use log::{debug, info, trace, warn};
 use riscv::register::scause::Scause;
 
 use crate::{
-    mm::{
-        address::KernelAddr, frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission,
-        PhysPageNum, VirtAddr,
-    },
+    mm::{frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission, VirtAddr},
     process::Process,
     processor::{current_process, SumGuard},
     stack_trace,

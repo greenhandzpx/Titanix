@@ -13,7 +13,7 @@ use log::{debug, info};
 
 use crate::{
     driver::block::BlockDevice,
-    mm::PageCache,
+    fs::PageCache,
     timer::posix::TimeSpec,
     utils::{
         error::{AgeneralRet, GeneralRet},
@@ -191,7 +191,7 @@ pub trait Inode: Send + Sync {
         }
     }
 
-    /// unlink() system call will call this function.
+    /// unlink() system call will call this method.
     /// This method will delete the inode in inode cache and call delete() function to delete inode in disk.
     fn unlink(&self, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
@@ -229,6 +229,7 @@ pub trait Inode: Send + Sync {
     /// Note that this method only sync this inode itself, not including its children.
     fn sync_if_dir(&self) {
         // TODO: not yet implement
+        // log::error!("sync dir!!");
     }
 }
 

@@ -1,5 +1,5 @@
 use alloc::{collections::BTreeMap, sync::Arc};
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
@@ -7,7 +7,7 @@ use crate::{
     mm::{
         address::{StepByOne, VPNRange},
         frame_alloc,
-        page::{self, PageBuilder},
+        page::PageBuilder,
         page_table::PTEFlags,
         Page, PageTable, PhysPageNum, VirtAddr, VirtPageNum,
     },

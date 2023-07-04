@@ -1,5 +1,3 @@
-use core::arch::global_asm;
-
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, trace, warn};
 use xmas_elf::ElfFile;

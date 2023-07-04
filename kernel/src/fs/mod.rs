@@ -8,6 +8,7 @@ pub mod inode;
 // pub mod inode_fat32_tmp;
 // pub mod fat32_tmp;
 pub mod ffi;
+mod page_cache;
 pub mod pipe;
 mod procfs;
 mod testfs;
@@ -28,6 +29,7 @@ pub use inode::InodeState;
 use log::debug;
 use log::info;
 use log::warn;
+pub use page_cache::PageCache;
 
 use crate::driver::BLOCK_DEVICE;
 use crate::mm::MapPermission;

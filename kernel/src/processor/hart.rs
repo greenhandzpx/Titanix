@@ -1,7 +1,6 @@
 use core::arch::asm;
 
 use alloc::{boxed::Box, sync::Arc};
-use log::{error, info};
 use riscv::register::sstatus::{self, FS};
 
 use crate::{

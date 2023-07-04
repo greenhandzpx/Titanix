@@ -6,14 +6,11 @@ use alloc::{
 use log::trace;
 
 use crate::{
-    config::mm::PAGE_SIZE_BITS, fs::Inode, sync::mutex::SpinNoIrqLock, utils::error::GeneralRet,
+    config::mm::PAGE_SIZE_BITS, fs::Inode, mm::MapPermission, sync::mutex::SpinNoIrqLock,
+    utils::error::GeneralRet,
 };
 
-use super::{
-    page::{Page, PageBuilder},
-    // radix_tree::RadixTree,
-    MapPermission,
-};
+use crate::mm::{Page, PageBuilder};
 
 /// i.e. linux's `address_space`
 /// TODO: add lru policy?

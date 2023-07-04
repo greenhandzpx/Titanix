@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use riscv::register::{sie, sstatus};
+use riscv::register::sstatus;
 
 use crate::{
     mm::PageTable,

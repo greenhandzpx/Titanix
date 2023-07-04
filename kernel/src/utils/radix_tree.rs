@@ -1,11 +1,7 @@
 use alloc::{sync::Arc, vec, vec::Vec};
-use log::{debug, trace};
+use log::trace;
 
-use crate::{
-    config::fs::RADIX_TREE_MAP_SHIFT, sync::mutex::SpinNoIrqLock, utils::cell::SyncUnsafeCell,
-};
-
-type Mutex<T> = SpinNoIrqLock<T>;
+use crate::{config::fs::RADIX_TREE_MAP_SHIFT, utils::cell::SyncUnsafeCell};
 
 struct RadixTreeLeafNode<T: Clone> {
     key: usize,
@@ -32,6 +28,7 @@ enum RadixTreeNode<T: Clone> {
 
 /// To simplify, this struct only fits for those whose Key type is `usize`.
 /// All of the mutual exclusion should be guaranteed by user.
+#[allow(unused)]
 pub struct RadixTree<T: Clone> {
     level_num: usize,
     root: Arc<RadixTreeInternalNode<T>>,
@@ -40,6 +37,7 @@ pub struct RadixTree<T: Clone> {
 // TODO: implement iterator for RadixTree<T>
 
 impl<T: Clone> RadixTree<T> {
+    #[allow(unused)]
     pub fn new(level_num: usize) -> Self {
         Self {
             level_num,
@@ -50,6 +48,7 @@ impl<T: Clone> RadixTree<T> {
     /// Note that elements that have the same low bits will be put into
     /// the same slot. This is what we want because when this structure
     /// is applied in `PageCache`, we will read pages contiguously.
+    #[allow(unused)]
     pub fn lookup(&self, key: usize) -> Option<T> {
         let indice = self.indice(key);
         let mut parent = self.root.clone();
@@ -77,6 +76,7 @@ impl<T: Clone> RadixTree<T> {
         return None;
     }
 
+    #[allow(unused)]
     pub fn insert(&mut self, key: usize, value: T) {
         let indice = self.indice(key);
         let mut parent = self.root.clone();
@@ -117,6 +117,7 @@ impl<T: Clone> RadixTree<T> {
         }
     }
 
+    #[allow(unused)]
     fn indice(&self, mut key: usize) -> Vec<usize> {
         let mut indice = vec![0usize; self.level_num];
         for i in (0..self.level_num).rev() {

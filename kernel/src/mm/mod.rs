@@ -21,9 +21,8 @@ pub mod heap_allocator;
 ///
 pub mod memory_space;
 mod page;
-mod page_cache;
+// mod page_cache;
 mod page_table;
-mod radix_tree;
 mod recycle_allocator;
 ///
 pub mod user_check;
@@ -35,9 +34,9 @@ pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 use log::info;
 pub use memory_space::remap_test;
 pub use memory_space::{MapPermission, MemorySpace, KERNEL_SPACE};
-pub use page::Page;
-pub use page_cache::page_cache_test;
-pub use page_cache::PageCache;
+pub use page::{Page, PageBuilder};
+// pub use page_cache::page_cache_test;
+// pub use page_cache::PageCache;
 pub use page_table::PageTable;
 pub use page_table::PageTableEntry;
 pub use recycle_allocator::RecycleAllocator;

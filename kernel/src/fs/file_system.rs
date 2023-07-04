@@ -248,7 +248,8 @@ impl FileSystemManager {
         spawn_kernel_thread(async move {
             loop {
                 ksleep(Duration::from_secs(5)).await;
-                if fs_moved.clone().sync_fs().await.is_err() {
+                // log::error!("I'm going to write back!!");
+                if fs_moved.sync_fs().await.is_err() {
                     info!(
                         "[fs write back] fs {} must have already been umounted",
                         fs_moved.metadata().mount_point

@@ -1,5 +1,5 @@
 use alloc::sync::Weak;
-use log::{trace, warn};
+use log::trace;
 
 use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
@@ -42,6 +42,7 @@ enum DataState {
     Outdated,
 }
 
+/// Build a page
 pub struct PageBuilder {
     permission: MapPermission,
     offset: Option<usize>,
@@ -51,6 +52,7 @@ pub struct PageBuilder {
 }
 
 impl PageBuilder {
+    /// Construct a page builder
     pub fn new() -> Self {
         Self {
             offset: None,
@@ -60,16 +62,19 @@ impl PageBuilder {
             is_file_page: false,
         }
     }
+    /// Whether this page is related to a file
     pub fn is_file_page(mut self) -> Self {
         self.is_file_page = true;
         self
     }
+    /// The page's backup file
     pub fn file_info(mut self, file_info: &FilePageInfo) -> Self {
         self.offset = Some(file_info.file_offset);
         self.inode = Some(file_info.inode.clone());
         self.is_file_page = true;
         self
     }
+    /// Page map permission
     pub fn permission(mut self, permission: MapPermission) -> Self {
         // if permission.bits() == 0 {
         //     warn!("permission None: {:?}", permission);
@@ -77,18 +82,22 @@ impl PageBuilder {
         self.permission = permission;
         self
     }
+    /// Page's file offset
     pub fn offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
         self
     }
+    /// Page's backup inode
     pub fn inode(mut self, inode: Weak<dyn Inode>) -> Self {
         self.inode = Some(inode);
         self
     }
+    /// Page's physical page frame
     pub fn physical_frame(mut self, frame: FrameTracker) -> Self {
         self.physical_frame = Some(frame);
         self
     }
+    /// Build the page
     pub fn build(mut self) -> Page {
         stack_trace!();
         let frame = match self.physical_frame {
