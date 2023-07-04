@@ -83,21 +83,21 @@ impl PageCache {
     }
 }
 
-/// Page cache test
-pub fn page_cache_test() {
-    // info!("page_cache_test start...");
-    // let mut page_cache = PageCache {
-    //     inode: None,
-    //     pages: RadixTree::new(3),
-    // };
-    // page_cache.insert(0x123 << PAGE_SIZE_BITS, Page::new(None));
-    // page_cache.insert(0x124 << PAGE_SIZE_BITS, Page::new(None));
-    // page_cache.insert(0x125 << PAGE_SIZE_BITS, Page::new(None));
-    // assert!(page_cache.lookup(0x123 << PAGE_SIZE_BITS).is_some());
-    // assert!(page_cache.lookup(0x124 << PAGE_SIZE_BITS).is_some());
-    // assert!(page_cache.lookup(0x125 << PAGE_SIZE_BITS).is_some());
-    // page_cache.insert(0x1123 << PAGE_SIZE_BITS, Page::new(None));
-    // assert!(page_cache.lookup(0x123 << PAGE_SIZE_BITS).is_none());
-    // assert!(page_cache.lookup(0x1123 << PAGE_SIZE_BITS).is_some());
-    // info!("page_cache_test passed!");
-}
+// /// Page cache test
+// pub fn page_cache_test() {
+//     // info!("page_cache_test start...");
+//     // let mut page_cache = PageCache {
+//     //     inode: None,
+//     //     pages: RadixTree::new(3),
+//     // };
+//     // page_cache.insert(0x123 << PAGE_SIZE_BITS, Page::new(None));
+//     // page_cache.insert(0x124 << PAGE_SIZE_BITS, Page::new(None));
+//     // page_cache.insert(0x125 << PAGE_SIZE_BITS, Page::new(None));
+//     // assert!(page_cache.lookup(0x123 << PAGE_SIZE_BITS).is_some());
+//     // assert!(page_cache.lookup(0x124 << PAGE_SIZE_BITS).is_some());
+//     // assert!(page_cache.lookup(0x125 << PAGE_SIZE_BITS).is_some());
+//     // page_cache.insert(0x1123 << PAGE_SIZE_BITS, Page::new(None));
+//     // assert!(page_cache.lookup(0x123 << PAGE_SIZE_BITS).is_none());
+//     // assert!(page_cache.lookup(0x1123 << PAGE_SIZE_BITS).is_some());
+//     // info!("page_cache_test passed!");
+// }

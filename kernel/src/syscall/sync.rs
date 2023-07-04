@@ -1,36 +1,61 @@
-use core::intrinsics::atomic_load_acquire;
+use core::{intrinsics::atomic_load_acquire, time::Duration};
 
-use log::{debug, warn};
+use log::{debug, info, error};
 
 use crate::{
     mm::user_check::UserCheck,
-    process::thread::{self, TidAddress},
+    process::thread::TidAddress,
     processor::{current_process, current_task, SumGuard},
     stack_trace,
-    sync::{mutex::SpinNoIrqLock, CondVar},
-    syscall::FutexOperations,
+    sync::FutexFuture,
+    timer::{posix::TimeSpec, timeout_task::TimeoutTaskFuture},
     utils::error::{SyscallErr, SyscallRet},
 };
 
-pub async fn sys_futex(uaddr: usize, futex_op: usize, val: usize) -> SyscallRet {
+/// Futex Operations
+enum FutexOperations {
+    /// Wait
+    FutexWait = 0,
+    /// Wake up
+    FutexWake = 1,
+    /// Private
+    FutexPrivateFlag = 128,
+    /// Real time
+    FutexClockRealTime = 256,
+}
+
+pub async fn sys_futex(uaddr: usize, futex_op: usize, val: u32, timeout_ptr: usize) -> SyscallRet {
     stack_trace!();
-    todo!("[sys_futex]: not yet implemented!");
+    // todo!("[sys_futex]: not yet implemented!");
+    if futex_op & FutexOperations::FutexPrivateFlag as usize == 0 {
+        error!("[sys_futex] unsupported operation");
+        return Ok(0);
+    }
     match futex_op {
         _ if futex_op == FutexOperations::FutexWait as usize => {
+            let _sum_guard = SumGuard::new();
             UserCheck::new()
                 .check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
-            let _sum_guard = SumGuard::new();
-            if unsafe { atomic_load_acquire(uaddr as *const usize) } == val {
-                current_process().inner_handler(|proc| {
-                    if !proc.addr_to_condvar_map.contains_key(&uaddr) {
-                        proc.addr_to_condvar_map.insert(uaddr, CondVar::new());
+            if unsafe { atomic_load_acquire(uaddr as *const u32) } == val {
+                let timeout = match timeout_ptr {
+                    0 => {
+                        debug!("[sys_futex]: infinite timeout");
+                        None
                     }
-                    current_task().sleep();
-                    let cond_var = proc.addr_to_condvar_map.get(&uaddr).unwrap();
-                    cond_var.wait_without_mutex();
-                });
-                while current_task().is_sleep() {
-                    thread::yield_now().await;
+                    _ => {
+                        UserCheck::new().check_readable_slice(
+                            timeout_ptr as *const u8,
+                            core::mem::size_of::<TimeSpec>(),
+                        )?;
+                        Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
+                    }
+                };
+                let future = FutexFuture::new(uaddr.into(), val);
+                if let Some(timeout) = timeout {
+                    info!("[sys_futex]: timeout {:?}", timeout);
+                    TimeoutTaskFuture::new(timeout, future).await;
+                } else {
+                    future.await;
                 }
             } else {
                 return Err(SyscallErr::EAGAIN);
@@ -47,19 +72,11 @@ pub async fn sys_futex(uaddr: usize, futex_op: usize, val: usize) -> SyscallRet 
 }
 
 /// Futex syscall
-pub fn futex_wake(uaddr: usize, val: usize) -> SyscallRet {
+pub fn futex_wake(uaddr: usize, val: u32) -> SyscallRet {
     stack_trace!();
     UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
-    let cnt = current_process().inner_handler(|proc| {
-        let mut res = 0;
-        if let Some(cond_var) = proc.addr_to_condvar_map.get(&uaddr) {
-            for _ in 0..val {
-                res += 1;
-                cond_var.signal();
-            }
-        }
-        res
-    });
+    let cnt =
+        current_process().inner_handler(|proc| proc.futex_queue.wake(uaddr.into(), val as usize));
     return Ok(cnt as isize);
 }
 

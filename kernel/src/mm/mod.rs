@@ -1,13 +1,3 @@
-/*
- * @Author: greenhandzpx 893522573@qq.com
- * @Date: 2023-01-28 12:24:08
- * @LastEditors: greenhandzpx 893522573@qq.com
- * @LastEditTime: 2023-02-22 10:03:39
- * @FilePath: /oscomp-kernel/os/src/mm/mod.rs
- * @Description:
- *
- * Copyright (c) 2023 by ${git_name_email}, All Rights Reserved.
- */
 //! Memory management implementation
 //!
 //! SV39 page-based virtual-memory architecture for RV64 systems, and

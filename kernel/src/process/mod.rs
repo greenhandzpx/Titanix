@@ -5,7 +5,7 @@
 ///
 pub mod thread;
 
-use log::{debug, error, info};
+use log::debug;
 pub use thread::yield_now;
 
 /// Aux header
@@ -29,13 +29,12 @@ use crate::{
     processor::{current_process, current_task, hart::local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue, SIGKILL},
     stack_trace,
-    sync::{mutex::SpinNoIrqLock, CondVar, Mailbox},
+    sync::{mutex::SpinNoIrqLock, FutexQueue, Mailbox},
     timer::posix::ITimerval,
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 use alloc::{
-    collections::BTreeMap,
     string::String,
     sync::{Arc, Weak},
     vec,
@@ -47,14 +46,7 @@ use thread::Thread;
 pub use manager::PROCESS_MANAGER;
 pub use pid::{pid_alloc, PidHandle};
 
-// pub enum TaskStatus {
-//     Running,
-//     Sleep,
-//     Zombie,
-// }
 
-///
-// pub static mut INITPROC: Option<Arc<Process>> = None;
 
 ///Add init process to the manager
 pub fn add_initproc() {
@@ -96,8 +88,8 @@ pub struct ProcessInner {
     pub pending_sigs: SigQueue,
     /// UStack base of all threads(the lowest bound)
     pub ustack_base: usize,
-    /// Addr -> Condvar map
-    pub addr_to_condvar_map: BTreeMap<usize, CondVar>,
+    /// Futex queue
+    pub futex_queue: FutexQueue,
     /// Exit code of the current process
     /// Note that we may need to put this member in every thread
     pub exit_code: i8,
@@ -233,7 +225,7 @@ impl Process {
                 sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                 pending_sigs: SigQueue::new(),
                 ustack_base: user_sp_base,
-                addr_to_condvar_map: BTreeMap::new(),
+                futex_queue: FutexQueue::new(),
                 exit_code: 0,
                 cwd: String::from("/"),
                 timers: [ITimerval::default(); 3],
@@ -525,7 +517,7 @@ impl Process {
                     sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                     pending_sigs: SigQueue::new(),
                     ustack_base: parent_inner.ustack_base,
-                    addr_to_condvar_map: BTreeMap::new(),
+                    futex_queue: FutexQueue::new(),
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),
                     timers: [ITimerval::default(); 3],

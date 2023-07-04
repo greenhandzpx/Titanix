@@ -1,6 +1,9 @@
 //! Synchronization and interior mutability primitives
-mod cond_var;
-pub use cond_var::CondVar;
+
+mod futex;
+
+pub use futex::FutexQueue;
+pub use futex::FutexFuture;
 
 mod mailbox;
 /// Different kinds of mutex

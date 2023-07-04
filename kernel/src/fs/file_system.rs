@@ -17,6 +17,7 @@ use crate::{
     sync::mutex::SpinNoIrqLock,
     timer::timeout_task::ksleep,
     utils::{
+        async_tools::block_on,
         error::{AgeneralRet, GeneralRet, SyscallErr},
         path,
     },
@@ -262,6 +263,7 @@ impl FileSystemManager {
         Ok(fs)
     }
 
+    /// TODO: change into async
     pub fn unmount(&self, mount_point: &str) -> GeneralRet<()> {
         // find fs
         let fs = {
@@ -277,6 +279,19 @@ impl FileSystemManager {
             return Err(SyscallErr::EEXIST);
         }
         let fs = fs.unwrap();
+
+        // TODO: this may lead to dead lock since the async function may try to
+        // hold a sleeplock.
+        let fs_moved = fs.clone();
+        block_on(async move {
+            if fs_moved.sync_fs().await.is_err() {
+                log::error!(
+                    "[umount] fs {} must have already been umounted",
+                    fs_moved.metadata().mount_point
+                );
+            }
+        });
+
         let meta = fs.metadata();
         // remove root inode from inode cache
         let fa_ino = {

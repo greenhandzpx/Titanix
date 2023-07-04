@@ -3,7 +3,7 @@ use log::{debug, trace, warn};
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
-    fs::File,
+    fs::{File, Inode},
     mm::{
         address::{StepByOne, VPNRange},
         frame_alloc,
@@ -292,7 +292,9 @@ impl VmArea {
             backup_file.offset += VirtAddr::from(removed_vpn_range.start()).0
                 - VirtAddr::from(self.vpn_range.start()).0;
             if self.mmap_flags.unwrap().contains(MmapFlags::MAP_SHARED) {
-                backup_file.file.sync().ok().unwrap();
+                // TODO: do we need to sync to the disk?
+                // It seems ok for us to just sync to page cache.
+                // <dyn Inode>::sync(backup_file.file.metadata().inner.lock().inode.as_ref().unwrap().clone())
             }
         }
     }

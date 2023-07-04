@@ -102,11 +102,11 @@ pub trait File: Send + Sync {
 
     fn metadata(&self) -> &FileMeta;
 
-    /// Sync the file content to disk
-    fn sync(&self) -> GeneralRet<()> {
-        // TODO
-        Ok(())
-    }
+    // /// Sync the file content to disk
+    // fn sync(&self) -> GeneralRet<()> {
+    //     // TODO
+    //     Ok(())
+    // }
 }
 
 impl dyn File {

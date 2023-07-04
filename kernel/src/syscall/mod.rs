@@ -262,7 +262,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_EXIT => sys_exit(args[0] as i8),
         SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i8),
         SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0]),
-        SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2]).await,
+        SYSCALL_FUTEX => sys_futex(args[0], args[1], args[2] as u32, args[3]).await,
         SYSCALL_NANOSLEEP => sys_nanosleep(args[0]).await,
         SYSCALL_SETTIMER => sys_settimer(
             args[0] as i32,
@@ -393,13 +393,7 @@ bitflags! {
     }
 }
 
-/// Futex Operations
-pub enum FutexOperations {
-    /// Wait
-    FutexWait = 1,
-    /// Wake up
-    FutexWake = 2,
-}
+
 
 /// Poll Fd
 #[repr(C)]
