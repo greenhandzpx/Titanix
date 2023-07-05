@@ -1426,15 +1426,21 @@ pub async fn sys_pselect6(
     }
 }
 
-
-
+pub async fn sys_ftruncate(fd: usize, len: usize)  -> SyscallRet {
+    stack_trace!();
+    let file = current_process().inner_handler(|proc| {
+        proc.fd_table.get(fd)
+    }).ok_or(SyscallErr::EBADF)?;
+    file.truncate(len).await?;
+    Ok(0)
+}
 
 pub async fn sys_fsync(fd: usize) -> SyscallRet {
     stack_trace!();
     let file = current_process().inner_handler(|proc| {
         proc.fd_table.get(fd)
     }).ok_or(SyscallErr::EBADF)?;
-    let inode = file.metadata().inner.lock().inode.clone().ok_or(SyscallErr::EIO)?;
+    let inode = file.metadata().inner.lock().inode.clone().ok_or(SyscallErr::EINVAL)?;
     info!("[sys_fsync] start to sync file..., fd {}", fd);
     <dyn Inode>::sync(inode).await?;
     info!("[sys_fsync] sync file finished, fd {}", fd);
@@ -1448,5 +1454,5 @@ pub async fn sys_sync() -> SyscallRet {
     let root_fs = FILE_SYSTEM_MANAGER.root_fs();
     root_fs.sync_fs().await?;
     info!("[sys_sync] sync finished");
-    todo!()
+    Ok(0)
 }

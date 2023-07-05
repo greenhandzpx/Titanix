@@ -11,6 +11,7 @@ use hashbrown::HashMap;
 use lazy_static::*;
 use log::{debug, info};
 
+use crate::utils::error::SyscallErr;
 use crate::{
     driver::block::BlockDevice,
     fs::PageCache,
@@ -225,12 +226,13 @@ pub trait Inode: Send + Sync {
 
     // fn sync(&self);
 
-    /// Sync the inode if it is a dir.
+    /// Sync the inode's metadata
     /// Note that this method only sync this inode itself, not including its children.
-    fn sync_if_dir(&self) {
+    fn sync_metedata(&self) {
         // TODO: not yet implement
         // log::error!("sync dir!!");
     }
+
 }
 
 impl dyn Inode {
@@ -298,7 +300,7 @@ impl dyn Inode {
         Box::pin(async move {
             match this.metadata().mode {
                 InodeMode::FileDIR => {
-                    this.sync_if_dir();
+                    this.sync_metedata();
                     let mut children_set: Vec<Arc<dyn Inode>> = Vec::new();
                     for (_, child) in this.metadata().inner.lock().children.iter() {
                         children_set.push(child.clone());
@@ -309,6 +311,7 @@ impl dyn Inode {
                     }
                 }
                 InodeMode::FileREG => {
+                    this.sync_metedata();
                     <dyn Inode>::sync_reg_file(this).await?;
                 }
                 _ => {}
@@ -317,6 +320,7 @@ impl dyn Inode {
         })
     }
 
+    /// Sync regular file's content
     async fn sync_reg_file(this: Arc<dyn Inode>) -> GeneralRet<()> {
         let page_cache = this.metadata().inner.lock().page_cache.clone();
         if let Some(page_cache) = page_cache {
@@ -356,8 +360,6 @@ impl InodeMeta {
 
 #[derive(Clone)]
 pub struct InodeMetaInner {
-    // /// inode' file's size
-    // pub size: usize,
     /// last access time, need to flush to disk.
     pub st_atim: TimeSpec,
     /// last modification time, need to flush to disk

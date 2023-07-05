@@ -176,6 +176,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
         ),
         SYSCALL_STATFS => sys_handler!(sys_statfs, (args[0] as *const u8, args[1] as *mut Statfs)),
+        SYSCALL_FTRUNCATE => sys_handler!(sys_ftruncate, (args[0], args[1]), await),
         SYSCALL_FACCESSAT => sys_handler!(
             sys_faccessat,
             (

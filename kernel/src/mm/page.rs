@@ -1,5 +1,5 @@
 use alloc::sync::Weak;
-use log::trace;
+use log::{trace, info};
 
 use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
@@ -160,13 +160,20 @@ impl Page {
     pub async fn sync(&self) -> GeneralRet<()> {
         let file_info = self.file_info.as_ref().unwrap().lock().await;
         let inode = file_info.inode.upgrade().ok_or(SyscallErr::EBADF)?;
+        let data_len = inode.metadata().inner.lock().data_len;
         for idx in 0..PAGE_SIZE / BLOCK_SIZE {
             match file_info.data_states[idx] {
                 DataState::Dirty => {
                     let page_offset = idx * BLOCK_SIZE;
+                    let file_offset = file_info.file_offset + page_offset;
+                    // In case of truncate
+                    if data_len <= file_offset {
+                        info!("[Page::sync] file has been truncated, now len {:#x}, page's file offset {:#x}", data_len, file_offset);
+                        return Ok(());
+                    }
                     inode
                         .write(
-                            file_info.file_offset + page_offset,
+                            file_offset,
                             &self.bytes_array()[page_offset..page_offset + BLOCK_SIZE],
                         )
                         .await?;

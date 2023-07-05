@@ -1,6 +1,6 @@
 use core::task::Waker;
 
-use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use log::trace;
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
-        error::{AsyscallRet, GeneralRet, SyscallRet},
+        error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
     },
 };
 
@@ -102,11 +102,34 @@ pub trait File: Send + Sync {
 
     fn metadata(&self) -> &FileMeta;
 
-    // /// Sync the file content to disk
-    // fn sync(&self) -> GeneralRet<()> {
-    //     // TODO
-    //     Ok(())
-    // }
+    fn truncate(&self, len: usize) -> AgeneralRet<()> {
+        Box::pin(async move {
+            let (old_pos, writable, inode) = self.metadata().inner_get(|inner| {
+                let flags = inner.flags;
+                let inode = inner.inode.as_ref().ok_or(SyscallErr::EINVAL)?.clone();
+                Ok((
+                    inner.pos,
+                    flags.contains(OpenFlags::WRONLY) || flags.contains(OpenFlags::RDWR),
+                    inode,
+                ))
+            })?;
+            if !writable {
+                return Err(SyscallErr::EACCES);
+            }
+            let old_data_len = inode.metadata().inner.lock().data_len;
+            if len < old_data_len {
+                inode.metadata().inner.lock().data_len = len;
+            } else if len > old_data_len {
+                inode.metadata().inner.lock().data_len = len;
+                // fill with \0
+                let buf = vec![0 as u8; len - old_data_len];
+                self.seek(old_data_len)?;
+                self.write(&buf).await?;
+                self.seek(old_pos)?;
+            }
+            Ok(())
+        })
+    }
 }
 
 impl dyn File {
