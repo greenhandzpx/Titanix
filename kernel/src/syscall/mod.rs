@@ -132,7 +132,7 @@ macro_rules! sys_handler {
     ($handler: ident, $args: tt, $await: tt) => {
         {
             strace!(
-                "syscall: {}, args: {:?}, sepc: {:#x}",
+                "{}, args: {:?}, sepc: {:#x}",
                 stringify!($handler),
                 $args,
                 crate::processor::current_trap_cx().sepc
@@ -227,6 +227,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
         ),
         SYSCALL_FSTAT => sys_handler!(sys_fstat, (args[0], args[1])),
+        SYSCALL_SYNC => sys_handler!(sys_sync, (), await),
+        SYSCALL_FSYNC => sys_handler!(sys_fsync, (args[0]), await),
         SYSCALL_UTIMENSAT => sys_handler!(
             sys_utimensat,
             (
