@@ -440,6 +440,7 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallRet {
             let mut start_ts = Duration::ZERO;
             for thread in proc.threads.iter() {
                 if let Some(thread) = thread.upgrade() {
+                    // TODO: is it ok to just read the other thread's unsafe cell data?
                     user_time += unsafe { (*thread.inner.get()).time_info.user_time };
                     sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
                     if start_ts.is_zero() {

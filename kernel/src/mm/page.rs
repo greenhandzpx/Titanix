@@ -1,5 +1,5 @@
 use alloc::sync::Weak;
-use log::{trace, info};
+use log::{info, trace};
 
 use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
@@ -58,7 +58,8 @@ impl PageBuilder {
             offset: None,
             inode: None,
             physical_frame: None,
-            permission: MapPermission::empty(),
+            // TODO: defalut is readable and writable
+            permission: MapPermission::R | MapPermission::W,
             is_file_page: false,
         }
     }

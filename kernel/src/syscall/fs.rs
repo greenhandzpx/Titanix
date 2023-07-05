@@ -38,7 +38,7 @@ use crate::timer::{posix::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
-use crate::{fs, stack_trace, strace};
+use crate::{fs, stack_trace};
 
 /// get current working directory
 pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
@@ -1426,21 +1426,27 @@ pub async fn sys_pselect6(
     }
 }
 
-pub async fn sys_ftruncate(fd: usize, len: usize)  -> SyscallRet {
+pub async fn sys_ftruncate(fd: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    let file = current_process().inner_handler(|proc| {
-        proc.fd_table.get(fd)
-    }).ok_or(SyscallErr::EBADF)?;
+    let file = current_process()
+        .inner_handler(|proc| proc.fd_table.get(fd))
+        .ok_or(SyscallErr::EBADF)?;
     file.truncate(len).await?;
     Ok(0)
 }
 
 pub async fn sys_fsync(fd: usize) -> SyscallRet {
     stack_trace!();
-    let file = current_process().inner_handler(|proc| {
-        proc.fd_table.get(fd)
-    }).ok_or(SyscallErr::EBADF)?;
-    let inode = file.metadata().inner.lock().inode.clone().ok_or(SyscallErr::EINVAL)?;
+    let file = current_process()
+        .inner_handler(|proc| proc.fd_table.get(fd))
+        .ok_or(SyscallErr::EBADF)?;
+    let inode = file
+        .metadata()
+        .inner
+        .lock()
+        .inode
+        .clone()
+        .ok_or(SyscallErr::EINVAL)?;
     info!("[sys_fsync] start to sync file..., fd {}", fd);
     <dyn Inode>::sync(inode).await?;
     info!("[sys_fsync] sync file finished, fd {}", fd);

@@ -79,9 +79,9 @@ kernel:
 	@cp src/linker64.ld src/linker.ld
 	@cargo fmt
 ifeq ($(STRACE), )
-	@cargo build --release 
+	@cargo build --$(MODE)
 else
-	@cargo build --release --features strace
+	@cargo build --$(MODE) --features strace
 endif
 	@rm src/linker.ld
 	@echo "build kernel finished"

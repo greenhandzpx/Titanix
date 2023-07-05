@@ -8,7 +8,7 @@ use crate::{
             vm_area::BackupFile,
             PageFaultHandler,
         },
-        MapPermission, VPNRange, VirtAddr,
+        MapPermission, VPNRange, VirtAddr, SHARED_MEMORY_MANAGER,
     },
     processor::current_process,
     stack_trace,
@@ -38,6 +38,7 @@ pub fn sys_mmap(
         if offset != 0 {
             return Err(SyscallErr::EINVAL);
         }
+        // TODO: support shared memory(i.e. MAP_ANONYMOUS | MAP_SHARED)
         current_process().inner_handler(|proc| {
             let mut vma = {
                 if flags.contains(MmapFlags::MAP_FIXED) {
@@ -231,4 +232,24 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
             }
         }
     })
+}
+
+const IPC_PRIVATE: usize = 0;
+
+pub fn sys_shmget(key: usize, len: usize, _shmflag: u32) -> SyscallRet {
+    stack_trace!();
+    if key != IPC_PRIVATE {
+        panic!("[sys_shmget] unsupported operation, key {:#X}", key);
+    }
+    Ok(SHARED_MEMORY_MANAGER.lock().alloc(key, len) as isize)
+}
+
+pub fn sys_shmat(shmid: usize, shmaddr: usize, _shmflag: u32) -> SyscallRet {
+    stack_trace!();
+    let addr = match shmaddr {
+        0 => None,
+        addr => Some(VirtAddr::from(addr)),
+    };
+
+    SHARED_MEMORY_MANAGER.lock().attach(shmid, addr)
 }

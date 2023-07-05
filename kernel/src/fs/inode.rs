@@ -232,7 +232,6 @@ pub trait Inode: Send + Sync {
         // TODO: not yet implement
         // log::error!("sync dir!!");
     }
-
 }
 
 impl dyn Inode {
@@ -326,7 +325,7 @@ impl dyn Inode {
         if let Some(page_cache) = page_cache {
             page_cache.sync().await?;
         } else {
-            info!("[sync_reg_file] {} no page cache yet", this.metadata().path);
+            log::debug!("[sync_reg_file] {} no page cache yet", this.metadata().path);
         }
         Ok(())
     }

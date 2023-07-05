@@ -14,6 +14,8 @@ mod page;
 // mod page_cache;
 mod page_table;
 mod recycle_allocator;
+mod shm;
+pub use shm::SHARED_MEMORY_MANAGER;
 ///
 pub mod user_check;
 

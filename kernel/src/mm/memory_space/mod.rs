@@ -323,29 +323,17 @@ impl MemorySpace {
     ///Remove `VmArea` that starts with `start_vpn`
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some(area) = self.areas.get_unchecked_mut().get_mut(&start_vpn) {
-            let pgtbl_ref = self.page_table.get_unchecked_mut();
-            // area.unmap(pgtbl_ref);
-            area.unmap_lazily(pgtbl_ref);
+            area.unmap_lazily();
             self.areas.get_unchecked_mut().remove(&start_vpn);
         }
-        // if let Some((idx, area)) = self
-        //     .areas
-        //     .iter_mut()
-        //     .enumerate()
-        //     .find(|(_, area)| area.vpn_range.get_start() == start_vpn)
-        // {
-        //     let pgtbl_ref = unsafe { &mut (*self.page_table.get()) };
-        //     area.unmap(pgtbl_ref);
-        //     self.areas.remove(idx);
-        // }
     }
     /// Add the map area to memory set and map the map area(allocating physical frames)
     fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
         stack_trace!();
-        let pgtbl_ref = self.page_table.get_unchecked_mut();
-        vm_area.map(pgtbl_ref);
+        // let pgtbl_ref = self.page_table.get_unchecked_mut();
+        vm_area.map();
         if let Some(data) = data {
-            vm_area.copy_data_with_offset(pgtbl_ref, data_offset, data);
+            vm_area.copy_data_with_offset(data_offset, data);
         }
         self.areas
             .get_unchecked_mut()
@@ -758,9 +746,6 @@ impl MemorySpace {
         stack_trace!();
         // let mut memory_space = Self::new_bare();
         let mut memory_space = Self::new_from_global();
-        let new_pagetable = memory_space.page_table.get_unchecked_mut();
-        // // map trampoline
-        // memory_space.map_trampoline();
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
             let mut new_area = VmArea::from_another(area, memory_space.page_table.clone());
@@ -769,7 +754,7 @@ impl MemorySpace {
             for vpn in area.vpn_range {
                 if let Some(ppn) = user_space.translate(vpn) {
                     let src_ppn = ppn.ppn();
-                    let dst_ppn = new_area.map_one(new_pagetable, vpn);
+                    let dst_ppn = new_area.map_one(vpn, None);
                     dst_ppn.bytes_array().copy_from_slice(src_ppn.bytes_array());
                 }
                 // let src_ppn = user_space.translate(vpn).unwrap().ppn();

@@ -277,6 +277,7 @@ where
     l: T,
     r: T,
 }
+
 impl<T> SimpleRange<T>
 where
     T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
@@ -297,6 +298,7 @@ where
         self.r = new_right;
     }
 }
+
 impl<T> IntoIterator for SimpleRange<T>
 where
     T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
@@ -307,6 +309,14 @@ where
         SimpleRangeIterator::new(self.l, self.r)
     }
 }
+
+// impl<T> Iterator for SimpleRange<T>
+// where
+//     T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
+// {
+
+// }
+
 /// iterator for the simple range structure
 pub struct SimpleRangeIterator<T>
 where

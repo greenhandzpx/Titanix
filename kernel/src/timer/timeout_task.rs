@@ -33,7 +33,7 @@ impl<F: Future + Send + 'static> TimeoutTaskFuture<F> {
 impl<F: Future + Send + 'static> Future for TimeoutTaskFuture<F> {
     type Output = TimeoutTaskOutput<F::Output>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        info!("[TimeoutTaskFuture::poll] enter");
+        log::debug!("[TimeoutTaskFuture::poll] enter");
         let this = unsafe { self.get_unchecked_mut() };
         let ret = unsafe { Pin::new_unchecked(&mut this.task_future).poll(cx) };
         if ret.is_pending() {
@@ -47,7 +47,7 @@ impl<F: Future + Send + 'static> Future for TimeoutTaskFuture<F> {
                     };
                     TIMER_QUEUE.add_timer(timer);
                     this.has_added_to_timer = true;
-                    info!("[TimeoutTaskFuture::poll] add timer");
+                    log::debug!("[TimeoutTaskFuture::poll] add timer");
                 }
 
                 trace!("[TimeoutTaskFuture::poll] still not ready");
