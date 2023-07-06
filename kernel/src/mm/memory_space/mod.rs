@@ -966,8 +966,8 @@ bitflags! {
         const X = 1 << 3;
         ///Accessible in U mode
         const U = 1 << 4;
-        /// COW when fork
-        const COW = 1 << 8;
+        // /// COW when fork
+        // const COW = 1 << 8;
     }
 }
 

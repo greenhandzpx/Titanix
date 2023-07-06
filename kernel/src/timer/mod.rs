@@ -12,7 +12,7 @@ use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::{BTreeMap, BinaryHeap};
 use lazy_static::*;
-use log::{debug, info};
+use log::info;
 use riscv::register::time;
 
 const TICKS_PER_SEC: usize = 100;
@@ -81,9 +81,10 @@ pub fn handle_timeout_events() {
     // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time may be a little long.
     loop {
         if let Some(timer) = timers.peek() {
-            debug!(
+            log::trace!(
                 "[handle_timeout_events] find a timer, current ts: {:?}, expired ts: {:?}",
-                current_time, timer.0.expired_time
+                current_time,
+                timer.0.expired_time
             );
             if current_time >= timer.0.expired_time {
                 let mut timer = timers.pop().unwrap();

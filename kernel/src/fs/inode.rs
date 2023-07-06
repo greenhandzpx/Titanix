@@ -292,13 +292,14 @@ impl dyn Inode {
     }
 
     /// Sync this inode.
-    /// If the inode is a dir, sync it and all of its children recursively.
+    /// If the inode is a dir, sync it's metadata and all of its children recursively.
     /// If the inode is a regular file, sync its content.
     // #[async_recursion]
     pub fn sync<'a>(this: Arc<dyn Inode>) -> AgeneralRet<'a, ()> {
         Box::pin(async move {
             match this.metadata().mode {
                 InodeMode::FileDIR => {
+                    log::debug!("[Inode::sync] sync dir..., name {}", this.metadata().name);
                     this.sync_metedata();
                     let mut children_set: Vec<Arc<dyn Inode>> = Vec::new();
                     for (_, child) in this.metadata().inner.lock().children.iter() {
@@ -308,10 +309,17 @@ impl dyn Inode {
                     for child in children_set {
                         <dyn Inode>::sync(child).await?;
                     }
+                    log::debug!(
+                        "[Inode::sync] sync dir finished, name {}",
+                        this.metadata().name
+                    );
                 }
                 InodeMode::FileREG => {
+                    let name = this.metadata().name.clone();
+                    log::debug!("[Inode::sync] sync reg file..., name {}", name);
                     this.sync_metedata();
                     <dyn Inode>::sync_reg_file(this).await?;
+                    log::debug!("[Inode::sync] sync reg file finished, name {}", name);
                 }
                 _ => {}
             }

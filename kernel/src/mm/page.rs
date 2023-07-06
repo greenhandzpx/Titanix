@@ -162,11 +162,19 @@ impl Page {
         let file_info = self.file_info.as_ref().unwrap().lock().await;
         let inode = file_info.inode.upgrade().ok_or(SyscallErr::EBADF)?;
         let data_len = inode.metadata().inner.lock().data_len;
+        log::trace!(
+            "[Page::sync] sync page, file offset {:#x}",
+            file_info.file_offset
+        );
         for idx in 0..PAGE_SIZE / BLOCK_SIZE {
             match file_info.data_states[idx] {
                 DataState::Dirty => {
                     let page_offset = idx * BLOCK_SIZE;
                     let file_offset = file_info.file_offset + page_offset;
+                    log::trace!(
+                        "[Page::sync] sync block of the page, file offset {:#x}",
+                        file_offset
+                    );
                     // In case of truncate
                     if data_len <= file_offset {
                         info!("[Page::sync] file has been truncated, now len {:#x}, page's file offset {:#x}", data_len, file_offset);

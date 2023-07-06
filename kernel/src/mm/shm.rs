@@ -7,7 +7,7 @@ use lazy_static::*;
 
 use crate::{
     config::mm::{PAGE_SIZE, PAGE_SIZE_BITS},
-    mm::{frame_alloc, MapPermission, PageBuilder},
+    mm::{frame_alloc, page_table::PTEFlags, MapPermission, PageBuilder},
     processor::current_process,
     stack_trace,
     sync::mutex::SpinNoIrqLock,
@@ -76,7 +76,9 @@ impl SharedMemory {
         stack_trace!();
 
         current_process().inner_handler(|proc| {
-            let permission = MapPermission::R | MapPermission::X;
+            // TODO: give user all permissions temporarily
+            let permission =
+                MapPermission::R | MapPermission::X | MapPermission::W | MapPermission::U;
             let mut vma = match addr {
                 Some(addr) => proc
                     .memory_space
@@ -89,6 +91,11 @@ impl SharedMemory {
             };
             debug_assert!(vma.end_vpn().0 - vma.start_vpn().0 == self.page_cnt);
             for (idx, vpn) in vma.vpn_range.into_iter().enumerate() {
+                log::debug!(
+                    "[SharedMemory::attach] attach vma, vpn {:#x}, pte flags {:?}",
+                    vpn.0,
+                    PTEFlags::from(permission)
+                );
                 let page = match self.pages.len() <= idx {
                     true => {
                         let page = Arc::new(PageBuilder::new().permission(permission).build());
@@ -106,8 +113,16 @@ impl SharedMemory {
                 };
                 vma.map_one(vpn, Some(page));
             }
+            log::info!(
+                "[SharedMemory::attach] attach vma, start vpn {:#x}, pte flags {:?}",
+                vma.start_vpn().0,
+                PTEFlags::from(permission)
+            );
+            let start_vpn = vma.start_vpn();
+            proc.memory_space.insert_area(vma);
+            proc.memory_space.activate();
 
-            Ok(vma.start_vpn().0 as isize)
+            Ok(VirtAddr::from(start_vpn).0 as isize)
         })
     }
 }

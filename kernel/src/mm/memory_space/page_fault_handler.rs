@@ -108,7 +108,7 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         // todo!()
         stack_trace!();
         // Box::pin(async move {
-        debug!("handle sbrk page fault, va {:#x}", va.0);
+        trace!("handle sbrk page fault, va {:#x}", va.0);
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;

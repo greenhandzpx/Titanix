@@ -32,6 +32,9 @@ bitflags! {
 impl From<MapPermission> for PTEFlags {
     fn from(perm: MapPermission) -> Self {
         let mut ret = Self::from_bits(0).unwrap();
+        if perm.contains(MapPermission::U) {
+            ret |= PTEFlags::U;
+        }
         if perm.contains(MapPermission::R) {
             ret |= PTEFlags::R;
         }
@@ -41,6 +44,9 @@ impl From<MapPermission> for PTEFlags {
         if perm.contains(MapPermission::X) {
             ret |= PTEFlags::X;
         }
+        // if perm.contains(MapPermission::COW) {
+        //     ret |= PTEFlags::COW;
+        // }
         ret
     }
 }

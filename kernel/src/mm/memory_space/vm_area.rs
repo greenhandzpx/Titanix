@@ -177,7 +177,8 @@ impl VmArea {
                 // todo!()
             }
         }
-        let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        // let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        let pte_flags = PTEFlags::from(self.map_perm);
         // debug!("vpn {:#x} pg ph {:#x}", vpn.0, ppn.0);
         page_table.map(vpn, ppn, pte_flags);
         ppn

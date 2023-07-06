@@ -153,7 +153,7 @@ impl UserCheck {
         stack_trace!();
         match memory_space::handle_page_fault(va, scause).await {
             Ok(_) => {
-                debug!(
+                log::trace!(
                     "[kernel] [proc {}]handle legal page fault, addr {:#x}",
                     current_process().pid(),
                     va.0

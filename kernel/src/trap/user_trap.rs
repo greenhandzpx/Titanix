@@ -68,7 +68,7 @@ pub async fn trap_handler() {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            debug!(
+            log::debug!(
                 "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
                 stval,
                 current_trap_cx().sepc,
@@ -77,7 +77,7 @@ pub async fn trap_handler() {
             stack_trace!();
             match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
                 Ok(()) => {
-                    debug!(
+                    log::trace!(
                         "[kernel] handle legal page fault, addr {:#x}, instruction {:#x}",
                         stval,
                         current_trap_cx().sepc
