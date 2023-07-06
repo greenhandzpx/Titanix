@@ -175,11 +175,22 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         "[sys_execve] enter, path ptr {:#x} ,args ptr {:#x}, envs ptr {:#x}",
         path as usize, args as usize, envs as usize
     );
-    // info!("path1 {:#x}", path as usize);
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
+
+    UserCheck::new().check_c_str(path)?;
+    let mut path = path::path_process(AT_FDCWD, path as *const u8).unwrap();
+    info!("[sys_execve] path {}", path);
+
     // transfer the cmd args
     let mut args_vec: Vec<String> = Vec::new();
+    if path.ends_with(".sh") {
+        let sh_file = path;
+        path = "/busybox".to_string();
+        args_vec.push("sh".to_string());
+        args_vec.push(sh_file);
+    }
+
     UserCheck::new().check_c_str(args as *const u8)?;
     loop {
         if unsafe { *args == 0 } {
@@ -194,7 +205,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         }
     }
 
-    stack_trace!();
     let mut envs_vec: Vec<String> = Vec::new();
     UserCheck::new().check_c_str(envs as *const u8)?;
     loop {
@@ -210,12 +220,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         }
     }
     envs_vec.push("PATH=/:".to_string());
-    // UserCheck::new().readable_slice(path, len);
-    UserCheck::new().check_c_str(path)?;
-    // let path = c_str_to_string(path);
-    let path = path::path_process(AT_FDCWD, path as *const u8).unwrap();
-    info!("[sys_execve] path {}", path);
-    // print_dir_tree();
 
     if path == "/shell" || path == "/busybox" {
         if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
