@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use alloc::{string::String, sync::Arc};
 
 use crate::{
     driver::block::BlockDevice,
@@ -43,13 +43,13 @@ impl Inode for BlockDeviceInode {
 impl BlockDeviceInode {
     pub fn new(
         parent: Arc<dyn Inode>,
-        path: &str,
+        name: String,
         block_device: Arc<dyn BlockDevice>,
         dev_id: usize,
     ) -> Self {
         let metadata = InodeMeta::new(
             Some(parent),
-            path,
+            name,
             crate::fs::InodeMode::FileBLK,
             0,
             Some(InodeDevice::Device(DevWrapper {

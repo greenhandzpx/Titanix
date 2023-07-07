@@ -1,4 +1,7 @@
-use alloc::{string::ToString, sync::Arc};
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+};
 
 use crate::{
     fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
@@ -23,8 +26,8 @@ pub struct TtyInode {
 }
 
 impl TtyInode {
-    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
-        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
+    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
+        let metadata = InodeMeta::new(Some(parent), name, crate::fs::InodeMode::FileCHR, 0, None);
         Self { metadata }
     }
 }
@@ -71,7 +74,6 @@ impl TtyFile {
         Self {
             buf: AtomicU8::new(255),
             metadata: FileMeta {
-                path: "/dev/tty".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

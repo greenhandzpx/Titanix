@@ -1,7 +1,4 @@
-use core::{
-    hash::Hash,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{
     collections::BTreeMap,
@@ -14,10 +11,11 @@ use log::{debug, info, warn};
 
 use crate::{
     driver::block::BlockDevice,
+    fs::HashKey,
     mm::PageCache,
     timer::posix::TimeSpec,
     utils::{
-        error::{AgeneralRet, GeneralRet},
+        error::{AgeneralRet, GeneralRet, SyscallErr},
         path,
     },
 };
@@ -26,14 +24,8 @@ use super::{
     fat32_tmp::ROOT_FS,
     file::{DefaultFile, FileMeta, FileMetaInner},
     file_system::FILE_SYSTEM_MANAGER,
-    hash_key::HashKey,
-    // dentry::{self, Dentry},
-    // inode::OpenFlags,
     pipe::Pipe,
-    File,
-    FileSystem,
-    Mutex,
-    OpenFlags,
+    File, FileSystem, Mutex, OpenFlags,
 };
 
 lazy_static! {
@@ -76,12 +68,13 @@ pub trait Inode: Send + Sync {
     fn init(
         &mut self,
         parent: Option<Arc<dyn Inode>>,
-        path: &str,
+        name: String,
         mode: InodeMode,
         data_len: usize,
     ) -> GeneralRet<()> {
         debug!("start to init inode...");
-        let meta = InodeMeta::new(parent, path, mode, data_len, None);
+        debug!("[init] name: {}, mode: {:?}", name, mode);
+        let meta = InodeMeta::new(parent, name, mode, data_len, None);
         self.set_metadata(meta);
         debug!("init inode finished");
         Ok(())
@@ -91,7 +84,6 @@ pub trait Inode: Send + Sync {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         debug!("[inode] open");
         let file_meta = FileMeta {
-            path: self.metadata().path.clone(),
             inner: Mutex::new(FileMetaInner {
                 flags,
                 inode: Some(this),
@@ -108,7 +100,7 @@ pub trait Inode: Send + Sync {
     fn mkdir(
         &self,
         _this: Arc<dyn Inode>,
-        _pathname: &str,
+        _name: &str,
         _mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
@@ -119,7 +111,7 @@ pub trait Inode: Send + Sync {
     fn mknod(
         &self,
         _this: Arc<dyn Inode>,
-        _pathname: &str,
+        _name: &str,
         _mode: InodeMode,
         _dev_id: usize,
     ) -> GeneralRet<Arc<dyn Inode>> {
@@ -137,11 +129,15 @@ pub trait Inode: Send + Sync {
     fn metadata(&self) -> &InodeMeta;
     fn set_metadata(&mut self, meta: InodeMeta);
 
-    fn lookup(&self, this: Arc<dyn Inode>, name: &str) -> Option<Arc<dyn Inode>> {
+    fn lookup(&self, this: Arc<dyn Inode>, name: &str) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        if this.metadata().mode != InodeMode::FileDIR {
+            return Err(SyscallErr::ENOTDIR);
+        }
+        debug!("[lookup] child name: {}", name);
         let key = HashKey::new(self.metadata().ino, name.to_string());
         let value = INODE_CACHE.lock().get(&key).cloned();
         match value {
-            Some(value) => Some(value.clone()),
+            Some(value) => Ok(Some(value.clone())),
             None => {
                 debug!(
                     "[lookup] cannot find child dentry, name: {}, try to find in inode",
@@ -149,11 +145,38 @@ pub trait Inode: Send + Sync {
                 );
                 let target_inode = self.try_find_and_insert_inode(this, name);
                 match target_inode {
-                    Some(target_inode) => Some(target_inode.clone()),
-                    None => None,
+                    Some(target_inode) => Ok(Some(target_inode.clone())),
+                    None => Ok(None),
                 }
             }
         }
+    }
+    fn lookup_from_this(
+        &self,
+        this: Arc<dyn Inode>,
+        path: &str,
+    ) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        let path_names = path::path2vec(path);
+        // path_names.remove(0);
+
+        let mut parent = this;
+
+        for (i, name) in path_names.clone().into_iter().enumerate() {
+            debug!("[lookup_from_inode] round: {}, name: {}", i, name);
+            match parent.lookup(parent.clone(), name)? {
+                Some(p) => {
+                    debug!("[lookup_from_this] inode name: {}", p.metadata().name);
+                    parent = p;
+                }
+                None => {
+                    if i == path_names.len() - 1 {
+                        return Ok(None);
+                    }
+                    return Err(SyscallErr::ENOENT);
+                }
+            }
+        }
+        Ok(Some(parent))
     }
     fn try_find_and_insert_inode(
         &self,
@@ -165,6 +188,11 @@ pub trait Inode: Send + Sync {
         if target_inode.is_some() {
             debug!("[try_find_and_insert_inode] find in children");
             return target_inode;
+        }
+        if this.metadata().name.eq("tmp") {
+            // tmp in memory, don't load children
+            debug!("[try_find_and_insert_inode] parent is tmp, not need to load children");
+            return None;
         }
         <dyn Inode>::load_children(this.clone());
         debug!(
@@ -250,51 +278,31 @@ impl dyn Inode {
         debug!("[load_children] leave");
     }
     /// Look up from root(e.g. "/home/oscomp/workspace")
-    pub fn lookup_from_root(
-        // file_system: Arc<dyn FileSystem>,
-        path: &str,
-    ) -> Option<Arc<dyn Inode>> {
-        let path_names = path::path2vec(path);
-        // path_names.remove(0);
-
-        let root_fs = FILE_SYSTEM_MANAGER
-            .fs_mgr
-            .lock()
-            .get("/")
-            .cloned()
-            .expect("No root fs is mounted");
-
-        let mut parent = root_fs.metadata().root_inode.clone().unwrap();
-
-        for name in path_names {
-            match parent.lookup(parent.clone(), name) {
-                Some(p) => parent = p,
-                None => return None,
-            }
-        }
-        Some(parent)
-    }
-    /// Look up from root(e.g. "/home/oscomp/workspace")
     pub fn lookup_from_root_tmp(
         // file_system: Arc<dyn FileSystem>,
         path: &str,
-    ) -> Option<Arc<dyn Inode>> {
+    ) -> GeneralRet<Option<Arc<dyn Inode>>> {
         let path_names = path::path2vec(path);
         // path_names.remove(0);
 
         let mut parent = ROOT_FS.metadata().root_inode.clone().unwrap();
 
-        for (i, name) in path_names.into_iter().enumerate() {
+        for (i, name) in path_names.clone().into_iter().enumerate() {
             debug!("[lookup_from_root_tmp] round: {}, name: {}", i, name);
-            match parent.lookup(parent.clone(), name) {
+            match parent.lookup(parent.clone(), name)? {
                 Some(p) => {
                     debug!("[lookup_from_root_tmp] inode name: {}", p.metadata().name);
                     parent = p
                 }
-                None => return None,
+                None => {
+                    if i == path_names.len() - 1 {
+                        return Ok(None);
+                    }
+                    return Err(SyscallErr::ENOENT);
+                }
             }
         }
-        Some(parent)
+        Ok(Some(parent))
     }
 
     pub fn create_page_cache_if_needed(this: Arc<dyn Inode>) {
@@ -315,10 +323,10 @@ pub struct InodeMeta {
     pub rdev: Option<usize>,
     /// inode's device
     pub device: Option<InodeDevice>,
-    /// path to this inode
-    pub path: String,
     /// name which doesn't have slash
     pub name: String,
+    /// path
+    pub path: String,
     pub inner: Mutex<InodeMetaInner>,
 }
 
@@ -356,12 +364,11 @@ pub struct InodeMetaInner {
 impl InodeMeta {
     pub fn new(
         parent: Option<Arc<dyn Inode>>,
-        path: &str,
+        path: String,
         mode: InodeMode,
         data_len: usize,
         device: Option<InodeDevice>,
     ) -> Self {
-        let name = path::get_name(path);
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),
             None => None,
@@ -371,8 +378,8 @@ impl InodeMeta {
             mode,
             rdev: None,
             device,
-            path: path.to_string(),
-            name: name.to_string(),
+            name: path::get_name(&path).to_string(),
+            path,
             inner: Mutex::new(InodeMetaInner {
                 // size: 0,
                 st_atim: TimeSpec::new(),

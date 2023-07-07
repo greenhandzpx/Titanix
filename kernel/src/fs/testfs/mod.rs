@@ -1,6 +1,7 @@
 use core::cell::SyncUnsafeCell;
 
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
@@ -21,8 +22,8 @@ pub struct TestRootInode {
 }
 
 impl TestRootInode {
-    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
-        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0, None);
+    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
+        let metadata = InodeMeta::new(Some(parent), name, crate::fs::InodeMode::FileBLK, 0, None);
         Self {
             metadata: Some(metadata),
         }
@@ -37,7 +38,6 @@ impl Inode for TestRootInode {
     ) -> GeneralRet<alloc::sync::Arc<dyn super::File>> {
         let file = TestRootFile {
             metadata: Some(FileMeta {
-                path: this.metadata().path.clone(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this.clone()),
@@ -51,7 +51,7 @@ impl Inode for TestRootInode {
     fn mkdir(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
@@ -126,11 +126,11 @@ impl TestFs {
 impl FileSystem for TestFs {
     fn create_root(
         &self,
-        parent: Option<alloc::sync::Arc<dyn Inode>>,
-        mount_point: &str,
+        parent: Option<Arc<dyn Inode>>,
+        name: String,
     ) -> crate::utils::error::GeneralRet<alloc::sync::Arc<dyn Inode>> {
         let mut root_inode = TestRootInode { metadata: None };
-        root_inode.init(parent, mount_point, super::InodeMode::FileDIR, 0)?;
+        root_inode.init(parent, name, super::InodeMode::FileDIR, 0)?;
         Ok(Arc::new(root_inode))
     }
 

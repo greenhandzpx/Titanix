@@ -2,7 +2,6 @@ use alloc::{
     boxed::Box,
     string::{String, ToString},
     sync::Arc,
-    vec::Vec,
 };
 use lazy_static::*;
 use log::debug;
@@ -89,9 +88,9 @@ pub struct MeminfoInode {
 }
 
 impl MeminfoInode {
-    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
         Self {
-            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0, None),
+            metadata: InodeMeta::new(Some(parent), name, InodeMode::FileREG, 0, None),
         }
     }
 }
@@ -100,7 +99,6 @@ impl Inode for MeminfoInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(MeminfoFile {
             meta: FileMeta {
-                path: "/proc/meminfo".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

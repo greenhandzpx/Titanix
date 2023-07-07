@@ -1,8 +1,9 @@
 use core::cell::UnsafeCell;
+use core::f32::consts::E;
 use core::panic;
 
 use alloc::boxed::Box;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use fatfs::{DirEntry, Read, Seek, Write};
 use lazy_static::*;
@@ -52,11 +53,11 @@ impl FileSystem for Fat32FileSystem {
     fn create_root(
         &self,
         parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
+        name: String,
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("fat32: start to create root inode...");
         let mut root_inode = Fat32RootInode::new(&ROOT_FS, None);
-        root_inode.init(parent, mount_point, super::InodeMode::FileDIR, 0)?;
+        root_inode.init(parent, name, super::InodeMode::FileDIR, 0)?;
         debug!("fat32: create root inode finished");
         Ok(Arc::new(root_inode))
     }
@@ -89,7 +90,6 @@ impl Inode for Fat32RootInode {
         let (readable, writable) = flags.read_write();
         let file_meta = FileMeta {
             // TODO: not sure whether this file_name() is absolute path or not
-            path: "/".to_string(),
             inner: Mutex::new(FileMetaInner {
                 flags,
                 inode: Some(this),
@@ -126,7 +126,7 @@ impl Inode for Fat32RootInode {
             // debug!("[load children]: dentry name {}", file_name);
             let meta = InodeMeta::new(
                 Some(this.clone()),
-                &file_name,
+                file_name,
                 inode_mode,
                 data_len as usize,
                 None,
@@ -163,13 +163,12 @@ impl Inode for Fat32RootInode {
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
         dev_id: usize,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[Fat32RootInode mknod] fatfs mknod: {}", pathname);
+        debug!("[Fat32RootInode mknod] fatfs mknod: {}", name);
 
-        let name = path::get_name(pathname);
         let _new_file = self.fs.fat_fs.root_dir().create_file(name).unwrap();
         let func = || {
             for dentry in self.fs.fat_fs.root_dir().iter() {
@@ -181,7 +180,7 @@ impl Inode for Fat32RootInode {
         };
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
-        new_inode.init(Some(this.clone()), pathname, mode, 0)?;
+        new_inode.init(Some(this.clone()), name.to_string(), mode, 0)?;
         let new_inode = Arc::new(new_inode);
         this.metadata()
             .inner
@@ -194,14 +193,11 @@ impl Inode for Fat32RootInode {
     fn mkdir(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[Fat32RootInode mkdir] fatfs mkdir: {}", pathname);
+        debug!("[Fat32RootInode mkdir] fatfs mkdir: {}", name);
 
-        let name = path::get_name(pathname);
-        stack_trace!();
-        debug!("[Fat32RootInode mkdir] get name: {}", name);
         let _new_dir = self.fs.fat_fs.root_dir().create_dir(name).unwrap();
         let func = || {
             for dentry in self.fs.fat_fs.root_dir().iter() {
@@ -213,7 +209,7 @@ impl Inode for Fat32RootInode {
         };
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
-        new_inode.init(Some(this.clone()), pathname, mode, 0)?;
+        new_inode.init(Some(this.clone()), name.to_string(), mode, 0)?;
         let new_inode = Arc::new(new_inode);
         this.metadata()
             .inner
@@ -269,7 +265,6 @@ impl Inode for Fat32Inode {
         debug!("[Fat32Inode]: open: name: {}", self.dentry.file_name());
         let file_meta = FileMeta {
             // TODO: not sure whether this file_name() is absolute path or not
-            path: self.dentry.file_name(),
             inner: Mutex::new(FileMetaInner {
                 flags,
                 inode: Some(this),
@@ -307,7 +302,7 @@ impl Inode for Fat32Inode {
             let file_name = dentry.as_ref().unwrap().file_name();
             let meta = InodeMeta::new(
                 Some(this.clone()),
-                &file_name,
+                file_name,
                 inode_mode,
                 data_len as usize,
                 None,
@@ -329,13 +324,12 @@ impl Inode for Fat32Inode {
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
         _dev_id: usize,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[Fat32Inode::mknod] fatfs mknod: {}", pathname);
+        debug!("[Fat32Inode::mknod] fatfs mknod: {}", name);
 
-        let name = path::get_name(pathname);
         if self.dentry.is_file() {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -350,7 +344,7 @@ impl Inode for Fat32Inode {
         };
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
-        new_inode.init(Some(this.clone()), pathname, mode, 0)?;
+        new_inode.init(Some(this.clone()), name.to_string(), mode, 0)?;
         let new_inode = Arc::new(new_inode);
         this.metadata()
             .inner
@@ -363,12 +357,11 @@ impl Inode for Fat32Inode {
     fn mkdir(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[Fat32Inode mkdir] fatfs mkdir: {}", pathname);
+        debug!("[Fat32Inode mkdir] fatfs mkdir: {}", name);
 
-        let name = path::get_name(pathname);
         if self.dentry.is_file() {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -383,7 +376,7 @@ impl Inode for Fat32Inode {
         };
         let new_dentry = func();
         let mut new_inode = Fat32Inode::new(new_dentry.unwrap(), None);
-        new_inode.init(Some(this.clone()), pathname, mode, 0)?;
+        new_inode.init(Some(this.clone()), name.to_string(), mode, 0)?;
         let new_inode = Arc::new(new_inode);
         this.metadata()
             .inner

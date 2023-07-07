@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc};
 use log::debug;
 
 use crate::{
@@ -15,9 +15,9 @@ pub struct MountsInode {
     metadata: InodeMeta,
 }
 impl MountsInode {
-    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
         Self {
-            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0, None),
+            metadata: InodeMeta::new(Some(parent), name, InodeMode::FileREG, 0, None),
         }
     }
 }
@@ -26,7 +26,6 @@ impl Inode for MountsInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(MountsFile {
             meta: FileMeta {
-                path: "/proc/mounts".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

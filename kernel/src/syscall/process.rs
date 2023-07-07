@@ -241,9 +241,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
     envs_vec.push("PATH=/:".to_string());
     // UserCheck::new().readable_slice(path, len);
-    UserCheck::new().check_c_str(path)?;
-    // let path = c_str_to_string(path);
-    let path = path::path_process(AT_FDCWD, path as *const u8).unwrap();
+    let path = path::path_process(AT_FDCWD, path as *const u8)?.unwrap();
     debug!("sys exec {}", path);
     // print_dir_tree();
 
@@ -255,18 +253,10 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             Err(SyscallErr::EACCES)
         }
     } else {
-        if let Some(app_inode) = resolve_path(&path, OpenFlags::RDONLY) {
-            let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
-            trace!("try to read all data in file {}", path);
-            let elf_data = app_file.sync_read_all()?;
-            current_process().exec(&elf_data, args_vec, envs_vec)
-            // if app_file.metadata().flags.contains(OpenFlags::CLOEXEC) {
-            //     current_process().close_file(fd)
-            // }
-        } else {
-            warn!("[sys_exec] Cannot find this elf file {}", path);
-            Err(SyscallErr::EACCES)
-        }
+        let app_inode = resolve_path(path.as_str(), OpenFlags::RDONLY)?;
+        let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
+        let elf_data = app_file.sync_read_all()?;
+        current_process().exec(&elf_data, args_vec, envs_vec)
     }
 }
 

@@ -1,5 +1,6 @@
 use core::sync::atomic::AtomicUsize;
 
+use alloc::string::String;
 use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
@@ -36,19 +37,19 @@ impl Inode for DevRootInode {
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
         dev_id: usize,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[DevRootInode::mknod]: mknod: {}", pathname);
+        debug!("[DevRootInode::mknod]: mknod: {}", name);
         debug_assert!(dev_id < DEV_NAMES.len());
         let creator = DEV_NAMES[dev_id].2;
-        let inode = creator(this.clone(), DEV_NAMES[dev_id].0);
+        let inode = creator(this.clone(), name.to_string());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(inode.metadata().name.clone(), inode.clone());
+            .insert(name.to_string(), inode.clone());
         Ok(inode)
     }
 
@@ -97,10 +98,10 @@ impl FileSystem for DevFs {
     fn create_root(
         &self,
         parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
+        name: String,
     ) -> GeneralRet<Arc<dyn Inode>> {
         let mut root_inode = DevRootInode::new();
-        root_inode.init(parent.clone(), mount_point, InodeMode::FileDIR, 0)?;
+        root_inode.init(parent.clone(), name.clone(), InodeMode::FileDIR, 0)?;
         let res = Arc::new(root_inode);
         // TODO: should we add a flag to indicate that this dentry(i.e dev) is no need to be flushed
         // to disk
@@ -110,7 +111,7 @@ impl FileSystem for DevFs {
             .inner
             .lock()
             .children
-            .insert(path::get_name(mount_point).to_string(), res.clone());
+            .insert(name, res.clone());
         Ok(res)
     }
     fn set_metadata(&mut self, metadata: super::file_system::FileSystemMeta) {
@@ -124,22 +125,22 @@ impl FileSystem for DevFs {
 const DEV_NAMES: [(
     &str,
     InodeMode,
-    fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
+    fn(parent: Arc<dyn Inode>, name: String) -> Arc<dyn Inode>,
 ); 5] = [
-    ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
-        Arc::new(TestRootInode::new(parent, path))
+    ("vda2", InodeMode::FileBLK, |parent, name| {
+        Arc::new(TestRootInode::new(parent, name))
     }),
-    ("/dev/zero", InodeMode::FileCHR, |parent, path| {
-        Arc::new(ZeroInode::new(parent, path))
+    ("zero", InodeMode::FileCHR, |parent, name| {
+        Arc::new(ZeroInode::new(parent, name))
     }),
-    ("/dev/null", InodeMode::FileCHR, |parent, path| {
-        Arc::new(NullInode::new(parent, path))
+    ("null", InodeMode::FileCHR, |parent, name| {
+        Arc::new(NullInode::new(parent, name))
     }),
-    ("/dev/tty", InodeMode::FileCHR, |parent, path| {
-        Arc::new(TtyInode::new(parent, path))
+    ("tty", InodeMode::FileCHR, |parent, name| {
+        Arc::new(TtyInode::new(parent, name))
     }),
-    ("/dev/rtc", InodeMode::FileCHR, |parent, path| {
-        Arc::new(RtcInode::new(parent, path))
+    ("rtc", InodeMode::FileCHR, |parent, name| {
+        Arc::new(RtcInode::new(parent, name))
     }),
 ];
 
@@ -171,8 +172,7 @@ pub fn init() -> GeneralRet<()> {
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
         )?;
-        let child_name = child.metadata().name.clone();
-        let key = HashKey::new(parent_ino, child_name);
+        let key = HashKey::new(parent_ino, dev_name.to_string());
         cache_lock.insert(key, child);
         debug!("insert {} finished", dev_name);
     }

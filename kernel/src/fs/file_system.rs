@@ -61,7 +61,7 @@ pub trait FileSystem: Send + Sync {
     fn create_root(
         &self,
         parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
+        name: String,
     ) -> GeneralRet<Arc<dyn Inode>>;
 
     fn init_ref(
@@ -79,12 +79,13 @@ pub trait FileSystem: Send + Sync {
                 None
             } else {
                 debug!("parent dir {}", parent_dir.as_ref().unwrap());
-                <dyn Inode>::lookup_from_root_tmp(&parent_dir.unwrap())
+                <dyn Inode>::lookup_from_root_tmp(&parent_dir.unwrap())?
             }
         };
 
+        let child_name = path::get_name(mount_point).to_string();
         debug!("start to create root inode...");
-        let root_inode = self.create_root(parent.clone(), mount_point)?;
+        let root_inode = self.create_root(parent.clone(), child_name.clone())?;
         debug!("create root inode success");
 
         let parent_ino = {
@@ -94,8 +95,7 @@ pub trait FileSystem: Send + Sync {
                 parent.unwrap().metadata().ino
             }
         };
-        let child_name = path::get_name(mount_point);
-        let key = HashKey::new(parent_ino, child_name.to_string());
+        let key = HashKey::new(parent_ino, child_name.clone());
 
         let root_inode = {
             INODE_CACHE.lock().insert(key.clone(), root_inode.clone());
@@ -132,12 +132,13 @@ pub trait FileSystem: Send + Sync {
                 None
             } else {
                 debug!("parent dir {}", parent_dir.as_ref().unwrap());
-                <dyn Inode>::lookup_from_root_tmp(&parent_dir.unwrap())
+                <dyn Inode>::lookup_from_root_tmp(&parent_dir.unwrap())?
             }
         };
 
+        let child_name = path::get_name(mount_point).to_string();
         debug!("start to create root inode...");
-        let root_inode = self.create_root(parent.clone(), mount_point)?;
+        let root_inode = self.create_root(parent.clone(), child_name.clone())?;
         debug!("create root inode success");
 
         let parent_ino = {
@@ -147,8 +148,7 @@ pub trait FileSystem: Send + Sync {
                 parent.unwrap().metadata().ino
             }
         };
-        let child_name = path::get_name(mount_point);
-        let key = HashKey::new(parent_ino, child_name.to_string());
+        let key = HashKey::new(parent_ino, child_name.clone());
 
         let root_inode = {
             INODE_CACHE.lock().insert(key.clone(), root_inode.clone());
@@ -167,22 +167,6 @@ pub trait FileSystem: Send + Sync {
         self.set_metadata(meta);
 
         Ok(())
-    }
-    fn mounts_info(&self) -> String {
-        let dev_name = self.metadata().dev_name.to_string();
-        let root_inode = self.metadata().root_inode.unwrap();
-        let mount_point = root_inode.metadata().path.as_str();
-        let ftype = self.metadata().ftype;
-        let flags = self.metadata().flags;
-        let buf_str = dev_name
-            + " "
-            + mount_point
-            + " "
-            + ftype.to_string().as_str()
-            + " "
-            + flags.to_string().as_str()
-            + " 0 0\n";
-        buf_str
     }
     fn mount(&self) -> GeneralRet<isize> {
         stack_trace!();
@@ -252,8 +236,15 @@ impl FileSystemManager {
     pub fn mounts_info(&self) -> String {
         let mut res = "".to_string();
         let fs_mgr = self.fs_mgr.lock();
-        for (_mount_point, fs) in fs_mgr.iter() {
-            res += fs.mounts_info().as_str();
+        for (mount_point, fs) in fs_mgr.iter() {
+            res += fs.metadata().dev_name.as_str();
+            res += " ";
+            res += mount_point.as_str();
+            res += " ";
+            res += fs.metadata().ftype.to_string().as_str();
+            res += " ";
+            res += fs.metadata().flags.to_string().as_str();
+            res += " 0 0\n";
         }
         res
     }

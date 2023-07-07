@@ -1,6 +1,9 @@
 use core::sync::atomic::AtomicUsize;
 
-use alloc::{string::ToString, sync::Arc};
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+};
 use log::{debug, info};
 
 use crate::{
@@ -25,24 +28,24 @@ impl Inode for ProcRootInode {
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         _mode: InodeMode,
         _dev_id: usize,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[ProcRootInode mknod] mknod: {}", pathname);
+        debug!("[ProcRootInode mknod] mknod: {}", name);
         let mut index = 0;
         for (i, proc) in PROC_NAME.into_iter().enumerate() {
-            if proc.0 == pathname {
+            if proc.0 == name {
                 index = i;
             }
         }
         let creator = PROC_NAME[index].2;
-        let inode = creator(this.clone(), pathname);
+        let inode = creator(this.clone(), PROC_NAME[index].0.to_string());
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(path::get_name(pathname).to_string(), inode.clone());
+            .insert(name.to_string(), inode.clone());
         Ok(inode)
     }
     fn metadata(&self) -> &InodeMeta {
@@ -71,13 +74,13 @@ impl ProcRootInode {
 const PROC_NAME: [(
     &str,
     InodeMode,
-    fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
+    fn(parent: Arc<dyn Inode>, name: String) -> Arc<dyn Inode>,
 ); 2] = [
-    ("/proc/mounts", InodeMode::FileREG, |parent, path| {
-        Arc::new(MountsInode::new(parent, path))
+    ("mounts", InodeMode::FileREG, |parent, name| {
+        Arc::new(MountsInode::new(parent, name))
     }),
-    ("/proc/meminfo", InodeMode::FileREG, |parent, path| {
-        Arc::new(MeminfoInode::new(parent, path))
+    ("meminfo", InodeMode::FileREG, |parent, name| {
+        Arc::new(MeminfoInode::new(parent, name))
     }),
 ];
 
@@ -99,19 +102,18 @@ impl FileSystem for ProcFs {
     fn create_root(
         &self,
         parent: Option<Arc<dyn Inode>>,
-        mount_point: &str,
+        name: String,
     ) -> GeneralRet<Arc<dyn Inode>> {
         let mut root_inode = ProcRootInode::new();
-        root_inode.init(parent.clone(), mount_point, InodeMode::FileDIR, 0)?;
+        root_inode.init(parent.clone(), name.clone(), InodeMode::FileDIR, 0)?;
         let res = Arc::new(root_inode);
-        let name = path::get_name(mount_point);
         let parent = parent.expect("No pareny");
         parent
             .metadata()
             .inner
             .lock()
             .children
-            .insert(name.to_string(), res.clone());
+            .insert(name, res.clone());
         Ok(res)
     }
 
@@ -148,8 +150,7 @@ pub fn init() -> GeneralRet<()> {
                 .id_allocator
                 .fetch_add(1, core::sync::atomic::Ordering::AcqRel),
         )?;
-        let child_name = child.metadata().name.clone();
-        let key = HashKey::new(parent_ino, child_name);
+        let key = HashKey::new(parent_ino, proc_name.to_string());
         cache_lock.insert(key, child);
         debug!("[procfs] insert {} finished", proc_name);
     }

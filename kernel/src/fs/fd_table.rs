@@ -8,7 +8,8 @@ pub struct FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
-        let tty_inode = resolve_path("/dev/tty", OpenFlags::empty()).unwrap();
+        let tty_inode = resolve_path("/dev/tty", OpenFlags::empty()).ok().unwrap();
+        // .unwrap();
         let stdin = tty_inode
             .open(tty_inode.clone(), OpenFlags::RDONLY)
             .unwrap();

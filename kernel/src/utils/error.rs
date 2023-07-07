@@ -10,7 +10,7 @@ pub type SysFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub type AsyscallRet<'a> = SysFuture<'a, SyscallRet>;
 pub type AgeneralRet<'a, T> = SysFuture<'a, GeneralRet<T>>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SyscallErr {
     EUNDEF = 0,
     EPERM = 1,
