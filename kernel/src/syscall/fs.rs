@@ -552,7 +552,7 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_write]: fd {}, len {}", fd, len);
+    info!("[sys_write]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -1310,8 +1310,8 @@ pub async fn sys_pselect6(
         }
         _ => {
             UserCheck::new()
-                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeVal>())?;
-            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeVal) }))
+                .check_readable_slice(timeout_ptr as *const u8, core::mem::size_of::<TimeSpec>())?;
+            Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
         }
     };
     info!(

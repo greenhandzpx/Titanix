@@ -123,6 +123,8 @@ pub fn sys_clone(
 
     let clone_flags = clone_flags.unwrap();
 
+    info!("[sys_clone] flags {:?}", clone_flags);
+
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_THREAD)
     {
         // fork

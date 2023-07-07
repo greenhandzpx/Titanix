@@ -1,9 +1,11 @@
 use alloc::{boxed::Box, sync::Arc};
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::{
     config::{mm::PAGE_SIZE, mm::USER_STACK_SIZE},
-    mm::{memory_space::UStackPageFaultHandler, MapPermission, VirtAddr},
+    mm::{memory_space::UStackPageFaultHandler, user_check::UserCheck, MapPermission, VirtAddr},
+    processor::SumGuard,
+    syscall::futex_wake,
 };
 
 use super::Thread;
@@ -83,11 +85,6 @@ impl Thread {
     }
 
     ///
-    pub fn alloc_tid(&mut self) {
-        self.tid = self.process.alloc_tid();
-    }
-
-    ///
     pub fn dealloc_ustack(&self) {
         debug!("dealloc ustack");
         let inner = unsafe { &mut (*self.inner.get()) };
@@ -98,11 +95,6 @@ impl Thread {
             .memory_space
             .remove_area_with_start_vpn(ustack_bottom.into());
     }
-
-    ///
-    pub fn dealloc_tid(&self) {
-        self.process.dealloc_tid(self.tid.0);
-    }
 }
 
 impl Drop for Thread {
@@ -111,6 +103,29 @@ impl Drop for Thread {
         // if !self.user_specified_stack {
         self.dealloc_ustack();
         // }
-        self.dealloc_tid();
+    }
+}
+
+/// Tid address which may be set by `set_tid_address` syscall
+pub struct TidAddress {
+    /// Address
+    pub addr: usize,
+}
+
+impl Drop for TidAddress {
+    fn drop(&mut self) {
+        debug!("Drop tid address {:#x}", self.addr);
+        if UserCheck::new()
+            .check_writable_slice(self.addr as *mut u8, core::mem::size_of::<usize>())
+            .is_ok()
+        {
+            let _sum_guard = SumGuard::new();
+            unsafe {
+                *(self.addr as *mut usize) = 0;
+            }
+        }
+        if futex_wake(self.addr, 1).is_err() {
+            warn!("futex wake failed when thread died");
+        }
     }
 }
