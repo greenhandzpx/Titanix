@@ -19,8 +19,6 @@ use crate::{
 use super::{inode::Inode, Mutex, OpenFlags};
 
 pub struct FileMeta {
-    /// path to file, need to be absolute path
-    pub path: String,
     /// Mutable,
     pub inner: Mutex<FileMetaInner>,
 }

@@ -6,7 +6,7 @@ use crate::{
     },
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
-use alloc::{boxed::Box, string::ToString, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 
 pub struct NullInode {
@@ -25,7 +25,6 @@ impl Inode for NullInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(NullFile {
             meta: FileMeta {
-                path: "todo_here()".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

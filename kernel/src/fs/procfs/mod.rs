@@ -1,7 +1,11 @@
 use core::sync::atomic::AtomicUsize;
 
-use alloc::{string::ToString, sync::Arc, vec::Vec};
-use log::debug;
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use log::{debug, info};
 
 use crate::{
     fs::{ffi::StatFlags, hash_key::HashKey, inode::INODE_CACHE, FileSystemType},
@@ -22,24 +26,24 @@ impl Inode for ProcRootInode {
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         _mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[ProcRootInode mknod] mknod: {}", pathname);
+        debug!("[ProcRootInode mknod] mknod: {}", name);
         let mut index = 0;
         for (i, proc) in PROC_NAME.into_iter().enumerate() {
-            if proc.0 == pathname {
+            if proc.0.ends_with(name) {
                 index = i;
             }
         }
         let creator = PROC_NAME[index].2;
-        let inode = creator(this.clone(), pathname);
+        let inode = creator(this.clone(), PROC_NAME[index].0);
         this.metadata()
             .inner
             .lock()
             .children
-            .insert(path::get_name(pathname).to_string(), inode.clone());
+            .insert(name.to_string(), inode.clone());
         Ok(inode)
     }
     fn metadata(&self) -> &InodeMeta {

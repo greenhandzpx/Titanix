@@ -1,10 +1,11 @@
+use alloc::boxed::Box;
+use alloc::{string::ToString, sync::Arc};
+use log::{debug, info};
+
 use crate::fs::ffi::StatFlags;
 use crate::utils::error::AsyscallRet;
 use crate::utils::error::GeneralRet;
-use alloc::boxed::Box;
 use alloc::vec::Vec;
-use alloc::{string::ToString, sync::Arc};
-use log::debug;
 
 use super::file::{FileMeta, FileMetaInner};
 use super::{
@@ -35,7 +36,6 @@ impl Inode for TestRootInode {
     ) -> GeneralRet<alloc::sync::Arc<dyn super::File>> {
         let file = TestRootFile {
             metadata: Some(FileMeta {
-                path: this.metadata().path.clone(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this.clone()),
@@ -49,7 +49,7 @@ impl Inode for TestRootInode {
     fn mkdir(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()

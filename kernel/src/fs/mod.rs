@@ -37,6 +37,7 @@ use crate::processor::current_process;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::timer::posix::current_time_spec;
+use crate::utils::error::GeneralRet;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -208,45 +209,48 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
     }
 }
 
-pub fn resolve_path(name: &str, flags: OpenFlags) -> Option<Arc<dyn Inode>> {
-    debug!("[resolve_path]: name {}, flags {:?}", name, flags);
-    let inode = <dyn Inode>::lookup_from_root(name);
+/// Try not to use this when you have dirfd
+pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
+    debug!("[resolve_path]: path: {}, flags: {:?}", path, flags);
+    let inode = <dyn Inode>::lookup_from_root(path)?;
     // inode
+    if inode.is_some() {
+        return Ok(inode.unwrap());
+    }
     if flags.contains(OpenFlags::CREATE) {
-        if inode.is_some() {
-            return inode;
-        }
-        let parent_path = path::get_parent_dir(name).unwrap();
-        let parent = <dyn Inode>::lookup_from_root(&parent_path);
-        let child_name = path::get_name(name);
+        let parent_path = path::get_parent_dir(path).unwrap();
+        let parent = <dyn Inode>::lookup_from_root(&parent_path)?;
+        let child_name = path::get_name(path);
         if let Some(parent) = parent {
-            debug!("create file {}", name);
-            if flags.contains(OpenFlags::DIRECTORY) {
-                parent
-                    .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
-                    .unwrap();
-            } else {
-                // TODO dev id
-                parent
-                    .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
-                    .unwrap();
-            }
-            let res = <dyn Inode>::lookup_from_root(name);
-            if let Some(inode) = res.as_ref() {
-                <dyn Inode>::create_page_cache_if_needed(inode.clone());
-            }
-            res
+            debug!("create file {}", path);
+            let res = {
+                if flags.contains(OpenFlags::DIRECTORY) {
+                    parent
+                        .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
+                        .unwrap()
+                } else {
+                    // TODO dev id
+                    parent
+                        .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
+                        .unwrap()
+                }
+            };
+            let key = HashKey::new(parent.metadata().ino, child_name.to_string());
+            INODE_CACHE.lock().insert(key, res.clone());
+            <dyn Inode>::create_page_cache_if_needed(res.clone());
+            Ok(res)
         } else {
             warn!("parent dir {} doesn't exist", parent_path);
-            return None;
+            return Err(SyscallErr::ENOENT);
         }
     } else {
-        inode
+        return Err(SyscallErr::ENOENT);
     }
 }
 
 /// We should give the absolute path (Or None) to open_file function.
-pub fn open_file(absolute_path: Option<String>, flags: u32) -> SyscallRet {
+#[allow(unused)]
+pub fn open_file_string(absolute_path: Option<String>, flags: u32) -> SyscallRet {
     stack_trace!();
     debug!(
         "[open_file] absolute path: {:?}, flags: {}",
@@ -256,40 +260,112 @@ pub fn open_file(absolute_path: Option<String>, flags: u32) -> SyscallRet {
     match absolute_path {
         Some(absolute_path) => {
             debug!("[open_file] file name {}", absolute_path);
-            if let Some(inode) = resolve_path(&absolute_path, flags) {
-                stack_trace!();
-                let mut inner_lock = inode.metadata().inner.lock();
-                inner_lock.st_atim = current_time_spec();
-                match inner_lock.state {
-                    InodeState::Synced => {
-                        inner_lock.state = InodeState::DirtyInode;
-                    }
-                    _ => {}
+            let inode = resolve_path(&absolute_path, flags)?;
+            stack_trace!();
+            let mut inner_lock = inode.metadata().inner.lock();
+            inner_lock.st_atim = current_time_spec();
+            match inner_lock.state {
+                InodeState::Synced => {
+                    inner_lock.state = InodeState::DirtyInode;
                 }
-                debug!(
-                    "[open_file] inode ino: {}, name: {}",
-                    inode.metadata().ino,
-                    inode.metadata().name
-                );
-                // TODO: add to fs's dirty list
-                let fd = current_process().inner_handler(|proc| {
-                    let fd = proc.fd_table.alloc_fd();
-                    let file = inode.open(inode.clone(), flags)?;
-
-                    proc.fd_table.put(fd, file);
-                    Ok(fd)
-                })?;
-                debug!("[open_file] find fd: {}", fd);
-                Ok(fd as isize)
-            } else {
-                debug!("file {} doesn't exist", absolute_path);
-                Err(SyscallErr::ENOENT)
+                _ => {}
             }
+            debug!(
+                "[open_file] inode ino: {}, name: {}",
+                inode.metadata().ino,
+                inode.metadata().name
+            );
+            // TODO: add to fs's dirty list
+            let fd = current_process().inner_handler(|proc| {
+                let fd = proc.fd_table.alloc_fd();
+                let file = inode.open(inode.clone(), flags)?;
+
+                proc.fd_table.put(fd, file);
+                Ok(fd)
+            })?;
+            debug!("[open_file] find fd: {}", fd);
+            Ok(fd as isize)
         }
         None => {
             debug!("cannot find the file, absolute_path is none");
             Err(SyscallErr::ENOENT)
         }
+    }
+}
+
+/// When you get inode, you can use this fuction to open
+pub fn open_file_inode(inode: Arc<dyn Inode>, flags: OpenFlags) -> SyscallRet {
+    stack_trace!();
+    let mut inner_lock = inode.metadata().inner.lock();
+    inner_lock.st_atim = current_time_spec();
+    match inner_lock.state {
+        InodeState::Synced => {
+            inner_lock.state = InodeState::DirtyInode;
+        }
+        _ => {}
+    }
+    debug!(
+        "[open_file] inode ino: {}, name: {}",
+        inode.metadata().ino,
+        inode.metadata().name
+    );
+    // TODO: add to fs's dirty list
+    let fd = current_process().inner_handler(|proc| {
+        let fd = proc.fd_table.alloc_fd();
+        let file = inode.open(inode.clone(), flags)?;
+
+        proc.fd_table.put(fd, file);
+        Ok(fd)
+    })?;
+    debug!("[open_file] find fd: {}", fd);
+    Ok(fd as isize)
+}
+
+/// You should try to use this when you have dirfd and path(*const u8), do not use resolve_path.
+pub fn resolve_path_with_dirfd(
+    dirfd: isize,
+    path: *const u8,
+    flags: OpenFlags,
+) -> GeneralRet<Arc<dyn Inode>> {
+    let res = path::path_to_inode(dirfd, path);
+    let inode = res.0?;
+    stack_trace!();
+    let path = res.1.unwrap();
+    if inode.is_some() {
+        return Ok(inode.unwrap());
+    }
+    if flags.contains(OpenFlags::CREATE) {
+        let parent = res.2;
+        let parent = match parent {
+            Some(parent) => parent,
+            None => {
+                let parent_path = path::get_parent_dir(&path).unwrap();
+                <dyn Inode>::lookup_from_root(&parent_path)
+                    .ok()
+                    .unwrap()
+                    .unwrap()
+            }
+        };
+        let child_name = path::get_name(&path);
+        debug!("create file {}", path);
+        let res = {
+            if flags.contains(OpenFlags::DIRECTORY) {
+                parent
+                    .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
+                    .unwrap()
+            } else {
+                // TODO dev id
+                parent
+                    .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
+                    .unwrap()
+            }
+        };
+        let key = HashKey::new(parent.metadata().ino, child_name.to_string());
+        INODE_CACHE.lock().insert(key, res.clone());
+        <dyn Inode>::create_page_cache_if_needed(res.clone());
+        Ok(res)
+    } else {
+        return Err(SyscallErr::ENOENT);
     }
 }
 

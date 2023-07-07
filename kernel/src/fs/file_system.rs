@@ -151,8 +151,15 @@ impl FileSystemManager {
     pub fn mounts_info(&self) -> String {
         let mut res = "".to_string();
         let fs_mgr = self.fs_mgr.lock();
-        for (_mount_point, fs) in fs_mgr.iter() {
-            res += fs.mounts_info().as_str();
+        for (mount_point, fs) in fs_mgr.iter() {
+            res += fs.metadata().dev_name.as_str();
+            res += " ";
+            res += mount_point.as_str();
+            res += " ";
+            res += fs.metadata().fstype.to_string().as_str();
+            res += " ";
+            res += fs.metadata().flags.to_string().as_str();
+            res += " 0 0\n";
         }
         res
     }
@@ -172,14 +179,14 @@ impl FileSystemManager {
         let covered_inode;
         let fa_ino;
         if let Some(some_mount_point_fa) = mount_point_fa {
-            fa_inode = <dyn Inode>::lookup_from_root(&some_mount_point_fa);
+            fa_inode = <dyn Inode>::lookup_from_root(&some_mount_point_fa)?;
             if fa_inode.is_none() {
                 return Err(SyscallErr::EEXIST);
             }
             let fa_inode_unwrap = Arc::clone(fa_inode.as_ref().unwrap());
             fa_ino = fa_inode_unwrap.metadata().ino;
             let maybe_covered_inode =
-                fa_inode_unwrap.lookup(Arc::clone(&fa_inode_unwrap), mount_point_name);
+                fa_inode_unwrap.lookup(Arc::clone(&fa_inode_unwrap), mount_point_name)?;
             if maybe_covered_inode.is_none() {
                 return Err(SyscallErr::EEXIST);
             }
