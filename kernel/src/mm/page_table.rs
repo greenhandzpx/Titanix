@@ -1,5 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 use crate::config::mm::KERNEL_DIRECT_OFFSET;
+use crate::stack_trace;
 // use crate::config::MMIO;
 // use crate::driver::block::MMIO_VIRT;
 
@@ -11,7 +12,7 @@ use alloc::vec::Vec;
 use alloc::{string::String, vec};
 use bitflags::*;
 use core::arch::asm;
-use log::{error, info};
+use log::{debug, error, info};
 use riscv::register::satp;
 
 bitflags! {
@@ -31,6 +32,9 @@ bitflags! {
 impl From<MapPermission> for PTEFlags {
     fn from(perm: MapPermission) -> Self {
         let mut ret = Self::from_bits(0).unwrap();
+        if perm.contains(MapPermission::U) {
+            ret |= PTEFlags::U;
+        }
         if perm.contains(MapPermission::R) {
             ret |= PTEFlags::R;
         }
@@ -40,6 +44,9 @@ impl From<MapPermission> for PTEFlags {
         if perm.contains(MapPermission::X) {
             ret |= PTEFlags::X;
         }
+        // if perm.contains(MapPermission::COW) {
+        //     ret |= PTEFlags::COW;
+        // }
         ret
     }
 }
@@ -122,6 +129,7 @@ impl PageTable {
 
     /// Create a pagetable from kernel global pagetable
     pub fn from_global() -> Self {
+        stack_trace!();
         let frame = frame_alloc().unwrap();
         let global_root_ppn = unsafe {
             (*KERNEL_SPACE
@@ -135,7 +143,11 @@ impl PageTable {
         // Map kernel space
         // Note that we just need shallow copy here
         let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
-        let level_1_index = kernel_start_vpn.indexes()[0];
+        let level_1_index = kernel_start_vpn.indices()[0];
+        debug!(
+            "[PageTable::from_global] kernel start vpn level 1 index {:#x}, start vpn {:#x}",
+            level_1_index, kernel_start_vpn.0
+        );
         frame.ppn.pte_array()[level_1_index..]
             .copy_from_slice(&global_root_ppn.pte_array()[level_1_index..]);
 
@@ -188,7 +200,7 @@ impl PageTable {
     }
 
     fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
-        let idxs = vpn.indexes();
+        let idxs = vpn.indices();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
@@ -208,7 +220,7 @@ impl PageTable {
     }
     ///
     pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
-        let idxs = vpn.indexes();
+        let idxs = vpn.indices();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
@@ -232,14 +244,23 @@ impl PageTable {
         let pte = self.find_pte_create(vpn).unwrap();
         if pte.is_valid() {
             error!("faillll");
-            error!("ppn {:#x}", pte.ppn().0);
+            error!("ppn {:#x}, pte {:?}", pte.ppn().0, pte.flags());
         }
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
-    ///
+    /// Unmap a vpn but won't panic if not valid
+    pub fn unmap_nopanic(&mut self, vpn: VirtPageNum) {
+        if let Some(pte) = self.find_pte(vpn) {
+            if pte.is_valid() {
+                *pte = PageTableEntry::empty();
+            }
+        }
+    }
+    /// Unmap a vpn
     #[allow(unused)]
     pub fn unmap(&mut self, vpn: VirtPageNum) {
+        stack_trace!();
         let pte = self.find_pte(vpn).unwrap();
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
         *pte = PageTableEntry::empty();

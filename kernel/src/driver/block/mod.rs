@@ -5,12 +5,7 @@ mod spi;
 mod virtio_blk;
 use core::any::Any;
 
-// pub use io_device_tmp::IoDevice;
-mod io_device;
-pub use io_device::IoDevice;
-
 use alloc::sync::Arc;
-// use easy_fs::BlockDevice;
 use lazy_static::*;
 
 use crate::config::{
@@ -35,10 +30,6 @@ lazy_static! {
         let ret = Arc::new(BlockDeviceImpl::new());
         ret
     };
-    // pub static ref BLOCK_DEVICE: Arc<dyn easy_fs::BlockDevice> = {
-    //     let ret = Arc::new(BlockDeviceImpl::new());
-    //     ret
-    // };
 }
 
 pub trait BlockDevice: Send + Sync + Any {

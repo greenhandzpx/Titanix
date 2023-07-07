@@ -13,7 +13,6 @@ use core::{
     task::Waker,
 };
 use lazy_static::*;
-use log::{debug, info, warn};
 
 use crate::{
     process, processor::SumGuard, sbi::console_getchar, sync::mutex::SleepLock,
@@ -26,8 +25,8 @@ pub struct TtyInode {
 }
 
 impl TtyInode {
-    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
-        let metadata = InodeMeta::new(Some(parent), name, crate::fs::InodeMode::FileCHR, 0, None);
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
         Self { metadata }
     }
 }

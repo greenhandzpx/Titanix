@@ -2,18 +2,14 @@
 #![no_main]
 
 use alloc::vec;
-use user_lib::{clone, CloneFlags, sleep, exit};
+use user_lib::{clone, exit, sleep, CloneFlags};
 
 #[macro_use]
 extern crate user_lib;
 extern crate alloc;
 
-
-
 fn func(num: *const u8) -> isize {
-    let num = unsafe {
-        *(num as *const i32)
-    };
+    let num = unsafe { *(num as *const i32) };
     for _ in 0..100 {
         println!("clone thread arg: {}", num);
     }
@@ -27,7 +23,12 @@ pub fn main(_argc: usize, _argv: &[&str]) -> i32 {
     // let num2 = 2;
     // let num3 = 3;
     for i in 0..nums.len() {
-        clone(func, core::ptr::null::<u8>(), CloneFlags::CLONE_THREAD.bits() as i32, &nums[i] as *const i32 as *const u8);
+        clone(
+            func,
+            core::ptr::null::<u8>(),
+            CloneFlags::CLONE_THREAD.bits() as i32,
+            &nums[i] as *const i32 as *const u8,
+        );
     }
     // clone(func, core::ptr::null::<u8>(), CloneFlags::CLONE_THREAD.bits() as i32, &num as *const i32 as *const u8);
     let time = 1000;
@@ -36,4 +37,3 @@ pub fn main(_argc: usize, _argv: &[&str]) -> i32 {
     println!("sleep over");
     0
 }
-

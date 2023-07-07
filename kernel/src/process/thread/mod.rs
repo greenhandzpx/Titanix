@@ -13,12 +13,12 @@ use self::{
 };
 
 use super::Process;
-use crate::executor;
 use crate::signal::SignalContext;
 use crate::trap::TrapContext;
+use crate::{executor, stack_trace};
 use alloc::sync::Arc;
-use core::cell::UnsafeCell;
 use core::future::Future;
+use core::{cell::UnsafeCell, task::Waker};
 
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
@@ -36,8 +36,6 @@ pub struct Thread {
     pub tid: TidHandle,
     /// the process this thread belongs to
     pub process: Arc<Process>,
-    // /// whether the user specify the stack
-    // pub user_specified_stack: bool,
     /// mutable
     pub inner: UnsafeCell<ThreadInner>,
 }
@@ -65,6 +63,8 @@ pub struct ThreadInner {
     pub tid_addr: Option<TidAddress>,
     ///
     pub time_info: ThreadTimeInfo,
+    /// Waker
+    pub waker: Option<Waker>,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -90,6 +90,7 @@ impl Thread {
                 state: ThreadStateAtomic::new(),
                 tid_addr: None,
                 time_info: ThreadTimeInfo::new(),
+                waker: None,
                 // terminated: AtomicBool::new(false),
             }),
         };
@@ -106,6 +107,7 @@ impl Thread {
 
     /// Construct a new thread from the current thread
     pub fn from_current(&self, new_process: Arc<Process>, stack: Option<usize>) -> Self {
+        stack_trace!();
         Self {
             tid: new_process.alloc_tid(),
             process: new_process.clone(),
@@ -122,6 +124,7 @@ impl Thread {
                 state: ThreadStateAtomic::new(),
                 tid_addr: None,
                 time_info: ThreadTimeInfo::new(),
+                waker: None,
                 // terminated: AtomicBool::new(false),
             }),
         }
@@ -185,15 +188,25 @@ impl Thread {
             (*self.inner.get()).state.store(ThreadState::Sleep);
         }
     }
-    /// Wake up this thread
-    pub fn wake_up(&self) {
-        unsafe {
-            (*self.inner.get()).state.store(ThreadState::Runnable);
-        }
-    }
+    // /// Wake up this thread
+    // pub fn wake_up(&self) {
+    //     unsafe {
+    //         (*self.inner.get()).state.store(ThreadState::Runnable);
+    //     }
+    // }
     /// Tid of this thread
     pub fn tid(&self) -> usize {
         self.tid.0
+    }
+    /// Wake up this thread
+    pub fn wake_up(&self) {
+        unsafe { (*self.inner.get()).waker.as_ref().unwrap().wake_by_ref() }
+    }
+    /// Set waker for this thread
+    pub fn set_waker(&self, waker: Waker) {
+        unsafe {
+            (*self.inner.get()).waker = Some(waker);
+        }
     }
 }
 

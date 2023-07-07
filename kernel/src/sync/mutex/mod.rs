@@ -1,14 +1,3 @@
-/*
- * @Author: greenhandzpx 893522573@qq.com
- * @Date: 2023-01-31 08:35:53
- * @LastEditors: greenhandzpx 893522573@qq.com
- * @LastEditTime: 2023-01-31 12:53:32
- * @FilePath: /os/src/sync/mutex/mod.rs
- * @Description:
- *
- * Copyright (c) 2023 by ${git_name_email}, All Rights Reserved.
- */
-
 use riscv::register::sstatus;
 
 use self::{sleep_mutex::SleepMutex, spin_mutex::SpinMutex};

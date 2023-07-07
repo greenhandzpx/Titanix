@@ -1,7 +1,6 @@
 use core::arch::asm;
 
 use alloc::{boxed::Box, sync::Arc};
-use log::info;
 use riscv::register::sstatus::{self, FS};
 
 use crate::{
@@ -198,7 +197,7 @@ pub fn set_hart_stack() {
     unsafe {
         asm!("mv {}, sp", out(reg) sp);
     }
-    info!("set_hart_stack: sp {:#x}", sp);
+    println!("[kernel][hart{}] set_hart_stack: sp {:#x}", h.hart_id, sp);
     h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
 }
 

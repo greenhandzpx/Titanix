@@ -15,7 +15,7 @@ use core::arch::asm;
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 /// Trap context structure containing sstatus, sepc and registers
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct TrapContext {
     /// user-to-kernel should save:
@@ -26,12 +26,10 @@ pub struct TrapContext {
     pub sstatus: usize, // 32
     /// CSR sepc
     pub sepc: usize, // 33
-    // /// Addr of Page Table
-    // pub kernel_satp: usize,
-    // /// Addr of trap_handler function
+
     /// Unlike rCore-tutorial, we don't need to save
     /// trap_handler here, since we will trap back to kernel
-    /// and go to trap handler by reloading kernel's ra(through __alltraps).
+    /// and go to trap handler by reloading kernel's ra(through __trap_from_user).
     // pub trap_handler: usize,
 
     /// kernel-to-user should save:
@@ -70,26 +68,21 @@ impl UserContext {
 }
 
 impl TrapContext {
-    ///set stack pointer to x_2 reg (sp)
+    /// Set stack pointer to x_2 reg (sp)
     pub fn set_sp(&mut self, sp: usize) {
         self.user_x[2] = sp;
     }
-    ///init app context
-    pub fn app_init_context(
-        entry: usize,
-        sp: usize,
-        // kernel_satp: usize,
-        // kernel_sp: usize,
-
-        // trap_handler: usize,
-    ) -> Self {
+    /// Init app context
+    pub fn app_init_context(entry: usize, sp: usize) -> Self {
         let mut sstatus = sstatus::read();
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
-        let tp: usize;
-        unsafe {
-            asm!("mv {}, tp", out(reg) tp);
-        }
+        sstatus.set_sie(false);
+        sstatus.set_spie(false);
+        // let tp: usize;
+        // unsafe {
+        //     asm!("mv {}, tp", out(reg) tp);
+        // }
         let mut cx = Self {
             user_x: [0; 32],
             sstatus: sstatus.bits(),
@@ -100,19 +93,10 @@ impl TrapContext {
             kernel_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
-            kernel_tp: tp,
+            // We will give the right kernel tp in `__return_to_user`
+            kernel_tp: 0,
         };
         cx.set_sp(sp);
         cx
-        // let mut cx = Self {
-        //     user_x: [0; 32],
-        //     sstatus,
-        //     sepc: entry,
-        //     kernel_satp,
-        //     kernel_sp,
-        //     trap_handler,
-        // };
-        // cx.set_sp(sp);
-        // cx
     }
 }

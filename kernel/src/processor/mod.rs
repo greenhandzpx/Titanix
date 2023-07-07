@@ -53,6 +53,7 @@ pub fn close_interrupt() {
 }
 
 pub fn open_interrupt() {
+    // info!("open interrupt");
     #[cfg(feature = "kernel_interrupt")]
     unsafe {
         riscv::register::sstatus::set_sie();

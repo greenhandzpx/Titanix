@@ -24,7 +24,7 @@ pub struct SpinMutex<T: ?Sized, S: MutexSupport> {
     data: UnsafeCell<T>,
 }
 
-// 禁止Mutex跨越await导致死锁或无意义阻塞
+// Forbid Mutex step over `await` and lead to dead lock
 impl<'a, T: ?Sized, S: MutexSupport> !Sync for MutexGuard<'a, T, S> {}
 impl<'a, T: ?Sized, S: MutexSupport> !Send for MutexGuard<'a, T, S> {}
 

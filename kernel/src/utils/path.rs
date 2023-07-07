@@ -119,7 +119,7 @@ pub fn path_to_inode(
             return current_process().inner_handler(|proc| {
                 let cwd = proc.cwd.clone();
                 // If it have file, it must have inode
-                (<dyn Inode>::lookup_from_root_tmp(&cwd), None, None)
+                (<dyn Inode>::lookup_from_root(&cwd), None, None)
             });
         }
     } else {
@@ -148,7 +148,7 @@ pub fn path_to_inode(
                                 // path has ..
                                 // parent is not sure, return None
                                 let path = change_relative_to_absolute(&path, &proc.cwd).unwrap();
-                                (<dyn Inode>::lookup_from_root_tmp(&path), Some(path), None)
+                                (<dyn Inode>::lookup_from_root(&path), Some(path), None)
                             } else {
                                 // the path doesn't have ..
                                 // inode is the parent which should be returned
@@ -169,12 +169,12 @@ pub fn path_to_inode(
                 debug!("[path_to_inode] path is releative and dirfd is AT_FDCWD");
                 return current_process().inner_handler(|proc| {
                     let path = change_relative_to_absolute(&path, &proc.cwd).unwrap();
-                    (<dyn Inode>::lookup_from_root_tmp(&path), Some(path), None)
+                    (<dyn Inode>::lookup_from_root(&path), Some(path), None)
                 });
             }
         } else {
             debug!("[path_to_inode] path is absolutely");
-            (<dyn Inode>::lookup_from_root_tmp(&path), Some(path), None)
+            (<dyn Inode>::lookup_from_root(&path), Some(path), None)
         }
     }
 }

@@ -2,13 +2,14 @@ mod devfs;
 pub mod fat32;
 mod fd_table;
 mod file;
-mod file_system;
+pub mod file_system;
 mod hash_key;
 pub mod inode;
 // pub mod inode_fat32_tmp;
-pub mod fat32_tmp;
+// pub mod fat32_tmp;
+pub mod ffi;
+mod page_cache;
 pub mod pipe;
-pub mod posix;
 mod procfs;
 mod testfs;
 
@@ -28,8 +29,9 @@ pub use inode::InodeState;
 use log::debug;
 use log::info;
 use log::warn;
+pub use page_cache::PageCache;
 
-use crate::fs::fat32_tmp::ROOT_FS;
+use crate::driver::BLOCK_DEVICE;
 use crate::mm::MapPermission;
 use crate::processor::current_process;
 use crate::stack_trace;
@@ -40,26 +42,64 @@ use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
 
+use self::ffi::StatFlags;
+use self::file_system::FsDevice;
 use self::inode::INODE_CACHE;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub fn init() {
-    fat32_tmp::init().expect("fat32 init fail");
-    // // first mount root fs
-    // testfs::init().expect("testfs init fail");
-    // todo!();
-    devfs::init().expect("devfs init fail");
-    procfs::init().expect("procfs init fail");
-    // create tmp dir
-    let root_inode = ROOT_FS.metadata().root_inode.clone().unwrap();
-    let tmp = root_inode
-        .mkdir(root_inode.clone(), "tmp", InodeMode::FileDIR)
-        .unwrap();
-    let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
-    INODE_CACHE.lock().insert(key, tmp);
-}
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/",
+            "/dev/mmcblk0",
+            file_system::FsDevice::BlockDevice(Arc::clone(&BLOCK_DEVICE)),
+            FileSystemType::VFAT,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("rootfs init fail!");
+    // FILE_SYSTEM_MANAGER.mount("/", "/dev/vda2", FsDevice::None, FileSystemType::VFAT, StatFlags::ST_NOSUID);
 
+    let root_inode = FILE_SYSTEM_MANAGER.root_inode();
+
+    <dyn Inode>::load_children(Arc::clone(&root_inode));
+
+    let dev_dir = root_inode
+        .mkdir(Arc::clone(&root_inode), "/dev", InodeMode::FileDIR)
+        .expect("mkdir /dev fail!");
+
+    let key = HashKey::new(root_inode.metadata().ino, "dev".to_string());
+    INODE_CACHE.lock().insert(key, dev_dir);
+
+    let proc_dir = root_inode
+        .mkdir(Arc::clone(&root_inode), "/proc", InodeMode::FileDIR)
+        .expect("mkdir /proc fail!");
+
+    let key = HashKey::new(root_inode.metadata().ino, "proc".to_string());
+    INODE_CACHE.lock().insert(key, proc_dir);
+
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/dev",
+            "udev",
+            FsDevice::None,
+            FileSystemType::DevTmpFS,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("devfs init fail!");
+
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/proc",
+            "proc",
+            FsDevice::None,
+            FileSystemType::Proc,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("procfs init fail!");
+
+    list_rootfs();
+}
 pub const AT_FDCWD: isize = -100;
 
 bitflags! {
@@ -154,7 +194,7 @@ impl From<MapPermission> for OpenFlags {
 #[allow(unused)]
 pub fn print_dir_tree() {
     info!("------------ dir tree: ------------");
-    let parent = ROOT_FS.metadata().root_inode.clone().unwrap();
+    let parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
     print_dir_recursively(parent, 1);
 }
 
@@ -172,17 +212,14 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
 /// Try not to use this when you have dirfd
 pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
     debug!("[resolve_path]: path: {}, flags: {:?}", path, flags);
-    let inode = <dyn Inode>::lookup_from_root_tmp(path)?;
+    let inode = <dyn Inode>::lookup_from_root(path)?;
     // inode
     if inode.is_some() {
         return Ok(inode.unwrap());
     }
     if flags.contains(OpenFlags::CREATE) {
-        if inode.is_some() {
-            return Ok(inode.unwrap());
-        }
         let parent_path = path::get_parent_dir(path).unwrap();
-        let parent = <dyn Inode>::lookup_from_root_tmp(&parent_path)?;
+        let parent = <dyn Inode>::lookup_from_root(&parent_path)?;
         let child_name = path::get_name(path);
         if let Some(parent) = parent {
             debug!("create file {}", path);
@@ -194,15 +231,13 @@ pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> 
                 } else {
                     // TODO dev id
                     parent
-                        .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
+                        .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
                         .unwrap()
                 }
             };
             let key = HashKey::new(parent.metadata().ino, child_name.to_string());
             INODE_CACHE.lock().insert(key, res.clone());
-            // if let Some(inode) = res {
             <dyn Inode>::create_page_cache_if_needed(res.clone());
-            // }
             Ok(res)
         } else {
             warn!("parent dir {} doesn't exist", parent_path);
@@ -305,7 +340,7 @@ pub fn resolve_path_with_dirfd(
             Some(parent) => parent,
             None => {
                 let parent_path = path::get_parent_dir(&path).unwrap();
-                <dyn Inode>::lookup_from_root_tmp(&parent_path)
+                <dyn Inode>::lookup_from_root(&parent_path)
                     .ok()
                     .unwrap()
                     .unwrap()
@@ -321,7 +356,7 @@ pub fn resolve_path_with_dirfd(
             } else {
                 // TODO dev id
                 parent
-                    .mknod(parent.clone(), child_name, InodeMode::FileREG, 0)
+                    .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
                     .unwrap()
             }
         };
@@ -331,5 +366,19 @@ pub fn resolve_path_with_dirfd(
         Ok(res)
     } else {
         return Err(SyscallErr::ENOENT);
+    }
+}
+
+pub fn list_rootfs() {
+    <dyn Inode>::load_children(FILE_SYSTEM_MANAGER.root_inode());
+    for sb in FILE_SYSTEM_MANAGER
+        .root_inode()
+        .metadata()
+        .inner
+        .lock()
+        .children
+        .iter()
+    {
+        println!("-- {}", sb.0);
     }
 }

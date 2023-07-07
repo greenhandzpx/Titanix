@@ -39,6 +39,7 @@ where
     Key: Clone + Default + PartialEq + Hashable,
     Value: Clone,
 {
+    #[allow(unused)]
     pub fn new() -> Self {
         const INITIAL_CAPACITY: usize = 13;
         let ret = Self {
@@ -56,6 +57,7 @@ where
         ret
     }
 
+    #[allow(unused)]
     pub fn extend(&mut self) {
         trace!("[hash_table] enter extend");
         assert!(self.cells.len() > 0);
@@ -81,6 +83,7 @@ where
         *self = new_self;
     }
 
+    #[allow(unused)]
     pub fn insert(&mut self, key: Key, new_value: Value) {
         trace!("[hash_table] enter insert");
         if let Some(old_value) = self.get_mut(&key) {
@@ -106,6 +109,7 @@ where
         trace!("[hash_table] leave insert");
     }
 
+    #[allow(unused)]
     pub fn delete(&mut self, key: Key) {
         trace!("[hash_table] enter delete, key: {}", key.hash());
         if let Some(index) = self.get_index(&key) {

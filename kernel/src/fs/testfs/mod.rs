@@ -1,29 +1,27 @@
-use core::cell::SyncUnsafeCell;
-
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
-use crate::fs::posix::StatFlags;
+use crate::fs::ffi::StatFlags;
 use crate::utils::error::AsyscallRet;
-use crate::{fs::file_system::FILE_SYSTEM_MANAGER, utils::error::GeneralRet};
+use crate::utils::error::GeneralRet;
+use alloc::vec::Vec;
 
 use super::file::{FileMeta, FileMetaInner};
-use super::Mutex;
 use super::{
     file_system::{FileSystem, FileSystemMeta},
     inode::InodeMeta,
     File, Inode, InodeMode, OpenFlags,
 };
+use super::{FileSystemType, Mutex};
 
 pub struct TestRootInode {
     pub metadata: Option<InodeMeta>,
 }
 
 impl TestRootInode {
-    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
-        let metadata = InodeMeta::new(Some(parent), name, crate::fs::InodeMode::FileBLK, 0, None);
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileBLK, 0, None);
         Self {
             metadata: Some(metadata),
         }
@@ -112,61 +110,43 @@ impl File for TestRootFile {
 }
 
 pub struct TestFs {
-    metadata: SyncUnsafeCell<Option<FileSystemMeta>>,
+    metadata: FileSystemMeta,
 }
 
 impl TestFs {
-    pub fn new() -> Self {
-        Self {
-            metadata: SyncUnsafeCell::new(None),
-        }
+    pub fn new(
+        mount_point: &str,
+        dev_name: &str,
+        fstype: FileSystemType,
+        flags: StatFlags,
+        fa_inode: Option<Arc<dyn Inode>>,
+        covered_inode: Option<Arc<dyn Inode>>,
+    ) -> GeneralRet<Self> {
+        let mut root_inode = TestRootInode { metadata: None };
+        root_inode.init(
+            Option::clone(&fa_inode),
+            mount_point,
+            super::InodeMode::FileDIR,
+            0,
+        )?;
+
+        Ok(Self {
+            metadata: FileSystemMeta {
+                dev_name: dev_name.to_string(),
+                mount_point: mount_point.to_string(),
+                fstype,
+                flags,
+                root_inode: Arc::new(root_inode),
+                fa_inode,
+                covered_inode,
+                s_dirty: Vec::new(),
+            },
+        })
     }
 }
 
 impl FileSystem for TestFs {
-    fn create_root(
-        &self,
-        parent: Option<Arc<dyn Inode>>,
-        name: String,
-    ) -> crate::utils::error::GeneralRet<alloc::sync::Arc<dyn Inode>> {
-        let mut root_inode = TestRootInode { metadata: None };
-        root_inode.init(parent, name, super::InodeMode::FileDIR, 0)?;
-        Ok(Arc::new(root_inode))
+    fn metadata(&self) -> &FileSystemMeta {
+        &self.metadata
     }
-
-    fn metadata(&self) -> super::file_system::FileSystemMeta {
-        unsafe { (*self.metadata.get()).as_ref().unwrap().clone() }
-        // self.metadata.as_ref().unwrap().clone()
-    }
-
-    fn set_metadata(&mut self, metadata: super::file_system::FileSystemMeta) {
-        // self.metadata = Some(metadata);
-        self.metadata = SyncUnsafeCell::new(Some(metadata));
-    }
-
-    fn set_metadata_ref(&self, metadata: FileSystemMeta) {
-        unsafe { *self.metadata.get() = Some(metadata) }
-    }
-}
-
-pub fn init() -> GeneralRet<()> {
-    info!("start to init testfs...");
-
-    let mut test_fs = TestFs {
-        metadata: SyncUnsafeCell::new(None),
-    };
-    test_fs.init(
-        "/dev/sda1".to_string(),
-        "/",
-        crate::fs::FileSystemType::VFAT,
-        StatFlags::ST_NOSUID,
-    )?;
-
-    FILE_SYSTEM_MANAGER
-        .fs_mgr
-        .lock()
-        .insert("/".to_string(), Arc::new(test_fs));
-    info!("init testfs success");
-
-    Ok(())
 }

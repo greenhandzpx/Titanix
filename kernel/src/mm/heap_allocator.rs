@@ -19,14 +19,13 @@ static mut HEAP_SPACE: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
 pub fn init_heap() {
     unsafe {
         let start = HEAP_SPACE.as_ptr() as usize;
-        HEAP_ALLOCATOR.lock().init(start, KERNEL_HEAP_SIZE / 2);
+        HEAP_ALLOCATOR.lock().init(start, KERNEL_HEAP_SIZE);
         // HEAP_ALLOCATOR
         //     .lock()
         //     .add_to_heap(start + KERNEL_HEAP_SIZE / 2, start + KERNEL_HEAP_SIZE);
         debug!(
-            "kernel heap start {:#x}, mid {:#x}, end {:#x}",
+            "[kernel] heap start {:#x}, end {:#x}",
             start as usize,
-            start + KERNEL_HEAP_SIZE / 2,
             start + KERNEL_HEAP_SIZE
         );
     }

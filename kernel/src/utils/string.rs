@@ -1,6 +1,6 @@
 use alloc::{string::String, vec::Vec};
 
-use crate::{fs::posix::MAX_NAME_LEN, stack_trace};
+use crate::{fs::ffi::MAX_NAME_LEN, stack_trace};
 
 /// Convert C-style string(end with '\0') to rust string
 pub fn c_str_to_string(ptr: *const u8) -> String {
@@ -24,6 +24,7 @@ pub fn string_to_array(s: String) -> [u8; MAX_NAME_LEN] {
     bytes.try_into().unwrap()
 }
 
+#[allow(unused)]
 pub fn string_to_vec(s: String) -> Vec<u8> {
     let mut bytes = s.into_bytes();
     let len = bytes.len();

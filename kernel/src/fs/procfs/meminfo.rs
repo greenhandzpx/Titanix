@@ -88,9 +88,9 @@ pub struct MeminfoInode {
 }
 
 impl MeminfoInode {
-    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
         Self {
-            metadata: InodeMeta::new(Some(parent), name, InodeMode::FileREG, 0, None),
+            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0, None),
         }
     }
 }

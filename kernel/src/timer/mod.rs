@@ -15,8 +15,6 @@ use lazy_static::*;
 use log::info;
 use riscv::register::time;
 
-use self::posix::TimeSpec;
-
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
 const USEC_PER_SEC: usize = 1000000;
@@ -28,15 +26,6 @@ pub const CLOCK_MONOTONIC: usize = 1;
 /// for utimensat
 pub const UTIME_NOW: usize = 1073741823;
 pub const UTIME_OMIT: usize = 1073741822;
-
-/// Used for get time
-
-/// Used for clock_gettime
-/// arg_timespec - device_timespec = diff
-pub struct TimeDiff {
-    pub sec: isize,
-    pub nsec: isize,
-}
 
 /// get current time
 fn get_time() -> usize {
@@ -89,17 +78,17 @@ pub fn handle_timeout_events() {
     // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
     let current_time = current_time_duration();
     let mut timers = TIMER_QUEUE.timers.lock();
-    // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time
-    // may be a little long.
+    // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time may be a little long.
     loop {
         if let Some(timer) = timers.peek() {
+            log::trace!(
+                "[handle_timeout_events] find a timer, current ts: {:?}, expired ts: {:?}",
+                current_time,
+                timer.0.expired_time
+            );
             if current_time >= timer.0.expired_time {
                 let mut timer = timers.pop().unwrap();
-                //// Drop timers because the timer callback may lock the timer inside
-                //// TODO: is it low efficiency?
-                //// drop(timers);
                 timer.0.waker.take().unwrap().wake();
-                // timer.0.waker.as_ref().unwrap().wake_by_ref();
             } else {
                 break;
             }

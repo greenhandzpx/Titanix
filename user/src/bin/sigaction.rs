@@ -5,8 +5,10 @@
 extern crate user_lib;
 extern crate alloc;
 
-use user_lib::{close, exit, openat, read, OpenFlags, fork, sleep, kill, Signal, sigreturn, sigaction, SigAction, SigSet};
-
+use user_lib::{
+    close, exit, fork, kill, openat, read, sigaction, sigreturn, sleep, OpenFlags, SigAction,
+    SigSet, Signal,
+};
 
 fn sig_handler(signo: i32) {
     println!("I received a signal {}!", signo);
@@ -18,8 +20,14 @@ pub fn main(argc: usize, argv: &[&str]) -> i32 {
     let pid = fork();
     if pid == 0 {
         // child
-        let act = SigAction { sa_handler: sig_handler, sa_mask: SigSet::from_bits(0).unwrap()  };
-        let mut old_act = SigAction { sa_handler: sig_handler, sa_mask: SigSet::from_bits(0).unwrap()  };
+        let act = SigAction {
+            sa_handler: sig_handler,
+            sa_mask: SigSet::from_bits(0).unwrap(),
+        };
+        let mut old_act = SigAction {
+            sa_handler: sig_handler,
+            sa_mask: SigSet::from_bits(0).unwrap(),
+        };
         sigaction(Signal::SIGABRT, &act, &mut old_act);
         loop {
             println!("child: I'm still alive!");

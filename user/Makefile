@@ -15,10 +15,12 @@ TEST ?=
 elf: $(APPS)
 ifeq ($(PRELIMINARY), 1)
 	@echo "user: build for preliminary"
+	@cargo fmt
 	@cargo build --release --features preliminary 
 endif
 ifeq ($(PRELIMINARY), 0)
 	@echo "user: not build for preliminary"
+	@cargo fmt
 	@cargo build --release 
 endif
 ifeq ($(TEST), 1)

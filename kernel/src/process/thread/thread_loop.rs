@@ -1,41 +1,28 @@
-/*
- * @Author: greenhandzpx 893522573@qq.com
- * @Date: 2023-01-28 14:42:18
- * @LastEditors: greenhandzpx 893522573@qq.com
- * @LastEditTime: 2023-02-24 22:49:47
- * @FilePath: /oscomp-kernel/os/src/process/thread/threadloop.rs
- * @Description:
- *
- * Copyright (c) 2023 by greenhandzpx 893522573@qq.com, All Rights Reserved.
- */
-
 use alloc::sync::Arc;
-use log::{debug, info};
+use log::{debug, error, info};
 
 use crate::{
     process::thread::exit::handle_exit,
     processor::{close_interrupt, current_task, open_interrupt},
-    stack_trace,
     trap::{self, TrapContext},
+    utils::async_tools,
 };
 
 use super::Thread;
 
 pub async fn threadloop(thread: Arc<Thread>) {
+    thread.set_waker(async_tools::take_waker().await);
     debug!(
         "into thread loop, sepc {:#x}, trap cx addr {:#x}",
         current_task().trap_context_ref().sepc,
         current_task().trap_context_ref() as *const TrapContext as usize
     );
     loop {
-        // let trap_context = unsafe {
-        //     // TODO: figure out why we can't use in this way
-        //     // &mut (*thread.inner.get()).trap_context
-        //     let p = &mut *thread.inner.get();
-        //     &mut p.trap_context
-        // };
-
         trap::user_trap::trap_return();
+        // error!(
+        //     "[thread_loop] sepc {:#x}",
+        //     current_task().trap_context_ref().sepc
+        // );
         // next time when user traps into kernel, it will come back here
         trap::user_trap::trap_handler().await;
 

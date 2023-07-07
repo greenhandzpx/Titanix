@@ -1,4 +1,4 @@
-use core::{fmt, future::Future, pin::Pin};
+use core::{future::Future, pin::Pin};
 
 use alloc::boxed::Box;
 

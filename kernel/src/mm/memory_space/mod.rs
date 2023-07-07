@@ -40,12 +40,14 @@ mod cow;
 
 extern "C" {
     fn stext();
+    fn strampoline();
+    fn sigreturn_trampoline();
+    fn etrampoline();
     fn etext();
     fn srodata();
     fn erodata();
     fn sdata();
     fn edata();
-    // fn sbss_with_stack();
     fn sstack();
     fn estack();
     fn sbss();
@@ -96,19 +98,20 @@ impl MemorySpace {
 
     ///Create an empty `MemorySpace` but owns the global kernel mapping
     pub fn new_from_global() -> Self {
-        let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
         // TODO: optimize:
         // Now we copy all the kernel space's ptes one by one
         // but actually we can only copy the root ppn's corresponding ptes(i.e. level 1)
         // which may be faster (see `PageTable::from_global()`)
-        let mut new_page_table = PageTable::new();
-        for (_, area) in kernel_space.areas.get_unchecked_mut().iter() {
-            let pte_flags = PTEFlags::from_bits(area.map_perm.bits()).unwrap();
-            for vpn in area.vpn_range {
-                let ppn = kernel_space.translate(vpn).unwrap().ppn();
-                new_page_table.map(vpn, ppn, pte_flags);
-            }
-        }
+        // let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
+        // let mut new_page_table = PageTable::new();
+        // for (_, area) in kernel_space.areas.get_unchecked_mut().iter() {
+        //     let pte_flags = PTEFlags::from_bits(area.map_perm.bits()).unwrap();
+        //     for vpn in area.vpn_range {
+        //         let ppn = kernel_space.translate(vpn).unwrap().ppn();
+        //         new_page_table.map(vpn, ppn, pte_flags);
+        //     }
+        // }
+        let new_page_table = PageTable::from_global();
         let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
             page_table,
@@ -226,6 +229,7 @@ impl MemorySpace {
         va: VirtAddr,
         _scause: usize,
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&VmArea>)> {
+        stack_trace!();
         // There are serveral kinds of page faults:
         // 1. mmap area
         // 2. sbrk area
@@ -280,7 +284,15 @@ impl MemorySpace {
         permission: MapPermission,
     ) {
         self.push(
-            VmArea::new(start_va, end_va, MapType::Framed, permission, None, None),
+            VmArea::new(
+                start_va,
+                end_va,
+                MapType::Framed,
+                permission,
+                None,
+                None,
+                self.page_table.clone(),
+            ),
             0,
             None,
         );
@@ -295,7 +307,15 @@ impl MemorySpace {
         handler: Option<Arc<dyn PageFaultHandler>>,
     ) {
         self.push_lazily(
-            VmArea::new(start_va, end_va, MapType::Framed, permission, handler, None),
+            VmArea::new(
+                start_va,
+                end_va,
+                MapType::Framed,
+                permission,
+                handler,
+                None,
+                self.page_table.clone(),
+            ),
             None,
         );
     }
@@ -303,29 +323,17 @@ impl MemorySpace {
     ///Remove `VmArea` that starts with `start_vpn`
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some(area) = self.areas.get_unchecked_mut().get_mut(&start_vpn) {
-            let pgtbl_ref = self.page_table.get_unchecked_mut();
-            // area.unmap(pgtbl_ref);
-            area.unmap_lazily(pgtbl_ref);
+            area.unmap_lazily();
             self.areas.get_unchecked_mut().remove(&start_vpn);
         }
-        // if let Some((idx, area)) = self
-        //     .areas
-        //     .iter_mut()
-        //     .enumerate()
-        //     .find(|(_, area)| area.vpn_range.get_start() == start_vpn)
-        // {
-        //     let pgtbl_ref = unsafe { &mut (*self.page_table.get()) };
-        //     area.unmap(pgtbl_ref);
-        //     self.areas.remove(idx);
-        // }
     }
     /// Add the map area to memory set and map the map area(allocating physical frames)
     fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
         stack_trace!();
-        let pgtbl_ref = self.page_table.get_unchecked_mut();
-        vm_area.map(pgtbl_ref);
+        // let pgtbl_ref = self.page_table.get_unchecked_mut();
+        vm_area.map();
         if let Some(data) = data {
-            vm_area.copy_data_with_offset(pgtbl_ref, data_offset, data);
+            vm_area.copy_data_with_offset(data_offset, data);
         }
         self.areas
             .get_unchecked_mut()
@@ -341,12 +349,17 @@ impl MemorySpace {
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_space = Self::new_bare();
+        info!("[kernel] trampoline {:#x}", sigreturn_trampoline as usize);
         // // map trampoline
         // memory_space.map_trampoline();
         // map kernel sections
         info!(
-            "[kernel].text [{:#x}, {:#x})",
-            stext as usize, etext as usize
+            "[kernel].text [{:#x}, {:#x}) [{:#x}, {:#x})",
+            stext as usize, strampoline as usize, etrampoline as usize, etext as usize
+        );
+        info!(
+            "[kernel].text.trampoline [{:#x}, {:#x})",
+            strampoline as usize, etrampoline as usize,
         );
         info!(
             "[kernel].rodata [{:#x}, {:#x})",
@@ -370,11 +383,25 @@ impl MemorySpace {
         memory_space.push(
             VmArea::new(
                 (stext as usize).into(),
+                (strampoline as usize).into(),
+                MapType::Identical,
+                MapPermission::R | MapPermission::X,
+                None,
+                None,
+                memory_space.page_table.clone(),
+            ),
+            0,
+            None,
+        );
+        memory_space.push(
+            VmArea::new(
+                (etrampoline as usize).into(),
                 (etext as usize).into(),
                 MapType::Identical,
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -388,6 +415,7 @@ impl MemorySpace {
                 MapPermission::R,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -401,6 +429,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -415,6 +444,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -428,10 +458,26 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
         );
+        info!("[kernel]mapping signal-return trampoline");
+        memory_space.push(
+            VmArea::new(
+                (strampoline as usize).into(),
+                (etrampoline as usize).into(),
+                MapType::Identical,
+                MapPermission::R | MapPermission::X | MapPermission::U,
+                None,
+                None,
+                memory_space.page_table.clone(),
+            ),
+            0,
+            None,
+        );
+        // info!("{:#x}", unsafe { *(strampoline as usize as *const usize) });
         info!("[kernel]mapping physical memory");
         memory_space.push(
             VmArea::new(
@@ -441,6 +487,7 @@ impl MemorySpace {
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
+                memory_space.page_table.clone(),
             ),
             0,
             None,
@@ -457,6 +504,7 @@ impl MemorySpace {
                     MapPermission::R | MapPermission::W,
                     None,
                     None,
+                    memory_space.page_table.clone(),
                 ),
                 0,
                 None,
@@ -473,7 +521,7 @@ impl MemorySpace {
 
         let mut max_end_vpn = offset.floor();
         let mut head_va = 0;
-        debug!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+        info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -495,16 +543,24 @@ impl MemorySpace {
                 if ph_flags.is_execute() {
                     map_perm |= MapPermission::X;
                 }
-                let vm_area = VmArea::new(start_va, end_va, MapType::Framed, map_perm, None, None);
+                let vm_area = VmArea::new(
+                    start_va,
+                    end_va,
+                    MapType::Framed,
+                    map_perm,
+                    None,
+                    None,
+                    self.page_table.clone(),
+                );
                 max_end_vpn = vm_area.vpn_range.end();
 
-                let offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
+                let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
                 self.push(
                     vm_area,
-                    offset,
+                    map_offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
-                debug!(
+                info!(
                     "[map_elf]: {:#x}, {:#x}, map_perm: {:?}",
                     start_va.0, end_va.0, map_perm
                 );
@@ -639,6 +695,7 @@ impl MemorySpace {
             map_perm,
             Some(Arc::new(SBrkPageFaultHandler {})),
             None,
+            memory_space.page_table.clone(),
         );
         memory_space.push(heap_vma, 0, None);
         memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
@@ -686,20 +743,18 @@ impl MemorySpace {
 
     ///Clone a same `MemorySpace`
     pub fn from_existed_user(user_space: &Self) -> Self {
+        stack_trace!();
         // let mut memory_space = Self::new_bare();
-        let memory_space = Self::new_from_global();
-        let new_pagetable = memory_space.page_table.get_unchecked_mut();
-        // // map trampoline
-        // memory_space.map_trampoline();
+        let mut memory_space = Self::new_from_global();
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
-            let mut new_area = VmArea::from_another(area);
+            let mut new_area = VmArea::from_another(area, memory_space.page_table.clone());
             // memory_space.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {
                 if let Some(ppn) = user_space.translate(vpn) {
                     let src_ppn = ppn.ppn();
-                    let dst_ppn = new_area.map_one(new_pagetable, vpn);
+                    let dst_ppn = new_area.map_one(vpn, None);
                     dst_ppn.bytes_array().copy_from_slice(src_ppn.bytes_array());
                 }
                 // let src_ppn = user_space.translate(vpn).unwrap().ppn();
@@ -710,6 +765,7 @@ impl MemorySpace {
             }
             memory_space.push_lazily(new_area, None);
         }
+        memory_space.heap_range = user_space.heap_range;
         memory_space
     }
     ///Clone a same `MemorySpace`
@@ -722,24 +778,18 @@ impl MemorySpace {
 
         let new_pagetable = memory_space.page_table.get_unchecked_mut();
 
-        // for (_, area) in user_space.areas.iter_mut() {
-        //     // clear write bit && add cow bit
-        //     if area.map_perm.contains(MapPermission::W)
-        //         || area.map_perm.contains(MapPermission::COW)
-        //     {
-        //         area.map_perm |= MapPermission::COW;
-        //         area.map_perm.remove(MapPermission::W);
-        //         area.handler = Some(Arc::new(CowPageFaultHandler {}));
-        //     }
-        // }
-
         // copy data sections/trap_context/user_stack
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
-            let new_area = VmArea::from_another(area);
+            let new_area = VmArea::from_another(area, memory_space.page_table.clone());
+            info!(
+                "[from_existed_user_lazily] area range [{:#x}, {:#x})",
+                new_area.start_vpn().0,
+                new_area.end_vpn().0
+            );
             // copy data from another space
             for vpn in area.vpn_range {
                 // SAFETY: we've locked the process inner before calling this function
-                if let Some(ph_frame) = unsafe { (*area.data_frames.get()).0.remove(&vpn) } {
+                if let Some(ph_frame) = area.data_frames.get_unchecked_mut().0.remove(&vpn) {
                     // If there is related physcial frame, then we let the child and father share it.
                     let pte = user_space
                         .page_table
@@ -757,8 +807,8 @@ impl MemorySpace {
                     let mut new_flags = pte.flags() | PTEFlags::COW;
                     new_flags.remove(PTEFlags::W);
                     pte.set_flags(new_flags);
-                    debug_assert!(pte.flags().contains(PTEFlags::COW));
-                    debug_assert!(!pte.flags().contains(PTEFlags::W));
+                    assert!(pte.flags().contains(PTEFlags::COW));
+                    assert!(!pte.flags().contains(PTEFlags::W));
 
                     user_space
                         .cow_pages
@@ -782,8 +832,10 @@ impl MemorySpace {
             }
             memory_space.push_lazily(new_area, None);
         }
-        user_space.activate();
-        new_pagetable.activate();
+        memory_space.heap_range = user_space.heap_range;
+        // user_space.activate();
+        // new_pagetable.activate();
+
         memory_space
     }
     ///Refresh TLB with `sfence.vma`
@@ -835,6 +887,7 @@ impl MemorySpace {
             map_permission,
             None,
             None,
+            self.page_table.clone(),
         )))
     }
 
@@ -860,6 +913,7 @@ impl MemorySpace {
                     map_permission,
                     None,
                     None,
+                    self.page_table.clone(),
                 ));
             }
             last_start = vma.1.start_vpn().0 * PAGE_SIZE;
@@ -912,8 +966,8 @@ bitflags! {
         const X = 1 << 3;
         ///Accessible in U mode
         const U = 1 << 4;
-        /// COW when fork
-        const COW = 1 << 8;
+        // /// COW when fork
+        // const COW = 1 << 8;
     }
 }
 
@@ -951,6 +1005,7 @@ pub fn remap_test() {
 
 /// Handle different kinds of page fault
 pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    stack_trace!();
     if let Some(handler) = current_process().inner_handler(|proc| {
         let (handler, vma) = proc.memory_space.page_fault_handler(va, scause)?;
         if !handler.handle_page_fault(va, &proc.memory_space, vma)? {

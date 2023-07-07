@@ -17,10 +17,7 @@ fn sleepy() {
 
 #[no_mangle]
 pub fn main() -> i32 {
-    let mut current_time = TimeVal {
-        sec: 0,
-        usec: 0,
-    };
+    let mut current_time = TimeVal { sec: 0, usec: 0 };
     get_time(&mut current_time);
     let current_time = current_time.sec * 1000 + current_time.usec / 1000;
     let pid = fork();
@@ -30,10 +27,7 @@ pub fn main() -> i32 {
     }
     assert!(waitpid(pid as usize, &mut exit_code) == pid && exit_code == 0);
 
-    let mut current_time1 = TimeVal {
-        sec: 0,
-        usec: 0,
-    };
+    let mut current_time1 = TimeVal { sec: 0, usec: 0 };
     get_time(&mut current_time1);
     let current_time1 = current_time1.sec * 1000 + current_time1.usec / 1000;
     println!("use {} msecs.", current_time1 - current_time);

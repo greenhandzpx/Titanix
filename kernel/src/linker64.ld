@@ -13,9 +13,12 @@ SECTIONS
         *(.text.entry)
         . = ALIGN(4K);
         strampoline = .;
-        *(.text.trampoline);
+        *(.text.trampoline)
         . = ALIGN(4K);
+        etrampoline = .;
         *(.text .text.*)
+        /* . = ALIGN(4K); */
+        /* *(.text.trampoline) */
     }
 
     . = ALIGN(4K);
@@ -47,14 +50,18 @@ SECTIONS
     /* sbss_with_stack = .; */
     sbss = .;
     .bss : {
-        /* *(.bss.stack) */
-        /* sbss = .; */
         *(.bss .bss.*)
         *(.sbss .sbss.*)
     }
 
     . = ALIGN(4K);
     ebss = .;
+    /* strampoline = .;
+    .trampoline : {
+        *(.trampoline)
+    }
+    . = ALIGN(4K);
+    etrampoline = .; */
     ekernel = .;
 
     /DISCARD/ : {

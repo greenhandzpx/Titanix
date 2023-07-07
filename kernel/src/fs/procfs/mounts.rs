@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, string::ToString, sync::Arc};
 use log::debug;
 
 use crate::{
@@ -15,9 +15,9 @@ pub struct MountsInode {
     metadata: InodeMeta,
 }
 impl MountsInode {
-    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
         Self {
-            metadata: InodeMeta::new(Some(parent), name, InodeMode::FileREG, 0, None),
+            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0, None),
         }
     }
 }

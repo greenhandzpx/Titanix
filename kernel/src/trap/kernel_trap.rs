@@ -4,7 +4,7 @@ use riscv::register::{
     sepc, stval,
 };
 
-use crate::timer::set_next_trigger;
+use crate::timer::{handle_timeout_events, set_next_trigger};
 
 /// Kernel trap handler
 #[no_mangle]
@@ -17,9 +17,9 @@ pub fn kernel_trap_handler() {
             todo!()
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            warn!("timer interrupt!!");
+            // warn!("timer interrupt!!");
+            handle_timeout_events();
             set_next_trigger();
-            // todo!()
         }
         _ => {
             // error!("other exception!!");

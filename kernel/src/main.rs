@@ -13,8 +13,6 @@
 #![feature(core_intrinsics)]
 #![feature(const_mut_refs)]
 #![feature(poll_ready)]
-// #![feature(custom_test_frameworks)]
-// #![test_runner(crate::test_runner)]
 
 extern crate alloc;
 // extern crate intrusive_collections;
@@ -48,11 +46,8 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, AtomicU16, AtomicU8, Ordering},
-    time::Duration,
+    sync::atomic::{AtomicBool, Ordering},
 };
-
-use log::debug;
 
 use crate::{
     config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
@@ -61,7 +56,6 @@ use crate::{
     process::thread,
     processor::{hart, HARTS},
     sbi::hart_start,
-    timer::{timed_task::TimedTaskFuture, timeout_task::ksleep},
 };
 
 global_asm!(include_str!("entry.S"));
@@ -78,15 +72,7 @@ fn clear_bss() {
     }
 }
 
-// #[cfg(test)]
-// fn test_runner(tests: &[&dyn Fn()]) {
-//     println!("Running {} tests", tests.len());
-//     for test in tests {
-//         test();
-//     }
-// }
-///
-pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
+// pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
@@ -133,38 +119,36 @@ pub fn rust_main(hart_id: usize) {
         mm::heap_allocator::heap_test();
         mm::remap_test();
         trap::init();
-        //trap::enable_interrupt();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
         // executor::init();
-        // loader::list_apps();
-        fs::fat32_tmp::list_apps_fat32();
 
         fs::init();
 
         timer::init();
-
-        mm::page_cache_test();
 
         thread::spawn_kernel_thread(async move {
             process::add_initproc();
         });
 
         thread::spawn_kernel_thread(async move {
-            // TimedTaskFuture::new(Duration::from_secs(3), || {
-            //     debug!("I'm awake!! hhh just ignore me");
-            //     return true;
-            // }, None)
+            // use crate::timer::{timed_task::TimedTaskFuture, timeout_task::ksleep};
+            // let timeout = core::time::Duration::from_secs(3);
+            // TimedTaskFuture::new(
+            //     timeout,
+            //     || {
+            //         log::info!("I'm awake!! hhh just ignore me");
+            //         return true;
+            //     },
+            //     crate::timer::current_time_duration() + timeout,
+            // )
             // .await;
             // loop {
-            //     ksleep(Duration::from_secs(5)).await;
-            //     debug!("I'm awake!! hhh just ignore me");
+            //     ksleep(core::time::Duration::from_secs(5)).await;
+            //     log::debug!("I'm awake!! hhh just ignore me");
             // }
         });
 
-        // INIT_FINISHED.store(true, Ordering::Release);
+        // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);
-        FIRST_HART_ID.store(hart_id as u8, Ordering::SeqCst);
 
         let hart_num = unsafe { HARTS.len() };
         for i in 0..hart_num {
@@ -173,14 +157,19 @@ pub fn rust_main(hart_id: usize) {
             }
             hart_start(i, HART_START_ADDR);
         }
-    } else {
-        // The other harts
-
-        // while !INIT_FINISHED.load(Ordering::Acquire) {}
-        while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
+    } else {
+        // The other harts
+
+        #[cfg(not(feature = "multi_hart"))]
+        return;
+
+        // barrier
+        while !INIT_FINISHED.load(Ordering::SeqCst) {}
+
+        trap::init();
 
         hart::init(hart_id);
         unsafe {
@@ -191,12 +180,9 @@ pub fn rust_main(hart_id: usize) {
         }
         println!("[kernel] ---------- hart {} started ---------- ", hart_id);
 
-        // return;
+        trap::enable_timer_interrupt();
+        timer::set_next_trigger();
     }
 
-    // loop {
-    //     executor::run_until_idle();
-    // }
     executor::run_forever();
-    // panic!("Unreachable in rust_main!");
 }

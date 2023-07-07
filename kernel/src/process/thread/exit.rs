@@ -1,17 +1,22 @@
 use crate::{
-    process::PROCESS_MANAGER, processor::current_process, signal::SIGCHLD, stack_trace, sync::Event,
+    config::process::INITPROC_PID,
+    process::PROCESS_MANAGER,
+    processor::{current_process, current_trap_cx},
+    signal::SIGCHLD,
+    stack_trace,
+    sync::Event,
 };
 use alloc::{sync::Arc, vec::Vec};
-use log::debug;
+use log::{debug, info};
 
 use super::Thread;
 
 /// Things the thread need to do when it terminated
 pub fn handle_exit(thread: &Arc<Thread>) {
     stack_trace!();
-    debug!("thread {} handle exit", thread.tid());
-    if thread.process.pid() == 0 {
-        panic!("initproc die!!!");
+    info!("thread {} handle exit", thread.tid());
+    if thread.process.pid() == INITPROC_PID {
+        panic!("initproc die!!!, sepc {:#x}", current_trap_cx().sepc);
     }
     // Thread resource(i.e. tid, ustack) will be
     // released when the thread is destructed automatically
@@ -62,7 +67,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // 1. mark the process as zombie
     // 2. handle the process's children migration
     // 3. send signal to parent process
-    debug!(
+    info!(
         "final thread {} terminated, process become zombie",
         thread.tid()
     );

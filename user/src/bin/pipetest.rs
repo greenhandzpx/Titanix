@@ -32,7 +32,10 @@ pub fn main() -> i32 {
         // parent process, write to child
         // close read end
         close(pipe_fd[0] as usize);
-        assert_eq!(write(pipe_fd[1] as usize, STR.as_bytes()), STR.len() as isize);
+        assert_eq!(
+            write(pipe_fd[1] as usize, STR.as_bytes()),
+            STR.len() as isize
+        );
         // close write end
         close(pipe_fd[1] as usize);
         let mut child_exit_code: i32 = 0;

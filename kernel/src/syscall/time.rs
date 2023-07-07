@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use log::{debug, info};
+use log::{debug, info, trace};
 
 use crate::{
     mm::user_check::UserCheck,
@@ -16,7 +16,7 @@ use crate::{
         posix::{ITimerval, TimeSpec},
         timed_task::TimedTaskFuture,
         timeout_task::ksleep,
-        TimeDiff, CLOCK_MANAGER, CLOCK_REALTIME,
+        CLOCK_MANAGER, CLOCK_REALTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -63,7 +63,11 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     //     sec: time_spec.sec as isize - dev_spec.sec as isize,
     //     nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
     // };
-    info!("[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}", Duration::from(*time_spec), Duration::from(dev_spec));
+    info!(
+        "[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}",
+        Duration::from(*time_spec),
+        Duration::from(dev_spec)
+    );
 
     let mut manager_unlock = CLOCK_MANAGER.lock();
     manager_unlock.0.insert(clock_id, diff_time);
@@ -80,21 +84,21 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
     let clock = manager_locked.0.get(&clock_id);
     match clock {
         Some(clock) => {
-            debug!("[sys_clock_gettime] find the clock, clock id {}", clock_id);
+            trace!("[sys_clock_gettime] find the clock, clock id {}", clock_id);
             let dev_time = current_time_duration();
             let clock_time = dev_time + *clock;
             // let time_spec = TimeSpec {
             //     sec: (dev_spec.sec as isize + clock.sec) as usize,
             //     nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
             // };
-            debug!("[sys_clock_gettime] get time {:?}", clock_time);
+            info!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {
                 time_spec_ptr.write_volatile(clock_time.into());
             }
             Ok(0)
         }
         None => {
-            debug!("[sys_clock_gettime] Cannot find the clock: {}", clock_id);
+            trace!("[sys_clock_gettime] Cannot find the clock: {}", clock_id);
             Err(SyscallErr::EINVAL)
         }
     }
@@ -149,7 +153,7 @@ pub fn sys_settimer(
     let new_value = unsafe { &*new_value };
     let interval = Duration::from(new_value.it_interval);
     let next_timeout = Duration::from(new_value.it_value);
-    debug!(
+    info!(
         "[sys_settimer]: which {}, new_value{{ interval:{:?}, value:{:?} }}",
         which, interval, next_timeout
     );
@@ -188,7 +192,7 @@ pub fn sys_settimer(
                         (current_time_duration() + next_timeout).into();
                 });
                 spawn_kernel_thread(async move {
-                    TimedTaskFuture::new(interval, callback, Some(next_timeout)).await
+                    TimedTaskFuture::new(interval, callback, next_timeout).await
                 });
             }
             which

@@ -7,11 +7,7 @@ use crate::{
     processor::SumGuard,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-    sync::Arc,
-};
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 
 pub struct ZeroInode {
@@ -20,8 +16,8 @@ pub struct ZeroInode {
 }
 
 impl ZeroInode {
-    pub fn new(parent: Arc<dyn Inode>, name: String) -> Self {
-        let metadata = InodeMeta::new(Some(parent), name, crate::fs::InodeMode::FileCHR, 0, None);
+    pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
         Self { metadata }
     }
 }
@@ -30,7 +26,6 @@ impl Inode for ZeroInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(ZeroFile {
             meta: FileMeta {
-                // path: self.metadata().path.clone(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

@@ -2,3 +2,6 @@
 - 在将内核页表映射到高地址的过程中，忘记将sp指针进行映射，导致构造新页表时发生pagefault，因为旧的地址空间(0x80200000段)在新页表中没有相关映射
 - Vec的copy_from_raw_parts不能从用户态地址拷贝？
 - libc测试时waitpid结果不对？原因是sigreturn的时候返回值写成了0，导致在trap_handler中将0覆盖了x10寄存器，解决：sigreturn应该返回x10寄存器的值。
+- 需要写sepc或者stvec寄存器时一定要关中断！！！
+- 不要随意刷表，只能刷本进程的页表
+- 进程一开始从用户态回到内核态时，需要给用户态的trap context中的sstatus的sie字段置零，因为在`__return_to_user`函数中会给sstatus赋值，即便前面事先调用了`close_interrupt`函数也不能保证内核态中断不发生，因此我们需要手动给sstatus清除sie

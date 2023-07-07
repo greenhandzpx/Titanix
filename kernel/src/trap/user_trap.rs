@@ -1,4 +1,4 @@
-use log::{debug, warn};
+use log::{debug, error, info, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -6,9 +6,13 @@ use riscv::register::{
 
 use crate::{
     mm::{memory_space, VirtAddr},
-    process::{self, thread::exit_and_terminate_all_threads},
-    processor::{current_process, current_task, current_trap_cx, hart::local_hart},
+    process::thread::{self, exit_and_terminate_all_threads},
+    processor::{
+        close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
+        open_interrupt, SumGuard,
+    },
     signal::check_signal_for_current_process,
+    stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
     trap::set_user_trap_entry,
@@ -21,12 +25,17 @@ use super::{set_kernel_trap_entry, TrapContext};
 pub async fn trap_handler() {
     set_kernel_trap_entry();
 
-    // if local_hart().hart_id() as u8 != FIRST_HART_ID.load(core::sync::atomic::Ordering::Relaxed) {
-    //     info!("other hart trap");
-    // }
-
-    let scause = scause::read();
     let stval = stval::read();
+    let scause = scause::read();
+    // info!(
+    //     "trap in, sepc {:#x}, user sp {:#x}, kernel sp {:#x}",
+    //     current_trap_cx().sepc,
+    //     current_trap_cx().user_x[2],
+    //     current_trap_cx().kernel_sp,
+    // );
+
+    open_interrupt();
+
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
@@ -59,15 +68,16 @@ pub async fn trap_handler() {
         | Trap::Exception(Exception::InstructionPageFault)
         | Trap::Exception(Exception::LoadFault)
         | Trap::Exception(Exception::LoadPageFault) => {
-            debug!(
+            log::debug!(
                 "[kernel] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
                 stval,
                 current_trap_cx().sepc,
                 scause.cause()
             );
+            stack_trace!();
             match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
                 Ok(()) => {
-                    debug!(
+                    log::trace!(
                         "[kernel] handle legal page fault, addr {:#x}, instruction {:#x}",
                         stval,
                         current_trap_cx().sepc
@@ -85,15 +95,10 @@ pub async fn trap_handler() {
                     #[cfg(feature = "stack_trace")]
                     warn!("backtrace:");
                     local_hart().env().stack_tracker.print_stacks();
+
                     exit_and_terminate_all_threads(-2);
-                    // current_process().inner_handler(|proc| {
-                    //     proc.exit_code = -2;
-                    //     proc.is_zombie = true;
-                    // });
                 }
             }
-            // let sstatus = sstatus::read();
-            // debug!("sstatus {:#x}", sstatus.bits());
             // There are serveral kinds of page faults:
             // 1. mmap area
             // 2. sbrk area
@@ -105,8 +110,9 @@ pub async fn trap_handler() {
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             warn!(
-                "[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}",
-                stval
+                "[kernel] IllegalInstruction in application, kernel killed it, stval {:#x}, sepc {:#x}",
+                stval,
+                sepc::read(),
             );
             #[cfg(feature = "stack_trace")]
             warn!("backtrace:");
@@ -124,10 +130,19 @@ pub async fn trap_handler() {
             // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // debug!("timer interrupt");
+            // let _sum_guard = SumGuard::new();
+            // let sepc = current_trap_cx().sepc;
+            // let inst: u32 = unsafe { *(sepc as *const u32) };
+            // info!(
+            //     "timer interrupt, sepc {:#x}, inst {:#x}, s1 {} a5 {}",
+            //     sepc,
+            //     inst,
+            //     current_trap_cx().user_x[9],
+            //     current_trap_cx().user_x[15]
+            // );
             handle_timeout_events();
             set_next_trigger();
-            process::yield_now().await;
+            thread::yield_now().await;
         }
         _ => {
             panic!(
@@ -148,6 +163,9 @@ pub async fn trap_handler() {
 /// Note that we don't need to flush TLB since user and
 /// kernel use the same pagetable.
 pub fn trap_return() {
+    // Important!
+    close_interrupt();
+
     set_user_trap_entry();
     extern "C" {
         // fn __alltraps();
@@ -159,7 +177,23 @@ pub fn trap_return() {
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
+        // error!(
+        //     "[trap_return] user sp {:#x}, sepc {:#x}, trap cx addr {:#x}",
+        //     current_trap_cx().user_x[2],
+        //     current_trap_cx().sepc,
+        //     current_trap_cx() as *mut _ as usize
+        // );
+
         __return_to_user(current_trap_cx());
+
+        // Open interrupt in `trap_handler`
+
+        // error!(
+        //     "[trap_in] sepc {:#x}, x10 {:#x} x11 {:#x}",
+        //     current_trap_cx().sepc,
+        //     current_trap_cx().user_x[10],
+        //     current_trap_cx().user_x[11],
+        // );
 
         (*current_task().inner.get()).time_info.when_trap_in();
     }

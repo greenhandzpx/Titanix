@@ -1,17 +1,15 @@
-use crate::driver::block::BlockDevice;
-use alloc::sync::Arc;
-use log::debug;
-
-use self::{
-    bpb::BootSector,
-    fat::FileAllocTable,
-    fat32info::FAT32Info,
-    inode::{FAT32Inode, FAT32InodeMeta},
+use self::{bpb::BootSector, fat::FileAllocTable, fat32info::FAT32Info, inode::FAT32Inode};
+use crate::{
+    driver::block::BlockDevice,
+    fs::FileSystemType,
+    utils::error::{GeneralRet, SyscallErr},
 };
+use alloc::{string::ToString, sync::Arc, vec::Vec};
+
+use super::{ffi::StatFlags, file_system::FileSystemMeta, FileSystem, Inode};
 
 mod bpb;
 mod dentry;
-mod disk_dentry;
 mod fat;
 mod fat32info;
 mod file;
@@ -21,8 +19,8 @@ mod time;
 mod util;
 
 pub const SECTOR_SIZE: usize = 512;
-const SHORTNAME_LEN: usize = 11;
-const LONGNAME_LEN: usize = 255;
+const SNAME_LEN: usize = 11;
+const LNAME_MAXLEN: usize = 256;
 const BOOT_SECTOR_ID: usize = 0;
 const FATENTRY_PER_SECTOR: usize = 128;
 const FAT_CACHE_SIZE: usize = 16;
@@ -33,34 +31,24 @@ const FSI_RESERVED1_SIZE: usize = 480;
 const FSI_RESERVED2_SIZE: usize = 12;
 const FSI_NOT_AVAILABLE: u32 = 0xFFFFFFFF;
 
-pub struct FAT32FileSystemMeta {
-    info: Arc<FAT32Info>,
-    fat: Arc<FileAllocTable>,
-    root_inode: Arc<FAT32Inode>,
-}
-
 pub struct FAT32FileSystem {
-    block_device: Arc<dyn BlockDevice>,
-    meta: Option<FAT32FileSystemMeta>,
+    fat: Arc<FileAllocTable>,
+    meta: FileSystemMeta,
 }
 
 impl FAT32FileSystem {
-    /// 传入一个 Block Device，但是不做任何事情。
-    pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        Self {
-            block_device: Arc::clone(&block_device),
-            meta: None,
-        }
-    }
-
-    pub fn mount(&mut self) -> Option<()> {
-        if self.meta.is_some() {
-            debug!("尝试挂载一个已挂载的FAT32文件系统");
-            return None;
-        }
+    /// do nothing but store block device.
+    pub fn new(
+        block_device: Arc<dyn BlockDevice>,
+        mount_point: &str,
+        dev_name: &str,
+        fstype: FileSystemType,
+        flags: StatFlags,
+        fa_inode: Option<Arc<dyn Inode>>,
+        covered_inode: Option<Arc<dyn Inode>>,
+    ) -> GeneralRet<Self> {
         let mut bs_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
-        self.block_device
-            .read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
+        block_device.read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
         let raw_bs: BootSector = BootSector::new(&bs_data);
         if raw_bs.BPB_BytesPerSector as usize != SECTOR_SIZE
             || raw_bs.BPB_RootEntryCount != 0
@@ -68,59 +56,50 @@ impl FAT32FileSystem {
             || raw_bs.BPB_FATsize16 != 0
             || raw_bs.BPB_FSVer != 0
         {
-            return None;
+            return Err(SyscallErr::EINVAL);
         }
         let info = Arc::new(FAT32Info::new(raw_bs));
         let fat = Arc::new(FileAllocTable::new(
-            Arc::clone(&self.block_device),
+            Arc::clone(&block_device),
             Arc::clone(&info),
         ));
-        let root_inode = Arc::new(FAT32Inode::new(
+        let root_inode = FAT32Inode::new_root(
             Arc::clone(&fat),
-            None,
+            Option::clone(&fa_inode),
+            mount_point,
             info.root_cluster_id,
-            0,
-            inode::FAT32FileType::Directory,
-            FAT32InodeMeta::default(),
-        ));
-        self.meta = Some(FAT32FileSystemMeta {
-            info: Arc::clone(&info),
-            fat,
-            root_inode: Arc::clone(&root_inode),
-        });
-        Some(())
+        );
+        let root_inode: Arc<dyn Inode> = Arc::new(root_inode);
+        let meta = FileSystemMeta {
+            dev_name: dev_name.to_string(),
+            mount_point: mount_point.to_string(),
+            fstype,
+            flags,
+            root_inode,
+            fa_inode,
+            covered_inode,
+            s_dirty: Vec::new(),
+        };
+        let ret = Self {
+            fat: Arc::clone(&fat),
+            meta,
+        };
+        Ok(ret)
     }
+}
 
-    pub fn unmount(&mut self) -> Option<()> {
-        if self.meta.is_none() {
-            debug!("尝试卸载一个未挂载的FAT32文件系统");
-            None
-        } else if self.sync_fs().is_some() {
-            self.meta = None;
-            Some(())
-        } else {
-            debug!("卸载失败了！");
-            None
-        }
+impl FileSystem for FAT32FileSystem {
+    // fn sync_fs(&self) {
+    //     todo!()
+    // }
+
+    fn metadata(&self) -> &FileSystemMeta {
+        &self.meta
     }
+}
 
-    pub fn root_inode(&self) -> Option<Arc<FAT32Inode>> {
-        if self.meta.is_none() {
-            debug!("FAT32文件系统没有挂载");
-            None
-        } else {
-            Some(Arc::clone(&self.meta.as_ref().unwrap().root_inode))
-        }
-    }
-
-    pub fn sync_fs(&self) -> Option<()> {
-        if self.meta.is_none() {
-            debug!("尝试同步一个未挂载的FAT32文件系统");
-            None
-        } else {
-            self.meta.as_ref().unwrap().fat.sync_fat();
-            self.meta.as_ref().unwrap().root_inode.sync_inode();
-            Some(())
-        }
+impl Drop for FAT32FileSystem {
+    fn drop(&mut self) {
+        self.sync_fs();
     }
 }

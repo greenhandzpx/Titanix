@@ -1,10 +1,10 @@
 use alloc::sync::Weak;
-use log::{trace, warn};
+use log::{info, trace};
 
 use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
-    mm,
+    mm, stack_trace,
     sync::mutex::SleepLock,
     utils::error::{GeneralRet, SyscallErr},
 };
@@ -42,6 +42,7 @@ enum DataState {
     Outdated,
 }
 
+/// Build a page
 pub struct PageBuilder {
     permission: MapPermission,
     offset: Option<usize>,
@@ -51,25 +52,30 @@ pub struct PageBuilder {
 }
 
 impl PageBuilder {
+    /// Construct a page builder
     pub fn new() -> Self {
         Self {
             offset: None,
             inode: None,
             physical_frame: None,
-            permission: MapPermission::from_bits(0).unwrap(),
+            // TODO: defalut is readable and writable
+            permission: MapPermission::R | MapPermission::W,
             is_file_page: false,
         }
     }
+    /// Whether this page is related to a file
     pub fn is_file_page(mut self) -> Self {
         self.is_file_page = true;
         self
     }
+    /// The page's backup file
     pub fn file_info(mut self, file_info: &FilePageInfo) -> Self {
         self.offset = Some(file_info.file_offset);
         self.inode = Some(file_info.inode.clone());
         self.is_file_page = true;
         self
     }
+    /// Page map permission
     pub fn permission(mut self, permission: MapPermission) -> Self {
         // if permission.bits() == 0 {
         //     warn!("permission None: {:?}", permission);
@@ -77,19 +83,24 @@ impl PageBuilder {
         self.permission = permission;
         self
     }
+    /// Page's file offset
     pub fn offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
         self
     }
+    /// Page's backup inode
     pub fn inode(mut self, inode: Weak<dyn Inode>) -> Self {
         self.inode = Some(inode);
         self
     }
+    /// Page's physical page frame
     pub fn physical_frame(mut self, frame: FrameTracker) -> Self {
         self.physical_frame = Some(frame);
         self
     }
+    /// Build the page
     pub fn build(mut self) -> Page {
+        stack_trace!();
         let frame = match self.physical_frame {
             None => mm::frame_alloc().unwrap(),
             Some(_) => self.physical_frame.take().unwrap(),
@@ -146,9 +157,40 @@ impl Page {
         }
     }
 
-    /// Sync all buffers
-    pub fn sync(&self) {
-        todo!()
+    /// Sync all buffers if needed
+    pub async fn sync(&self) -> GeneralRet<()> {
+        let file_info = self.file_info.as_ref().unwrap().lock().await;
+        let inode = file_info.inode.upgrade().ok_or(SyscallErr::EBADF)?;
+        let data_len = inode.metadata().inner.lock().data_len;
+        log::trace!(
+            "[Page::sync] sync page, file offset {:#x}",
+            file_info.file_offset
+        );
+        for idx in 0..PAGE_SIZE / BLOCK_SIZE {
+            match file_info.data_states[idx] {
+                DataState::Dirty => {
+                    let page_offset = idx * BLOCK_SIZE;
+                    let file_offset = file_info.file_offset + page_offset;
+                    log::trace!(
+                        "[Page::sync] sync block of the page, file offset {:#x}",
+                        file_offset
+                    );
+                    // In case of truncate
+                    if data_len <= file_offset {
+                        info!("[Page::sync] file has been truncated, now len {:#x}, page's file offset {:#x}", data_len, file_offset);
+                        return Ok(());
+                    }
+                    inode
+                        .write(
+                            file_offset,
+                            &self.bytes_array()[page_offset..page_offset + BLOCK_SIZE],
+                        )
+                        .await?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Load all buffers

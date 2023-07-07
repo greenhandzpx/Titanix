@@ -1,9 +1,9 @@
 use alloc::{collections::BTreeMap, sync::Arc};
-use log::{debug, warn};
+use log::{debug, error, trace, warn};
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
-    fs::File,
+    fs::{File, Inode},
     mm::{
         address::{StepByOne, VPNRange},
         frame_alloc,
@@ -14,6 +14,7 @@ use crate::{
     stack_trace,
     syscall::MmapFlags,
     utils::{
+        async_tools::block_on,
         cell::SyncUnsafeCell,
         error::{GeneralRet, SyscallErr},
     },
@@ -60,11 +61,14 @@ pub struct VmArea {
     pub handler: Option<Arc<dyn PageFaultHandler>>,
     /// Backup file(only used for mmap)
     pub backup_file: Option<BackupFile>,
+    /// Page table.
+    /// Note that this member must be visited with process lock holding
+    pub page_table: Arc<SyncUnsafeCell<PageTable>>,
 }
 
 impl Drop for VmArea {
     fn drop(&mut self) {
-        // TODO: flush the mmap areas if needed
+        self.do_unmap_area(self.vpn_range);
     }
 }
 
@@ -77,6 +81,7 @@ impl VmArea {
         map_perm: MapPermission,
         handler: Option<Arc<dyn PageFaultHandler>>,
         backup_file: Option<BackupFile>,
+        page_table: Arc<SyncUnsafeCell<PageTable>>,
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
@@ -92,23 +97,25 @@ impl VmArea {
             mmap_flags: None,
             handler,
             backup_file,
+            page_table,
         }
     }
-    /// Construct a vma from another vma
-    pub fn from_another(another: &Self) -> Self {
-        let mut ret = Self {
+    /// Construct a vma from another vma.
+    /// Note that we won't copy the physical data frames.
+    pub fn from_another(another: &Self, page_table: Arc<SyncUnsafeCell<PageTable>>) -> Self {
+        Self {
             vpn_range: VPNRange::new(another.vpn_range.start(), another.vpn_range.end()),
             data_frames: SyncUnsafeCell::new(PageManager::new()),
             map_type: another.map_type,
             map_perm: another.map_perm,
-            mmap_flags: None,
-            handler: None,
-            backup_file: None,
-        };
-        if another.handler.is_some() {
-            ret.handler = Some(another.handler.as_ref().unwrap().arc_clone());
+            mmap_flags: another.mmap_flags,
+            handler: match another.handler.as_ref() {
+                Some(handler) => Some(handler.arc_clone()),
+                None => None,
+            },
+            backup_file: another.backup_file.clone(),
+            page_table,
         }
-        ret
     }
 
     /// Start vpn
@@ -120,6 +127,7 @@ impl VmArea {
     pub fn end_vpn(&self) -> VirtPageNum {
         self.vpn_range.end()
     }
+
     /// Page fault handler
     pub fn page_fault_handler(
         &self,
@@ -140,8 +148,10 @@ impl VmArea {
     }
 
     /// Alloc a new physical frame and add the given va to the pagetable
-    pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) -> PhysPageNum {
+    pub fn map_one(&mut self, vpn: VirtPageNum, physical_frame: Option<Arc<Page>>) -> PhysPageNum {
+        stack_trace!();
         let ppn: PhysPageNum;
+        let page_table = self.page_table.get_unchecked_mut();
         match self.map_type {
             MapType::Identical => {
                 ppn = PhysPageNum(vpn.0 - KERNEL_DIRECT_OFFSET);
@@ -149,12 +159,17 @@ impl VmArea {
                 // ppn = PhysPageNum(vpn.0);
             }
             MapType::Framed => {
-                let frame = PageBuilder::new()
-                    .permission(self.map_perm)
-                    .physical_frame(frame_alloc().unwrap())
-                    .build();
+                let frame = match physical_frame {
+                    Some(frame) => frame,
+                    None => Arc::new(
+                        PageBuilder::new()
+                            .permission(self.map_perm)
+                            .physical_frame(frame_alloc().unwrap())
+                            .build(),
+                    ),
+                };
                 ppn = frame.data_frame.ppn;
-                self.data_frames.get_mut().0.insert(vpn, Arc::new(frame));
+                self.data_frames.get_mut().0.insert(vpn, frame);
             }
             MapType::Direct => {
                 ppn = PhysPageNum(vpn.0 - KERNEL_DIRECT_OFFSET);
@@ -162,21 +177,26 @@ impl VmArea {
                 // todo!()
             }
         }
-        let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        // let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        let pte_flags = PTEFlags::from(self.map_perm);
         // debug!("vpn {:#x} pg ph {:#x}", vpn.0, ppn.0);
         page_table.map(vpn, ppn, pte_flags);
         ppn
     }
 
     /// Unmap a page
-    pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
+    pub fn unmap_one(&mut self, vpn: VirtPageNum) {
+        stack_trace!();
+        let page_table = self.page_table.get_unchecked_mut();
         if self.map_type == MapType::Framed {
             self.data_frames.get_mut().0.remove(&vpn);
         }
         page_table.unmap(vpn);
     }
     /// Some of the pages don't have correlated phyiscal frame
-    pub fn unmap_one_lazily(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
+    pub fn unmap_one_lazily(&mut self, vpn: VirtPageNum) {
+        stack_trace!();
+        let page_table = self.page_table.get_unchecked_mut();
         if self.map_type == MapType::Framed {
             self.data_frames.get_mut().0.remove(&vpn);
         }
@@ -185,23 +205,23 @@ impl VmArea {
         }
     }
     /// Map all pages this vma owns
-    pub fn map(&mut self, page_table: &mut PageTable) {
+    pub fn map(&mut self) {
         for vpn in self.vpn_range {
-            self.map_one(page_table, vpn);
+            self.map_one(vpn, None);
         }
     }
 
     /// Unmap all pages this vma owns
-    pub fn unmap(&mut self, page_table: &mut PageTable) {
+    pub fn unmap(&mut self) {
         for vpn in self.vpn_range {
-            self.unmap_one(page_table, vpn);
+            self.unmap_one(vpn);
         }
     }
 
     /// Some of the pages don't have correlated phyiscal frame
-    pub fn unmap_lazily(&mut self, page_table: &mut PageTable) {
+    pub fn unmap_lazily(&mut self) {
         for vpn in self.vpn_range {
-            self.unmap_one_lazily(page_table, vpn);
+            self.unmap_one_lazily(vpn);
         }
     }
 
@@ -209,12 +229,13 @@ impl VmArea {
     /// Assume that all frames were cleared before.
     pub fn copy_data_with_offset(
         &mut self,
-        page_table: &mut PageTable,
+        // page_table: &mut PageTable,
         mut offset: usize,
         data: &[u8],
     ) {
         stack_trace!();
         assert_eq!(self.map_type, MapType::Framed);
+        let page_table = self.page_table.get_unchecked_mut();
         let mut start: usize = 0;
         let mut current_vpn = self.vpn_range.start();
         let len = data.len();
@@ -225,6 +246,7 @@ impl VmArea {
                 .unwrap()
                 .ppn()
                 .bytes_array()[offset..offset + src.len()];
+            dst.fill(0);
             dst.copy_from_slice(src);
             start += PAGE_SIZE - offset;
             offset = 0;
@@ -257,20 +279,119 @@ impl VmArea {
         }
     }
 
+    /// Unmap a memory range in this area.
+    /// Note that this method won't do any validity check,
+    /// which means the removed vpn range must have at least
+    /// one bound that equals to the old vpn range.
+    fn do_unmap_area(&mut self, removed_vpn_range: VPNRange) {
+        stack_trace!();
+        trace!("[do_unmap_area] removed vpn range {:?}", removed_vpn_range);
+        // Free phyical page frames
+        self.data_frames
+            .get_mut()
+            .0
+            .retain(|vpn, _| *vpn < removed_vpn_range.start() || *vpn >= removed_vpn_range.end());
+        // Unmap from page table
+        let page_table = self.page_table.get_unchecked_mut();
+        for vpn in self.vpn_range {
+            if vpn >= removed_vpn_range.start() && vpn < removed_vpn_range.end() {
+                page_table.unmap_nopanic(vpn);
+            }
+        }
+        // Write back to disk if needed
+        if let Some(backup_file) = self.backup_file.as_mut() {
+            backup_file.offset += VirtAddr::from(removed_vpn_range.start()).0
+                - VirtAddr::from(self.vpn_range.start()).0;
+            if self.mmap_flags.unwrap().contains(MmapFlags::MAP_SHARED) {
+                // TODO: do we need to sync to the disk?
+                // It seems ok for us to just sync to page cache.
+                if block_on(<dyn Inode>::sync(
+                    backup_file
+                        .file
+                        .metadata()
+                        .inner
+                        .lock()
+                        .inode
+                        .as_ref()
+                        .unwrap()
+                        .clone(),
+                ))
+                .is_err()
+                {
+                    error!("[VmArea::do_unmap_area] error when unmapping");
+                }
+            }
+        }
+    }
+
     /// Clip the vm area.
     pub fn clip(&mut self, new_vpn_range: VPNRange) {
         debug!(
             "[VmArea::clip] old range {:?}, new range {:?}",
             self.vpn_range, new_vpn_range
         );
-        self.data_frames
-            .get_mut()
-            .0
-            .retain(|vpn, _| *vpn >= new_vpn_range.start() && *vpn <= new_vpn_range.end());
-        if let Some(backup_file) = self.backup_file.as_mut() {
-            backup_file.offset +=
-                VirtAddr::from(new_vpn_range.start()).0 - VirtAddr::from(self.vpn_range.start()).0;
+        assert!(new_vpn_range.start() >= self.start_vpn() && new_vpn_range.end() <= self.end_vpn());
+        if self.start_vpn() < new_vpn_range.start() {
+            self.do_unmap_area(VPNRange::new(self.start_vpn(), new_vpn_range.start()));
         }
+        if self.end_vpn() > new_vpn_range.end() {
+            self.do_unmap_area(VPNRange::new(new_vpn_range.end(), self.end_vpn()));
+        }
+        self.page_table.get_unchecked_mut().activate();
         self.vpn_range = new_vpn_range;
+    }
+
+    /// Unmap a memory range in this area.
+    /// Return the new splited vma if any.
+    pub fn unmap_area(&mut self, vpn_range: VPNRange) -> GeneralRet<Option<VmArea>> {
+        stack_trace!();
+
+        if vpn_range.start() < self.vpn_range.start() || vpn_range.end() > self.vpn_range.end() {
+            warn!("[VmArea::unmap_area] invalid vpn range: {:?}", vpn_range);
+            return Err(SyscallErr::EINVAL);
+        }
+
+        match (
+            vpn_range.start() == self.start_vpn(),
+            vpn_range.end() == self.end_vpn(),
+        ) {
+            (true, false) | (true, true) => {
+                self.do_unmap_area(vpn_range);
+                self.vpn_range = VPNRange::new(vpn_range.end(), self.end_vpn());
+                self.page_table.get_unchecked_mut().activate();
+                Ok(None)
+            }
+            (false, true) => {
+                self.do_unmap_area(vpn_range);
+                self.vpn_range = VPNRange::new(self.start_vpn(), vpn_range.start());
+                self.page_table.get_unchecked_mut().activate();
+                Ok(None)
+            }
+            (false, false) => {
+                self.do_unmap_area(vpn_range);
+                self.vpn_range = VPNRange::new(self.start_vpn(), vpn_range.start());
+
+                let mut splited_vma = VmArea::from_another(self, self.page_table.clone());
+                splited_vma.vpn_range = VPNRange::new(vpn_range.end(), self.vpn_range.end());
+                for (vpn, page) in self.data_frames.get_unchecked_mut().0.iter() {
+                    if *vpn >= splited_vma.vpn_range.start() && *vpn < splited_vma.vpn_range.end() {
+                        splited_vma
+                            .data_frames
+                            .get_unchecked_mut()
+                            .0
+                            .insert(*vpn, page.clone());
+                    }
+                }
+                for (vpn, _) in splited_vma.data_frames.get_unchecked_mut().0.iter() {
+                    self.data_frames.get_unchecked_mut().0.remove(vpn);
+                }
+                if let Some(backup_file) = splited_vma.backup_file.as_mut() {
+                    backup_file.offset +=
+                        VirtAddr::from(vpn_range.end()).0 - VirtAddr::from(self.start_vpn()).0;
+                }
+                self.page_table.get_unchecked_mut().activate();
+                Ok(Some(splited_vma))
+            } // (true, true) => Ok(None),
+        }
     }
 }

@@ -6,6 +6,7 @@ use log::{self, Level, LevelFilter, Log, Metadata, Record};
 use crate::{
     processor::{current_process, current_task, hart_idle_now, local_hart},
     sync::mutex::SpinNoIrqLock as Mutex,
+    timer::current_time_duration,
 };
 
 lazy_static! {
@@ -26,19 +27,6 @@ pub fn init() {
     });
 }
 
-// #[macro_export]
-// macro_rules! print {
-//     ($($arg:tt)*) => ({
-//         $crate::logging::print(format_args!($($arg)*));
-//     });
-// }
-
-// #[macro_export]
-// macro_rules! println {
-//     ($fmt:expr) => (print!(concat!($fmt, "\n")));
-//     ($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
-// }
-
 /// Add escape sequence to print with color in Linux console
 macro_rules! with_color {
     ($args: ident, $color_code: ident) => {{
@@ -46,18 +34,13 @@ macro_rules! with_color {
     }};
 }
 
-fn print_in_color(args: fmt::Arguments, color_code: u8) {
+/// Print msg with color
+pub fn print_in_color(args: fmt::Arguments, color_code: u8) {
     // use crate::arch::io;
     // let _guard = LOG_LOCK.lock();
     // io::putfmt(with_color!(args, color_code));
     crate::console::print(with_color!(args, color_code));
 }
-
-// pub fn print(args: fmt::Arguments) {
-//     use crate::arch::io;
-//     let _guard = LOG_LOCK.lock();
-//     io::putfmt(args);
-// }
 
 struct SimpleLogger;
 
@@ -70,39 +53,15 @@ impl Log for SimpleLogger {
             return;
         }
 
-        /*
-        if let Some(tid) = processor().tid_option() {
-            print_in_color(
-                format_args!(
-                    "[{:>5}][{},{}] {}\n",
-                    record.level(),
-                    crate::arch::cpu::id(),
-                    tid,
-                    record.args()
-                ),
-                level_to_color_code(record.level()),
-            );
-        } else {
-            */
-        // print_in_color(
-        //     format_args!(
-        //         "[{:>5}][{},-] {}\n",
-        //         record.level(),
-        //         crate::arch::cpu::id(),
-        //         record.args()
-        //     ),
-        //     level_to_color_code(record.level()),
-        // );
         if hart_idle_now() {
             print_in_color(
                 format_args!(
-                    "[{:>5}][{}:{}][{},-,-] {}\n",
+                    "[{:>5}][{}:{}][{},-,-][{:?}] {}\n",
                     record.level(),
                     record.file().unwrap(),
                     record.line().unwrap(),
                     local_hart().hart_id(),
-                    // current_process().pid.0,
-                    // current_task().tid.0,
+                    current_time_duration(),
                     record.args()
                 ),
                 level_to_color_code(record.level()),
@@ -110,13 +69,14 @@ impl Log for SimpleLogger {
         } else {
             print_in_color(
                 format_args!(
-                    "[{:>5}][{}:{}][{},{},{}] {}\n",
+                    "[{:>5}][{}:{}][{},{},{}][{:?}] {}\n",
                     record.level(),
                     record.file().unwrap(),
                     record.line().unwrap(),
                     local_hart().hart_id(),
                     current_process().pid(),
                     current_task().tid(),
+                    current_time_duration(),
                     record.args()
                 ),
                 level_to_color_code(record.level()),
@@ -131,9 +91,37 @@ fn level_to_color_code(level: Level) -> u8 {
     match level {
         Level::Error => 31, // Red
         Level::Warn => 93,  // BrightYellow
-        // Level::Info => 34,  // Blue
         Level::Info => 36,  // Blue
         Level::Debug => 32, // Green
         Level::Trace => 90, // BrightBlack
     }
+}
+
+#[allow(unused)]
+pub const STRACE_COLOR_CODE: u8 = 35; // Purple
+
+/// Syscall trace
+#[macro_export]
+#[cfg(feature = "strace")]
+macro_rules! strace {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        use crate::{
+            processor::{current_process, current_task, local_hart},
+            timer::current_time_duration,
+        };
+        $crate::utils::logging::print_in_color(
+            format_args!(concat!("[SYSCALL][{},{},{}][{:?}] ", $fmt, "\n"),
+            local_hart().hart_id(),
+            current_process().pid(),
+            current_task().tid(),
+            current_time_duration()
+            $(, $($arg)+)?),
+            crate::utils::logging::STRACE_COLOR_CODE);
+    }
+}
+/// Syscall trace
+#[macro_export]
+#[cfg(not(feature = "strace"))]
+macro_rules! strace {
+    ($fmt: literal $(, $($arg: tt)+)?) => {};
 }

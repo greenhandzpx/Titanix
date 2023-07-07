@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use super::{current_time_ms, MSEC_PER_SEC, current_time_duration};
+use super::{current_time_duration, current_time_ms, MSEC_PER_SEC};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]

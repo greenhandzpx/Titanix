@@ -3,12 +3,11 @@ use log::{debug, info, trace, warn};
 use riscv::register::scause::Scause;
 
 use crate::{
-    mm::{
-        address::KernelAddr, frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission,
-        PhysPageNum, VirtAddr,
-    },
+    mm::{frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission, VirtAddr},
     process::Process,
     processor::{current_process, SumGuard},
+    stack_trace,
+    syscall::MmapFlags,
     utils::error::{AgeneralRet, GeneralRet, SyscallErr},
 };
 
@@ -56,9 +55,11 @@ impl PageFaultHandler for UStackPageFaultHandler {
         memory_space: &MemorySpace,
         vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
-        // Box::pin(async move {
-        debug!("handle ustack page fault, va {:#x}", va.0);
-        // area.map_one(page_table, VirtPageNum::from(va));
+        stack_trace!();
+        info!(
+            "[UStackPageFaultHandler] handle ustack page fault, va {:#x}",
+            va.0
+        );
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
@@ -68,10 +69,14 @@ impl PageFaultHandler for UStackPageFaultHandler {
             .build();
         let data_frames = unsafe { &mut *vma.as_ref().unwrap().data_frames.get() };
         data_frames.0.insert(vpn, Arc::new(page));
-        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::X | PTEFlags::U;
+        let pte_flags = PTEFlags::W | PTEFlags::R | PTEFlags::U;
         let page_table = memory_space.page_table.get_unchecked_mut();
         page_table.map(vpn, ppn, pte_flags);
         page_table.activate();
+        info!(
+            "[UStackPageFaultHandler] handle ustack page fault finished, pa {:#x}",
+            ppn.0,
+        );
         Ok(true)
         // })
     }
@@ -101,8 +106,9 @@ impl PageFaultHandler for SBrkPageFaultHandler {
         vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
         // todo!()
+        stack_trace!();
         // Box::pin(async move {
-        debug!("handle sbrk page fault, va {:#x}", va.0);
+        trace!("handle sbrk page fault, va {:#x}", va.0);
         let vpn = va.floor();
         let frame = frame_alloc().unwrap();
         let ppn = frame.ppn;
@@ -133,38 +139,6 @@ impl PageFaultHandler for SBrkPageFaultHandler {
 pub struct MmapPageFaultHandler {}
 
 impl PageFaultHandler for MmapPageFaultHandler {
-    // // tmp version
-    // fn handle_page_fault(
-    //     &self,
-    //     va: VirtAddr,
-    //     vma: &VmArea,
-    //     page_table: &mut PageTable,
-    // ) -> GeneralRet<()> {
-    //     debug!("handle mmap page fault");
-    //     let backup_file = vma.backup_file.as_ref().ok_or(SyscallErr::ENODEV)?;
-    //     let file = backup_file.file.clone();
-    //     let offset = backup_file.offset + (va.0 - VirtAddr::from(vma.start_vpn()).0);
-    //     debug!("mmap offset {}", offset);
-    //     let open_flags: OpenFlags = vma.map_perm.into();
-    //     // let file = inode.file.open(inode.file.clone(), open_flags)?;
-    //     debug!("mmap backup file name {}", file.metadata().path);
-    //     let data_frames = unsafe { &mut (*vma.data_frames.get()) };
-    //     let frame = frame_alloc().unwrap();
-    //     let ppn = frame.ppn;
-    //     data_frames.0.insert(va.floor(), Arc::new(frame));
-    //     let bytes_array = ppn.bytes_array();
-    //     file.seek(offset)?;
-    //     file.sync_read(bytes_array)?;
-
-    //     let mut pte_flags = vma.map_perm.into();
-    //     pte_flags |= PTEFlags::U;
-    //     debug!("ppn {:#x}", ppn.0);
-    //     page_table.map(va.floor(), ppn, pte_flags);
-    //     page_table.activate();
-    //     Ok(())
-    // }
-
-    // page cache version
     fn handle_page_fault(
         &self,
         va: VirtAddr,
@@ -173,8 +147,6 @@ impl PageFaultHandler for MmapPageFaultHandler {
     ) -> GeneralRet<bool> {
         debug!("handle mmap page fault, va {:#x}", va.0);
         Ok(false)
-        // Box::pin(async move {
-        // })
     }
 
     fn handle_page_fault_async(
@@ -182,9 +154,10 @@ impl PageFaultHandler for MmapPageFaultHandler {
         va: VirtAddr,
         process: &'static Arc<Process>,
     ) -> AgeneralRet<()> {
+        stack_trace!();
         Box::pin(async move {
             debug!("handle mmap page fault asynchronously");
-            let (inode, map_perm, start_vpn) = process.inner_handler(|proc| {
+            let (inode, map_perm, mmap_flags, start_vpn) = process.inner_handler(|proc| {
                 let vma = proc
                     .memory_space
                     .find_vm_area_by_vpn(va.floor())
@@ -195,6 +168,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
                         .cloned()
                         .ok_or(SyscallErr::ENODEV)?,
                     vma.map_perm,
+                    vma.mmap_flags.unwrap(),
                     vma.start_vpn(),
                 ))
             })?;
@@ -224,8 +198,11 @@ impl PageFaultHandler for MmapPageFaultHandler {
                 String::from_utf8(page.bytes_array().to_vec())
             );
 
-            let page = match pte_flags.contains(PTEFlags::W) {
-                true => {
+            let page = match (
+                pte_flags.contains(PTEFlags::W),
+                mmap_flags.contains(MmapFlags::MAP_PRIVATE),
+            ) {
+                (true, true) => {
                     // Copy on write
                     let frame = frame_alloc().unwrap();
                     frame.ppn.bytes_array().copy_from_slice(&page.bytes_array());
@@ -238,7 +215,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
                             .build(),
                     )
                 }
-                false => page,
+                _ => page,
             };
 
             debug!(
@@ -247,7 +224,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             );
 
             process.inner_handler(|proc| {
-                let page_table = unsafe { &mut *proc.memory_space.page_table.get() };
+                let page_table = proc.memory_space.page_table.get_unchecked_mut();
                 page_table.map(va.floor(), page.data_frame.ppn, pte_flags);
                 page_table.activate();
                 let vma = proc.memory_space.find_vm_area_by_vpn(va.floor()).unwrap();
@@ -276,12 +253,14 @@ impl PageFaultHandler for CowPageFaultHandler {
         memory_space: &MemorySpace,
         _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
+        stack_trace!();
         debug!("handle cow page fault(cow), va {:#x}", va.0);
 
         let vpn = va.floor();
         let page_table = memory_space.page_table.get_unchecked_mut();
 
         if let Some(pte) = page_table.find_pte(vpn) {
+            stack_trace!();
             // the page has correlated physical frame
             debug_assert!(pte.flags().contains(PTEFlags::COW));
             debug_assert!(!pte.flags().contains(PTEFlags::W));
@@ -326,6 +305,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .unwrap()
                 }
                 _ => {
+                    stack_trace!();
                     // Else
                     // we should allocate new frame and decrease
                     // old frame's ref cnt
@@ -336,10 +316,12 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .ppn
                         .bytes_array()
                         .copy_from_slice(&shared_page.bytes_array());
+                    stack_trace!();
+                    // modify page tableray());
                     // modify page table
                     page_table.unmap(vpn);
-                    page_table.map(vpn, new_frame.ppn, pte_flags);
                     page_table.activate();
+                    page_table.map(vpn, new_frame.ppn, pte_flags);
                     // decrease old frame's ref cnt
                     memory_space
                         .cow_pages
@@ -347,6 +329,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .get_unchecked_mut()
                         .0
                         .remove(&vpn);
+                    stack_trace!();
                     Arc::new(
                         PageBuilder::new()
                             .permission(shared_page.permission)
@@ -355,6 +338,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                     )
                 }
             };
+            stack_trace!();
             let old_vma = memory_space.find_vm_area_by_vpn(vpn).unwrap();
             let data_frames = old_vma.data_frames.get_unchecked_mut();
             data_frames.0.insert(vpn, page);

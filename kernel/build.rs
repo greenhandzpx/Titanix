@@ -21,7 +21,9 @@ fn insert_app_data() -> Result<()> {
         })
         .filter(|name| name == "initproc" || name == "shell" || name == "user_spin")
         .collect();
+
     apps.sort();
+    apps.push("busybox".to_string());
 
     writeln!(
         f,
