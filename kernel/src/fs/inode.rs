@@ -11,6 +11,7 @@ use hashbrown::HashMap;
 use lazy_static::*;
 use log::{debug, info};
 
+use crate::sync::mutex::SleepLock;
 use crate::utils::error::SyscallErr;
 use crate::{
     driver::block::BlockDevice,
@@ -91,6 +92,7 @@ pub trait Inode: Send + Sync {
                 pos: 0,
                 dirent_index: 0,
             }),
+            prw_lock: SleepLock::new(()),
         };
         let file = DefaultFile::new(file_meta);
         Ok(Arc::new(file))
@@ -304,7 +306,7 @@ impl dyn Inode {
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         for (i, name) in path_names.clone().into_iter().enumerate() {
-            debug!("[lookup_from_root_tmp] round: {}, name: {}", i, name);
+            debug!("[lookup_from_root] round: {}, name: {}", i, name);
             match parent.lookup(parent.clone(), name)? {
                 Some(p) => {
                     debug!("[lookup_from_root] inode name: {}", p.metadata().name);

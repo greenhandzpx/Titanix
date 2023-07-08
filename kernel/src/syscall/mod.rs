@@ -31,6 +31,8 @@ const SYSCALL_READ: usize = 63;
 const SYSCALL_WRITE: usize = 64;
 const SYSCALL_READV: usize = 65;
 const SYSCALL_WRITEV: usize = 66;
+const SYSCALL_PREAD64: usize = 67;
+const SYSCALL_PWRITE64: usize = 68;
 const SYSCALL_SENDFILE: usize = 71;
 const SYSCALL_PSELECT6: usize = 72;
 const SYSCALL_PPOLL: usize = 73;
@@ -205,6 +207,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_WRITE => sys_handler!(sys_write, (args[0], args[1], args[2]), await),
         SYSCALL_READV => sys_handler!(sys_readv, (args[0], args[1], args[2]), await),
         SYSCALL_WRITEV => sys_handler!(sys_writev, (args[0], args[1], args[2]), await),
+        SYSCALL_PREAD64 => sys_handler!(sys_pread64, (args[0], args[1], args[2], args[3]), await),
+        SYSCALL_PWRITE64 => sys_handler!(sys_pwrite64, (args[0], args[1], args[2], args[3]), await),
         SYSCALL_SENDFILE => sys_handler!(
             sys_sendfile, (
                 args[0] as isize,

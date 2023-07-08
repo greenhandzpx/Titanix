@@ -21,8 +21,8 @@ use crate::fs::file_system::FsDevice;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
-    ffi::Iovec, ffi::UtsName, inode, FaccessatFlags, FcntlFlags, FileSystem, FileSystemType, Inode,
-    InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
+    ffi::Iovec, ffi::UtsName, inode, FaccessatFlags, FcntlFlags, FileSystemType, Inode, InodeMode,
+    Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::fs::{open_file_inode, resolve_path_with_dirfd, HashKey};
@@ -32,7 +32,6 @@ use crate::signal::SigSet;
 use crate::stack_trace;
 use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
-use crate::timer::posix::TimeVal;
 use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{posix::current_time_spec, UTIME_NOW};
 use crate::timer::{posix::TimeSpec, UTIME_OMIT};
@@ -526,7 +525,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     }
 
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
-    // debug!("check readable slice sva {:#x} {:#x}", buf as *const u8 as usize, buf as *const u8 as usize + len);
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
     file.write(buf).await
@@ -637,7 +635,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
-    stack_trace!();
     file.read(buf).await
     // if buf.len() < 2 {
     //     file.sync_read(buf)
@@ -1365,4 +1362,43 @@ pub async fn sys_sync() -> SyscallRet {
     // root_fs.sync_fs().await?;
     info!("[sys_sync] sync finished");
     Ok(0)
+}
+
+pub async fn sys_pread64(fd: usize, buf_ptr: usize, len: usize, offset: usize) -> SyscallRet {
+    stack_trace!();
+    debug!("[sys_pread]: fd {}, len {}", fd, len);
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+
+    if len == 0 {
+        return Ok(0);
+    }
+
+    UserCheck::new().check_writable_slice(buf_ptr as *mut u8, len)?;
+
+    let _sum_guard = SumGuard::new();
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, len) };
+
+    file.pread(buf, offset).await
+}
+
+pub async fn sys_pwrite64(fd: usize, buf_ptr: usize, len: usize, offset: usize) -> SyscallRet {
+    stack_trace!();
+    info!("[sys_write]: fd {}, len {}", fd, len);
+    let file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+
+    if !file.writable() {
+        return Err(SyscallErr::EPERM);
+    }
+    if len == 0 {
+        return Ok(0);
+    }
+
+    UserCheck::new().check_readable_slice(buf_ptr as *const u8, len)?;
+    let buf = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, len) };
+    // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
+    file.pwrite(buf, offset).await
 }
