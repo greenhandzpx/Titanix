@@ -315,8 +315,8 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
                 stack_trace!();
                 let temp = num_bytes + dirent.d_reclen as usize;
                 if temp > count {
-                    debug!("[getdents] user buf size too small");
-                    index = i + 1;
+                    debug!("[getdents] user buf size: {}, too small", count);
+                    index = i;
                     break;
                 }
                 num_bytes = temp;
@@ -328,6 +328,11 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             }
             file.metadata().inner.lock().dirent_index += index;
 
+            debug!(
+                "[sys_getdents] return: {}, dirent_index: {}",
+                num_bytes,
+                file.metadata().inner.lock().dirent_index
+            );
             Ok(num_bytes as isize)
         }
         None => Err(SyscallErr::ENOTDIR),

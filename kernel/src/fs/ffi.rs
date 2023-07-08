@@ -137,13 +137,6 @@ impl Dirent {
             if i < start_index {
                 continue;
             }
-            debug!(
-                "[dirent] i is: {}, d_name is: {}, d_ino is: {}, d_type: {:?}",
-                i,
-                value.metadata().name.clone(),
-                value.metadata().ino,
-                value.metadata().mode
-            );
             let mut dirent = Dirent {
                 d_ino: value.metadata().ino,
                 d_off: 0,
@@ -153,6 +146,14 @@ impl Dirent {
             };
             dirent.d_reclen =
                 (DIRENT_SIZE as usize - (MAX_NAME_LEN - array_str_len(&dirent.d_name))) as u16;
+            debug!(
+                "[dirent] i is: {}, d_name is: {}, d_ino is: {}, d_type: {:?}, d_reclen: {}",
+                i,
+                value.metadata().name.clone(),
+                value.metadata().ino,
+                value.metadata().mode,
+                dirent.d_reclen
+            );
             dirents.push(dirent);
         }
         dirents

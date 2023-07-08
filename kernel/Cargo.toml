@@ -26,7 +26,7 @@ fu740-hal = { path = "../dependencies/fu740-hal" }
 # default = ["stack_trace", "board_qemu", "kernel_interrupt"]
 # default = ["stack_trace", "board_qemu", "user_spin"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
-default = ["stack_trace", "board_qemu", "kernel_interrupt", ]
+default = ["stack_trace", "board_qemu", "kernel_interrupt"]
 board_qemu = []
 stack_trace = []
 kernel_interrupt = []

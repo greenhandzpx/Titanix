@@ -223,7 +223,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
     envs_vec.push("PATH=/:".to_string());
 
-    if path == "/shell" || path == "/busybox" {
+    if path.ends_with("shell") || path.ends_with("busybox") {
         if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
             current_process().exec(elf_data, args_vec, envs_vec)
         } else {
