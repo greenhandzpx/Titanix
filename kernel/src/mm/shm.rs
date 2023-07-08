@@ -7,7 +7,10 @@ use lazy_static::*;
 
 use crate::{
     config::mm::{PAGE_SIZE, PAGE_SIZE_BITS},
-    mm::{frame_alloc, page_table::PTEFlags, MapPermission, PageBuilder},
+    mm::{
+        frame_alloc, memory_space::vm_area::VmAreaType, page_table::PTEFlags, MapPermission,
+        PageBuilder,
+    },
     processor::current_process,
     stack_trace,
     sync::mutex::SpinNoIrqLock,
@@ -82,11 +85,16 @@ impl SharedMemory {
             let mut vma = match addr {
                 Some(addr) => proc
                     .memory_space
-                    .allocate_spec_area(self.page_cnt << PAGE_SIZE_BITS, permission, addr)?
+                    .allocate_spec_area(
+                        self.page_cnt << PAGE_SIZE_BITS,
+                        permission,
+                        addr,
+                        VmAreaType::Shm,
+                    )?
                     .ok_or(SyscallErr::ENOMEM)?,
                 None => proc
                     .memory_space
-                    .allocate_area(self.page_cnt << PAGE_SIZE_BITS, permission)
+                    .allocate_area(self.page_cnt << PAGE_SIZE_BITS, permission, VmAreaType::Shm)
                     .ok_or(SyscallErr::ENOMEM)?,
             };
             debug_assert!(vma.end_vpn().0 - vma.start_vpn().0 == self.page_cnt);

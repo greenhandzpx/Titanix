@@ -20,7 +20,7 @@ use crate::{
     },
 };
 
-use self::cow::CowPageManager;
+use self::{cow::CowPageManager, vm_area::VmAreaType};
 pub use self::{
     page_fault_handler::{CowPageFaultHandler, PageFaultHandler, UStackPageFaultHandler},
     vm_area::VmArea,
@@ -282,6 +282,7 @@ impl MemorySpace {
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
+        vma_type: VmAreaType,
     ) {
         self.push(
             VmArea::new(
@@ -292,6 +293,7 @@ impl MemorySpace {
                 None,
                 None,
                 self.page_table.clone(),
+                vma_type,
             ),
             0,
             None,
@@ -305,6 +307,7 @@ impl MemorySpace {
         end_va: VirtAddr,
         permission: MapPermission,
         handler: Option<Arc<dyn PageFaultHandler>>,
+        vma_type: VmAreaType,
     ) {
         self.push_lazily(
             VmArea::new(
@@ -315,6 +318,7 @@ impl MemorySpace {
                 handler,
                 None,
                 self.page_table.clone(),
+                vma_type,
             ),
             None,
         );
@@ -389,6 +393,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -402,6 +407,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -416,6 +422,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -430,6 +437,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -445,6 +453,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -459,6 +468,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -473,6 +483,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Elf,
             ),
             0,
             None,
@@ -488,6 +499,7 @@ impl MemorySpace {
                 None,
                 None,
                 memory_space.page_table.clone(),
+                VmAreaType::Physical,
             ),
             0,
             None,
@@ -505,6 +517,7 @@ impl MemorySpace {
                     None,
                     None,
                     memory_space.page_table.clone(),
+                    VmAreaType::MMIO,
                 ),
                 0,
                 None,
@@ -551,6 +564,7 @@ impl MemorySpace {
                     None,
                     None,
                     self.page_table.clone(),
+                    VmAreaType::Elf,
                 );
                 max_end_vpn = vm_area.vpn_range.end();
 
@@ -696,6 +710,7 @@ impl MemorySpace {
             Some(Arc::new(SBrkPageFaultHandler {})),
             None,
             memory_space.page_table.clone(),
+            VmAreaType::Brk,
         );
         memory_space.push(heap_vma, 0, None);
         memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
@@ -789,7 +804,7 @@ impl MemorySpace {
             // copy data from another space
             for vpn in area.vpn_range {
                 // SAFETY: we've locked the process inner before calling this function
-                if let Some(ph_frame) = area.data_frames.get_unchecked_mut().0.remove(&vpn) {
+                if let Some(ph_frame) = area.data_frames.get_unchecked_mut().0.get(&vpn) {
                     // If there is related physcial frame, then we let the child and father share it.
                     let pte = user_space
                         .page_table
@@ -803,29 +818,46 @@ impl MemorySpace {
                         pte.flags()
                     );
 
-                    // if pte.flags().contains(PTEFlags::W) {
-                    let mut new_flags = pte.flags() | PTEFlags::COW;
-                    new_flags.remove(PTEFlags::W);
-                    pte.set_flags(new_flags);
-                    assert!(pte.flags().contains(PTEFlags::COW));
-                    assert!(!pte.flags().contains(PTEFlags::W));
+                    let (pte_flags, ppn) = match area.vma_type {
+                        VmAreaType::Shm => {
+                            // If shared memory,
+                            // then we don't need to modify the pte flags,
+                            // i.e. no copy-on-write.
+                            info!("[from_existed_user_lazily] vma type {:?}", area.vma_type);
+                            new_area
+                                .data_frames
+                                .get_unchecked_mut()
+                                .0
+                                .insert(vpn, ph_frame.clone());
+                            (pte.flags(), ph_frame.data_frame.ppn)
+                        }
+                        _ => {
+                            // Else,
+                            // copy-on-write
+                            let mut new_flags = pte.flags() | PTEFlags::COW;
+                            new_flags.remove(PTEFlags::W);
+                            pte.set_flags(new_flags);
+                            debug_assert!(pte.flags().contains(PTEFlags::COW));
+                            debug_assert!(!pte.flags().contains(PTEFlags::W));
+                            user_space
+                                .cow_pages
+                                .page_mgr
+                                .get_unchecked_mut()
+                                .0
+                                .insert(vpn, ph_frame.clone());
+                            memory_space
+                                .cow_pages
+                                .page_mgr
+                                .get_unchecked_mut()
+                                .0
+                                .insert(vpn, ph_frame.clone());
+                            let ppn = ph_frame.data_frame.ppn;
+                            area.data_frames.get_unchecked_mut().0.remove(&vpn);
+                            (new_flags, ppn)
+                        }
+                    };
 
-                    user_space
-                        .cow_pages
-                        .page_mgr
-                        .get_unchecked_mut()
-                        .0
-                        .insert(vpn, ph_frame.clone());
-
-                    new_pagetable.map(vpn, ph_frame.data_frame.ppn, new_flags);
-                    memory_space
-                        .cow_pages
-                        .page_mgr
-                        .get_unchecked_mut()
-                        .0
-                        .insert(vpn, ph_frame);
-                    // }
-                    // let _dst_ppn = new_area.map_one_lazily(new_pagetable, vpn, ph_frame);
+                    new_pagetable.map(vpn, ppn, pte_flags);
                 } else {
                     trace!("no ppn for vpn {:#x}", vpn.0);
                 }
@@ -859,6 +891,7 @@ impl MemorySpace {
         length: usize,
         map_permission: MapPermission,
         start_va: VirtAddr,
+        vma_type: VmAreaType,
     ) -> GeneralRet<Option<VmArea>> {
         if length == 0 {
             return Ok(None);
@@ -888,12 +921,18 @@ impl MemorySpace {
             None,
             None,
             self.page_table.clone(),
+            vma_type,
         )))
     }
 
     /// Allocate an unused area(mostly for mmap).
     /// Note that length is counted by byte.
-    pub fn allocate_area(&self, length: usize, map_permission: MapPermission) -> Option<VmArea> {
+    pub fn allocate_area(
+        &self,
+        length: usize,
+        map_permission: MapPermission,
+        vma_type: VmAreaType,
+    ) -> Option<VmArea> {
         if length == 0 {
             return None;
         }
@@ -914,6 +953,7 @@ impl MemorySpace {
                     None,
                     None,
                     self.page_table.clone(),
+                    vma_type,
                 ));
             }
             last_start = vma.1.start_vpn().0 * PAGE_SIZE;

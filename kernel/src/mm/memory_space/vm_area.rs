@@ -44,6 +44,25 @@ pub struct BackupFile {
     pub file: Arc<dyn File>,
 }
 
+/// Vm area type
+#[derive(Debug, Clone, Copy)]
+pub enum VmAreaType {
+    /// Segments from elf file, e.g. text, rodata, data, bss
+    Elf,
+    /// Stack
+    Stack,
+    /// Brk
+    Brk,
+    /// Mmap
+    Mmap,
+    /// Shared memory
+    Shm,
+    /// Physical frames(for kernel)
+    Physical,
+    /// MMIO(for kernel)
+    MMIO,
+}
+
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct VmArea {
     /// Vpn range
@@ -64,6 +83,8 @@ pub struct VmArea {
     /// Page table.
     /// Note that this member must be visited with process lock holding
     pub page_table: Arc<SyncUnsafeCell<PageTable>>,
+    /// Vm area type
+    pub vma_type: VmAreaType,
 }
 
 impl Drop for VmArea {
@@ -82,6 +103,7 @@ impl VmArea {
         handler: Option<Arc<dyn PageFaultHandler>>,
         backup_file: Option<BackupFile>,
         page_table: Arc<SyncUnsafeCell<PageTable>>,
+        vma_type: VmAreaType,
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
@@ -98,6 +120,7 @@ impl VmArea {
             handler,
             backup_file,
             page_table,
+            vma_type,
         }
     }
     /// Construct a vma from another vma.
@@ -115,6 +138,7 @@ impl VmArea {
             },
             backup_file: another.backup_file.clone(),
             page_table,
+            vma_type: another.vma_type,
         }
     }
 

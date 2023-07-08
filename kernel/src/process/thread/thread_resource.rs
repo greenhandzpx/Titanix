@@ -3,7 +3,11 @@ use log::{debug, info, warn};
 
 use crate::{
     config::{mm::PAGE_SIZE, mm::USER_STACK_SIZE},
-    mm::{memory_space::UStackPageFaultHandler, user_check::UserCheck, MapPermission, VirtAddr},
+    mm::{
+        memory_space::{vm_area::VmAreaType, UStackPageFaultHandler},
+        user_check::UserCheck,
+        MapPermission, VirtAddr,
+    },
     processor::SumGuard,
     syscall::futex_wake,
 };
@@ -53,6 +57,7 @@ impl Thread {
                 (ustack_bottom + USER_STACK_SIZE).into(),
                 MapPermission::R | MapPermission::W | MapPermission::U,
                 Some(Arc::new(UStackPageFaultHandler {})),
+                VmAreaType::Stack,
             );
             proc.memory_space.activate();
         });

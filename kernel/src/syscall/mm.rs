@@ -5,7 +5,7 @@ use crate::{
     mm::{
         memory_space::{
             page_fault_handler::{MmapPageFaultHandler, SBrkPageFaultHandler},
-            vm_area::BackupFile,
+            vm_area::{BackupFile, VmAreaType},
             PageFaultHandler,
         },
         MapPermission, VPNRange, VirtAddr, SHARED_MEMORY_MANAGER,
@@ -43,11 +43,11 @@ pub fn sys_mmap(
             let mut vma = {
                 if flags.contains(MmapFlags::MAP_FIXED) {
                     proc.memory_space
-                        .allocate_spec_area(length, map_permission, addr.into())?
+                        .allocate_spec_area(length, map_permission, addr.into(), VmAreaType::Mmap)?
                         .ok_or(SyscallErr::ENOMEM)?
                 } else {
                     proc.memory_space
-                        .allocate_area(length, map_permission)
+                        .allocate_area(length, map_permission, VmAreaType::Mmap)
                         .ok_or(SyscallErr::ENOMEM)?
                 }
             };
@@ -78,11 +78,11 @@ pub fn sys_mmap(
             let mut vma = {
                 if flags.contains(MmapFlags::MAP_FIXED) {
                     proc.memory_space
-                        .allocate_spec_area(length, map_permission, addr.into())?
+                        .allocate_spec_area(length, map_permission, addr.into(), VmAreaType::Mmap)?
                         .ok_or(SyscallErr::ENOMEM)?
                 } else {
                     proc.memory_space
-                        .allocate_area(length, map_permission)
+                        .allocate_area(length, map_permission, VmAreaType::Mmap)
                         .ok_or(SyscallErr::ENOMEM)?
                 }
             };
