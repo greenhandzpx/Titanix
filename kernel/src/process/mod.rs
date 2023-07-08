@@ -5,7 +5,7 @@
 ///
 pub mod thread;
 
-use log::debug;
+use log::{debug, info};
 pub use thread::yield_now;
 
 /// Aux header
@@ -24,6 +24,7 @@ use crate::{
     mm::{user_check::UserCheck, MemorySpace, RecycleAllocator},
     process::{
         aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
+        pid::tid_alloc,
         thread::terminate_all_threads_except_main,
     },
     processor::{current_process, current_task, hart::local_hart, SumGuard},
@@ -44,7 +45,6 @@ use alloc::{
 use thread::Thread;
 
 pub use manager::PROCESS_MANAGER;
-pub use pid::{pid_alloc, PidHandle};
 
 ///Add init process to the manager
 pub fn add_initproc() {
@@ -62,7 +62,7 @@ pub fn add_initproc() {
     }
 }
 
-use self::{resource::RLimit, thread::TidHandle};
+use self::{pid::TidHandle, resource::RLimit};
 
 /// Process control block inner
 pub struct ProcessInner {
@@ -76,8 +76,6 @@ pub struct ProcessInner {
     pub children: Vec<Arc<Process>>,
     /// File descriptor table
     pub fd_table: FdTable,
-    /// Allocate tid
-    pub tid_allocator: RecycleAllocator,
     /// TODO: use BTreeMap to query and delete more quickly
     pub threads: Vec<Weak<Thread>>,
     /// Signal handlers for every signal
@@ -107,8 +105,8 @@ impl ProcessInner {
 }
 /// Process control block
 pub struct Process {
-    /// immutable
-    pid: PidHandle,
+    /// pid, i.e. the leader thread's tid
+    pid: Arc<TidHandle>,
     /// mailbox,
     pub mailbox: Arc<Mailbox>,
     /// mutable
@@ -116,16 +114,6 @@ pub struct Process {
 }
 
 impl Process {
-    ///
-    pub fn alloc_tid(&self) -> TidHandle {
-        TidHandle(self.inner.lock().tid_allocator.alloc())
-    }
-
-    ///
-    pub fn dealloc_tid(&self, tid: usize) {
-        self.inner.lock().tid_allocator.dealloc(tid);
-    }
-
     /// Main thread's trap context
     pub fn trap_context_main(&self) -> &mut TrapContext {
         let inner = self.inner.lock();
@@ -208,9 +196,9 @@ impl Process {
         // let debug_pa = memory_space.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
         // println!("entry pa {:#x}", debug_pa);
         // Alloc a pid
-        let pid_handle = pid_alloc();
+        let pid = Arc::new(tid_alloc());
         let process = Arc::new(Self {
-            pid: pid_handle,
+            pid: pid.clone(),
             mailbox: Arc::new(Mailbox::new()),
             inner: SpinNoIrqLock::new(ProcessInner {
                 is_zombie: false,
@@ -218,7 +206,6 @@ impl Process {
                 parent: None,
                 children: Vec::new(),
                 fd_table: FdTable::new(),
-                tid_allocator: RecycleAllocator::new(0),
                 threads: Vec::new(),
                 sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                 pending_sigs: SigQueue::new(),
@@ -238,6 +225,7 @@ impl Process {
             trap_context,
             user_sp_base,
             false,
+            Some(pid),
         ));
         // thread.alloc_ustack();
 
@@ -470,7 +458,13 @@ impl Process {
         trap_context.user_x[10] = arg as usize;
 
         let ustack_base = self.inner_handler(|proc| proc.ustack_base);
-        let new_thread = Arc::new(Thread::new(self.clone(), trap_context, ustack_base, true));
+        let new_thread = Arc::new(Thread::new(
+            self.clone(),
+            trap_context,
+            ustack_base,
+            true,
+            None,
+        ));
         // attach the new thread to process
         current_process()
             .inner
@@ -479,6 +473,8 @@ impl Process {
             .push(Arc::downgrade(&new_thread));
         let tid = new_thread.tid();
         thread::spawn_thread(new_thread);
+
+        info!("[Process::clone_thread] clone a new thread, tid {}", tid);
         Ok(tid as isize)
     }
 
@@ -486,7 +482,7 @@ impl Process {
         stack_trace!();
         let child = self.inner_handler(move |parent_inner| {
             assert_eq!(parent_inner.thread_count(), 1);
-            let pid = pid_alloc();
+            let pid = Arc::new(tid_alloc());
             debug!(
                 "fork: child's pid {}, parent's pid {} before",
                 pid.0, self.pid.0
@@ -510,7 +506,6 @@ impl Process {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     fd_table: FdTable::from_another(&parent_inner.fd_table),
-                    tid_allocator: RecycleAllocator::new(0),
                     threads: Vec::new(),
                     sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                     pending_sigs: SigQueue::new(),
@@ -531,10 +526,10 @@ impl Process {
         // create main thread of child process
         // note that we copy the parent's current thread's trap context
         // to child's main thread
-        let main_thread = Arc::new(current_task().from_current(child.clone(), stack));
+        let main_thread =
+            Arc::new(current_task().from_current(child.clone(), stack, Some(child.pid.clone())));
         // attach task to child process
-        let child_clone = child.clone();
-        child_clone
+        child
             .inner
             .lock()
             .threads

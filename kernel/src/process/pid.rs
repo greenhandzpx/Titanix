@@ -1,4 +1,4 @@
-//!Implementation of [`PidAllocator`]
+//!Implementation of [`TidAllocator`]
 use crate::config::process::INITPROC_PID;
 use crate::mm::RecycleAllocator;
 use crate::sync::mutex::SpinNoIrqLock;
@@ -9,10 +9,10 @@ lazy_static! {
     pub static ref PID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
         SpinNoIrqLock::new(RecycleAllocator::new(INITPROC_PID));
 }
-///Bind pid lifetime to `PidHandle`
-pub struct PidHandle(pub usize);
+///Bind pid lifetime to `TidHandle`
+pub struct TidHandle(pub usize);
 
-impl Drop for PidHandle {
+impl Drop for TidHandle {
     fn drop(&mut self) {
         debug!("drop pid {}", self.0);
         // println!("\u{1B}[33m drop pid {} \u{1B}[0m", self.0);
@@ -20,6 +20,6 @@ impl Drop for PidHandle {
     }
 }
 ///Allocate a pid from PID_ALLOCATOR
-pub fn pid_alloc() -> PidHandle {
-    PidHandle(PID_ALLOCATOR.lock().alloc())
+pub fn tid_alloc() -> TidHandle {
+    TidHandle(PID_ALLOCATOR.lock().alloc())
 }

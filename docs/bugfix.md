@@ -5,3 +5,4 @@
 - 需要写sepc或者stvec寄存器时一定要关中断！！！
 - 不要随意刷表，只能刷本进程的页表
 - 进程一开始从用户态回到内核态时，需要给用户态的trap context中的sstatus的sie字段置零，因为在`__return_to_user`函数中会给sstatus赋值，即便前面事先调用了`close_interrupt`函数也不能保证内核态中断不发生，因此我们需要手动给sstatus清除sie
+- 适配iozone的时候发现所有进程都spin在pselect函数，原因是共享内存在fork的时候默认被设为了copy-on-write，导致无法真正共享，修复后即可正常运行。

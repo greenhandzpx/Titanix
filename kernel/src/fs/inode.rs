@@ -307,7 +307,7 @@ impl dyn Inode {
             debug!("[lookup_from_root_tmp] round: {}, name: {}", i, name);
             match parent.lookup(parent.clone(), name)? {
                 Some(p) => {
-                    debug!("[lookup_from_root_tmp] inode name: {}", p.metadata().name);
+                    debug!("[lookup_from_root] inode name: {}", p.metadata().name);
                     parent = p
                 }
                 None => {

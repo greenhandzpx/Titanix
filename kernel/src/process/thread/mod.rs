@@ -7,12 +7,17 @@ mod thread_state;
 mod tid;
 mod time;
 
+pub use thread_resource::TidAddress;
+
 use self::{
     thread_state::{ThreadState, ThreadStateAtomic},
     time::ThreadTimeInfo,
 };
 
-use super::Process;
+use super::{
+    pid::{tid_alloc, TidHandle},
+    Process,
+};
 use crate::signal::SignalContext;
 use crate::trap::TrapContext;
 use crate::{executor, stack_trace};
@@ -25,7 +30,6 @@ pub use exit::{
 };
 
 use thread_loop::threadloop;
-pub use tid::{TidAddress, TidHandle};
 
 // pub use task::TaskControlBlock;
 // pub use task::TaskStatus;
@@ -33,7 +37,7 @@ pub use tid::{TidAddress, TidHandle};
 /// Thread control block
 pub struct Thread {
     /// immutable
-    pub tid: TidHandle,
+    pub tid: Arc<TidHandle>,
     /// the process this thread belongs to
     pub process: Arc<Process>,
     /// mutable
@@ -78,9 +82,13 @@ impl Thread {
         trap_context: TrapContext,
         ustack_base: usize,
         user_specified_stack: bool,
+        tid: Option<Arc<TidHandle>>,
     ) -> Self {
         let res = Self {
-            tid: process.alloc_tid(),
+            tid: match tid {
+                Some(tid) => tid,
+                None => Arc::new(tid_alloc()),
+            },
             process: process.clone(),
             // user_specified_stack,
             inner: UnsafeCell::new(ThreadInner {
@@ -106,10 +114,18 @@ impl Thread {
     }
 
     /// Construct a new thread from the current thread
-    pub fn from_current(&self, new_process: Arc<Process>, stack: Option<usize>) -> Self {
+    pub fn from_current(
+        &self,
+        new_process: Arc<Process>,
+        stack: Option<usize>,
+        tid: Option<Arc<TidHandle>>,
+    ) -> Self {
         stack_trace!();
         Self {
-            tid: new_process.alloc_tid(),
+            tid: match tid {
+                Some(tid) => tid,
+                None => Arc::new(tid_alloc()),
+            },
             process: new_process.clone(),
             inner: UnsafeCell::new(ThreadInner {
                 trap_context: {
