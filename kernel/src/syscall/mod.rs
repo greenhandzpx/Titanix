@@ -302,6 +302,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETPPID => sys_handler!(sys_getppid, ()),
         SYSCALL_GETUID => sys_handler!(sys_getuid, ()),
         SYSCALL_GETEUID => sys_handler!(sys_geteuid, ()),
+        SYSCALL_GETEGID => sys_handler!(sys_getegid, ()),
         SYSCALL_GETTID => sys_handler!(sys_gettid, ()),
         SYSCALL_SYSINFO => sys_handler!(sys_sysinfo, (args[0])),
         SYSCALL_SHMGET => sys_handler!(sys_shmget, (args[0], args[1], args[2] as u32)),

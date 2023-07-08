@@ -184,6 +184,7 @@ pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>>
     let _sum_guard = SumGuard::new();
     let path = match path as usize {
         0 => {
+            debug!("[path_process] path is null");
             if dirfd != AT_FDCWD {
                 debug!("[path_process] dirfd is a normal fd");
                 let absolute_path = path_with_dirfd(dirfd, ".".to_string());
@@ -201,6 +202,7 @@ pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>>
             }
         }
         _ => {
+            debug!("[path_process] path is not null");
             UserCheck::new().check_c_str(path)?;
             c_str_to_string(path)
         }

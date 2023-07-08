@@ -370,7 +370,7 @@ impl dyn Inode {
         if let Some(page_cache) = page_cache {
             page_cache.sync().await?;
         } else {
-            log::debug!("[sync_reg_file] {} no page cache yet", this.metadata().path);
+            log::trace!("[sync_reg_file] {} no page cache yet", this.metadata().path);
         }
         Ok(())
     }

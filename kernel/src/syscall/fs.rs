@@ -21,8 +21,8 @@ use crate::fs::file_system::FsDevice;
 use crate::fs::inode::INODE_CACHE;
 use crate::fs::pipe::make_pipe;
 use crate::fs::{
-    ffi::Iovec, ffi::UtsName, inode, FaccessatFlags, FcntlFlags, FileSystem, FileSystemType, Inode,
-    InodeMode, Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
+    ffi::Iovec, ffi::UtsName, inode, FaccessatFlags, FcntlFlags, FileSystemType, Inode, InodeMode,
+    Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::fs::{open_file_inode, resolve_path_with_dirfd, HashKey};
@@ -316,8 +316,8 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
                 stack_trace!();
                 let temp = num_bytes + dirent.d_reclen as usize;
                 if temp > count {
-                    debug!("[getdents] user buf size too small");
-                    index = i + 1;
+                    debug!("[getdents] user buf size: {}, too small", count);
+                    index = i;
                     break;
                 }
                 num_bytes = temp;
@@ -329,6 +329,11 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             }
             file.metadata().inner.lock().dirent_index += index;
 
+            debug!(
+                "[sys_getdents] return: {}, dirent_index: {}",
+                num_bytes,
+                file.metadata().inner.lock().dirent_index
+            );
             Ok(num_bytes as isize)
         }
         None => Err(SyscallErr::ENOTDIR),

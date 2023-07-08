@@ -4,7 +4,7 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
-use log::{debug, warn};
+use log::trace;
 
 use crate::processor::{self, context::UserTaskContext};
 // use crate::process::context::TaskContext;
@@ -101,7 +101,7 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        debug!("switch to kernel task");
+        trace!("switch to kernel task");
         let this = unsafe { self.get_unchecked_mut() };
 
         let hart = processor::local_hart();
