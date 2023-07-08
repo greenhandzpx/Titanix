@@ -26,7 +26,6 @@ impl Inode for MountsInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(MountsFile {
             meta: FileMeta {
-                path: "/proc/mounts".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

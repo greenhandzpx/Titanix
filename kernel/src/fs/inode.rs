@@ -14,6 +14,7 @@ use log::{debug, info};
 use crate::utils::error::SyscallErr;
 use crate::{
     driver::block::BlockDevice,
+    fs::HashKey,
     fs::PageCache,
     timer::posix::TimeSpec,
     utils::{
@@ -22,16 +23,11 @@ use crate::{
     },
 };
 
+use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
-    file_system::FILE_SYSTEM_MANAGER,
-    hash_key::HashKey,
-    // dentry::{self, Dentry},
-    // inode::OpenFlags,
     pipe::Pipe,
-    File,
-    Mutex,
-    OpenFlags,
+    File, Mutex, OpenFlags,
 };
 
 lazy_static! {
@@ -89,7 +85,6 @@ pub trait Inode: Send + Sync {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         debug!("[inode] open");
         let file_meta = FileMeta {
-            path: self.metadata().path.clone(),
             inner: Mutex::new(FileMetaInner {
                 flags,
                 inode: Some(this),
@@ -106,7 +101,7 @@ pub trait Inode: Send + Sync {
     fn mkdir(
         &self,
         _this: Arc<dyn Inode>,
-        _pathname: &str,
+        _name: &str,
         _mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
@@ -119,7 +114,7 @@ pub trait Inode: Send + Sync {
     fn mknod(
         &self,
         _this: Arc<dyn Inode>,
-        _pathname: &str,
+        _name: &str,
         _mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
@@ -139,11 +134,15 @@ pub trait Inode: Send + Sync {
 
     fn set_metadata(&mut self, meta: InodeMeta);
 
-    fn lookup(&self, this: Arc<dyn Inode>, name: &str) -> Option<Arc<dyn Inode>> {
+    fn lookup(&self, this: Arc<dyn Inode>, name: &str) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        if this.metadata().mode != InodeMode::FileDIR {
+            return Err(SyscallErr::ENOTDIR);
+        }
+        debug!("[lookup] child name: {}", name);
         let key = HashKey::new(self.metadata().ino, name.to_string());
         let value = INODE_CACHE.lock().get(&key).cloned();
         match value {
-            Some(value) => Some(value.clone()),
+            Some(value) => Ok(Some(value.clone())),
             None => {
                 debug!(
                     "[lookup] cannot find child dentry, name: {}, try to find in inode",
@@ -151,11 +150,38 @@ pub trait Inode: Send + Sync {
                 );
                 let target_inode = self.try_find_and_insert_inode(this, name);
                 match target_inode {
-                    Some(target_inode) => Some(target_inode.clone()),
-                    None => None,
+                    Some(target_inode) => Ok(Some(target_inode.clone())),
+                    None => Ok(None),
                 }
             }
         }
+    }
+    fn lookup_from_this(
+        &self,
+        this: Arc<dyn Inode>,
+        path: &str,
+    ) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        let path_names = path::path2vec(path);
+        // path_names.remove(0);
+
+        let mut parent = this;
+
+        for (i, name) in path_names.clone().into_iter().enumerate() {
+            debug!("[lookup_from_inode] round: {}, name: {}", i, name);
+            match parent.lookup(parent.clone(), name)? {
+                Some(p) => {
+                    debug!("[lookup_from_this] inode name: {}", p.metadata().name);
+                    parent = p;
+                }
+                None => {
+                    if i == path_names.len() - 1 {
+                        return Ok(None);
+                    }
+                    return Err(SyscallErr::ENOENT);
+                }
+            }
+        }
+        Ok(Some(parent))
     }
     fn try_find_and_insert_inode(
         &self,
@@ -167,6 +193,11 @@ pub trait Inode: Send + Sync {
         if target_inode.is_some() {
             debug!("[try_find_and_insert_inode] find in children");
             return target_inode;
+        }
+        if this.metadata().name.eq("tmp") {
+            // tmp in memory, don't load children
+            debug!("[try_find_and_insert_inode] parent is tmp, not need to load children");
+            return None;
         }
         <dyn Inode>::load_children(this.clone());
         debug!(
@@ -262,26 +293,32 @@ impl dyn Inode {
         }
         debug!("[load_children] leave");
     }
+
     /// Look up from root(e.g. "/home/oscomp/workspace")
     pub fn lookup_from_root(
         // file_system: Arc<dyn FileSystem>,
         path: &str,
-    ) -> Option<Arc<dyn Inode>> {
+    ) -> GeneralRet<Option<Arc<dyn Inode>>> {
         let path_names = path::path2vec(path);
-        // path_names.remove(0);
+
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
-        for (i, name) in path_names.into_iter().enumerate() {
-            debug!("[lookup_from_root] round: {}, name: {}", i, name);
-            match parent.lookup(parent.clone(), name) {
+        for (i, name) in path_names.clone().into_iter().enumerate() {
+            debug!("[lookup_from_root_tmp] round: {}, name: {}", i, name);
+            match parent.lookup(parent.clone(), name)? {
                 Some(p) => {
                     debug!("[lookup_from_root] inode name: {}", p.metadata().name);
                     parent = p
                 }
-                None => return None,
+                None => {
+                    if i == path_names.len() - 1 {
+                        return Ok(None);
+                    }
+                    return Err(SyscallErr::ENOENT);
+                }
             }
         }
-        Some(parent)
+        Ok(Some(parent))
     }
 
     pub fn create_page_cache_if_needed(this: Arc<dyn Inode>) {
@@ -299,7 +336,7 @@ impl dyn Inode {
         Box::pin(async move {
             match this.metadata().mode {
                 InodeMode::FileDIR => {
-                    log::debug!("[Inode::sync] sync dir..., name {}", this.metadata().name);
+                    log::trace!("[Inode::sync] sync dir..., name {}", this.metadata().name);
                     this.sync_metedata();
                     let mut children_set: Vec<Arc<dyn Inode>> = Vec::new();
                     for (_, child) in this.metadata().inner.lock().children.iter() {
@@ -309,17 +346,17 @@ impl dyn Inode {
                     for child in children_set {
                         <dyn Inode>::sync(child).await?;
                     }
-                    log::debug!(
+                    log::trace!(
                         "[Inode::sync] sync dir finished, name {}",
                         this.metadata().name
                     );
                 }
                 InodeMode::FileREG => {
                     let name = this.metadata().name.clone();
-                    log::debug!("[Inode::sync] sync reg file..., name {}", name);
+                    log::trace!("[Inode::sync] sync reg file..., name {}", name);
                     this.sync_metedata();
                     <dyn Inode>::sync_reg_file(this).await?;
-                    log::debug!("[Inode::sync] sync reg file finished, name {}", name);
+                    log::trace!("[Inode::sync] sync reg file finished, name {}", name);
                 }
                 _ => {}
             }
@@ -349,10 +386,10 @@ pub struct InodeMeta {
     pub rdev: Option<usize>,
     /// inode's device
     pub device: Option<InodeDevice>,
-    /// path to this inode
-    pub path: String,
     /// name which doesn't have slash
     pub name: String,
+    /// path
+    pub path: String,
     pub inner: Mutex<InodeMetaInner>,
 }
 

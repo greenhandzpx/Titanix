@@ -1,4 +1,7 @@
-use alloc::{string::ToString, sync::Arc};
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+};
 
 use crate::{
     fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
@@ -70,7 +73,6 @@ impl TtyFile {
         Self {
             buf: AtomicU8::new(255),
             metadata: FileMeta {
-                path: "/dev/tty".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

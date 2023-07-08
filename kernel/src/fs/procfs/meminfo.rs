@@ -99,7 +99,6 @@ impl Inode for MeminfoInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(MeminfoFile {
             meta: FileMeta {
-                path: "/proc/meminfo".to_string(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

@@ -7,7 +7,7 @@ use crate::{
     processor::SumGuard,
     utils::error::{AsyscallRet, GeneralRet},
 };
-use alloc::{boxed::Box, string::ToString, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 
 pub struct RtcInode {
@@ -26,8 +26,6 @@ impl Inode for RtcInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(RtcFile {
             meta: FileMeta {
-                path: "/dev/rtc".to_string(),
-                // path: self.metadata().path.clone(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

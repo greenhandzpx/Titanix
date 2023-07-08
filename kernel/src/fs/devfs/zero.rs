@@ -7,7 +7,7 @@ use crate::{
     processor::SumGuard,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
-use alloc::{boxed::Box, string::ToString, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 
 pub struct ZeroInode {
@@ -26,8 +26,6 @@ impl Inode for ZeroInode {
     fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(ZeroFile {
             meta: FileMeta {
-                path: "/dev/zero".to_string(),
-                // path: self.metadata().path.clone(),
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),

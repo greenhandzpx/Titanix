@@ -35,11 +35,11 @@ impl Inode for DevRootInode {
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         _mode: InodeMode,
         dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        debug!("[DevRootInode::mknod]: mknod: {}", pathname);
+        debug!("[DevRootInode::mknod]: mknod: {}", name);
         //        debug_assert!(dev_id.unwrap() < DEV_NAMES.len());
         let creator = DEV_NAMES[dev_id.unwrap()].2;
         let inode = creator(this.clone(), DEV_NAMES[dev_id.unwrap()].0);

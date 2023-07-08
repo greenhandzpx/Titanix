@@ -5,8 +5,10 @@ use alloc::{
 };
 
 use crate::{
-    fs::{FileSystem, Inode, AT_FDCWD},
-    processor::current_process,
+    fs::{Inode, AT_FDCWD},
+    mm::user_check::UserCheck,
+    processor::{current_process, SumGuard},
+    stack_trace,
 };
 
 use super::error::{GeneralRet, SyscallErr};
@@ -32,6 +34,24 @@ pub fn judge_is_relative(path: &str) -> bool {
     } else {
         return true;
     }
+}
+/// if path has .. return true
+pub fn check_double_dot(path: &str) -> bool {
+    let path_vec = path2vec(path);
+    for name in path_vec {
+        if name.eq("..") {
+            return true;
+        }
+    }
+    return false;
+}
+/// remove .
+pub fn remove_dot(path: &str) -> String {
+    let path_vec: Vec<&str> = path
+        .split('/')
+        .filter(|name| *name != "" && *name != ".")
+        .collect();
+    path_vec.join("/")
 }
 pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<String> {
     let absolute_path_vec = path2vec(cwd);
@@ -63,36 +83,157 @@ pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<Str
     }
     Some(res.join("/"))
 }
-pub fn path_process(dirfd: isize, path: *const u8) -> Option<String> {
-    let path_str = &c_str_to_string(path);
-    debug!("[path_process] dirfd {}, path name {}", dirfd, path_str);
+/// return (target_inode, absolute_path, parent_inode)
+pub fn path_to_inode(
+    dirfd: isize,
+    path: *const u8,
+) -> (
+    GeneralRet<Option<Arc<dyn Inode>>>,
+    Option<String>,
+    Option<Arc<dyn Inode>>,
+) {
+    let _sum_guard = SumGuard::new();
+    if path.is_null() {
+        if dirfd != AT_FDCWD {
+            debug!("[path_to_inode] path is null and dirfd is not AT_FDCWD");
+            return current_process().inner_handler(|proc| {
+                let wd_file = proc.fd_table.get_ref(dirfd as usize);
+                match wd_file {
+                    Some(wd_file) => {
+                        let inode = wd_file.metadata().inner.lock().inode.clone();
+                        if inode.is_none() {
+                            return (Err(SyscallErr::EBADF), None, None);
+                        }
+                        let inode = inode.unwrap();
+                        (
+                            Ok(Some(inode.clone())),
+                            Some(inode.metadata().path.clone()),
+                            None,
+                        )
+                    }
+                    None => (Err(SyscallErr::EBADF), None, None),
+                }
+            });
+        } else {
+            debug!("[path_to_inode] path is null and dirfd is AT_FDCWD");
+            return current_process().inner_handler(|proc| {
+                let cwd = proc.cwd.clone();
+                // If it have file, it must have inode
+                (<dyn Inode>::lookup_from_root(&cwd), None, None)
+            });
+        }
+    } else {
+        debug!("[path_to_inode] path is not null");
+        let check = UserCheck::new().check_c_str(path);
+        if check.is_err() {
+            return (Err(SyscallErr::EFAULT), None, None);
+        }
+        stack_trace!();
+        let path = c_str_to_string(path);
+        debug!("[path_to_inode] get path: {}", path);
+        stack_trace!();
+        if judge_is_relative(&path) {
+            if dirfd != AT_FDCWD {
+                debug!("[path_to_inode] path is releative and dirfd isn't AT_FDCWD");
+                return current_process().inner_handler(|proc| {
+                    let wd_file = proc.fd_table.get_ref(dirfd as usize);
+                    match wd_file {
+                        Some(wd_file) => {
+                            let inode = wd_file.metadata().inner.lock().inode.clone();
+                            if inode.is_none() {
+                                return (Err(SyscallErr::EFAULT), None, None);
+                            }
+                            let inode = inode.unwrap();
+                            if check_double_dot(&path) {
+                                // path has ..
+                                // parent is not sure, return None
+                                let path = change_relative_to_absolute(&path, &proc.cwd).unwrap();
+                                (<dyn Inode>::lookup_from_root(&path), Some(path), None)
+                            } else {
+                                // the path doesn't have ..
+                                // inode is the parent which should be returned
+                                let path = remove_dot(&path);
+                                let absolute_path =
+                                    change_relative_to_absolute(&path, &proc.cwd).unwrap();
+                                (
+                                    inode.lookup_from_this(inode.clone(), &path),
+                                    Some(absolute_path),
+                                    Some(inode),
+                                )
+                            }
+                        }
+                        None => return (Err(SyscallErr::EBADF), None, None),
+                    }
+                });
+            } else {
+                debug!("[path_to_inode] path is releative and dirfd is AT_FDCWD");
+                return current_process().inner_handler(|proc| {
+                    let path = change_relative_to_absolute(&path, &proc.cwd).unwrap();
+                    (<dyn Inode>::lookup_from_root(&path), Some(path), None)
+                });
+            }
+        } else {
+            debug!("[path_to_inode] path is absolutely");
+            (<dyn Inode>::lookup_from_root(&path), Some(path), None)
+        }
+    }
+}
+
+pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>> {
+    debug!("[path_process] dirfd: {}", dirfd);
+    let _sum_guard = SumGuard::new();
+    let path = match path as usize {
+        0 => {
+            if dirfd != AT_FDCWD {
+                debug!("[path_process] dirfd is a normal fd");
+                let absolute_path = path_with_dirfd(dirfd, ".".to_string());
+                if absolute_path.is_none() {
+                    return Err(SyscallErr::EBADF);
+                } else {
+                    return Ok(absolute_path);
+                }
+            } else {
+                debug!("[path_process] dirfd is AT_FDCWD");
+                let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+                debug!("[path_process] cwd {}", cwd);
+                let absolute_path = change_relative_to_absolute(".", &cwd);
+                return Ok(absolute_path);
+            }
+        }
+        _ => {
+            UserCheck::new().check_c_str(path)?;
+            c_str_to_string(path)
+        }
+    };
+    debug!("[path_process] dirfd {}, path name {}", dirfd, path);
     let absolute_path;
-    if judge_is_relative(path_str) {
+    if judge_is_relative(&path) {
         debug!("[path_process] A relative path");
         if dirfd == AT_FDCWD {
             debug!("[path_process] dirfd is AT_FDCWD");
             let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
             debug!("[path_process] cwd {}", cwd);
-            absolute_path = change_relative_to_absolute(path_str, &cwd);
+            absolute_path = change_relative_to_absolute(&path, &cwd);
         } else {
             debug!("[path_process] dirfd is a normal fd");
             absolute_path = path_with_dirfd(dirfd, path);
         }
     } else {
         debug!("[path_process] An absolute path");
-        absolute_path = Some(path_str.clone());
+        absolute_path = Some(path.clone());
     }
-    absolute_path
+    Ok(absolute_path)
 }
-pub fn path_with_dirfd(dirfd: isize, path: *const u8) -> Option<String> {
-    let path = &c_str_to_string(path);
+pub fn path_with_dirfd(dirfd: isize, path: String) -> Option<String> {
     let absolute_path = current_process().inner_handler(|proc| {
-        let wd_inode = proc.fd_table.get_ref(dirfd as usize);
-        match wd_inode {
-            Some(wd_inode) => {
-                let wd = wd_inode.metadata().path.clone();
+        let wd_file = proc.fd_table.get_ref(dirfd as usize);
+        match wd_file {
+            Some(wd_file) => {
+                let inner = wd_file.metadata().inner.lock();
+                let inode = inner.inode.as_ref().clone();
+                let wd = inode.unwrap().metadata().path.clone();
                 debug!("wd: {}", wd);
-                change_relative_to_absolute(path, &wd)
+                change_relative_to_absolute(&path, &wd)
             }
             None => None,
         }
@@ -100,22 +241,6 @@ pub fn path_with_dirfd(dirfd: isize, path: *const u8) -> Option<String> {
     absolute_path
 }
 
-#[allow(unused)]
-pub fn user_path(_file_system: Arc<dyn FileSystem>, path: &str) -> GeneralRet<Arc<dyn Inode>> {
-    // need to find the dentry which is associated with this path
-    // should call d_lookup_from_root_tmp() to get the dentry
-    // also should prepare the filesystem (init it first)
-    let path_vec = path2vec(path);
-    if path_vec[0].starts_with('/') {
-        let target = <dyn Inode>::lookup_from_root(path);
-        match target {
-            Some(target) => Ok(target),
-            None => Err(SyscallErr::ENOENT),
-        }
-    } else {
-        Err(SyscallErr::ENOENT)
-    }
-}
 pub fn get_parent_dir(path_name: &str) -> Option<String> {
     let dentry_vec: Vec<&str> = path2vec(path_name);
     debug!("[get_parent_dir] dentry vec {:?}", dentry_vec);
