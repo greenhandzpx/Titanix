@@ -1,6 +1,10 @@
 use alloc::{sync::Arc, vec, vec::Vec};
 
+use crate::utils::error::{GeneralRet, SyscallErr};
+
 use super::{file::File, resolve_path, OpenFlags};
+
+const MAX_FD: usize = 1024;
 
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,
@@ -31,7 +35,10 @@ impl FdTable {
         }
     }
 
-    pub fn from_another(fd_table: &FdTable) -> Self {
+    pub fn from_another(fd_table: &FdTable) -> GeneralRet<Self> {
+        if fd_table.fd_table.len() >= MAX_FD {
+            return Err(SyscallErr::EMFILE);
+        }
         let mut ret = Vec::new();
         for fd in fd_table.fd_table.iter() {
             if fd.is_none() {
@@ -40,7 +47,7 @@ impl FdTable {
                 ret.push(fd.as_ref().cloned());
             }
         }
-        Self { fd_table: ret }
+        Ok(Self { fd_table: ret })
     }
 
     /// Get a ref of the given fd
@@ -81,34 +88,46 @@ impl FdTable {
         self.fd_table[fd] = Some(file);
     }
 
-    pub fn alloc_fd(&mut self) -> usize {
+    pub fn alloc_fd(&mut self) -> GeneralRet<usize> {
         if let Some(fd) = self.free_slot() {
-            fd
+            Ok(fd)
         } else {
+            if self.fd_table.len() >= MAX_FD {
+                return Err(SyscallErr::EMFILE);
+            }
             self.fd_table.push(None);
-            self.fd_table.len() - 1
+            Ok(self.fd_table.len() - 1)
         }
     }
-    pub fn alloc_fd_lower_bound(&mut self, bound: usize) -> usize {
+    pub fn alloc_fd_lower_bound(&mut self, bound: usize) -> GeneralRet<usize> {
         if let Some(fd) =
             (0..self.fd_table.len()).find(|fd| *fd >= bound && self.fd_table[*fd].is_none())
         {
-            fd
+            Ok(fd)
         } else {
+            if bound >= MAX_FD {
+                return Err(SyscallErr::EMFILE);
+            }
             if bound >= self.fd_table.len() {
                 self.fd_table.resize(bound + 1, None);
             } else {
+                if self.fd_table.len() >= MAX_FD {
+                    return Err(SyscallErr::EMFILE);
+                }
                 self.fd_table.push(None)
             }
-            self.fd_table.len() - 1
+            Ok(self.fd_table.len() - 1)
         }
     }
 
-    pub fn alloc_spec_fd(&mut self, newfd: usize) -> usize {
+    pub fn alloc_spec_fd(&mut self, newfd: usize) -> GeneralRet<usize> {
+        if newfd >= MAX_FD {
+            return Err(SyscallErr::EMFILE);
+        }
         if newfd >= self.fd_table.len() {
             self.fd_table.resize(newfd + 1, None);
         }
-        newfd
+        Ok(newfd)
     }
 
     fn free_slot(&self) -> Option<usize> {

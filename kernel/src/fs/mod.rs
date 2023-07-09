@@ -284,7 +284,7 @@ pub fn open_file_string(absolute_path: Option<String>, flags: u32) -> SyscallRet
             );
             // TODO: add to fs's dirty list
             let fd = current_process().inner_handler(|proc| {
-                let fd = proc.fd_table.alloc_fd();
+                let fd = proc.fd_table.alloc_fd()?;
                 let file = inode.open(inode.clone(), flags)?;
 
                 proc.fd_table.put(fd, file);
@@ -318,7 +318,7 @@ pub fn open_file_inode(inode: Arc<dyn Inode>, flags: OpenFlags) -> SyscallRet {
     );
     // TODO: add to fs's dirty list
     let fd = current_process().inner_handler(|proc| {
-        let fd = proc.fd_table.alloc_fd();
+        let fd = proc.fd_table.alloc_fd()?;
         let file = inode.open(inode.clone(), flags)?;
 
         proc.fd_table.put(fd, file);

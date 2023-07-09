@@ -58,17 +58,16 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
 pub fn sys_dup(oldfd: usize) -> SyscallRet {
     stack_trace!();
     debug!("[sys_dup2] start...");
-    let newfd = current_process()
-        .inner_handler(move |proc| {
-            if let Some(file) = proc.fd_table.get_ref(oldfd).cloned() {
-                let newfd = proc.fd_table.alloc_fd();
-                proc.fd_table.put(newfd, file);
-                Some(newfd)
-            } else {
-                None
-            }
-        })
-        .ok_or(SyscallErr::EBADF)?;
+    let newfd = current_process().inner_handler(move |proc| {
+        if let Some(file) = proc.fd_table.get_ref(oldfd).cloned() {
+            let newfd = proc.fd_table.alloc_fd()?;
+            proc.fd_table.put(newfd, file);
+            debug!("[sys_dup2] ret: {}", newfd);
+            Ok(newfd)
+        } else {
+            Err(SyscallErr::EBADF)
+        }
+    })?;
     Ok(newfd as isize)
 }
 
@@ -656,12 +655,12 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     let (pipe_read, pipe_write) = make_pipe();
 
     let (read_fd, write_fd) = current_process().inner_handler(move |proc| {
-        let read_fd = proc.fd_table.alloc_fd();
+        let read_fd = proc.fd_table.alloc_fd()?;
         proc.fd_table.put(read_fd, pipe_read);
-        let write_fd = proc.fd_table.alloc_fd();
+        let write_fd = proc.fd_table.alloc_fd()?;
         proc.fd_table.put(write_fd, pipe_write);
-        (read_fd, write_fd)
-    });
+        Ok((read_fd, write_fd))
+    })?;
 
     UserCheck::new().check_writable_slice(pipe as *mut u8, core::mem::size_of::<i32>() * 2)?;
     let _sum_guard = SumGuard::new();
@@ -692,7 +691,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 // if proc.fd_table.get_ref(fd).is_none()
                 // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
                 let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                let newfd = proc.fd_table.alloc_fd_lower_bound(arg);
+                let newfd = proc.fd_table.alloc_fd_lower_bound(arg)?;
                 proc.fd_table.put(newfd, file);
                 debug!("[sys_fcntl]: dup file fd from {} to {}", fd, newfd);
                 Ok(newfd as isize)

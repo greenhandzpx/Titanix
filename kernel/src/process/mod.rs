@@ -152,7 +152,7 @@ impl Process {
     }
 
     ///
-    pub fn alloc_fd(&self) -> usize {
+    pub fn alloc_fd(&self) -> GeneralRet<usize> {
         self.inner.lock().fd_table.alloc_fd()
     }
 
@@ -497,6 +497,7 @@ impl Process {
             // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
             // create child process pcb
+            let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
             let child = Arc::new(Self {
                 pid,
                 mailbox: Arc::new(Mailbox::new()),
@@ -505,7 +506,7 @@ impl Process {
                     memory_space,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
-                    fd_table: FdTable::from_another(&parent_inner.fd_table),
+                    fd_table: child_fd_table,
                     threads: Vec::new(),
                     sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                     pending_sigs: SigQueue::new(),
@@ -520,8 +521,8 @@ impl Process {
             // add child
             parent_inner.children.push(Arc::clone(&child));
 
-            child
-        });
+            Ok(child)
+        })?;
 
         // create main thread of child process
         // note that we copy the parent's current thread's trap context
