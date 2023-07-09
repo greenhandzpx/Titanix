@@ -13,6 +13,7 @@ use crate::{
         File, Inode, InodeMode, Mutex, OpenFlags,
     },
     processor::SumGuard,
+    sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
 };
 
@@ -105,6 +106,7 @@ impl Inode for MeminfoInode {
                     pos: 0,
                     dirent_index: 0,
                 }),
+                prw_lock: SleepLock::new(()),
             },
         }))
     }

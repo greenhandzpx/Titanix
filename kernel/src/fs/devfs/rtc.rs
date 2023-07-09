@@ -5,6 +5,7 @@ use crate::{
         File, Inode, Mutex, OpenFlags,
     },
     processor::SumGuard,
+    sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet},
 };
 use alloc::{boxed::Box, sync::Arc};
@@ -32,6 +33,7 @@ impl Inode for RtcInode {
                     pos: 0,
                     dirent_index: 0,
                 }),
+                prw_lock: SleepLock::new(()),
             },
         }))
     }

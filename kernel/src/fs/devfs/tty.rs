@@ -79,6 +79,7 @@ impl TtyFile {
                     pos: 0,
                     dirent_index: 0,
                 }),
+                prw_lock: SleepLock::new(()),
             },
         }
     }

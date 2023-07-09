@@ -3,6 +3,7 @@ use alloc::{string::ToString, sync::Arc};
 use log::{debug, info};
 
 use crate::fs::ffi::StatFlags;
+use crate::sync::mutex::SleepLock;
 use crate::utils::error::AsyscallRet;
 use crate::utils::error::GeneralRet;
 use alloc::vec::Vec;
@@ -42,6 +43,7 @@ impl Inode for TestRootInode {
                     pos: 0,
                     dirent_index: 0,
                 }),
+                prw_lock: SleepLock::new(()),
             }),
         };
         Ok(Arc::new(file))

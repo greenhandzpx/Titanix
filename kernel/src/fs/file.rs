@@ -1,6 +1,6 @@
 use core::task::Waker;
 
-use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 use log::trace;
 
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
     mm::memory_space::VmArea,
     processor::SumGuard,
     stack_trace,
+    sync::mutex::SleepLock,
     timer::posix::current_time_spec,
     utils::{
         async_tools::block_on,
@@ -21,6 +22,8 @@ use super::{inode::Inode, Mutex, OpenFlags};
 pub struct FileMeta {
     /// Mutable,
     pub inner: Mutex<FileMetaInner>,
+    /// pread & pwrite's lock
+    pub prw_lock: SleepLock<()>,
 }
 
 impl FileMeta {
@@ -58,6 +61,28 @@ pub trait File: Send + Sync {
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
+    fn pread<'a>(&'a self, buf: &'a mut [u8], off: usize) -> AsyscallRet {
+        Box::pin(async move {
+            self.metadata().prw_lock.lock().await;
+            let old_off = self.offset()?;
+            self.seek(off)?;
+            let ret = self.read(buf);
+            self.seek(old_off as usize)?;
+            ret.await
+        })
+    }
+
+    fn pwrite<'a>(&'a self, buf: &'a [u8], off: usize) -> AsyscallRet {
+        Box::pin(async move {
+            self.metadata().prw_lock.lock().await;
+            let old_off = self.offset()?;
+            self.seek(off)?;
+            let ret = self.write(buf);
+            self.seek(old_off as usize)?;
+            ret.await
+        })
+    }
+
     fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
         Ok(true)
@@ -79,12 +104,25 @@ pub trait File: Send + Sync {
         block_on(self.write(buf))
     }
 
-    fn seek(&self, _offset: usize) -> SyscallRet {
-        todo!()
+    /// Return the new offset
+    fn seek(&self, offset: usize) -> SyscallRet {
+        let mut meta = self.metadata().inner.lock();
+        if let Some(inode) = meta.inode.as_ref() {
+            let file_len = inode.metadata().inner.lock().data_len;
+            if file_len < offset {
+                meta.pos = file_len;
+                Ok(meta.pos as isize)
+            } else {
+                meta.pos = offset;
+                Ok(offset as isize)
+            }
+        } else {
+            Ok(0)
+        }
     }
 
     fn offset(&self) -> SyscallRet {
-        todo!()
+        Ok(self.metadata().inner.lock().pos as isize)
     }
 
     /// Read all data from this file synchronously

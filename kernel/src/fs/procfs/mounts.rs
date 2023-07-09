@@ -8,6 +8,7 @@ use crate::{
         File, Inode, InodeMode, Mutex, OpenFlags, FILE_SYSTEM_MANAGER,
     },
     processor::SumGuard,
+    sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
 };
 
@@ -32,6 +33,7 @@ impl Inode for MountsInode {
                     pos: 0,
                     dirent_index: 0,
                 }),
+                prw_lock: SleepLock::new(()),
             },
         }))
     }

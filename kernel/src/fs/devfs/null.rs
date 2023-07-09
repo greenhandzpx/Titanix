@@ -4,6 +4,7 @@ use crate::{
         inode::InodeMeta,
         File, Inode, Mutex, OpenFlags,
     },
+    sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
 use alloc::{boxed::Box, sync::Arc};
@@ -31,6 +32,7 @@ impl Inode for NullInode {
                     pos: 0,
                     dirent_index: 0,
                 }),
+                prw_lock: SleepLock::new(()),
                 // path: self.metadata().path.clone(),
             },
         }))
