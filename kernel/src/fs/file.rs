@@ -66,9 +66,9 @@ pub trait File: Send + Sync {
             self.metadata().prw_lock.lock().await;
             let old_off = self.offset()?;
             self.seek(off)?;
-            let ret = self.read(buf);
+            let ret = self.read(buf).await;
             self.seek(old_off as usize)?;
-            ret.await
+            ret
         })
     }
 
@@ -77,9 +77,9 @@ pub trait File: Send + Sync {
             self.metadata().prw_lock.lock().await;
             let old_off = self.offset()?;
             self.seek(off)?;
-            let ret = self.write(buf);
+            let ret = self.write(buf).await;
             self.seek(old_off as usize)?;
-            ret.await
+            ret
         })
     }
 
@@ -106,19 +106,8 @@ pub trait File: Send + Sync {
 
     /// Return the new offset
     fn seek(&self, offset: usize) -> SyscallRet {
-        let mut meta = self.metadata().inner.lock();
-        if let Some(inode) = meta.inode.as_ref() {
-            let file_len = inode.metadata().inner.lock().data_len;
-            if file_len < offset {
-                meta.pos = file_len;
-                Ok(meta.pos as isize)
-            } else {
-                meta.pos = offset;
-                Ok(offset as isize)
-            }
-        } else {
-            Ok(0)
-        }
+        self.metadata().inner.lock().pos = offset;
+        Ok(offset as isize)
     }
 
     fn offset(&self) -> SyscallRet {
@@ -191,11 +180,6 @@ impl DefaultFile {
 impl File for DefaultFile {
     fn metadata(&self) -> &FileMeta {
         &self.metadata
-    }
-
-    fn seek(&self, offset: usize) -> SyscallRet {
-        self.metadata.inner.lock().pos = offset;
-        Ok(offset as isize)
     }
 
     /// For default file, data must be read from page cache first
