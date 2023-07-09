@@ -2,8 +2,6 @@ use alloc::{string::String, vec::Vec};
 
 use crate::{fs::ffi::MAX_NAME_LEN, stack_trace};
 
-use super::path::path2vec;
-
 /// Convert C-style string(end with '\0') to rust string
 pub fn c_str_to_string(ptr: *const u8) -> String {
     stack_trace!();
@@ -17,18 +15,7 @@ pub fn c_str_to_string(ptr: *const u8) -> String {
         ret.push(ch as char);
         ptr += 1;
     }
-    format(&ret)
-}
-
-/// format path: remove excess "/"
-pub fn format(src: &str) -> String {
-    let mut vec = path2vec(src);
-    if vec.len() == 0 {
-        vec.push("");
-    } else if vec[0] != "." && vec[0] != ".." {
-        vec.insert(0, "");
-    }
-    vec.join("/")
+    ret
 }
 
 pub fn string_to_array(s: String) -> [u8; MAX_NAME_LEN] {

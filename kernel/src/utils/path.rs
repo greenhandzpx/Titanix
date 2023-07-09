@@ -53,6 +53,16 @@ pub fn remove_dot(path: &str) -> String {
         .collect();
     path_vec.join("/")
 }
+/// format path: remove excess "/"
+pub fn format(src: &str) -> String {
+    let mut vec = path2vec(src);
+    if vec.len() == 0 {
+        vec.push("");
+    } else if vec[0] != "." && vec[0] != ".." {
+        vec.insert(0, "");
+    }
+    vec.join("/")
+}
 pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<String> {
     let absolute_path_vec = path2vec(cwd);
     let relative_path_vec = path2vec(relative_path);
@@ -130,6 +140,7 @@ pub fn path_to_inode(
         }
         stack_trace!();
         let path = c_str_to_string(path);
+        let path = format(&path);
         debug!("[path_to_inode] get path: {}", path);
         stack_trace!();
         if judge_is_relative(&path) {
@@ -204,7 +215,8 @@ pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>>
         _ => {
             debug!("[path_process] path is not null");
             UserCheck::new().check_c_str(path)?;
-            c_str_to_string(path)
+            let path = c_str_to_string(path);
+            format(&path)
         }
     };
     debug!("[path_process] dirfd {}, path name {}", dirfd, path);
