@@ -78,6 +78,13 @@ pub fn init() {
     let key = HashKey::new(root_inode.metadata().ino, "proc".to_string());
     INODE_CACHE.lock().insert(key, proc_dir);
 
+    let tmp_dir = root_inode
+        .mkdir(Arc::clone(&root_inode), "/tmp", InodeMode::FileDIR)
+        .expect("mkdir /tmp fail!");
+
+    let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
+    INODE_CACHE.lock().insert(key, tmp_dir);
+
     FILE_SYSTEM_MANAGER
         .mount(
             "/dev",
