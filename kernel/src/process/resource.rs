@@ -4,6 +4,7 @@ use log::debug;
 
 use crate::{
     config::{fs::RLIMIT_OFILE, mm::USER_STACK_SIZE},
+    fs::MAX_FD,
     processor::current_process,
     utils::error::SyscallRet,
 };
@@ -53,15 +54,40 @@ impl RLimit {
         unsafe {
             RLIM_INFINITY = self.rlim_max;
         }
+        match resource {
+            RLIMIT_NOFILE => unsafe {
+                MAX_FD.store(RLIM_INFINITY, core::sync::atomic::Ordering::Relaxed)
+            },
+            _ => {}
+        }
         current_process().inner_handler(|proc| proc.rlimit = self.clone());
         Ok(0)
     }
     /// Get RLimit
     pub fn get_rlimit(resource: u32) -> Self {
         match resource {
-            RLIMIT_STACK => Self::new(USER_STACK_SIZE, unsafe { RLIM_INFINITY }),
+            RLIMIT_STACK => Self::new(
+                {
+                    unsafe {
+                        if USER_STACK_SIZE > RLIM_INFINITY {
+                            RLIM_INFINITY
+                        } else {
+                            USER_STACK_SIZE
+                        }
+                    }
+                },
+                unsafe { RLIM_INFINITY },
+            ),
             RLIMIT_NOFILE => Self {
-                rlim_cur: RLIMIT_OFILE,
+                rlim_cur: {
+                    unsafe {
+                        if RLIMIT_OFILE > RLIM_INFINITY {
+                            RLIM_INFINITY
+                        } else {
+                            RLIMIT_OFILE
+                        }
+                    }
+                },
                 rlim_max: unsafe { RLIM_INFINITY },
             },
             _ => Self {

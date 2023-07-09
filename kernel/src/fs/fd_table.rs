@@ -1,10 +1,16 @@
+use core::sync::atomic::AtomicUsize;
+
 use alloc::{sync::Arc, vec, vec::Vec};
 
 use crate::utils::error::{GeneralRet, SyscallErr};
 
 use super::{file::File, resolve_path, OpenFlags};
 
-const MAX_FD: usize = 1024;
+use lazy_static::*;
+
+lazy_static! {
+    pub static ref MAX_FD: AtomicUsize = AtomicUsize::new(1024);
+}
 
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,
@@ -36,7 +42,7 @@ impl FdTable {
     }
 
     pub fn from_another(fd_table: &FdTable) -> GeneralRet<Self> {
-        if fd_table.fd_table.len() >= MAX_FD {
+        if fd_table.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
             return Err(SyscallErr::EMFILE);
         }
         let mut ret = Vec::new();
@@ -92,7 +98,7 @@ impl FdTable {
         if let Some(fd) = self.free_slot() {
             Ok(fd)
         } else {
-            if self.fd_table.len() >= MAX_FD {
+            if self.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
                 return Err(SyscallErr::EMFILE);
             }
             self.fd_table.push(None);
@@ -105,13 +111,13 @@ impl FdTable {
         {
             Ok(fd)
         } else {
-            if bound >= MAX_FD {
+            if bound >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
                 return Err(SyscallErr::EMFILE);
             }
             if bound >= self.fd_table.len() {
                 self.fd_table.resize(bound + 1, None);
             } else {
-                if self.fd_table.len() >= MAX_FD {
+                if self.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
                     return Err(SyscallErr::EMFILE);
                 }
                 self.fd_table.push(None)
@@ -121,7 +127,7 @@ impl FdTable {
     }
 
     pub fn alloc_spec_fd(&mut self, newfd: usize) -> GeneralRet<usize> {
-        if newfd >= MAX_FD {
+        if newfd >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
             return Err(SyscallErr::EMFILE);
         }
         if newfd >= self.fd_table.len() {
