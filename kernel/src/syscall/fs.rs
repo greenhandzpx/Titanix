@@ -2,6 +2,7 @@
 use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
+use core::str::from_utf8_unchecked;
 use core::time::Duration;
 
 use alloc::string::ToString;
@@ -474,13 +475,15 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
     }
     match whence {
         SEEK_SET => {
-            file.seek(offset as usize)?;
-            Ok(offset)
+            let off = file.seek(offset as usize)?;
+            debug!("[sys_lseek] return off: {}", off);
+            Ok(off)
         }
         SEEK_CUR => {
             let pos = file.metadata().inner.lock().pos;
             let off = pos + offset as usize;
-            file.seek(off)?;
+            let off = file.seek(off)?;
+            debug!("[sys_lseek] return off: {}", off);
             Ok(off as isize)
         }
         SEEK_END => {
@@ -496,7 +499,8 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
                 .lock()
                 .data_len;
             let off = size + offset as usize;
-            file.seek(off)?;
+            let off = file.seek(off)?;
+            debug!("[sys_lseek] return off: {}", off);
             Ok(off as isize)
         }
         _ => Err(SyscallErr::EINVAL),
@@ -575,8 +579,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         ret += iov_len;
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
-        trace!("[writev] buf: {:?}", buf);
-        // test();
         file.write(buf).await?;
     }
     Ok(ret as isize)
@@ -584,9 +586,11 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
 
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    debug!(
+    trace!(
         "[sys_readv] fd: {}, iov: {:#x}, iovcnt: {}",
-        fd, iov, iovcnt
+        fd,
+        iov,
+        iovcnt
     );
     let _sum_guard = SumGuard::new();
 
@@ -615,7 +619,6 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
         trace!("[readv] buf: {:?}", buf);
-        // test();
         file.read(buf).await?;
     }
     Ok(ret as isize)
@@ -1000,6 +1003,7 @@ pub fn sys_utimensat(
     _flags: u32,
 ) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
     let res = path::path_to_inode(dirfd, pathname);
     let inode = res.0?;
     if inode.is_none() {
@@ -1013,26 +1017,35 @@ pub fn sys_utimensat(
             debug!("[sys_utimensat] times is null");
             // If times is null, then both timestamps are set to the current time.
             inner_lock.st_atim = current_time_spec();
-            inner_lock.st_mtim = inner_lock.st_atim;
         } else {
             // times[0] for atime, times[1] for mtime
+            UserCheck::new()
+                .check_readable_slice(times as *const u8, 2 * core::mem::size_of::<TimeSpec>())?;
             let atime = unsafe { &*times };
-            unsafe {
-                times.add(1);
-            }
+            let times = unsafe { times.add(1) };
             let mtime = unsafe { &*times };
-            if atime.nsec == UTIME_NOW || mtime.nsec == UTIME_NOW {
-                debug!("[sys_utimensat] nsec is UTIME_NOW");
+            // change access time
+            if atime.nsec == UTIME_NOW {
+                debug!("[sys_utimensat] atime nsec is UTIME_NOW");
                 inner_lock.st_atim = current_time_spec();
-                inner_lock.st_mtim = inner_lock.st_atim;
-            } else if atime.nsec == UTIME_OMIT || mtime.nsec == UTIME_OMIT {
-                debug!("[sys_utimensat] nsec is UTIME_OMIT");
-                return Ok(0);
+            } else if atime.nsec == UTIME_OMIT {
+                debug!("[sys_utimensat] atime nsec is UTIME_OMIT");
             } else {
-                debug!("[sys_utimensat] normal nsec");
+                debug!("[sys_utimensat] atime normal nsec");
                 inner_lock.st_atim = *atime;
+            }
+            // change modify time
+            if mtime.nsec == UTIME_NOW {
+                debug!("[sys_utimensat] mtime nsec is UTIME_NOW");
+                inner_lock.st_mtim = current_time_spec();
+            } else if mtime.nsec == UTIME_OMIT {
+                debug!("[sys_utimensat] mtime nsec is UTIME_OMIT");
+            } else {
+                debug!("[sys_utimensat] mtime normal nsec");
                 inner_lock.st_mtim = *mtime;
             }
+            // change state change time
+            inner_lock.st_ctim = current_time_spec();
         }
         return Ok(0);
     }

@@ -242,8 +242,6 @@ impl File for DefaultFile {
 
             let mut inner_lock = inode.metadata().inner.lock();
             inner_lock.st_atim = current_time_spec();
-            inner_lock.st_mtim = inner_lock.st_atim;
-            inner_lock.st_ctim = inner_lock.st_atim;
             match inner_lock.state {
                 InodeState::DirtyData => inner_lock.state = InodeState::DirtyAll,
                 InodeState::Synced => inner_lock.state = InodeState::DirtyInode,

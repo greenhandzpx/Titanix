@@ -25,7 +25,7 @@ impl From<Duration> for TimeVal {
 }
 
 /// Used for nanosleep
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct TimeSpec {
     pub sec: usize,
