@@ -5,13 +5,12 @@
 ///
 pub mod thread;
 
-use log::{debug, info};
+use log::{debug, info, warn};
 pub use thread::yield_now;
 
 /// Aux header
 pub mod aux;
 mod manager;
-mod pid;
 /// System resource
 pub mod resource;
 // #[allow(clippy::module_inception)]
@@ -24,8 +23,7 @@ use crate::{
     mm::{user_check::UserCheck, MemorySpace, RecycleAllocator},
     process::{
         aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
-        pid::tid_alloc,
-        thread::terminate_all_threads_except_main,
+        thread::{terminate_all_threads_except_main, tid::tid_alloc},
     },
     processor::{current_process, current_task, hart::local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue, SIGKILL},
@@ -62,7 +60,7 @@ pub fn add_initproc() {
     }
 }
 
-use self::{pid::TidHandle, resource::RLimit};
+use self::{resource::RLimit, thread::tid::TidHandle};
 
 /// Process control block inner
 pub struct ProcessInner {
@@ -82,8 +80,8 @@ pub struct ProcessInner {
     pub sig_handler: Arc<SpinNoIrqLock<SigHandlerManager>>,
     /// Pending sigs that wait for the prcoess to handle
     pub pending_sigs: SigQueue,
-    /// UStack base of all threads(the lowest bound)
-    pub ustack_base: usize,
+    // /// UStack base of all threads(the lowest bound)
+    // pub ustack_base: usize,
     /// Futex queue
     pub futex_queue: FutexQueue,
     /// Exit code of the current process
@@ -192,7 +190,7 @@ impl Drop for Process {
 impl Process {
     /// Create a new process
     pub fn new_initproc(elf_data: &[u8]) -> Arc<Self> {
-        let (memory_space, user_sp_base, entry_point, auxv) = MemorySpace::from_elf(elf_data);
+        let (memory_space, user_sp_top, entry_point, auxv) = MemorySpace::from_elf(elf_data);
         // let debug_pa = memory_space.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
         // println!("entry pa {:#x}", debug_pa);
         // Alloc a pid
@@ -209,7 +207,7 @@ impl Process {
                 threads: Vec::new(),
                 sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                 pending_sigs: SigQueue::new(),
-                ustack_base: user_sp_base,
+                // ustack_base: user_sp_base,
                 futex_queue: FutexQueue::new(),
                 exit_code: 0,
                 cwd: String::from("/"),
@@ -217,14 +215,12 @@ impl Process {
                 rlimit: RLimit::new(0, 0),
             }),
         });
-        let trap_context =
-            TrapContext::app_init_context(entry_point, user_sp_base + USER_STACK_SIZE);
+        let trap_context = TrapContext::app_init_context(entry_point, user_sp_top);
         // create a main thread
         let thread = Arc::new(Thread::new(
             process.clone(),
             trap_context,
-            user_sp_base,
-            false,
+            user_sp_top,
             Some(pid),
         ));
         // thread.alloc_ustack();
@@ -253,43 +249,41 @@ impl Process {
 
         // memory_space with elf program headers/trampoline/trap context/user stack
         // substitute memory_space
-        let (memory_space, ustack_base, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
-        let task_ptr: *const Thread = self.inner_handler(|proc| {
-            assert_eq!(proc.thread_count(), 1);
+        let (memory_space, ustack_top, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
+        let main_thread = self.inner_handler(|proc| {
+            if proc.thread_count() > 1 {
+                warn!("[Process:exec] thread count > 1: {}", proc.thread_count());
+            }
             // Change hart local context's pagetable (quite important!!!)
             memory_space.activate();
             let hart = local_hart();
             hart.change_page_table(memory_space.page_table.clone());
             // process_inner.memory_space = memory_space;
-            proc.threads[0].as_ptr()
+            proc.threads[0].upgrade().unwrap()
         });
 
         terminate_all_threads_except_main();
-        // Then we alloc user resource for main thread again
-        // since memory_space has been changed
-        let task = unsafe {
-            &*task_ptr
-            // &*process_inner.threads[0].as_ptr()
-        };
-        let task_inner = unsafe { &mut *task.inner.get() };
 
         // TODO: not sure whether we should dealloc ustack here?
 
         self.inner_handler(|proc| {
-            proc.ustack_base = ustack_base;
+            // proc.ustack_base = ustack_base;
             proc.memory_space = memory_space;
         });
+
+        let main_thread_inner = unsafe { &mut (*main_thread.inner.get()) };
+        main_thread_inner.ustack_top = ustack_top;
         // // dealloc old ustack
         // task.dealloc_ustack();
         // self.inner.lock().memory_space = memory_space;
-        task_inner.ustack_base = ustack_base;
-        // alloc new ustack
-        task.alloc_ustack();
+        // main_thread_inner.ustack_base = ustack_base;
 
+        // // alloc new ustack
+        // main_thread.alloc_ustack();
 
         // ----- The following to to push arguments on user stack -----
+        let mut user_sp = main_thread_inner.ustack_top;
 
-        let mut user_sp = task.ustack_top();
         // Enable kernel to visit user space
         let _sum_guard = SumGuard::new();
         debug!("exec args len {}", args.len());
@@ -430,7 +424,7 @@ impl Process {
             auxv_base
         );
 
-        task_inner.trap_context = trap_cx;
+        main_thread_inner.trap_context = trap_cx;
         // Ok(args.len() as isize)
         Ok(0)
     }
@@ -458,14 +452,8 @@ impl Process {
         let mut trap_context = TrapContext::app_init_context(entry_point, stack);
         trap_context.user_x[10] = arg as usize;
 
-        let ustack_base = self.inner_handler(|proc| proc.ustack_base);
-        let new_thread = Arc::new(Thread::new(
-            self.clone(),
-            trap_context,
-            ustack_base,
-            true,
-            None,
-        ));
+        // let ustack_base = self.inner_handler(|proc| proc.ustack_base);
+        let new_thread = Arc::new(Thread::new(self.clone(), trap_context, stack, None));
         // attach the new thread to process
         current_process()
             .inner
@@ -511,7 +499,7 @@ impl Process {
                     threads: Vec::new(),
                     sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
                     pending_sigs: SigQueue::new(),
-                    ustack_base: parent_inner.ustack_base,
+                    // ustack_base: parent_inner.ustack_base,
                     futex_queue: FutexQueue::new(),
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),

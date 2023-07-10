@@ -125,8 +125,7 @@ pub fn sys_clone(
 
     info!("[sys_clone] flags {:?}", clone_flags);
 
-    if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_THREAD)
-    {
+    if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
 
         // TODO: maybe we should take more flags into account?
@@ -160,13 +159,15 @@ pub fn sys_clone(
             new_pid, clone_flags
         );
         Ok(new_pid as isize)
-    } else {
+    } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
 
         info!("clone a new thread");
 
         let current_process = current_process();
         current_process.create_thread(stack as usize)
+    } else {
+        panic!()
     }
 }
 

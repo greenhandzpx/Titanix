@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use log::{debug, error, info};
+use log::debug;
 
 use crate::{
     process::thread::exit::handle_exit,
