@@ -84,7 +84,7 @@ impl Thread {
         user_specified_stack: bool,
         tid: Option<Arc<TidHandle>>,
     ) -> Self {
-        let res = Self {
+        let thread = Self {
             tid: match tid {
                 Some(tid) => tid,
                 None => Arc::new(tid_alloc()),
@@ -102,15 +102,15 @@ impl Thread {
                 // terminated: AtomicBool::new(false),
             }),
         };
-        res.alloc_ustack();
+        thread.alloc_ustack();
         // debug!("old ustack top {:#x}", trap_context.user_x[2]);
         // debug!("new ustack top {:#x}", res.ustack_top());
         if !user_specified_stack {
             unsafe {
-                (*res.inner.get()).trap_context.set_sp(res.ustack_top());
+                (*thread.inner.get()).trap_context.set_sp(thread.ustack_top());
             }
         }
-        res
+        thread
     }
 
     /// Construct a new thread from the current thread

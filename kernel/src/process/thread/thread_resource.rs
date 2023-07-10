@@ -61,32 +61,7 @@ impl Thread {
             );
             proc.memory_space.activate();
         });
-        // self.process.inner_handler(move |proc| {
-        //     if proc
-        //         .memory_space
-        //         .find_vm_area_by_vpn(VirtAddr::from(ustack_bottom).floor())
-        //         .is_some()
-        //     {
-        //         debug!("ustack {:#x} has been added to memory set", ustack_bottom);
-        //         return;
-        //     }
-        //     proc.memory_space.insert_framed_area(
-        //         ustack_bottom.into(),
-        //         (ustack_bottom + USER_STACK_SIZE).into(),
-        //         MapPermission::R | MapPermission::W | MapPermission::U,
-        //     );
-        // });
 
-        // self.process
-        //     .inner
-        //     .lock()
-        //     .memory_space
-        //     .insert_framed_area_lazily(
-        //         ustack_bottom.into(),
-        //         (ustack_bottom + USER_STACK_SIZE).into(),
-        //         MapPermission::R | MapPermission::W | MapPermission::U,
-        //         Some(Box::new(UStackPageFaultHandler {})),
-        //     );
     }
 
     ///

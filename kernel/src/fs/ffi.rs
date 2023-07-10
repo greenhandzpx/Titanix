@@ -357,3 +357,7 @@ impl FdSet {
         self.fds_bits[fd / FD_SET_LEN] |= 1 << offset;
     }
 }
+
+pub const SEEK_SET: u8 = 0;
+pub const SEEK_CUR: u8 = 1;
+pub const SEEK_END: u8 = 2;

@@ -286,7 +286,8 @@ impl Process {
         // alloc new ustack
         task.alloc_ustack();
 
-        // ---- The following to to push arguments on user stack ----
+
+        // ----- The following to to push arguments on user stack -----
 
         let mut user_sp = task.ustack_top();
         // Enable kernel to visit user space

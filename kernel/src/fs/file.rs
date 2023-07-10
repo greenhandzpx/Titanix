@@ -43,6 +43,17 @@ pub struct FileMetaInner {
     pub dirent_index: usize,
 }
 
+/// It is based on the `std::io::SeekFrom` enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeekFrom {
+    /// Sets the offset to the provided number of bytes.
+    Start(usize),
+    /// Sets the offset to the size of this object plus the specified number of bytes.
+    End(isize),
+    /// Sets the offset to the current position plus the specified number of bytes.
+    Current(isize),
+}
+
 // #[async_trait]
 pub trait File: Send + Sync {
     fn readable(&self) -> bool {
@@ -64,10 +75,10 @@ pub trait File: Send + Sync {
     fn pread<'a>(&'a self, buf: &'a mut [u8], off: usize) -> AsyscallRet {
         Box::pin(async move {
             self.metadata().prw_lock.lock().await;
-            let old_off = self.offset()?;
-            self.seek(off)?;
+            let old_off = self.seek(SeekFrom::Current(0))?;
+            self.seek(SeekFrom::Start(off))?;
             let ret = self.read(buf).await;
-            self.seek(old_off as usize)?;
+            self.seek(SeekFrom::Start(old_off as usize))?;
             ret
         })
     }
@@ -75,10 +86,10 @@ pub trait File: Send + Sync {
     fn pwrite<'a>(&'a self, buf: &'a [u8], off: usize) -> AsyscallRet {
         Box::pin(async move {
             self.metadata().prw_lock.lock().await;
-            let old_off = self.offset()?;
-            self.seek(off)?;
+            let old_off = self.seek(SeekFrom::Current(0))?;
+            self.seek(SeekFrom::Start(off))?;
             let ret = self.write(buf).await;
-            self.seek(old_off as usize)?;
+            self.seek(SeekFrom::Start(old_off as usize))?;
             ret
         })
     }
@@ -105,13 +116,38 @@ pub trait File: Send + Sync {
     }
 
     /// Return the new offset
-    fn seek(&self, offset: usize) -> SyscallRet {
-        self.metadata().inner.lock().pos = offset;
-        Ok(offset as isize)
-    }
-
-    fn offset(&self) -> SyscallRet {
-        Ok(self.metadata().inner.lock().pos as isize)
+    fn seek(&self, pos: SeekFrom) -> SyscallRet {
+        let mut meta = self.metadata().inner.lock();
+        match pos {
+            SeekFrom::Current(off) => {
+                if off < 0 {
+                    meta.pos -= off.abs() as usize;
+                } else {
+                    meta.pos += off as usize;
+                }
+            }
+            SeekFrom::Start(off) => {
+                meta.pos = off;
+            }
+            SeekFrom::End(off) => {
+                let data_len = meta
+                    .inode
+                    .as_ref()
+                    .unwrap()
+                    .metadata()
+                    .inner
+                    .lock()
+                    .data_len;
+                if off < 0 {
+                    meta.pos = data_len - off.abs() as usize;
+                } else {
+                    meta.pos = data_len + off as usize;
+                }
+            }
+        }
+        Ok(meta.pos as isize)
+        // self.metadata().inner.lock().pos = offset;
+        // Ok(offset as isize)
     }
 
     /// Read all data from this file synchronously
@@ -148,9 +184,9 @@ pub trait File: Send + Sync {
                 inode.metadata().inner.lock().data_len = len;
                 // fill with \0
                 let buf = vec![0 as u8; len - old_data_len];
-                self.seek(old_data_len)?;
+                self.seek(SeekFrom::Start(old_data_len))?;
                 self.write(&buf).await?;
-                self.seek(old_pos)?;
+                self.seek(SeekFrom::Start(old_pos))?;
             }
             Ok(())
         })

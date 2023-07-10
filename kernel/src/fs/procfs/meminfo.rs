@@ -167,10 +167,4 @@ impl File for MeminfoFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-
-    fn seek(&self, offset: usize) -> SyscallRet {
-        debug!("[MeminfoFile] seek offset: {}", offset);
-        self.meta.inner.lock().pos = offset;
-        Ok(offset as isize)
-    }
 }

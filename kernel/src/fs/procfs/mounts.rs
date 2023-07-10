@@ -91,10 +91,4 @@ impl File for MountsFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-
-    fn seek(&self, offset: usize) -> SyscallRet {
-        debug!("[MountsFile] seek offset: {}", offset);
-        self.meta.inner.lock().pos = offset;
-        Ok(offset as isize)
-    }
 }

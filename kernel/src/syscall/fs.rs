@@ -15,8 +15,8 @@ use log::{debug, info, trace, warn};
 use super::PollFd;
 use crate::config::fs::RLIMIT_OFILE;
 use crate::fs::ffi::{
-    Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, STAT, STATFS_SIZE, STAT_SIZE,
-    SYSINFO_SIZE,
+    Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, SEEK_CUR, SEEK_END, SEEK_SET, STAT,
+    STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE,
 };
 use crate::fs::file_system::FsDevice;
 use crate::fs::inode::INODE_CACHE;
@@ -26,12 +26,12 @@ use crate::fs::{
     Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
-use crate::fs::{open_file_inode, resolve_path_with_dirfd, HashKey};
+use crate::fs::{open_file_inode, resolve_path_with_dirfd, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
 use crate::stack_trace;
-use crate::syscall::{PollEvents, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
 use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{posix::current_time_spec, UTIME_NOW};
@@ -71,7 +71,7 @@ pub fn sys_dup(oldfd: usize) -> SyscallRet {
     Ok(newfd as isize)
 }
 
-pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SyscallRet {
+pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallRet {
     stack_trace!();
     debug!("[sys_dup3] start... oldfd:{}, newfd:{}", oldfd, newfd);
     // TODO: handle `close on exec`
@@ -81,7 +81,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SyscallRet {
                 if newfd >= RLIMIT_OFILE {
                     return Err(SyscallErr::EINVAL);
                 } else {
-                    proc.fd_table.alloc_spec_fd(newfd);
+                    proc.fd_table.alloc_spec_fd(newfd)?;
                 }
             }
             debug!("[sys_dup3]: dup oldfd:{} to newfd:{}", oldfd, newfd);
@@ -474,31 +474,17 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
     }
     match whence {
         SEEK_SET => {
-            let off = file.seek(offset as usize)?;
+            let off = file.seek(SeekFrom::Start(offset as usize))?;
             debug!("[sys_lseek] return off: {}", off);
             Ok(off)
         }
         SEEK_CUR => {
-            let pos = file.metadata().inner.lock().pos;
-            let off = pos + offset as usize;
-            let off = file.seek(off)?;
+            let off = file.seek(SeekFrom::Current(offset))?;
             debug!("[sys_lseek] return off: {}", off);
             Ok(off as isize)
         }
         SEEK_END => {
-            let size = file
-                .metadata()
-                .inner
-                .lock()
-                .inode
-                .as_ref()
-                .unwrap()
-                .metadata()
-                .inner
-                .lock()
-                .data_len;
-            let off = size + offset as usize;
-            let off = file.seek(off)?;
+            let off = file.seek(SeekFrom::End(offset))?;
             debug!("[sys_lseek] return off: {}", off);
             Ok(off as isize)
         }
@@ -755,11 +741,12 @@ pub async fn sys_sendfile(
             UserCheck::new()
                 .check_readable_slice(offset_ptr as *const u8, core::mem::size_of::<usize>())?;
             let _sum_guard = SumGuard::new();
-            let old_offset = input_file.offset()?;
             let input_offset = unsafe { *(offset_ptr as *const usize) };
-            input_file.seek(input_offset)?;
-            let nbytes = input_file.read(&mut buf).await?;
-            input_file.seek(old_offset as usize)?;
+            let nbytes = input_file.pread(&mut buf, input_offset).await?;
+            // let old_offset = input_file.offset()?;
+            // input_file.seek(input_offset)?;
+            // let nbytes = input_file.read(&mut buf).await?;
+            // input_file.seek(old_offset as usize)?;
             unsafe {
                 *(offset_ptr as *mut usize) = *(offset_ptr as *mut usize) + nbytes as usize;
             }

@@ -88,10 +88,6 @@ const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
 
-const SEEK_SET: u8 = 0;
-const SEEK_CUR: u8 = 1;
-const SEEK_END: u8 = 2;
-
 mod dev;
 mod fs;
 mod mm;
