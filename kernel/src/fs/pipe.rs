@@ -9,12 +9,10 @@ use log::debug;
 use crate::config::fs::PIPE_BUF_CAPACITY;
 use crate::processor::{current_task, SumGuard};
 use crate::stack_trace;
-use crate::sync::mutex::SpinNoIrqLock;
 use crate::utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet};
 
 use super::file::{File, FileMeta, SeekFrom};
-
-type Mutex<T> = SpinNoIrqLock<T>;
+use super::Mutex;
 
 #[derive(Clone)]
 pub struct Pipe {

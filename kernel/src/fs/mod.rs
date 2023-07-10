@@ -11,6 +11,7 @@ pub mod ffi;
 mod page_cache;
 pub mod pipe;
 mod procfs;
+pub mod socket;
 mod testfs;
 
 use alloc::string::String;

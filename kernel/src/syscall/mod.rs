@@ -111,6 +111,7 @@ use dev::*;
 use fs::*;
 use log::error;
 use mm::*;
+use net::*;
 use process::*;
 use signal::*;
 pub use sync::futex_wake;
@@ -319,6 +320,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SYSINFO => sys_handler!(sys_sysinfo, (args[0])),
         SYSCALL_SHMGET => sys_handler!(sys_shmget, (args[0], args[1], args[2] as u32)),
         SYSCALL_SHMAT => sys_handler!(sys_shmat, (args[0], args[1], args[2] as u32)),
+        SYSCALL_SOCKET => {
+            sys_handler!(sys_socket, (args[0] as u32, args[1] as u32, args[2] as u32))
+        }
         SYSCALL_TGKILL => sys_handler!(
             sys_tgkill,
             (args[0] as usize, args[1] as usize, args[2] as i32)
