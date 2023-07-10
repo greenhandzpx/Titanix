@@ -172,39 +172,47 @@ impl KSigAction {
 
 /// Note that we handle only one pending signal every time
 pub fn check_signal_for_current_process() {
-    // loop {
+    // TODO: handle nesting sig handle:
+    // Do we need to save trap contexts like a stack?
+    if let Some((sig_info, sig_action, old_blocked_sigs)) =
+        current_process().inner_handler(|proc| {
+            if proc.pending_sigs.sig_queue.is_empty() {
+                return None;
+            }
+            let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
+            assert!(sig_info.signo < SIG_NUM);
 
-    if let Some((sig_info, sig_action)) = current_process().inner_handler(|proc| {
-        if proc.pending_sigs.sig_queue.is_empty() {
-            return None;
-        }
-        let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
-        assert!(sig_info.signo < SIG_NUM);
+            debug!("find a sig {}", sig_info.signo);
 
-        debug!("find a sig {}", sig_info.signo);
+            let signo = sig_info.signo;
 
-        let signo = sig_info.signo;
+            let signo_shift = SigSet::from_bits(1 << sig_info.signo).unwrap();
 
-        let signo_shift = SigSet::from_bits(1 << sig_info.signo).unwrap();
+            if proc.pending_sigs.blocked_sigs.contains(signo_shift) {
+                debug!("sig {} has been blocked", signo);
+                return None;
+            }
 
-        if proc.pending_sigs.blocked_sigs.contains(signo_shift) {
-            debug!("sig {} has been blocked", signo);
-            return None;
-        }
+            let old_blocked_sigs = proc.pending_sigs.blocked_sigs;
 
-        save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
+            // save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
 
-        proc.pending_sigs.blocked_sigs |= signo_shift;
-        // TODO: only use the first element now
-        proc.pending_sigs.blocked_sigs |= proc.sig_handler.lock().sigactions[sig_info.signo]
-            .sig_action
-            .sa_mask[0];
+            proc.pending_sigs.blocked_sigs |= signo_shift;
+            // TODO: only use the first element now
+            proc.pending_sigs.blocked_sigs |= proc.sig_handler.lock().sigactions[sig_info.signo]
+                .sig_action
+                .sa_mask[0];
 
-        Some((sig_info, proc.sig_handler.lock().sigactions[signo]))
-    }) {
+            Some((
+                sig_info,
+                proc.sig_handler.lock().sigactions[signo],
+                old_blocked_sigs,
+            ))
+        })
+    {
         // Note that serveral sig handlers may be executed at the same time by different threads
         // since we don't hold the process inner lock
-        handle_signal(sig_info.signo, sig_action);
+        handle_signal(sig_info.signo, sig_action, old_blocked_sigs);
         // } else {
         //     break;
     }
@@ -215,12 +223,14 @@ extern "C" {
     fn sigreturn_trampoline();
 }
 
-fn handle_signal(signo: usize, sig_action: KSigAction) {
+fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet) {
     info!(
         "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
     );
     if sig_action.is_user_defined {
+        save_context_for_sig_handler(old_blocked_sigs);
+
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;
@@ -253,6 +263,10 @@ fn save_context_for_sig_handler(blocked_sigs: SigSet) {
         blocked_sigs,
         user_context: UserContext::from_trap_context(current_task().trap_context_ref()),
     };
+    debug!(
+        "[save_context_for_sig_handler] sepc {:#x}",
+        signal_context.user_context.sepc
+    );
     current_task().set_signal_context(signal_context);
 }
 
