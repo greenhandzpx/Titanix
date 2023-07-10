@@ -61,7 +61,6 @@ impl Thread {
             );
             proc.memory_space.activate();
         });
-
     }
 
     ///

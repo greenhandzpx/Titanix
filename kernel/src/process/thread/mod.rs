@@ -107,7 +107,9 @@ impl Thread {
         // debug!("new ustack top {:#x}", res.ustack_top());
         if !user_specified_stack {
             unsafe {
-                (*thread.inner.get()).trap_context.set_sp(thread.ustack_top());
+                (*thread.inner.get())
+                    .trap_context
+                    .set_sp(thread.ustack_top());
             }
         }
         thread

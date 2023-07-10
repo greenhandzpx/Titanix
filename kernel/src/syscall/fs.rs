@@ -475,17 +475,17 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
     match whence {
         SEEK_SET => {
             let off = file.seek(SeekFrom::Start(offset as usize))?;
-            debug!("[sys_lseek] return off: {}", off);
+            trace!("[sys_lseek] return off: {}", off);
             Ok(off)
         }
         SEEK_CUR => {
             let off = file.seek(SeekFrom::Current(offset))?;
-            debug!("[sys_lseek] return off: {}", off);
+            trace!("[sys_lseek] return off: {}", off);
             Ok(off as isize)
         }
         SEEK_END => {
             let off = file.seek(SeekFrom::End(offset))?;
-            debug!("[sys_lseek] return off: {}", off);
+            trace!("[sys_lseek] return off: {}", off);
             Ok(off as isize)
         }
         _ => Err(SyscallErr::EINVAL),
@@ -561,10 +561,10 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_base: {}", iov_base);
         let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
         trace!("get iov_len: {}", iov_len);
-        ret += iov_len;
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
-        file.write(buf).await?;
+        let write_ret = file.write(buf).await?;
+        ret += write_ret as usize;
     }
     Ok(ret as isize)
 }
@@ -600,11 +600,11 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_base: {}", iov_base);
         let iov_len = unsafe { &*(current as *const Iovec) }.iov_len;
         trace!("get iov_len: {}", iov_len);
-        ret += iov_len;
         UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
         trace!("[readv] buf: {:?}", buf);
-        file.read(buf).await?;
+        let read_ret = file.read(buf).await?;
+        ret += read_ret as usize;
     }
     Ok(ret as isize)
 }
