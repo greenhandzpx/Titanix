@@ -2,22 +2,17 @@ mod exit;
 mod schedule;
 #[allow(clippy::module_inception)]
 mod thread_loop;
-mod thread_resource;
 mod thread_state;
-mod tid;
+pub mod tid;
 mod time;
-
-pub use thread_resource::TidAddress;
 
 use self::{
     thread_state::{ThreadState, ThreadStateAtomic},
+    tid::{tid_alloc, TidAddress, TidHandle},
     time::ThreadTimeInfo,
 };
 
-use super::{
-    pid::{tid_alloc, TidHandle},
-    Process,
-};
+use super::Process;
 use crate::signal::SignalContext;
 use crate::trap::TrapContext;
 use crate::{executor, stack_trace};
@@ -56,19 +51,22 @@ pub struct ThreadInner {
     pub trap_context: TrapContext,
     /// Used for signal handle
     pub signal_context: Option<SignalContext>,
-    /// When invoking `exec`, we need to get the ustack base.
-    /// Note that ustack_base is the base of all ustacks
-    pub ustack_base: usize,
+
+    // /// When invoking `exec`, we need to get the ustack base.
+    // /// Note that ustack_base is the base of all ustacks
+    // pub ustack_base: usize,
     /// Thread state.
     /// Note that this may be modified by another thread, which
     /// need to be sync
     pub state: ThreadStateAtomic,
     /// Tid address, which may be modified by `set_tid_address` syscall
     pub tid_addr: Option<TidAddress>,
-    ///
+    /// Time info
     pub time_info: ThreadTimeInfo,
     /// Waker
     pub waker: Option<Waker>,
+    /// Ustack top
+    pub ustack_top: usize,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -80,8 +78,8 @@ impl Thread {
     pub fn new(
         process: Arc<Process>,
         trap_context: TrapContext,
-        ustack_base: usize,
-        user_specified_stack: bool,
+        ustack_top: usize,
+        // user_specified_stack: bool,
         tid: Option<Arc<TidHandle>>,
     ) -> Self {
         let thread = Self {
@@ -94,7 +92,7 @@ impl Thread {
             inner: UnsafeCell::new(ThreadInner {
                 trap_context,
                 signal_context: None,
-                ustack_base,
+                ustack_top,
                 state: ThreadStateAtomic::new(),
                 tid_addr: None,
                 time_info: ThreadTimeInfo::new(),
@@ -102,16 +100,6 @@ impl Thread {
                 // terminated: AtomicBool::new(false),
             }),
         };
-        thread.alloc_ustack();
-        // debug!("old ustack top {:#x}", trap_context.user_x[2]);
-        // debug!("new ustack top {:#x}", res.ustack_top());
-        if !user_specified_stack {
-            unsafe {
-                (*thread.inner.get())
-                    .trap_context
-                    .set_sp(thread.ustack_top());
-            }
-        }
         thread
     }
 
@@ -138,7 +126,7 @@ impl Thread {
                     trap_context
                 },
                 signal_context: None,
-                ustack_base: unsafe { (*self.inner.get()).ustack_base },
+                ustack_top: unsafe { (*self.inner.get()).ustack_top },
                 state: ThreadStateAtomic::new(),
                 tid_addr: None,
                 time_info: ThreadTimeInfo::new(),

@@ -605,7 +605,6 @@ impl MemorySpace {
             aux_type: AT_PHENT,
             value: elf.header.pt2.ph_entry_size() as usize,
         }); // ELF64 header 64bytes
-
         auxv.push(AuxHeader {
             aux_type: AT_PHNUM,
             value: ph_count as usize,
@@ -699,9 +698,26 @@ impl MemorySpace {
         // We will add the ustack to memory set later by `Thread` itself
         // Now we add heap section
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
+
+        let ustack_vma = VmArea::new(
+            user_stack_bottom.into(),
+            user_stack_top.into(),
+            MapType::Framed,
+            MapPermission::U | MapPermission::R | MapPermission::W,
+            Some(Arc::new(UStackPageFaultHandler {})),
+            None,
+            memory_space.page_table.clone(),
+            VmAreaType::Stack,
+        );
+        memory_space.push(ustack_vma, 0, None);
+        debug!(
+            "[from_elf] map ustack: {:#x}, {:#x}",
+            user_stack_bottom, user_stack_top,
+        );
+
         // guard page
         let heap_start_va = user_stack_top + PAGE_SIZE;
-        let map_perm = MapPermission::U | MapPermission::R | MapPermission::W | MapPermission::X;
+        let map_perm = MapPermission::U | MapPermission::R | MapPermission::W;
         let heap_vma = VmArea::new(
             heap_start_va.into(),
             heap_start_va.into(),
@@ -719,7 +735,7 @@ impl MemorySpace {
             heap_start_va, heap_start_va
         );
 
-        (memory_space, user_stack_bottom, entry_point, auxv)
+        (memory_space, user_stack_top, entry_point, auxv)
     }
 
     /// Check whether the elf file is dynamic linked and
