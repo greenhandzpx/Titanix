@@ -36,7 +36,25 @@ lazy_static! {
     /// TODO: add max capacity limit and lru policy
     ///
     pub static ref INODE_CACHE: Mutex<HashMap<HashKey, Arc<dyn Inode>>> = Mutex::new(HashMap::new());
+    pub static ref FAST_PATH_CACHE: Mutex<HashMap<String, Arc<dyn Inode>>> = Mutex::new(HashMap::new());
 }
+
+impl FAST_PATH_CACHE {
+    /// return (target inode, is in fast path)
+    pub fn get(path: String) -> (Option<Arc<dyn Inode>>, bool) {
+        if FAST_PATH.contains(&path.as_str()) {
+            let target = FAST_PATH_CACHE.lock().get(&path).cloned();
+            return (target, true);
+        } else {
+            return (None, false);
+        }
+    }
+    pub fn insert(path: String, inode: Arc<dyn Inode>) {
+        FAST_PATH_CACHE.lock().insert(path, inode);
+    }
+}
+
+pub const FAST_PATH: [&str; 3] = ["/dev/null", "/dev/zero", "/dev/tty"];
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum InodeMode {
@@ -164,9 +182,18 @@ pub trait Inode: Send + Sync {
         path: &str,
     ) -> GeneralRet<Option<Arc<dyn Inode>>> {
         let path_names = path::path2vec(path);
-        // path_names.remove(0);
 
-        let mut parent = this;
+        let mut parent = this.clone();
+
+        let path = path::merge(&this.metadata().path, path);
+        let path = path::format(&path);
+        let (target, fast_path) = FAST_PATH_CACHE::get(path.clone());
+        if target.is_some() {
+            debug!("[lookup_from_root] find in fast path cache");
+            return Ok(target);
+        }
+
+        debug!("[lookup_from_root] mismatch in fast path cache");
 
         for (i, name) in path_names.clone().into_iter().enumerate() {
             debug!("[lookup_from_inode] round: {}, name: {}", i, name);
@@ -182,6 +209,11 @@ pub trait Inode: Send + Sync {
                     return Err(SyscallErr::ENOENT);
                 }
             }
+        }
+
+        if fast_path {
+            debug!("[lookup_from_root] insert into fast path cache: {}", path);
+            FAST_PATH_CACHE::insert(path, parent.clone());
         }
         Ok(Some(parent))
     }
@@ -305,6 +337,15 @@ impl dyn Inode {
 
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
+        let path = path::format(path);
+        let (target, fast_path) = FAST_PATH_CACHE::get(path.clone());
+        if target.is_some() {
+            debug!("[lookup_from_root] find in fast path cache");
+            return Ok(target);
+        }
+
+        debug!("[lookup_from_root] mismatch in fast path cache");
+
         for (i, name) in path_names.clone().into_iter().enumerate() {
             debug!("[lookup_from_root] round: {}, name: {}", i, name);
             match parent.lookup(parent.clone(), name)? {
@@ -319,6 +360,11 @@ impl dyn Inode {
                     return Err(SyscallErr::ENOENT);
                 }
             }
+        }
+
+        if fast_path {
+            debug!("[lookup_from_root] insert into fast path cache: {}", path);
+            FAST_PATH_CACHE::insert(path, parent.clone());
         }
         Ok(Some(parent))
     }

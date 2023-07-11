@@ -271,7 +271,6 @@ pub fn get_parent_dir(path_name: &str) -> Option<String> {
     }
     Some(res)
 }
-#[allow(unused)]
 pub fn merge(p1: &str, p2: &str) -> String {
     let mut res = p1.to_string();
     res += "/";

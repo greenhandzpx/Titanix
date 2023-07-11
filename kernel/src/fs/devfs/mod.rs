@@ -9,9 +9,10 @@ use self::rtc::RtcInode;
 use self::{tty::TtyInode, zero::ZeroInode};
 use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
-use crate::fs::inode::INODE_CACHE;
+use crate::fs::inode::{FAST_PATH, INODE_CACHE};
 use crate::utils::error::GeneralRet;
 
+use super::inode::FAST_PATH_CACHE;
 use super::testfs::TestRootInode;
 use super::FileSystemType;
 use super::{
@@ -121,6 +122,7 @@ impl DevFs {
         let id_allocator = AtomicUsize::new(0);
 
         let mut cache_lock = INODE_CACHE.lock();
+        let mut fast_path = FAST_PATH_CACHE.lock();
         let parent_ino = root_inode.metadata().ino;
         for (dev_name2, inode_mode, _) in DEV_NAMES {
             let child = root_inode.mknod(
@@ -131,7 +133,11 @@ impl DevFs {
             )?;
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);
-            cache_lock.insert(key, child);
+            cache_lock.insert(key, child.clone());
+            if FAST_PATH.contains(&dev_name2) {
+                debug!("inster {} into fast path cache", dev_name2);
+                fast_path.insert(dev_name2.to_string(), child);
+            }
             debug!("insert {} finished", dev_name2);
         }
 
