@@ -480,6 +480,8 @@ bitflags! {
         const MAP_FIXED = 1 << 4;
         /// Anonymous
         const MAP_ANONYMOUS = 1 << 5;
+        /// Stack
+        const MAP_STACK = 1 << 17;
     }
 }
 

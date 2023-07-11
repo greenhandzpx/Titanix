@@ -4,7 +4,7 @@ use log::{debug, error, info};
 
 use crate::{
     mm::user_check::UserCheck,
-    process::thread::TidAddress,
+    process::thread::tid::TidAddress,
     processor::{current_process, current_task, SumGuard},
     stack_trace,
     sync::FutexFuture,
