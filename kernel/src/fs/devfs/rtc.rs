@@ -79,4 +79,7 @@ impl File for RtcFile {
         debug!("write /dev/rtc");
         Box::pin(async move { Ok(buf.len() as isize) })
     }
+    fn flags(&self) -> OpenFlags {
+        self.meta.inner.lock().flags
+    }
 }

@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::ToString, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
-    utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
 pub struct MountsInode {
@@ -90,5 +90,9 @@ impl File for MountsFile {
 
     fn metadata(&self) -> &FileMeta {
         &self.meta
+    }
+
+    fn flags(&self) -> OpenFlags {
+        self.meta.inner.lock().flags
     }
 }

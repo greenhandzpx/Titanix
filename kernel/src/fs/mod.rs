@@ -146,6 +146,7 @@ bitflags! {
 
     /// fcntl flags
     pub struct FcntlFlags: u32 {
+        const FD_CLOEXEC = 1;
         const AT_EMPTY_PATH = 1 << 0;
         const AT_NO_AUTOMOUNT = 1 << 11;
         const AT_SYMLINK_NOFOLLOW = 1 << 8;

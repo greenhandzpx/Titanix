@@ -119,7 +119,7 @@ use sync::*;
 use time::*;
 
 use crate::{
-    fs::ffi::Statfs,
+    fs::{ffi::Statfs, socket::SocketAddr},
     mm::MapPermission,
     process::resource::RLimit,
     signal::{SigAction, SigSet},
@@ -323,6 +323,55 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SOCKET => {
             sys_handler!(sys_socket, (args[0] as u32, args[1] as u32, args[2] as u32))
         }
+        SYSCALL_BIND => sys_handler!(
+            sys_bind,
+            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
+        ),
+        SYSCALL_LISTEN => sys_handler!(sys_listen, (args[0] as u32, args[1] as u32)),
+        SYSCALL_ACCEPT => sys_handler!(
+            sys_accept,
+            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
+        ),
+        SYSCALL_CONNECT => sys_handler!(
+            sys_connect,
+            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
+        ),
+        SYSCALL_GETSOCKNAME => sys_handler!(
+            sys_getsockname,
+            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
+        ),
+        SYSCALL_SENDTO => sys_handler!(
+            sys_sendto,
+            (
+                args[0] as u32,
+                args[1],
+                args[2],
+                args[3] as u32,
+                args[4],
+                args[5] as u32
+            ), await
+        ),
+        SYSCALL_RECVFROM => sys_handler!(
+            sys_recvfrom,
+            (
+                args[0] as u32,
+                args[1],
+                args[2],
+                args[3] as u32,
+                args[4],
+                args[5] as u32
+            ), await
+        ),
+        SYSCALL_SETSOCKOPT => sys_handler!(
+            sys_setsockopt,
+            (
+                args[0] as u32,
+                args[1] as u32,
+                args[2] as u32,
+                args[3],
+                args[4] as u32
+            )
+        ),
         SYSCALL_TGKILL => sys_handler!(
             sys_tgkill,
             (args[0] as usize, args[1] as usize, args[2] as i32)

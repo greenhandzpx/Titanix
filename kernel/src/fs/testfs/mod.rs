@@ -109,6 +109,10 @@ impl File for TestRootFile {
     fn metadata(&self) -> &FileMeta {
         self.metadata.as_ref().unwrap()
     }
+
+    fn flags(&self) -> OpenFlags {
+        self.metadata.as_ref().unwrap().inner.lock().flags
+    }
 }
 
 pub struct TestFs {

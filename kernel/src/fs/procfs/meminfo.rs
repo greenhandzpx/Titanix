@@ -14,7 +14,7 @@ use crate::{
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
-    utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
+    utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
 lazy_static! {
@@ -166,5 +166,9 @@ impl File for MeminfoFile {
 
     fn metadata(&self) -> &FileMeta {
         &self.meta
+    }
+
+    fn flags(&self) -> OpenFlags {
+        self.meta.inner.lock().flags
     }
 }

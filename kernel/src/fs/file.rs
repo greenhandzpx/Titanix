@@ -163,6 +163,8 @@ pub trait File: Send + Sync {
 
     fn metadata(&self) -> &FileMeta;
 
+    fn flags(&self) -> OpenFlags;
+
     fn truncate(&self, len: usize) -> AgeneralRet<()> {
         Box::pin(async move {
             let (old_pos, writable, inode) = self.metadata().inner_get(|inner| {
@@ -216,6 +218,10 @@ impl DefaultFile {
 impl File for DefaultFile {
     fn metadata(&self) -> &FileMeta {
         &self.metadata
+    }
+
+    fn flags(&self) -> OpenFlags {
+        self.metadata.inner.lock().flags
     }
 
     /// For default file, data must be read from page cache first

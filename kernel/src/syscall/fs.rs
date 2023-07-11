@@ -2,7 +2,6 @@
 use core::ops::Add;
 use core::ptr;
 use core::ptr::copy_nonoverlapping;
-use core::str::from_utf8_unchecked;
 use core::time::Duration;
 
 use alloc::string::ToString;
@@ -697,9 +696,13 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
         _ if cmd == FcntlCmd::F_GETFD as i32 || cmd == FcntlCmd::F_GETFL as i32 => {
             current_process().inner_handler(|proc| {
                 let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                let flags = file.metadata().inner.lock().flags;
-                debug!("[sys_fcntl]: set file flags to {:?}", flags);
-                Ok(OpenFlags::bits(&flags) as isize)
+                let flags = file.flags();
+                debug!("[sys_fcntl]: get file flags {:?}", flags);
+                if flags.contains(OpenFlags::CLOEXEC) && cmd == FcntlCmd::F_GETFD as i32 {
+                    Ok(FcntlFlags::bits(&FcntlFlags::FD_CLOEXEC) as isize)
+                } else {
+                    Ok(OpenFlags::bits(&flags) as isize)
+                }
             })
         }
         _ => {

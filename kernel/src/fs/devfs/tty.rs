@@ -158,4 +158,7 @@ impl File for TtyFile {
         //     return Ok(true);
         // }
     }
+    fn flags(&self) -> OpenFlags {
+        self.metadata.inner.lock().flags
+    }
 }

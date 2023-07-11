@@ -12,7 +12,7 @@ use crate::stack_trace;
 use crate::utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet};
 
 use super::file::{File, FileMeta, SeekFrom};
-use super::Mutex;
+use super::{Mutex, OpenFlags};
 
 #[derive(Clone)]
 pub struct Pipe {
@@ -172,6 +172,9 @@ impl File for Pipe {
                 Ok(false)
             }
         })
+    }
+    fn flags(&self) -> OpenFlags {
+        todo!()
     }
 }
 
