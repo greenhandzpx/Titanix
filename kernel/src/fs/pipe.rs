@@ -406,9 +406,9 @@ impl Future for PipeFuture {
                 for _ in 0..loop_read {
                     buf[this.already_put] = ring_buffer.read_byte();
                     this.already_put += 1;
-                    // if this.already_put == this.user_buf_len {
-                    //     return Poll::Ready(Ok(this.already_put as isize));
-                    // }
+                    if this.already_put == this.user_buf_len {
+                        return Poll::Ready(Ok(this.already_put as isize));
+                    }
                 }
                 return Poll::Ready(Ok(this.already_put as isize));
                 // ring_buffer.wait_for_reading(cx.waker().clone());
