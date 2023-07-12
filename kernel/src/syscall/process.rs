@@ -187,11 +187,13 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
 
     // transfer the cmd args
     let mut args_vec: Vec<String> = Vec::new();
+    // Actually, we should open the sh file and read #!...
+    // find the interpreter and option args
+    // but we default all the shell script should be start with "#! busybox sh"
+    // So we should push /busybox and sh into the args vec
     if path.ends_with(".sh") {
-        let sh_file = path;
         path = "/busybox".to_string();
         args_vec.push("sh".to_string());
-        args_vec.push(sh_file);
     }
 
     UserCheck::new().check_c_str(args as *const u8)?;
