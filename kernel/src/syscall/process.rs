@@ -193,6 +193,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     // So we should push /busybox and sh into the args vec
     if path.ends_with(".sh") {
         path = "/busybox".to_string();
+        args_vec.push("busybox".to_string());
         args_vec.push("sh".to_string());
     }
 
