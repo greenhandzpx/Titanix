@@ -397,8 +397,14 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    let inode = file.metadata().inner.lock().inode.as_ref().unwrap().clone();
-    _fstat(inode, stat_buf)
+    let inner = file.metadata().inner.lock();
+    let inode = inner.inode.as_ref();
+    if inode.is_none() {
+        Ok(0)
+    } else {
+        let inode = inode.unwrap().clone();
+        _fstat(inode, stat_buf)
+    }
 }
 
 /// We should give the stat_buf which has already been checked to _fstat function.

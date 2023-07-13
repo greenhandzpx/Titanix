@@ -14,11 +14,11 @@ use crate::utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet};
 use super::file::{File, FileMeta, SeekFrom};
 use super::{Mutex, OpenFlags};
 
-#[derive(Clone)]
 pub struct Pipe {
     readable: bool,
     writable: bool,
     buffer: Arc<Mutex<PipeRingBuffer>>,
+    meta: FileMeta,
 }
 
 impl File for Pipe {
@@ -33,7 +33,7 @@ impl File for Pipe {
     }
 
     fn metadata(&self) -> &FileMeta {
-        todo!()
+        &self.meta
     }
 
     fn seek(&self, _pos: SeekFrom) -> SyscallRet {
@@ -180,17 +180,21 @@ impl File for Pipe {
 
 impl Pipe {
     pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+        let meta = FileMeta::new(OpenFlags::RDONLY);
         Self {
             readable: true,
             writable: false,
             buffer,
+            meta,
         }
     }
     pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+        let meta = FileMeta::new(OpenFlags::WRONLY);
         Self {
             readable: false,
             writable: true,
             buffer,
+            meta,
         }
     }
     fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
