@@ -272,3 +272,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     }
     Ok(0)
 }
+
+pub fn sys_umask(mask: u32) -> SyscallRet {
+    Ok(0x777 as isize)
+}

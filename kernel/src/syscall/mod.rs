@@ -49,7 +49,7 @@ const SYSCALL_FUTEX: usize = 98;
 const SYSCALL_SET_ROBUST_LIST: usize = 99;
 const SYSCALL_GET_ROBUST_LIST: usize = 100;
 const SYSCALL_NANOSLEEP: usize = 101;
-const SYSCALL_SETTIMER: usize = 103;
+const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_SYSLOG: usize = 116;
@@ -260,8 +260,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_handler!(sys_futex, (args[0], args[1] as u32, args[2] as u32, args[3], args[4], args[5] as u32), await)
         }
         SYSCALL_NANOSLEEP => sys_handler!(sys_nanosleep, (args[0]), await),
-        SYSCALL_SETTIMER => sys_handler!(
-            sys_settimer,
+        SYSCALL_SETITIMER => sys_handler!(
+            sys_setitimer,
             (
                 args[0] as i32,
                 args[1] as *const ITimerval,
@@ -310,6 +310,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETPGID => sys_handler!(sys_getpgid, (args[0])),
         SYSCALL_UNAME => sys_handler!(sys_uname, (args[0])),
         SYSCALL_GETRUSAGE => sys_handler!(sys_getrusage, (args[0] as i32, args[1])),
+        SYSCALL_UMASK => sys_handler!(sys_umask, (args[0] as u32)),
         SYSCALL_GET_TIME => sys_handler!(sys_get_time, (args[0] as *mut TimeVal)),
         SYSCALL_GETPID => sys_handler!(sys_getpid, ()),
         SYSCALL_GETPPID => sys_handler!(sys_getppid, ()),

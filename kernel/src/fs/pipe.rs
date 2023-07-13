@@ -410,6 +410,7 @@ impl Future for PipeFuture {
                         return Poll::Ready(Ok(this.already_put as isize));
                     }
                 }
+                debug!("[PipeFuture::poll] read return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put as isize));
                 // ring_buffer.wait_for_reading(cx.waker().clone());
                 // return Poll::Pending;
@@ -441,6 +442,7 @@ impl Future for PipeFuture {
                         break;
                     }
                 }
+                debug!("[PipeFuture::poll] write return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put as isize));
                 // ring_buffer.wait_for_writing(cx.waker().clone());
                 // return Poll::Pending;
