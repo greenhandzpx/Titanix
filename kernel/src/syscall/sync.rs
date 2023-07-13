@@ -24,19 +24,26 @@ enum FutexOperations {
     FutexClockRealTime = 256,
 }
 
-pub async fn sys_futex(uaddr: usize, futex_op: usize, val: u32, timeout_ptr: usize) -> SyscallRet {
+pub async fn sys_futex(
+    uaddr: usize,
+    futex_op: u32,
+    val: u32,
+    timeout_ptr: usize,
+    uaddr2: usize,
+    val3: u32,
+) -> SyscallRet {
     stack_trace!();
     // todo!("[sys_futex]: not yet implemented!");
-    if futex_op & FutexOperations::FutexPrivateFlag as usize == 0 {
+    if futex_op & FutexOperations::FutexPrivateFlag as u32 == 0 {
         error!("[sys_futex] unsupported operation");
         return Ok(0);
     }
     info!(
-        "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}",
-        uaddr, futex_op, val
+        "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}, uaddr2 {:#x}, val3 {:#x}",
+        uaddr, futex_op, val, uaddr2, val3
     );
     match futex_op {
-        _ if futex_op == FutexOperations::FutexWait as usize => {
+        _ if futex_op == FutexOperations::FutexWait as u32 => {
             let _sum_guard = SumGuard::new();
             UserCheck::new()
                 .check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
@@ -65,7 +72,7 @@ pub async fn sys_futex(uaddr: usize, futex_op: usize, val: u32, timeout_ptr: usi
                 return Err(SyscallErr::EAGAIN);
             }
         }
-        _ if futex_op == FutexOperations::FutexWake as usize => {
+        _ if futex_op == FutexOperations::FutexWake as u32 => {
             return futex_wake(uaddr, val);
         }
         _ => {
