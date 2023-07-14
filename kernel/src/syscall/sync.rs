@@ -7,7 +7,7 @@ use crate::{
     process::thread::tid::TidAddress,
     processor::{current_process, current_task, SumGuard},
     stack_trace,
-    sync::FutexFuture,
+    sync::{futex_wake, FutexFuture},
     timer::{posix::TimeSpec, timeout_task::TimeoutTaskFuture},
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -26,7 +26,7 @@ enum FutexOperations {
 
 pub async fn sys_futex(
     uaddr: usize,
-    futex_op: u32,
+    mut futex_op: u32,
     val: u32,
     timeout_ptr: usize,
     uaddr2: usize,
@@ -34,10 +34,13 @@ pub async fn sys_futex(
 ) -> SyscallRet {
     stack_trace!();
     // todo!("[sys_futex]: not yet implemented!");
-    if futex_op & FutexOperations::FutexPrivateFlag as u32 == 0 {
-        error!("[sys_futex] unsupported operation");
-        return Ok(0);
-    }
+    // if futex_op & FutexOperations::FutexPrivateFlag as u32 == 0 {
+    //     error!("[sys_futex] unsupported operation");
+    //     return Ok(0);
+    // } else {
+    //     futex_op &= !(FutexOperations::FutexPrivateFlag as u32);
+    // }
+    futex_op &= !(FutexOperations::FutexPrivateFlag as u32);
     info!(
         "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}, uaddr2 {:#x}, val3 {:#x}",
         uaddr, futex_op, val, uaddr2, val3
@@ -76,22 +79,15 @@ pub async fn sys_futex(
             return futex_wake(uaddr, val);
         }
         _ => {
-            panic!("Unplemented futex op")
+            panic!("Unplemented futex op, {}", futex_op)
         }
     }
     Ok(0)
 }
 
 /// Futex syscall
-pub fn futex_wake(uaddr: usize, val: u32) -> SyscallRet {
-    stack_trace!();
-    UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
-    let cnt =
-        current_process().inner_handler(|proc| proc.futex_queue.wake(uaddr.into(), val as usize));
-    return Ok(cnt as isize);
-}
-
 pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
+    stack_trace!();
     debug!("tid_ptr: {:#x}", tid_ptr);
     if UserCheck::new()
         .check_writable_slice(tid_ptr as *mut u8, core::mem::size_of::<usize>())
@@ -104,6 +100,16 @@ pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
         *(tid_ptr as *mut usize) = current_task().tid();
     }
     let inner = unsafe { &mut (*current_task().inner.get()) };
-    inner.tid_addr = Some(TidAddress { addr: tid_ptr });
+    inner.tid_addr.clear_tid_address = Some(tid_ptr);
     Ok(current_task().tid() as isize)
+}
+
+pub fn sys_set_robust_list(head: usize, len: usize) -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}
+
+pub fn sys_get_robust_list(pid: usize, head_ptr: usize, len_ptr: usize) -> SyscallRet {
+    stack_trace!();
+    Ok(0)
 }

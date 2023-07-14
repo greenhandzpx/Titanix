@@ -92,7 +92,7 @@ __return_to_user:
     ld t1, 33*8(sp)
     csrw sstatus, t0
     csrw sepc, t1
-    # restore general purpose registers except x0/sp/tp
+    # restore general purpose registers except x0/sp/  tp
     ld x1, 1*8(sp)
     ld x3, 3*8(sp)
     .set n, 4

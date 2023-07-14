@@ -2,8 +2,10 @@
 
 mod futex;
 
+pub use futex::futex_wake;
 pub use futex::FutexFuture;
 pub use futex::FutexQueue;
+pub use futex::OwnedFutexes;
 
 mod mailbox;
 /// Different kinds of mutex

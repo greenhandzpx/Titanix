@@ -13,10 +13,10 @@ use self::{
 };
 
 use super::Process;
-use crate::signal::SignalContext;
-use crate::trap::TrapContext;
 use crate::{executor, stack_trace};
-use alloc::sync::Arc;
+use crate::{mm::VirtAddr, signal::SignalContext};
+use crate::{sync::OwnedFutexes, trap::TrapContext};
+use alloc::{collections::BTreeSet, sync::Arc};
 use core::future::Future;
 use core::{cell::UnsafeCell, task::Waker};
 
@@ -60,13 +60,15 @@ pub struct ThreadInner {
     /// need to be sync
     pub state: ThreadStateAtomic,
     /// Tid address, which may be modified by `set_tid_address` syscall
-    pub tid_addr: Option<TidAddress>,
+    pub tid_addr: TidAddress,
     /// Time info
     pub time_info: ThreadTimeInfo,
     /// Waker
     pub waker: Option<Waker>,
     /// Ustack top
     pub ustack_top: usize,
+    /// Futexes this thread owns
+    pub owned_futexes: OwnedFutexes,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -94,9 +96,10 @@ impl Thread {
                 signal_context: None,
                 ustack_top,
                 state: ThreadStateAtomic::new(),
-                tid_addr: None,
+                tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
+                owned_futexes: OwnedFutexes::new(),
                 // terminated: AtomicBool::new(false),
             }),
         };
@@ -128,9 +131,11 @@ impl Thread {
                 signal_context: None,
                 ustack_top: unsafe { (*self.inner.get()).ustack_top },
                 state: ThreadStateAtomic::new(),
-                tid_addr: None,
+                tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
+                // TODO: not sure whether we should inherit the futexes
+                owned_futexes: OwnedFutexes::new(),
                 // terminated: AtomicBool::new(false),
             }),
         }

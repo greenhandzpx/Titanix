@@ -112,9 +112,9 @@ use fs::*;
 use log::error;
 use mm::*;
 use net::*;
+pub use process::CloneFlags;
 use process::*;
 use signal::*;
-pub use sync::futex_wake;
 use sync::*;
 use time::*;
 
@@ -259,6 +259,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_FUTEX => {
             sys_handler!(sys_futex, (args[0], args[1] as u32, args[2] as u32, args[3], args[4], args[5] as u32), await)
         }
+        SYSCALL_SET_ROBUST_LIST => {
+            sys_handler!(sys_set_robust_list, (args[0], args[1]))
+        }
+        SYSCALL_GET_ROBUST_LIST => {
+            sys_handler!(sys_get_robust_list, (args[0], args[1], args[2]))
+        }
         SYSCALL_NANOSLEEP => sys_handler!(sys_nanosleep, (args[0]), await),
         SYSCALL_SETTIMER => sys_handler!(
             sys_settimer,
@@ -383,9 +389,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             (
                 args[0],
                 args[1] as *const u8,
-                args[2] as *const u8,
+                args[2],
                 args[3] as *const u8,
-                args[4] as *const u8,
+                args[4],
             )
         ),
         SYSCALL_EXECVE => sys_handler!(

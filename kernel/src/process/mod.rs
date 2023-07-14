@@ -17,18 +17,19 @@ pub mod resource;
 // mod task;
 
 use crate::{
-    config::{mm::USER_STACK_SIZE, process::CLONE_STACK_SIZE},
+    config::process::CLONE_STACK_SIZE,
     fs::FdTable,
     loader::get_app_data_by_name,
-    mm::{user_check::UserCheck, MemorySpace, RecycleAllocator},
+    mm::{user_check::UserCheck, MemorySpace},
     process::{
         aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
         thread::{terminate_all_threads_except_main, tid::tid_alloc},
     },
-    processor::{current_process, current_task, hart::local_hart, SumGuard},
+    processor::{current_process, current_task, current_trap_cx, hart::local_hart, SumGuard},
     signal::{SigHandlerManager, SigInfo, SigQueue, SIGKILL},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, FutexQueue, Mailbox},
+    syscall::CloneFlags,
     timer::posix::ITimerval,
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
@@ -431,11 +432,25 @@ impl Process {
 
     /// Create a new thread
     /// TODO: take more args into account
-    pub fn create_thread(self: &Arc<Self>, stack: usize) -> SyscallRet {
-        self.clone_thread(stack)
+    pub fn create_thread(
+        self: &Arc<Self>,
+        stack: usize,
+        tls_ptr: usize,
+        parent_tid_ptr: usize,
+        child_tid_ptr: usize,
+        flags: CloneFlags,
+    ) -> SyscallRet {
+        self.clone_thread(stack, tls_ptr, parent_tid_ptr, child_tid_ptr, flags)
     }
 
-    fn clone_thread(self: &Arc<Self>, stack: usize) -> SyscallRet {
+    fn clone_thread(
+        self: &Arc<Self>,
+        stack: usize,
+        tls_ptr: usize,
+        parent_tid_ptr: usize,
+        child_tid_ptr: usize,
+        flags: CloneFlags,
+    ) -> SyscallRet {
         // Note that the user mode code will put the `func` and `arg` in
         // 0(stack) and 8(stack)
 
@@ -445,12 +460,16 @@ impl Process {
 
         let entry_point = unsafe { *(stack as *const usize) };
         let arg = unsafe {
-            let arg_addr = stack + 8;
+            let arg_addr = stack + core::mem::size_of::<usize>();
             *(arg_addr as *const usize)
         };
 
         let mut trap_context = TrapContext::app_init_context(entry_point, stack);
         trap_context.user_x[10] = arg as usize;
+        // Thread local storage
+        trap_context.user_x[4] = tls_ptr;
+        // Global pointer
+        trap_context.user_x[3] = current_trap_cx().user_x[3];
 
         // let ustack_base = self.inner_handler(|proc| proc.ustack_base);
         let new_thread = Arc::new(Thread::new(self.clone(), trap_context, stack, None));
@@ -460,10 +479,59 @@ impl Process {
             .lock()
             .threads
             .push(Arc::downgrade(&new_thread));
+
         let tid = new_thread.tid();
+
+        let new_thread_inner = unsafe { &mut (*new_thread.inner.get()) };
+        if flags.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
+            new_thread_inner.tid_addr.clear_tid_address = Some(child_tid_ptr);
+            UserCheck::new()
+                .check_writable_slice(child_tid_ptr as *mut u8, core::mem::size_of::<usize>())?;
+            unsafe {
+                *(child_tid_ptr as *mut usize) = tid;
+            }
+            debug!(
+                "[clone_thread] CLONE_CHILD_CLEARTID: child tid ptr {:#x}, tid {}",
+                child_tid_ptr, tid
+            );
+        }
+        if flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
+            new_thread_inner.tid_addr.set_tid_address = Some(child_tid_ptr);
+            UserCheck::new()
+                .check_writable_slice(child_tid_ptr as *mut u8, core::mem::size_of::<usize>())?;
+            unsafe {
+                *(child_tid_ptr as *mut usize) = tid;
+            }
+            debug!(
+                "[clone_thread] CLONE_CHILD_SETTID: child tid ptr {:#x}, tid {}",
+                child_tid_ptr, tid
+            );
+        }
+        if flags.contains(CloneFlags::CLONE_PARENT_SETTID) {
+            UserCheck::new()
+                .check_writable_slice(parent_tid_ptr as *mut u8, core::mem::size_of::<usize>())?;
+            unsafe {
+                *(parent_tid_ptr as *mut usize) = tid;
+            }
+            debug!(
+                "[clone_thread] CLONE_PARENT_SETTID: parent tid ptr {:#x}, tid {}",
+                parent_tid_ptr, tid
+            );
+        }
+
         thread::spawn_thread(new_thread);
 
-        info!("[Process::clone_thread] clone a new thread, tid {}", tid);
+        info!(
+            "[Process::clone_thread] start func {:#x}, tls {:#x}, start arg {:#x}",
+            unsafe { *((*((stack + 8) as *const usize)) as *const usize) },
+            tls_ptr,
+            unsafe { *((*((stack + 8) as *const usize) + 8) as *const usize) }
+        );
+
+        info!(
+            "[Process::clone_thread] clone a new thread, tid {}, sp {:#x}, sepc {:#x}",
+            tid, stack, entry_point
+        );
         Ok(tid as isize)
     }
 

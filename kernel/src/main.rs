@@ -13,6 +13,7 @@
 #![feature(core_intrinsics)]
 #![feature(const_mut_refs)]
 #![feature(poll_ready)]
+#![feature(map_first_last)]
 
 extern crate alloc;
 // extern crate intrusive_collections;

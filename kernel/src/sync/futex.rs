@@ -6,9 +6,14 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::{mm::VirtAddr, processor::current_process};
+use crate::{
+    mm::{user_check::UserCheck, VirtAddr},
+    processor::{current_process, current_task, SumGuard},
+    stack_trace,
+    utils::error::{GeneralRet, SyscallRet},
+};
 
 /// Futex queue that stores: uaddr -> waiters
 pub struct FutexQueue(pub BTreeMap<VirtAddr, VecDeque<FutexWaiter>>);
@@ -20,8 +25,8 @@ impl FutexQueue {
     }
 
     /// Wait
-    pub fn add_waiter(&mut self, addr: VirtAddr, waker: Waker) {
-        let waiter = FutexWaiter::new(waker);
+    pub fn add_waiter(&mut self, addr: VirtAddr, tid: usize, waker: Waker) {
+        let waiter = FutexWaiter::new(tid, waker);
         if let Some(queue) = self.0.get_mut(&addr) {
             queue.push_back(waiter);
         } else {
@@ -46,16 +51,35 @@ impl FutexQueue {
             0
         }
     }
+
+    /// Wake up one waiter.
+    /// Returns the waiter's tid
+    pub fn wake_one(&mut self, addr: VirtAddr) -> Option<usize> {
+        if let Some(waiters) = self.0.get_mut(&addr) {
+            if let Some(waiter) = waiters.pop_front() {
+                let tid = waiter.tid;
+                waiter.wake();
+                Some(tid)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
 }
 
-pub struct FutexWaiter(Waker);
+pub struct FutexWaiter {
+    tid: usize,
+    waker: Waker,
+}
 
 impl FutexWaiter {
-    fn new(waker: Waker) -> Self {
-        Self(waker)
+    fn new(tid: usize, waker: Waker) -> Self {
+        Self { tid, waker }
     }
     fn wake(self) {
-        self.0.wake();
+        self.waker.wake();
     }
 }
 
@@ -85,16 +109,87 @@ impl Future for FutexFuture {
         // before we add the waiter, then we will sleep forever.
         if !unsafe { *self.has_added_waiter.get() } {
             current_process().inner_handler(|proc| {
-                proc.futex_queue.add_waiter(self.addr, cx.waker().clone());
+                proc.futex_queue
+                    .add_waiter(self.addr, current_task().tid(), cx.waker().clone());
             });
             unsafe {
                 *self.has_added_waiter.get() = true;
             }
         }
         if unsafe { atomic_load_acquire(self.addr.0 as *const u32) } != self.expected_val {
+            unsafe {
+                (*current_task().inner.get())
+                    .owned_futexes
+                    .0
+                    .insert(self.addr);
+            }
             Poll::Ready(())
         } else {
             Poll::Pending
+        }
+    }
+}
+
+/// Wake up
+pub fn futex_wake(uaddr: usize, val: u32) -> SyscallRet {
+    stack_trace!();
+    UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
+    unsafe {
+        (*current_task().inner.get())
+            .owned_futexes
+            .0
+            .remove(&crate::mm::VirtAddr(uaddr));
+    }
+    let cnt =
+        current_process().inner_handler(|proc| proc.futex_queue.wake(uaddr.into(), val as usize));
+    return Ok(cnt as isize);
+}
+
+/// Wake up one waiter.
+/// Return the waiter's tid
+pub fn futex_wake_one(uaddr: usize) -> GeneralRet<Option<usize>> {
+    stack_trace!();
+    UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
+    unsafe {
+        (*current_task().inner.get())
+            .owned_futexes
+            .0
+            .remove(&crate::mm::VirtAddr(uaddr));
+    }
+    Ok(current_process().inner_handler(|proc| proc.futex_queue.wake_one(uaddr.into())))
+}
+
+pub const FUTEX_OWNER_DIED: u32 = 1 << 30;
+///
+pub struct OwnedFutexes(pub BTreeSet<VirtAddr>);
+
+impl OwnedFutexes {
+    ///
+    pub fn new() -> Self {
+        Self(BTreeSet::new())
+    }
+
+    ///
+    pub fn owner_died(&mut self) {
+        let _sum_guard = SumGuard::new();
+        while let Some(addr) = self.0.pop_first() {
+            if let Some(tid) = futex_wake_one(addr.0).ok() {
+                if let Some(tid) = tid {
+                    unsafe {
+                        *(addr.0 as *mut u32) = tid as u32;
+                        *(addr.0 as *mut u32) |= FUTEX_OWNER_DIED;
+                    }
+                } else {
+                    unsafe {
+                        *(addr.0 as *mut u32) |= FUTEX_OWNER_DIED;
+                    }
+                }
+                log::debug!("[owner_died] futex word {:#x}", unsafe {
+                    *(addr.0 as *const u32)
+                });
+            } else {
+                log::warn!("[handle_exit] futex wake err?!");
+            }
         }
     }
 }

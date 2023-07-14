@@ -4,7 +4,7 @@ use crate::{
     processor::{current_process, current_trap_cx},
     signal::SIGCHLD,
     stack_trace,
-    sync::Event,
+    sync::{futex_wake, Event},
 };
 use alloc::{sync::Arc, vec::Vec};
 use log::{debug, info};
@@ -24,7 +24,10 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // The reason why we clear tid addr here is that in the destruction function of TidAddr, we will lock the process inner.
     let inner = unsafe { &mut (*thread.inner.get()) };
     debug!("clear tid address");
-    inner.tid_addr.take();
+    inner.tid_addr.thread_died();
+
+    inner.owned_futexes.owner_died();
+
     // We should visit the process inner exclusively
     // since different harts may arrive here at the
     // same time
@@ -32,15 +35,6 @@ pub fn handle_exit(thread: &Arc<Thread>) {
 
     let mut idx: Option<usize> = None;
     for (i, t) in process_inner.threads.iter().enumerate() {
-        // // # SAFETY:
-        // // it is impossibe for the case like one thread is dead
-        // // but hasn't been removed from its process's `threads` member
-        // // since one thread must be removed from `threads` first and then
-        // // die
-        // if unsafe { (*t.as_ptr()).tid.0 == thread.tid.0 } {
-        //     idx = Some(i);
-        //     break;
-        // }
         // TODO: not sure whether it is safe to unwrap here
         if t.upgrade().unwrap().tid.0 == thread.tid.0 {
             idx = Some(i);
@@ -92,7 +86,6 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
     parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
     parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(SIGCHLD))
-    // todo!("Handle thread exit")
 }
 
 /// Exit and terminate all threads of the current process.

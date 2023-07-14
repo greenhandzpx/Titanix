@@ -1,10 +1,9 @@
 //!Implementation of [`TidAllocator`]
-use crate::config::process::INITPROC_PID;
 use crate::mm::user_check::UserCheck;
 use crate::mm::RecycleAllocator;
 use crate::processor::SumGuard;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::syscall::futex_wake;
+use crate::{config::process::INITPROC_PID, sync::futex_wake};
 use lazy_static::*;
 use log::{debug, warn};
 
@@ -29,24 +28,42 @@ pub fn tid_alloc() -> TidHandle {
 
 /// Tid address which may be set by `set_tid_address` syscall
 pub struct TidAddress {
-    /// Address
-    pub addr: usize,
+    /// Set tid address
+    pub set_tid_address: Option<usize>,
+    /// Clear tid address
+    pub clear_tid_address: Option<usize>,
 }
 
-impl Drop for TidAddress {
-    fn drop(&mut self) {
-        debug!("Drop tid address {:#x}", self.addr);
-        if UserCheck::new()
-            .check_writable_slice(self.addr as *mut u8, core::mem::size_of::<usize>())
-            .is_ok()
-        {
-            let _sum_guard = SumGuard::new();
-            unsafe {
-                *(self.addr as *mut usize) = 0;
-            }
+impl TidAddress {
+    ///
+    pub fn new() -> Self {
+        Self {
+            set_tid_address: None,
+            clear_tid_address: None,
         }
-        if futex_wake(self.addr, 1).is_err() {
-            warn!("futex wake failed when thread died");
+    }
+
+    ///
+    pub fn thread_died(&self) {
+        if let Some(clear_tid_address) = self.clear_tid_address {
+            debug!("Drop tid address {:#x}", clear_tid_address);
+            if UserCheck::new()
+                .check_writable_slice(clear_tid_address as *mut u8, core::mem::size_of::<usize>())
+                .is_ok()
+            {
+                let _sum_guard = SumGuard::new();
+                unsafe {
+                    *(clear_tid_address as *mut usize) = 0;
+                }
+            }
+            if futex_wake(clear_tid_address, 1).is_err() {
+                warn!("futex wake failed when thread died");
+            }
         }
     }
 }
+
+// impl Drop for TidAddress {
+//     fn drop(&mut self) {
+//     }
+// }

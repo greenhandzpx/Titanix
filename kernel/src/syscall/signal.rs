@@ -115,25 +115,28 @@ enum SigProcmaskHow {
 
 pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> SyscallRet {
     stack_trace!();
+    if old_set as usize != 0 {
+        UserCheck::new()
+            .check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
+    }
+    if set as usize == 0 {
+        debug!("arg set is null");
+        return Ok(0);
+    }
+    UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
+    let _sum_guard = SumGuard::new();
+    debug!("[sys_rt_sigprocmask]: how: {}", how);
     current_process().inner_handler(|proc| {
         if old_set as usize != 0 {
-            UserCheck::new()
-                .check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
             let _sum_guard = SumGuard::new();
             unsafe {
                 *old_set = proc.pending_sigs.blocked_sigs;
                 debug!("[sys_rt_sigprocmask] old set: {:#x}", *old_set);
             }
         }
-        if set as usize == 0 {
-            debug!("arg set is null");
-            return Ok(0);
-        }
-        UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
-        let _sum_guard = SumGuard::new();
-        debug!("[sys_rt_sigprocmask]: how: {}", how);
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
+                stack_trace!();
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
                     return Ok(0);
@@ -157,6 +160,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             }
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
+                    debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
                     return Ok(0);
                 } else {
