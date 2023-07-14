@@ -487,8 +487,11 @@ impl Process {
             new_thread_inner.tid_addr.clear_tid_address = Some(child_tid_ptr);
             UserCheck::new()
                 .check_writable_slice(child_tid_ptr as *mut u8, core::mem::size_of::<usize>())?;
+            // unsafe {
+            //     *(child_tid_ptr as *mut usize) = tid;
+            // }
             unsafe {
-                *(child_tid_ptr as *mut usize) = tid;
+                *(child_tid_ptr as *mut usize) = 0;
             }
             debug!(
                 "[clone_thread] CLONE_CHILD_CLEARTID: child tid ptr {:#x}, tid {}",

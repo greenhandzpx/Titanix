@@ -6,17 +6,23 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
+use alloc::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    sync::Arc,
+};
 
 use crate::{
     mm::{user_check::UserCheck, VirtAddr},
     processor::{current_process, current_task, SumGuard},
     stack_trace,
-    utils::error::{GeneralRet, SyscallRet},
+    utils::{
+        cell::SyncUnsafeCell,
+        error::{GeneralRet, SyscallRet},
+    },
 };
 
-/// Futex queue that stores: uaddr -> waiters
-pub struct FutexQueue(pub BTreeMap<VirtAddr, VecDeque<FutexWaiter>>);
+/// Futex queue that stores: uaddr -> waiters(tid -> waiter)
+pub struct FutexQueue(pub BTreeMap<VirtAddr, BTreeMap<usize, FutexWaiter>>);
 
 impl FutexQueue {
     /// Construct a futex queue
@@ -25,26 +31,54 @@ impl FutexQueue {
     }
 
     /// Wait
-    pub fn add_waiter(&mut self, addr: VirtAddr, tid: usize, waker: Waker) {
-        let waiter = FutexWaiter::new(tid, waker);
+    pub fn emplace_waiter(
+        &mut self,
+        addr: Arc<SyncUnsafeCell<VirtAddr>>,
+        tid: usize,
+        waker: Waker,
+    ) {
+        let waiter = FutexWaiter::new(tid, addr, waker);
+        self.add_waiter(waiter);
+    }
+
+    ///
+    fn add_waiter(&mut self, waiter: FutexWaiter) {
+        let addr = waiter.addr.get_unchecked_mut().clone();
         if let Some(queue) = self.0.get_mut(&addr) {
-            queue.push_back(waiter);
+            queue.insert(waiter.tid, waiter);
         } else {
-            let mut queue = VecDeque::new();
-            queue.push_back(waiter);
+            let mut queue = BTreeMap::new();
+            queue.insert(waiter.tid, waiter);
             self.0.insert(addr, queue);
         }
     }
 
-    /// Wake
+    fn remove_waiter(&mut self, addr: VirtAddr, tid: usize) {
+        if let Some(queue) = self.0.get_mut(&addr) {
+            queue.remove(&tid);
+        }
+    }
+
+    /// Wake up `nval` waiters.
     pub fn wake(&mut self, addr: VirtAddr, nval: usize) -> usize {
+        // if let Some(waiters) = self.0.get_mut(&addr) {
+        //     for (i, waiter) in waiters.iter().enumerate() {
+        //         if i == nval {
+        //             return nval;
+        //         }
+        //         waiter.1.wake_by_ref();
+        //     }
+        //     waiters.len()
+        // } else {
+        //     0
+        // }
         if let Some(waiters) = self.0.get_mut(&addr) {
             for i in 0..nval {
                 if waiters.is_empty() {
                     return i;
                 }
-                let waiter = waiters.pop_front().unwrap();
-                waiter.wake();
+                let waiter = waiters.pop_first().unwrap();
+                waiter.1.wake();
             }
             nval
         } else {
@@ -52,12 +86,49 @@ impl FutexQueue {
         }
     }
 
+    /// Wake up at most nval_wake `old_addr`'s waiters.
+    /// Migrate at most nval_rq `old_addr`'s waiters to `new_addr`.
+    /// Return the number of threads waking up and
+    ///  migrating to the new queue
+    pub fn requeue_waiters(
+        &mut self,
+        old_addr: VirtAddr,
+        new_addr: VirtAddr,
+        nval_wake: usize,
+        nval_rq: usize,
+    ) -> usize {
+        if old_addr.0 == new_addr.0 {
+            return 0;
+        }
+        let ret = self.wake(old_addr, nval_wake);
+        for i in 0..nval_rq {
+            if let Some(old_queue) = self.0.get_mut(&old_addr) {
+                if let Some((_, waiter)) = old_queue.pop_first() {
+                    *waiter.addr.get_unchecked_mut() = new_addr;
+                    self.add_waiter(waiter);
+                }
+            } else {
+                return ret + i;
+            }
+        }
+        ret + nval_rq
+    }
+
     /// Wake up one waiter.
-    /// Returns the waiter's tid
+    /// Returns the waiter's tid.
     pub fn wake_one(&mut self, addr: VirtAddr) -> Option<usize> {
+        // if let Some(waiters) = self.0.get_mut(&addr) {
+        //     for (_, waiter) in waiters.iter() {
+        //         let tid = waiter.tid;
+        //         waiter.wake_by_ref();
+        //         return Some(tid);
+        //     }
+        //     None
+        // } else {
+        //     None
+        // }
         if let Some(waiters) = self.0.get_mut(&addr) {
-            if let Some(waiter) = waiters.pop_front() {
-                let tid = waiter.tid;
+            if let Some((tid, waiter)) = waiters.pop_first() {
                 waiter.wake();
                 Some(tid)
             } else {
@@ -71,21 +142,29 @@ impl FutexQueue {
 
 pub struct FutexWaiter {
     tid: usize,
+    addr: Arc<SyncUnsafeCell<VirtAddr>>,
     waker: Waker,
 }
 
 impl FutexWaiter {
-    fn new(tid: usize, waker: Waker) -> Self {
-        Self { tid, waker }
+    fn new(tid: usize, addr: Arc<SyncUnsafeCell<VirtAddr>>, waker: Waker) -> Self {
+        Self { tid, addr, waker }
     }
     fn wake(self) {
         self.waker.wake();
+    }
+    fn wake_by_ref(&self) {
+        self.waker.wake_by_ref();
     }
 }
 
 /// Futex future for waiters
 pub struct FutexFuture {
-    addr: VirtAddr,
+    /// The reason why we use Arc here is that we may need to change the
+    /// addr this thread is waiting for(i.e. futex queue) through another thread.
+    /// The reason why we use UnsafeCell is that since we will lock the process
+    /// every time we poll, there is no need locking again.
+    addr: Arc<SyncUnsafeCell<VirtAddr>>,
     expected_val: u32,
     has_added_waiter: UnsafeCell<bool>,
 }
@@ -94,7 +173,7 @@ impl FutexFuture {
     /// Construct a futex future
     pub fn new(addr: VirtAddr, expected_val: u32) -> Self {
         Self {
-            addr,
+            addr: Arc::new(SyncUnsafeCell::new(addr)),
             expected_val,
             has_added_waiter: UnsafeCell::new(false),
         }
@@ -107,26 +186,30 @@ impl Future for FutexFuture {
         // Add waiter before we try to load the value.
         // Because If the waker wakes up us after we load the value and
         // before we add the waiter, then we will sleep forever.
-        if !unsafe { *self.has_added_waiter.get() } {
-            current_process().inner_handler(|proc| {
-                proc.futex_queue
-                    .add_waiter(self.addr, current_task().tid(), cx.waker().clone());
-            });
-            unsafe {
-                *self.has_added_waiter.get() = true;
+        current_process().inner_handler(|proc| {
+            if !unsafe { *self.has_added_waiter.get() } {
+                proc.futex_queue.emplace_waiter(
+                    self.addr.clone(),
+                    current_task().tid(),
+                    cx.waker().clone(),
+                );
+                unsafe {
+                    *self.has_added_waiter.get() = true;
+                }
             }
-        }
-        if unsafe { atomic_load_acquire(self.addr.0 as *const u32) } != self.expected_val {
-            unsafe {
-                (*current_task().inner.get())
-                    .owned_futexes
-                    .0
-                    .insert(self.addr);
+            // let addr_locked = self.addr.lock();
+            let addr = unsafe { *self.addr.get() };
+            if unsafe { atomic_load_acquire(addr.0 as *const u32) } != self.expected_val {
+                proc.futex_queue.remove_waiter(addr, current_task().tid());
+                // TODO: change thread's owned futexes when requeue
+                unsafe {
+                    (*current_task().inner.get()).owned_futexes.0.insert(addr);
+                }
+                Poll::Ready(())
+            } else {
+                Poll::Pending
             }
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
+        })
     }
 }
 
@@ -158,6 +241,8 @@ pub fn futex_wake_one(uaddr: usize) -> GeneralRet<Option<usize>> {
     }
     Ok(current_process().inner_handler(|proc| proc.futex_queue.wake_one(uaddr.into())))
 }
+
+// pub fn futex_
 
 pub const FUTEX_OWNER_DIED: u32 = 1 << 30;
 ///

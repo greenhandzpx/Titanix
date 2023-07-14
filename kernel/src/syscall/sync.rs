@@ -18,6 +18,10 @@ enum FutexOperations {
     FutexWait = 0,
     /// Wake up
     FutexWake = 1,
+    ///
+    FutexRequeue = 3,
+    ///
+    FutexCmpRequeue = 4,
     /// Private
     FutexPrivateFlag = 128,
     /// Real time
@@ -42,8 +46,8 @@ pub async fn sys_futex(
     // }
     futex_op &= !(FutexOperations::FutexPrivateFlag as u32);
     info!(
-        "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}, uaddr2 {:#x}, val3 {:#x}",
-        uaddr, futex_op, val, uaddr2, val3
+        "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}, timeout_ptr(or val2) {:#x}, uaddr2 {:#x}, val3 {:#x}",
+        uaddr, futex_op, val, timeout_ptr, uaddr2, val3
     );
     match futex_op {
         _ if futex_op == FutexOperations::FutexWait as u32 => {
@@ -77,6 +81,31 @@ pub async fn sys_futex(
         }
         _ if futex_op == FutexOperations::FutexWake as u32 => {
             return futex_wake(uaddr, val);
+        }
+        _ if futex_op == FutexOperations::FutexRequeue as u32
+            || futex_op == FutexOperations::FutexCmpRequeue as u32 =>
+        {
+            let _sum_guard = SumGuard::new();
+            UserCheck::new()
+                .check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
+            if futex_op == FutexOperations::FutexCmpRequeue as u32 {
+                let uaddr_val = unsafe { atomic_load_acquire(uaddr as *const u32) };
+                if uaddr_val == val3 {
+                } else {
+                    log::warn!(
+                        "[sys_futex] the value isn't {:#x} anymore, is {:#x}",
+                        val3,
+                        uaddr_val
+                    );
+                    return Err(SyscallErr::EAGAIN);
+                }
+            }
+
+            let val2 = timeout_ptr;
+            return Ok(current_process().inner_handler(|proc| {
+                proc.futex_queue
+                    .requeue_waiters(uaddr.into(), uaddr2.into(), val as usize, val2)
+            }) as isize);
         }
         _ => {
             panic!("Unplemented futex op, {}", futex_op)
