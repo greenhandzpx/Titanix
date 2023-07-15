@@ -136,7 +136,7 @@ const ITIMER_REAL: i32 = 0;
 const ITIMER_VIRTUAL: i32 = 1;
 const ITIMER_PROF: i32 = 2;
 
-pub fn sys_settimer(
+pub fn sys_setitimer(
     which: i32,
     new_value: *const ITimerval,
     old_value: *mut ITimerval,
@@ -192,7 +192,8 @@ pub fn sys_settimer(
                         (current_time_duration() + next_timeout).into();
                 });
                 spawn_kernel_thread(async move {
-                    TimedTaskFuture::new(interval, callback, next_timeout).await
+                    TimedTaskFuture::new(interval, callback, next_timeout + current_time_duration())
+                        .await
                 });
             }
             which

@@ -186,7 +186,9 @@ pub fn check_signal_for_current_process() {
 
             let signo = sig_info.signo;
 
-            let signo_shift = SigSet::from_bits(1 << sig_info.signo).unwrap();
+            let signo_shift = SigSet::from_bits(1 << (sig_info.signo - 1)).unwrap();
+
+            debug!("current blocked sig: {:?}", proc.pending_sigs.blocked_sigs);
 
             if proc.pending_sigs.blocked_sigs.contains(signo_shift) {
                 debug!("sig {} has been blocked", signo);

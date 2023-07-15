@@ -507,7 +507,7 @@ impl InodeMeta {
 
 #[derive(Clone)]
 pub enum InodeDevice {
-    Pipe(Pipe),
+    Pipe(Arc<Pipe>),
     Device(DevWrapper),
     // TODO: add more
 }

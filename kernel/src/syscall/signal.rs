@@ -3,7 +3,7 @@ use log::{debug, info, warn};
 use crate::{
     config::signal::SIG_NUM,
     mm::user_check::UserCheck,
-    process::PROCESS_MANAGER,
+    process::{thread, PROCESS_MANAGER},
     processor::{current_process, current_task, current_trap_cx, SumGuard},
     signal::{ign_sig_handler, KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_ERR, SIG_IGN},
     stack_trace,
@@ -131,7 +131,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             let _sum_guard = SumGuard::new();
             unsafe {
                 *old_set = proc.pending_sigs.blocked_sigs;
-                debug!("[sys_rt_sigprocmask] old set: {:#x}", *old_set);
+                debug!("[sys_rt_sigprocmask] old set: {:?}", *old_set);
             }
         }
         match how {
@@ -139,6 +139,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 stack_trace!();
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                    debug!(
+                        "[sys_rt_sigprocmask] current bolcked sigs: {:?}",
+                        proc.pending_sigs.blocked_sigs
+                    );
                     return Ok(0);
                 } else {
                     info!("invalid set arg");
@@ -149,6 +153,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
+                    debug!(
+                        "[sys_rt_sigprocmask] current bolcked sigs: {:?}",
+                        proc.pending_sigs.blocked_sigs
+                    );
                     return Ok(0);
                 } else {
                     info!(
@@ -162,6 +170,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
                     debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
+                    debug!(
+                        "[sys_rt_sigprocmask] current bolcked sigs: {:?}",
+                        proc.pending_sigs.blocked_sigs
+                    );
                     return Ok(0);
                 } else {
                     warn!("invalid set arg");
@@ -197,6 +209,36 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
 
 pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const u8) -> SyscallRet {
     Ok(0)
+}
+
+pub async fn sys_rt_sigsuspend(mask: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_readable_slice(mask as *const u8, core::mem::size_of::<SigSet>())?;
+    let mask = unsafe { *(mask as *const SigSet) };
+    debug!("[sys_rt_sigsuspend] set mask: {:?}", mask);
+    // retore old sigset
+    let old_set = current_process().inner_handler(|proc| {
+        let old = proc.pending_sigs.blocked_sigs;
+        proc.pending_sigs.blocked_sigs = mask;
+        old
+    });
+    loop {
+        thread::yield_now().await;
+        if current_process().is_zombie() {
+            current_process().inner_handler(|proc| {
+                proc.pending_sigs.blocked_sigs = old_set;
+            });
+            return Err(SyscallErr::EINTR);
+        }
+        current_process().inner_handler(|proc| {
+            if !proc.pending_sigs.sig_queue.is_empty() {
+                proc.pending_sigs.blocked_sigs = old_set;
+                return Err(SyscallErr::EINTR);
+            }
+            Ok(())
+        })?;
+    }
 }
 
 pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
@@ -275,4 +317,8 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
         }
     }
     Ok(0)
+}
+
+pub fn sys_umask(_mask: u32) -> SyscallRet {
+    Ok(0x777 as isize)
 }
