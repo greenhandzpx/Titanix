@@ -1,1 +1,1 @@
-pub const SIG_NUM: usize = 32;
+pub const SIG_NUM: usize = 33;

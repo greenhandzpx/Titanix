@@ -26,6 +26,12 @@ impl ProcessManager {
             None => None,
         }
     }
+    pub fn get_process_by_tid(&self, tid: usize) -> Option<Arc<Process>> {
+        match self.0.lock().range(..=tid).last() {
+            Some((_, proc)) => proc.upgrade(),
+            None => None,
+        }
+    }
     /// Get the init process
     pub fn init_proc(&self) -> Arc<Process> {
         self.0.lock().get(&INITPROC_PID).unwrap().upgrade().unwrap()

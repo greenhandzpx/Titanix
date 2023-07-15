@@ -1146,7 +1146,7 @@ pub async fn sys_ppoll(
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
         current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
                 proc.pending_sigs.blocked_sigs |= new_sig_mask;
             } else {
                 warn!("[sys_ppoll]: invalid set arg");
@@ -1293,7 +1293,7 @@ pub async fn sys_pselect6(
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
         current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask) {
+            if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
                 proc.pending_sigs.blocked_sigs |= new_sig_mask;
             } else {
                 warn!("[sys_pselect]: invalid set arg");

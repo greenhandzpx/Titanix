@@ -26,7 +26,7 @@ use crate::{
         thread::{terminate_all_threads_except_main, tid::tid_alloc},
     },
     processor::{current_process, current_task, current_trap_cx, hart::local_hart, SumGuard},
-    signal::{SigHandlerManager, SigInfo, SigQueue, SIGKILL},
+    signal::{signal_queue::SigQueue, SigInfo, SIGKILL},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, FutexQueue, Mailbox},
     syscall::CloneFlags,
@@ -35,6 +35,7 @@ use crate::{
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 use alloc::{
+    collections::BTreeMap,
     string::String,
     sync::{Arc, Weak},
     vec,
@@ -76,9 +77,7 @@ pub struct ProcessInner {
     /// File descriptor table
     pub fd_table: FdTable,
     /// TODO: use BTreeMap to query and delete more quickly
-    pub threads: Vec<Weak<Thread>>,
-    /// Signal handlers for every signal
-    pub sig_handler: Arc<SpinNoIrqLock<SigHandlerManager>>,
+    pub threads: BTreeMap<usize, Weak<Thread>>,
     /// Pending sigs that wait for the prcoess to handle
     pub pending_sigs: SigQueue,
     // /// UStack base of all threads(the lowest bound)
@@ -117,7 +116,7 @@ impl Process {
     pub fn trap_context_main(&self) -> &mut TrapContext {
         let inner = self.inner.lock();
         assert!(inner.thread_count() > 0);
-        unsafe { (*inner.threads[0].as_ptr()).trap_context_mut() }
+        unsafe { (*inner.threads.get(&self.pid.0).unwrap().as_ptr()).trap_context_mut() }
     }
 
     /// Get the process's pid
@@ -159,7 +158,7 @@ impl Process {
     pub fn send_signal(&self, sig_info: SigInfo) {
         if sig_info.signo == SIGKILL {
             self.inner_handler(|proc| {
-                for thread in proc.threads.iter() {
+                for (_, thread) in proc.threads.iter() {
                     if let Some(thread) = thread.upgrade() {
                         thread.terminate();
                         thread.wake_up();
@@ -205,8 +204,7 @@ impl Process {
                 parent: None,
                 children: Vec::new(),
                 fd_table: FdTable::new(),
-                threads: Vec::new(),
-                sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
+                threads: BTreeMap::new(),
                 pending_sigs: SigQueue::new(),
                 // ustack_base: user_sp_base,
                 futex_queue: FutexQueue::new(),
@@ -226,7 +224,11 @@ impl Process {
         ));
         // thread.alloc_ustack();
 
-        process.inner.lock().threads.push(Arc::downgrade(&thread));
+        process
+            .inner
+            .lock()
+            .threads
+            .insert(thread.tid(), Arc::downgrade(&thread));
         PROCESS_MANAGER.add_process(process.pid(), &process);
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
@@ -260,7 +262,7 @@ impl Process {
             let hart = local_hart();
             hart.change_page_table(memory_space.page_table.clone());
             // process_inner.memory_space = memory_space;
-            proc.threads[0].upgrade().unwrap()
+            proc.threads.get(&self.pid()).unwrap().upgrade().unwrap()
         });
 
         terminate_all_threads_except_main();
@@ -478,7 +480,7 @@ impl Process {
             .inner
             .lock()
             .threads
-            .push(Arc::downgrade(&new_thread));
+            .insert(new_thread.tid(), Arc::downgrade(&new_thread));
 
         let tid = new_thread.tid();
 
@@ -521,6 +523,9 @@ impl Process {
                 parent_tid_ptr, tid
             );
         }
+        // if flags.contains(CloneFlags::CLONE_SIGHAND) {
+        //     todo!()
+        // }
 
         thread::spawn_thread(new_thread);
 
@@ -567,9 +572,8 @@ impl Process {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     fd_table: child_fd_table,
-                    threads: Vec::new(),
-                    sig_handler: Arc::new(SpinNoIrqLock::new(SigHandlerManager::new())),
-                    pending_sigs: SigQueue::new(),
+                    threads: BTreeMap::new(),
+                    pending_sigs: SigQueue::from_another(&parent_inner.pending_sigs),
                     // ustack_base: parent_inner.ustack_base,
                     futex_queue: FutexQueue::new(),
                     exit_code: 0,
@@ -594,7 +598,7 @@ impl Process {
             .inner
             .lock()
             .threads
-            .push(Arc::downgrade(&main_thread));
+            .insert(main_thread.tid(), Arc::downgrade(&main_thread));
 
         PROCESS_MANAGER.add_process(child.pid(), &child);
         // add this thread to scheduler

@@ -13,10 +13,15 @@ use self::{
 };
 
 use super::Process;
-use crate::{executor, stack_trace};
+use crate::{
+    executor,
+    signal::{signal_queue::SigQueue, SigInfo},
+    stack_trace,
+    sync::mutex::SpinNoIrqLock,
+};
 use crate::{mm::VirtAddr, signal::SignalContext};
 use crate::{sync::OwnedFutexes, trap::TrapContext};
-use alloc::{collections::BTreeSet, sync::Arc};
+use alloc::sync::Arc;
 use core::future::Future;
 use core::{cell::UnsafeCell, task::Waker};
 
@@ -69,6 +74,9 @@ pub struct ThreadInner {
     pub ustack_top: usize,
     /// Futexes this thread owns
     pub owned_futexes: OwnedFutexes,
+    /// Thread local signals.
+    /// TODO: should we lock?
+    pub pending_sigs: SpinNoIrqLock<SigQueue>,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -100,6 +108,9 @@ impl Thread {
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
                 owned_futexes: OwnedFutexes::new(),
+                pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(
+                    &process.inner.lock().pending_sigs,
+                )),
                 // terminated: AtomicBool::new(false),
             }),
         };
@@ -136,11 +147,25 @@ impl Thread {
                 waker: None,
                 // TODO: not sure whether we should inherit the futexes
                 owned_futexes: OwnedFutexes::new(),
+                pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
+                    &(*self.inner.get()).pending_sigs.lock()
+                })),
                 // terminated: AtomicBool::new(false),
             }),
         }
     }
 
+    /// We can get whatever we want in the inner by providing a handler
+    pub unsafe fn inner_handler<T>(&self, f: impl FnOnce(&mut ThreadInner) -> T) -> T {
+        f(&mut *self.inner.get())
+    }
+
+    /// Send signal to this process
+    pub fn send_signal(&self, sig_info: SigInfo) {
+        log::debug!("[Thread::send_signal] signo {}", sig_info.signo);
+        let inner = unsafe { &mut *self.inner.get() };
+        inner.pending_sigs.lock().sig_queue.push_back(sig_info);
+    }
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {
         unsafe { &(*self.inner.get()).signal_context.as_ref().unwrap() }

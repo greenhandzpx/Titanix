@@ -55,6 +55,7 @@ const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
+const SYSCALL_TKILL: usize = 130;
 const SYSCALL_TGKILL: usize = 131;
 const SYSCALL_RT_SIGACTION: usize = 134;
 const SYSCALL_RT_SIGPROCMASK: usize = 135;
@@ -378,6 +379,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[4] as u32
             )
         ),
+        SYSCALL_TKILL => sys_handler!(sys_tkill, (args[0], args[1] as i32)),
         SYSCALL_TGKILL => sys_handler!(
             sys_tgkill,
             (args[0] as usize, args[1] as usize, args[2] as i32)

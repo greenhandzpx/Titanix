@@ -33,19 +33,19 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // same time
     let mut process_inner = thread.process.inner.lock();
 
-    let mut idx: Option<usize> = None;
-    for (i, t) in process_inner.threads.iter().enumerate() {
-        // TODO: not sure whether it is safe to unwrap here
-        if t.upgrade().unwrap().tid.0 == thread.tid.0 {
-            idx = Some(i);
-            break;
-        }
-    }
-    if let Some(idx) = idx {
-        process_inner.threads.remove(idx);
-    } else {
-        panic!("Cannot find the thread in its process")
-    }
+    // let mut idx: Option<usize> = None;
+    // for (i, (_, t)) in process_inner.threads.iter().enumerate() {
+    //     // TODO: not sure whether it is safe to unwrap here
+    //     if t.upgrade().unwrap().tid.0 == thread.tid.0 {
+    //         idx = Some(i);
+    //         break;
+    //     }
+    // }
+    // if let Some(idx) = idx {
+    // } else {
+    //     panic!("Cannot find the thread in its process")
+    // }
+    process_inner.threads.remove(&thread.tid());
 
     if process_inner.thread_count() > 0 {
         // this thread isn't the final thread
@@ -97,7 +97,7 @@ pub fn exit_and_terminate_all_threads(exit_code: i8) {
         proc.exit_code = exit_code;
         proc.is_zombie = true;
         // current_process().set_zombie();
-        for thread in proc.threads.iter_mut() {
+        for (_, thread) in proc.threads.iter_mut() {
             threads.push(thread.upgrade().unwrap());
             // unsafe { (*thread.as_ptr()).terminate() }
         }
@@ -114,7 +114,7 @@ pub fn exit_and_terminate_all_threads(exit_code: i8) {
 pub fn terminate_all_threads_except_main() {
     let threads = current_process().inner_handler(|proc| {
         let mut threads: Vec<Arc<Thread>> = Vec::new();
-        for (i, thread) in proc.threads.iter_mut().enumerate() {
+        for (i, (_, thread)) in proc.threads.iter_mut().enumerate() {
             if i == 0 {
                 continue;
             }
@@ -134,7 +134,7 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
     if let Some(thread) = current_process().inner_handler(|proc| {
         proc.exit_code = exit_code;
         // let mut idx: Option<usize> = None;
-        for (_, thread) in proc.threads.iter_mut().enumerate() {
+        for (_, (_, thread)) in proc.threads.iter_mut().enumerate() {
             // let t = unsafe { &mut *(thread.as_ptr() as *mut Thread) };
             if let Some(t) = thread.upgrade() {
                 if t.tid() == tid {

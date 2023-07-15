@@ -21,7 +21,7 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
         core::mem::size_of::<SigAction>()
     );
     // Ok(0)
-    if sig < 0 || sig as usize >= SIG_NUM {
+    if sig < 0 || sig as usize > SIG_NUM {
         return Err(SyscallErr::EINVAL);
     }
     debug!("[sys_rt_sigaction]: sig {}", sig);
@@ -31,8 +31,7 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
         if oldact as *const u8 != core::ptr::null::<u8>() {
             UserCheck::new()
                 .check_writable_slice(oldact as *mut u8, core::mem::size_of::<SigAction>())?;
-            let sig_handler_locked = proc.sig_handler.lock();
-            let oldact_ref = sig_handler_locked.get(sig as usize);
+            let oldact_ref = proc.pending_sigs.sig_handlers.get(sig as usize);
             unsafe {
                 oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, 1);
                 debug!(
@@ -56,12 +55,7 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
                 .check_readable_slice(act as *const u8, core::mem::size_of::<SigAction>())?;
 
             let mut sig_action = unsafe { *act };
-            // // TODO: quite unsafe here!!!
-            // let is_user_defined = if sig_action.sa_handler as usize == SIG_DFL {
-            //     false
-            // } else {
-            //     true
-            // };
+
             let new_sigaction = match sig_action.sa_handler as usize {
                 SIG_DFL => {
                     KSigAction::new(sig as usize, false)
@@ -99,9 +93,17 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
                 new_sigaction.sig_action.sa_flags,
                 new_sigaction.sig_action.sa_restorer,
             );
-            proc.sig_handler
-                .lock()
+            proc.pending_sigs.sig_handlers
                 .set_sigaction(sig as usize, new_sigaction);
+            for (_, thread) in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    unsafe {
+                        thread.inner_handler(|th| {
+                            th.pending_sigs.lock().sig_handlers.set_sigaction(sig as usize, new_sigaction);
+                        })
+                    }
+                }
+            }
         }
         Ok(0)
     })
@@ -137,7 +139,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
                 stack_trace!();
-                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
                     return Ok(0);
                 } else {
@@ -146,7 +148,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 }
             }
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
-                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
                     return Ok(0);
@@ -159,7 +161,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 }
             }
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
-                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
+                if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
                     return Ok(0);
@@ -196,7 +198,32 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
 }
 
 pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const u8) -> SyscallRet {
+    stack_trace!();
     Ok(0)
+}
+
+pub fn sys_tkill(tid: usize, signo: i32) -> SyscallRet {
+    stack_trace!();
+    if let Some(proc) = PROCESS_MANAGER.get_process_by_tid(tid) {
+        if let Some(thread) = proc.inner_handler(|proc| {
+            if let Some(thread) = proc.threads.get(&tid) {
+                thread.upgrade()
+            } else {
+                None
+            }
+        }) {
+            let sig_info = SigInfo {
+                signo: signo as usize,
+                errno: 0,
+            };
+            thread.send_signal(sig_info);
+            Ok(0)
+        } else {
+            Err(SyscallErr::ESRCH)
+        }
+    } else {
+        Err(SyscallErr::ESRCH)
+    }
 }
 
 pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {

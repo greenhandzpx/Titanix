@@ -9,6 +9,7 @@ use crate::{
 
 mod signal_context;
 mod signal_handler;
+pub mod signal_queue;
 pub use signal_context::SignalContext;
 pub use signal_handler::SIG_DFL;
 pub use signal_handler::SIG_ERR;
@@ -50,9 +51,11 @@ pub const SIGIO: usize = 29;
 pub const SIGPWR: usize = 30;
 pub const SIGSYS: usize = 31;
 pub const SIGRTMIN: usize = 32;
+pub const SIGRT_1: usize = SIGRTMIN + 1;
 
 bitflags! {
-    pub struct SigSet: u32{
+    // TODO: not sure u64 or u32
+    pub struct SigSet: usize {
         const SIGHUP    = 1 << (SIGHUP -1);
         const SIGINT    = 1 << (SIGINT - 1);
         const SIGQUIT   = 1 << (SIGQUIT - 1);
@@ -85,22 +88,24 @@ bitflags! {
         const SIGPWR    = 1 << (SIGPWR - 1);
         const SIGSYS    = 1 << (SIGSYS - 1);
         const SIGRTMIN  = 1 << (SIGRTMIN- 1);
+        const SIGRT_1   = 1 << (SIGRT_1 - 1);
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct SigHandlerManager {
-    sigactions: [KSigAction; SIG_NUM],
+    sigactions: [KSigAction; SIG_NUM + 1],
 }
 
 impl SigHandlerManager {
     pub fn new() -> Self {
-        let sigactions: [KSigAction; SIG_NUM] =
+        let sigactions: [KSigAction; SIG_NUM + 1] =
             core::array::from_fn(|signo| KSigAction::new(signo, false));
         Self { sigactions }
     }
 
     pub fn get(&self, signo: usize) -> Option<&KSigAction> {
-        if signo < SIG_NUM {
+        if signo <= SIG_NUM {
             Some(&self.sigactions[signo])
         } else {
             None
@@ -108,7 +113,7 @@ impl SigHandlerManager {
     }
 
     pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
-        if signo < SIG_NUM {
+        if signo <= SIG_NUM {
             self.sigactions[signo] = sigaction;
         }
     }
@@ -170,60 +175,48 @@ impl KSigAction {
     }
 }
 
-/// Note that we handle only one pending signal every time
-pub fn check_signal_for_current_process() {
+/// Note that we handle only one pending signal every time.
+/// Return true if there is a user-defined pending sig to handle.
+pub fn check_signal_for_current_process() -> bool {
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
     if let Some((sig_info, sig_action, old_blocked_sigs)) =
-        current_process().inner_handler(|proc| {
-            if proc.pending_sigs.sig_queue.is_empty() {
-                return None;
-            }
-            let sig_info = proc.pending_sigs.sig_queue.pop_front().unwrap();
-            assert!(sig_info.signo < SIG_NUM);
-
-            debug!("find a sig {}", sig_info.signo);
-
-            let signo = sig_info.signo;
-
-            let signo_shift = SigSet::from_bits(1 << sig_info.signo).unwrap();
-
-            if proc.pending_sigs.blocked_sigs.contains(signo_shift) {
-                debug!("sig {} has been blocked", signo);
-                return None;
-            }
-
-            let old_blocked_sigs = proc.pending_sigs.blocked_sigs;
-
-            // save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
-
-            proc.pending_sigs.blocked_sigs |= signo_shift;
-            // TODO: only use the first element now
-            proc.pending_sigs.blocked_sigs |= proc.sig_handler.lock().sigactions[sig_info.signo]
-                .sig_action
-                .sa_mask[0];
-
-            Some((
-                sig_info,
-                proc.sig_handler.lock().sigactions[signo],
-                old_blocked_sigs,
-            ))
-        })
+        current_process().inner_handler(|proc| proc.pending_sigs.check_signal())
     {
         // Note that serveral sig handlers may be executed at the same time by different threads
         // since we don't hold the process inner lock
-        handle_signal(sig_info.signo, sig_action, old_blocked_sigs);
-        // } else {
-        //     break;
+        handle_signal(sig_info.signo, sig_action, old_blocked_sigs)
+    } else {
+        false
     }
-    // }
+}
+
+/// Note that we handle only one pending signal every time.
+/// Return true if there is a user-defined pending sig to handle.
+pub fn check_signal_for_current_thread() -> bool {
+    // TODO: handle nesting sig handle:
+    // Do we need to save trap contexts like a stack?
+    if let Some((sig_info, sig_action, old_blocked_sigs)) =
+        unsafe { current_task().inner_handler(|thread| thread.pending_sigs.lock().check_signal()) }
+    {
+        log::info!(
+            "[check_signal_for_current_thread] handle signal {}",
+            sig_info.signo
+        );
+        // Note that serveral sig handlers may be executed at the same time by different threads
+        // since we don't hold the process inner lock
+        handle_signal(sig_info.signo, sig_action, old_blocked_sigs)
+    } else {
+        false
+    }
 }
 
 extern "C" {
     fn sigreturn_trampoline();
 }
 
-fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet) {
+/// Return true if there is a user-defined pending sig to handle
+fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet) -> bool {
     info!(
         "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
@@ -234,26 +227,21 @@ fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet)
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;
-        // if sig_action.sig_action.sa_restorer != 0 {
-        // ra
         info!(
             "[handle_signal] restorer: {:#x}",
             // sig_action.sig_action.sa_restorer
             sigreturn_trampoline as usize,
         );
-        // current_trap_cx().user_x[1] = sig_action.sig_action.sa_restorer;
+        // ra
         current_trap_cx().user_x[1] = sigreturn_trampoline as usize;
+        true
         // }
     } else {
         // Just in kernel mode
         // TODO: change to async
         (sig_action.sig_action.sa_handler)(signo);
+        false
     }
-    // current_trap_cx().sepc = sigaction_handler_wrapper as *const u8 as usize;
-    // // a0
-    // current_trap_cx().user_x[10] = sig_handler;
-    // // a1
-    // current_trap_cx().user_x[11] = signo;
 }
 
 fn save_context_for_sig_handler(blocked_sigs: SigSet) {
@@ -273,24 +261,4 @@ fn save_context_for_sig_handler(blocked_sigs: SigSet) {
 pub struct SigInfo {
     pub signo: usize,
     pub errno: usize,
-}
-
-pub struct SigQueue {
-    pub sig_queue: VecDeque<SigInfo>,
-    pub blocked_sigs: SigSet,
-}
-
-impl SigQueue {
-    pub fn new() -> Self {
-        Self {
-            sig_queue: VecDeque::new(),
-            blocked_sigs: SigSet::from_bits(0).unwrap(),
-        }
-    }
-    pub fn send_signal(&mut self, signo: usize) {
-        self.sig_queue.push_back(SigInfo {
-            signo: signo as usize,
-            errno: 0,
-        });
-    }
 }

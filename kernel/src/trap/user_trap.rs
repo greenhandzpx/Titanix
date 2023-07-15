@@ -11,7 +11,7 @@ use crate::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
         open_interrupt, SumGuard,
     },
-    signal::check_signal_for_current_process,
+    signal::{check_signal_for_current_process, check_signal_for_current_thread},
     stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
@@ -130,16 +130,6 @@ pub async fn trap_handler() {
             // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // let _sum_guard = SumGuard::new();
-            // let sepc = current_trap_cx().sepc;
-            // let inst: u32 = unsafe { *(sepc as *const u32) };
-            // info!(
-            //     "timer interrupt, sepc {:#x}, inst {:#x}, s1 {} a5 {}",
-            //     sepc,
-            //     inst,
-            //     current_trap_cx().user_x[9],
-            //     current_trap_cx().user_x[15]
-            // );
             handle_timeout_events();
             set_next_trigger();
             thread::yield_now().await;
@@ -172,7 +162,11 @@ pub fn trap_return() {
         fn __return_to_user(cx: *mut TrapContext);
     }
 
-    check_signal_for_current_process();
+    // If no pending sig for process, then check for thread.
+    // TODO: not sure whether this is the right way
+    if !check_signal_for_current_process() {
+        check_signal_for_current_thread();
+    }
 
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();

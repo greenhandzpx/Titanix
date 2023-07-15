@@ -1,0 +1,1 @@
+- 根据linux manual，当clone的时候指定了CLONE_SIGHAND时，应该将子进程与父进程共享sig handler表，在Rust即表示为Arc<Mutex<>>，但这样每次检查信号时都要加锁，感觉会拖慢性能，所以我们直接拷贝一份新的，然后在sigaction里手动将所有线程的handler都改了。
