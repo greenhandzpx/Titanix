@@ -138,6 +138,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             _ if how == SigProcmaskHow::SigBlock as i32 => {
                 stack_trace!();
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
+                    info!(
+                        "[sys_rt_sigprocmask]: add block sig mask {:?}",
+                        new_sig_mask
+                    );
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
                     debug!(
                         "[sys_rt_sigprocmask] current bolcked sigs: {:?}",
@@ -151,7 +155,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             }
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
-                    info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
+                    info!("[sys_rt_sigprocmask]: unblock sig mask {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
                     debug!(
                         "[sys_rt_sigprocmask] current bolcked sigs: {:?}",
@@ -168,12 +172,8 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             }
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set) } {
-                    debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
+                    debug!("[sys_rt_sigprocmask] set sig mask: {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
-                    debug!(
-                        "[sys_rt_sigprocmask] current bolcked sigs: {:?}",
-                        proc.pending_sigs.blocked_sigs
-                    );
                     return Ok(0);
                 } else {
                     warn!("invalid set arg");

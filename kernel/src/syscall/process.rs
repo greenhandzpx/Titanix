@@ -189,8 +189,10 @@ pub fn sys_clone(
         // trap_cx.user_x[10] = 0;
 
         info!(
-            "[sys_clone] return new pid: {}, flags {:?}",
-            new_pid, clone_flags
+            "[sys_clone] return new pid: {}, clone flags {:?}, child flags {:?}",
+            new_pid,
+            clone_flags,
+            new_process.inner.lock().pending_sigs.blocked_sigs
         );
         Ok(new_pid as isize)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
@@ -269,6 +271,13 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
 
     if path.ends_with("shell") || path.ends_with("busybox") {
         if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
+            current_process().exec(elf_data, args_vec, envs_vec)
+        } else {
+            warn!("[sys_exec] Cannot find this elf file {}", path);
+            Err(SyscallErr::EACCES)
+        }
+    } else if path.eq("/bin/true") {
+        if let Some(elf_data) = get_app_data_by_name(&path[5..]) {
             current_process().exec(elf_data, args_vec, envs_vec)
         } else {
             warn!("[sys_exec] Cannot find this elf file {}", path);
