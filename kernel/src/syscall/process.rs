@@ -7,6 +7,7 @@ use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
+use crate::signal::SigSet;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
 use crate::utils::error::SyscallErr;
@@ -310,6 +311,12 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
 
     let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
+
+    // TODO: need to find the reason why
+    // remove SIGCHLD from blocked_sig
+    process.inner_handler(|proc| {
+        proc.pending_sigs.blocked_sigs.remove(SigSet::SIGCHLD);
+    });
 
     loop {
         if let Some((os_exit, found_pid, exit_code)) = process.inner_handler(|proc| {
