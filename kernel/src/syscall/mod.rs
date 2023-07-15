@@ -378,6 +378,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_tgkill,
             (args[0] as usize, args[1] as usize, args[2] as i32)
         ),
+        SYSCALL_RT_SIGSUSPEND => sys_handler!(sys_rt_sigsuspend, (args[0]), await),
         SYSCALL_BRK => sys_handler!(sys_brk, (args[0])),
         SYSCALL_MUNMAP => sys_handler!(sys_munmap, (args[0] as usize, args[1] as usize)),
         SYSCALL_CLONE => sys_handler!(

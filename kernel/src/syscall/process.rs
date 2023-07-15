@@ -5,7 +5,7 @@ use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
-use crate::processor::{current_process, current_task, current_trap_cx, env, local_hart, SumGuard};
+use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
@@ -267,7 +267,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     //     UserCheck::new()
     //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
     // }
-    info!("[sys_waitpid]: enter, pid {}, options {:#x}", pid, options);
+    info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
 
     let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
 
@@ -308,7 +308,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 // get child's exit code
                 let exit_code = child.exit_code();
                 info!(
-                    "[sys_waitpid] found pid {} exit code {}",
+                    "[sys_wait4] found pid {} exit code {}",
                     found_pid, exit_code
                 );
 
@@ -316,11 +316,11 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
             } else {
                 // the child still alive
                 debug!(
-                    "[sys_waitpid] no such pid, children size {}",
+                    "[sys_wait4] no such pid, children size {}",
                     proc.children.len()
                 );
                 if proc.children.len() > 0 {
-                    debug!("[sys_waitpid] first child pid {}", proc.children[0].pid());
+                    debug!("[sys_wait4] first child pid {}", proc.children[0].pid());
                 }
                 // Ok((-1 as isize, 0))
                 Ok(None)
@@ -342,14 +342,14 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                     let _sum_guard = SumGuard::new();
                     let exit_status_ptr = exit_status_addr as *mut i32;
                     debug!(
-                        "waitpid: write pid to exit_status_ptr {:#x} before",
+                        "wait4: write pid to exit_status_ptr {:#x} before",
                         exit_status_addr
                     );
                     // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
                     unsafe {
                         exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
                         debug!(
-                            "waitpid: write pid to exit_code_ptr after, exit code {:#x}",
+                            "wait4: write pid to exit_code_ptr after, exit code {:#x}",
                             (*exit_status_ptr & 0xff00) >> 8
                         );
                     }
