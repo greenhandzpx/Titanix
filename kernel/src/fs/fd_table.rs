@@ -1,10 +1,16 @@
 use core::sync::atomic::AtomicUsize;
 
 use alloc::{sync::Arc, vec, vec::Vec};
+use log::debug;
 
-use crate::utils::error::{GeneralRet, SyscallErr};
+use crate::{
+    fs::InodeState,
+    stack_trace,
+    timer::posix::current_time_spec,
+    utils::error::{GeneralRet, SyscallErr, SyscallRet},
+};
 
-use super::{file::File, resolve_path, OpenFlags};
+use super::{file::File, resolve_path, Inode, OpenFlags};
 
 use lazy_static::*;
 
@@ -39,6 +45,32 @@ impl FdTable {
                 Some(stderr),
             ],
         }
+    }
+
+    /// Open a file according to the inode.
+    /// Return file descriptor.
+    pub fn open(&mut self, inode: Arc<dyn Inode>, flags: OpenFlags) -> SyscallRet {
+        stack_trace!();
+        let mut inner_lock = inode.metadata().inner.lock();
+        inner_lock.st_atim = current_time_spec();
+        match inner_lock.state {
+            InodeState::Synced => {
+                inner_lock.state = InodeState::DirtyInode;
+            }
+            _ => {}
+        }
+        debug!(
+            "[FdTable::open] inode ino: {}, name: {}",
+            inode.metadata().ino,
+            inode.metadata().name
+        );
+        // TODO: add to fs's dirty list
+        let fd = self.alloc_fd()?;
+        let file = inode.open(inode.clone(), flags)?;
+
+        self.put(fd, file);
+        debug!("[FdTable::open] find fd: {}", fd);
+        Ok(fd as isize)
     }
 
     pub fn from_another(fd_table: &FdTable) -> GeneralRet<Self> {

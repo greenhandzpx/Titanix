@@ -58,7 +58,10 @@ pub async fn trap_handler() {
             cx = current_trap_cx();
             cx.user_x[10] = match result {
                 Ok(ret) => ret as usize,
-                Err(err) => -(err as isize) as usize,
+                Err(err) => {
+                    log::info!("[trap_handler] syscall return, err {}", err as usize);
+                    -(err as isize) as usize
+                }
             }
             // TODO: Change into async syscall
         }

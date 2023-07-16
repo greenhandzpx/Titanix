@@ -1,4 +1,3 @@
-use alloc::collections::VecDeque;
 use log::{debug, info};
 
 use crate::{
@@ -11,6 +10,7 @@ mod signal_context;
 mod signal_handler;
 pub mod signal_queue;
 pub use signal_context::SignalContext;
+pub use signal_context::SignalTrampoline;
 pub use signal_handler::SIG_DFL;
 pub use signal_handler::SIG_ERR;
 pub use signal_handler::SIG_IGN;
@@ -227,15 +227,16 @@ fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet)
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;
+        // a2 -> user context
+        current_trap_cx().user_x[12] = current_task().sig_trampoline.user_addr();
+        // ra
+        current_trap_cx().user_x[1] = sigreturn_trampoline as usize;
         info!(
             "[handle_signal] restorer: {:#x}",
             // sig_action.sig_action.sa_restorer
             sigreturn_trampoline as usize,
         );
-        // ra
-        current_trap_cx().user_x[1] = sigreturn_trampoline as usize;
         true
-        // }
     } else {
         // Just in kernel mode
         // TODO: change to async
@@ -247,10 +248,15 @@ fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet)
 fn save_context_for_sig_handler(blocked_sigs: SigSet) {
     // save old sig mask
     // and save old user trap context
-    let signal_context = SignalContext {
+    log::debug!(
+        "[save_context_for_sig_handler] old blocked sigs {:?}",
+        blocked_sigs
+    );
+    let mut signal_context = SignalContext::new(
         blocked_sigs,
-        user_context: UserContext::from_trap_context(current_task().trap_context_ref()),
-    };
+        UserContext::from_trap_context(current_task().trap_context_ref()),
+    );
+    signal_context.user_context.user_x[0] = signal_context.user_context.sepc;
     debug!(
         "[save_context_for_sig_handler] sepc {:#x}",
         signal_context.user_context.sepc

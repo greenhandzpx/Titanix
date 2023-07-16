@@ -259,80 +259,7 @@ pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> 
     }
 }
 
-/// We should give the absolute path (Or None) to open_file function.
-#[allow(unused)]
-pub fn open_file_string(absolute_path: Option<String>, flags: u32) -> SyscallRet {
-    stack_trace!();
-    debug!(
-        "[open_file] absolute path: {:?}, flags: {}",
-        absolute_path, flags
-    );
-    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    match absolute_path {
-        Some(absolute_path) => {
-            debug!("[open_file] file name {}", absolute_path);
-            let inode = resolve_path(&absolute_path, flags)?;
-            stack_trace!();
-            let mut inner_lock = inode.metadata().inner.lock();
-            inner_lock.st_atim = current_time_spec();
-            match inner_lock.state {
-                InodeState::Synced => {
-                    inner_lock.state = InodeState::DirtyInode;
-                }
-                _ => {}
-            }
-            debug!(
-                "[open_file] inode ino: {}, name: {}",
-                inode.metadata().ino,
-                inode.metadata().name
-            );
-            // TODO: add to fs's dirty list
-            let fd = current_process().inner_handler(|proc| {
-                let fd = proc.fd_table.alloc_fd()?;
-                let file = inode.open(inode.clone(), flags)?;
-
-                proc.fd_table.put(fd, file);
-                Ok(fd)
-            })?;
-            debug!("[open_file] find fd: {}", fd);
-            Ok(fd as isize)
-        }
-        None => {
-            debug!("cannot find the file, absolute_path is none");
-            Err(SyscallErr::ENOENT)
-        }
-    }
-}
-
-/// When you get inode, you can use this fuction to open
-pub fn open_file_inode(inode: Arc<dyn Inode>, flags: OpenFlags) -> SyscallRet {
-    stack_trace!();
-    let mut inner_lock = inode.metadata().inner.lock();
-    inner_lock.st_atim = current_time_spec();
-    match inner_lock.state {
-        InodeState::Synced => {
-            inner_lock.state = InodeState::DirtyInode;
-        }
-        _ => {}
-    }
-    debug!(
-        "[open_file] inode ino: {}, name: {}",
-        inode.metadata().ino,
-        inode.metadata().name
-    );
-    // TODO: add to fs's dirty list
-    let fd = current_process().inner_handler(|proc| {
-        let fd = proc.fd_table.alloc_fd()?;
-        let file = inode.open(inode.clone(), flags)?;
-
-        proc.fd_table.put(fd, file);
-        Ok(fd)
-    })?;
-    debug!("[open_file] find fd: {}", fd);
-    Ok(fd as isize)
-}
-
-/// You should try to use this when you have dirfd and path(*const u8), do not use resolve_path.
+/// You should try using this when you have dirfd and path(*const u8), do not use resolve_path.
 pub fn resolve_path_with_dirfd(
     dirfd: isize,
     path: *const u8,
@@ -376,6 +303,7 @@ pub fn resolve_path_with_dirfd(
         <dyn Inode>::create_page_cache_if_needed(res.clone());
         Ok(res)
     } else {
+        warn!("parent dir {} doesn't exist", path);
         return Err(SyscallErr::ENOENT);
     }
 }

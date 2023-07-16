@@ -75,6 +75,12 @@ impl From<KernelAddr> for PhysAddr {
     }
 }
 
+impl From<KernelAddr> for VirtAddr {
+    fn from(ka: KernelAddr) -> Self {
+        Self(ka.0)
+    }
+}
+
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << PA_WIDTH_SV39) - 1))
@@ -218,14 +224,18 @@ impl VirtPageNum {
     }
 }
 
-impl PhysAddr {
+impl KernelAddr {
     ///Get mutable reference to `PhysAddr` value
-    pub fn get_mut<T>(&self) -> &'static mut T {
+    pub fn reinterpret<T>(&self) -> &'static T {
+        unsafe { (self.0 as *mut T).as_ref().unwrap() }
+    }
+    ///Get mutable reference to `PhysAddr` value
+    pub fn reinterpret_mut<T>(&self) -> &'static mut T {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
     }
 }
 impl PhysPageNum {
-    ///Get `PageTableEntry` on `PhysPageNum`
+    /// Get `PageTableEntry` on `PhysPageNum`
     pub fn pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
         let kernel_pa = KernelAddr::from(pa).0;
@@ -237,11 +247,20 @@ impl PhysPageNum {
         let kernel_pa = KernelAddr::from(pa).0;
         unsafe { core::slice::from_raw_parts_mut(kernel_pa as *mut u8, 4096) }
     }
-    // ///
-    // pub fn get_mut<T>(&self) -> &'static mut T {
-    //     let pa: PhysAddr = (*self).into();
-    //     pa.get_mut()
-    // }
+
+    ///
+    pub fn reinterpret<T>(&self) -> &'static T {
+        let pa: PhysAddr = (*self).into();
+        let kernel_pa = KernelAddr::from(pa);
+        kernel_pa.reinterpret()
+    }
+
+    ///
+    pub fn reinterpret_mut<T>(&self) -> &'static mut T {
+        let pa: PhysAddr = (*self).into();
+        let kernel_pa = KernelAddr::from(pa);
+        kernel_pa.reinterpret_mut()
+    }
 }
 
 /// step the give type

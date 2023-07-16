@@ -25,7 +25,7 @@ use crate::fs::{
     Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
-use crate::fs::{open_file_inode, resolve_path_with_dirfd, HashKey, SeekFrom};
+use crate::fs::{resolve_path_with_dirfd, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
@@ -495,7 +495,7 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
     stack_trace!();
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let inode = resolve_path_with_dirfd(dirfd, filename_addr, flags)?;
-    open_file_inode(inode, flags)
+    current_process().inner_handler(|proc| proc.fd_table.open(inode, flags))
 }
 
 pub fn sys_close(fd: usize) -> SyscallRet {

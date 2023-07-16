@@ -2,6 +2,7 @@
 use crate::mm::user_check::UserCheck;
 use crate::mm::RecycleAllocator;
 use crate::processor::SumGuard;
+use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::{config::process::INITPROC_PID, sync::futex_wake};
 use lazy_static::*;
@@ -45,6 +46,7 @@ impl TidAddress {
 
     ///
     pub fn thread_died(&self) {
+        stack_trace!();
         if let Some(clear_tid_address) = self.clear_tid_address {
             debug!("Drop tid address {:#x}", clear_tid_address);
             if UserCheck::new()

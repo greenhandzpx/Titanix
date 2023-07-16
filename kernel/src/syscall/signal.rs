@@ -133,14 +133,23 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             let _sum_guard = SumGuard::new();
             unsafe {
                 *old_set = proc.pending_sigs.blocked_sigs;
-                debug!("[sys_rt_sigprocmask] old set: {:#x}", *old_set);
+                debug!(
+                    "[sys_rt_sigprocmask] old set: {:?}",
+                    proc.pending_sigs.blocked_sigs
+                );
             }
         }
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
                 stack_trace!();
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
+                    debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                    unsafe {
+                        current_task().inner_handler(|th| {
+                            th.pending_sigs.lock().blocked_sigs |= new_sig_mask;
+                        });
+                    }
                     return Ok(0);
                 } else {
                     info!("invalid set arg");
@@ -151,6 +160,11 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
+                    unsafe {
+                        current_task().inner_handler(|th| {
+                            th.pending_sigs.lock().blocked_sigs.remove(new_sig_mask);
+                        });
+                    }
                     return Ok(0);
                 } else {
                     info!(
@@ -164,6 +178,11 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
                     proc.pending_sigs.blocked_sigs = new_sig_mask;
+                    unsafe {
+                        current_task().inner_handler(|th| {
+                            th.pending_sigs.lock().blocked_sigs = new_sig_mask;
+                        });
+                    }
                     return Ok(0);
                 } else {
                     warn!("invalid set arg");
@@ -184,16 +203,30 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     // restore the old sig mask
     current_process().inner_handler(|proc| {
         proc.pending_sigs.blocked_sigs = signal_context.blocked_sigs;
+        info!(
+            "[sys_rt_sigreturn] blocked sigs: {:?}",
+            proc.pending_sigs.blocked_sigs
+        );
     });
     // restore the old user context
     let trap_context_mut = current_task().trap_context_mut();
     trap_context_mut.user_x = signal_context.user_context.user_x;
+    trap_context_mut.user_x[0] = 0;
     trap_context_mut.sstatus = signal_context.user_context.sstatus;
-    trap_context_mut.sepc = signal_context.user_context.sepc;
+    // trap_context_mut.sepc = signal_context.user_context.sepc;
+    trap_context_mut.sepc = signal_context.user_context.user_x[0];
     info!(
         "[sys_rt_sigreturn] sig return, sepc {:#x}",
         trap_context_mut.sepc
     );
+    // info!(
+    //     "[sys_rt_sigreturn] sig return, user x {:?}",
+    //     signal_context.user_context.user_x
+    // );
+    // info!(
+    //     "[sys_rt_sigreturn] sig return, dummy {:?}",
+    //     signal_context.blocked_sigs_dummy.dummy
+    // );
     Ok(trap_context_mut.user_x[10] as isize)
 }
 

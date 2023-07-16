@@ -121,6 +121,16 @@ impl PageBuilder {
 }
 
 impl Page {
+    /// Reinterpret this page
+    pub fn reinterpret<T>(&self) -> &'static T {
+        self.data_frame.ppn.reinterpret()
+    }
+
+    /// Reinterpret this page
+    pub fn reinterpret_mut<T>(&self) -> &'static mut T {
+        self.data_frame.ppn.reinterpret_mut()
+    }
+
     /// Read this page.
     /// `offset`: page offset
     pub async fn read(&self, offset: usize, buf: &mut [u8]) -> GeneralRet<usize> {

@@ -7,3 +7,5 @@
 - 进程一开始从用户态回到内核态时，需要给用户态的trap context中的sstatus的sie字段置零，因为在`__return_to_user`函数中会给sstatus赋值，即便前面事先调用了`close_interrupt`函数也不能保证内核态中断不发生，因此我们需要手动给sstatus清除sie
 - 适配iozone的时候发现所有进程都spin在pselect函数，原因是共享内存在fork的时候默认被设为了copy-on-write，导致无法真正共享，修复后即可正常运行。
 - 适配libc-test的时候发现创建一个新线程时需要向tp寄存器写入tls，向gp寄存器写入全局指针
+- 适配libc-test的pthread相关的测试时，需要注意set_tid_address和clear_tid_address的含义以及SignalContext一定要写对！注意SigSet需要补齐到libc规定的大小
+- 信号被阻塞时不应从队列中清除，而是一直留着直到不阻塞并处理

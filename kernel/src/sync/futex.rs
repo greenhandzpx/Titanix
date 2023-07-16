@@ -232,6 +232,13 @@ pub fn futex_wake(uaddr: usize, val: u32) -> SyscallRet {
 /// Return the waiter's tid
 pub fn futex_wake_one(uaddr: usize) -> GeneralRet<Option<usize>> {
     stack_trace!();
+    // if UserCheck::new()
+    //     .check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())
+    //     .is_err()
+    // {
+    //     log::warn!("[futex_wake_one] invalid addr {:#x}", uaddr);
+    //     return Ok(None);
+    // }
     UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
     unsafe {
         (*current_task().inner.get())
@@ -256,6 +263,7 @@ impl OwnedFutexes {
 
     ///
     pub fn owner_died(&mut self) {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         while let Some(addr) = self.0.pop_first() {
             if let Some(tid) = futex_wake_one(addr.0).ok() {

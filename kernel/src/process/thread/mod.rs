@@ -14,12 +14,21 @@ use self::{
 
 use super::Process;
 use crate::{
+    config::mm::PAGE_SIZE,
     executor,
-    signal::{signal_queue::SigQueue, SigInfo},
+    mm::{
+        memory_space::{vm_area::VmAreaType, MapType},
+        MapPermission, Page, PageBuilder, VirtAddr,
+    },
+    signal::{signal_queue::SigQueue, SigInfo, SignalTrampoline},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
 };
-use crate::{mm::VirtAddr, signal::SignalContext};
+use crate::{
+    mm::{KernelAddr, PhysAddr},
+    processor::SumGuard,
+    signal::SignalContext,
+};
 use crate::{sync::OwnedFutexes, trap::TrapContext};
 use alloc::sync::Arc;
 use core::future::Future;
@@ -37,7 +46,9 @@ use thread_loop::threadloop;
 /// Thread control block
 pub struct Thread {
     /// immutable
-    pub tid: Arc<TidHandle>,
+    tid: Arc<TidHandle>,
+    /// signal trampoline(store ucontext)
+    pub sig_trampoline: SignalTrampoline,
     /// the process this thread belongs to
     pub process: Arc<Process>,
     /// mutable
@@ -56,10 +67,6 @@ pub struct ThreadInner {
     pub trap_context: TrapContext,
     /// Used for signal handle
     pub signal_context: Option<SignalContext>,
-
-    // /// When invoking `exec`, we need to get the ustack base.
-    // /// Note that ustack_base is the base of all ustacks
-    // pub ustack_base: usize,
     /// Thread state.
     /// Note that this may be modified by another thread, which
     /// need to be sync
@@ -92,11 +99,13 @@ impl Thread {
         // user_specified_stack: bool,
         tid: Option<Arc<TidHandle>>,
     ) -> Self {
+        let sig_trampoline = SignalTrampoline::new(process.clone());
         let thread = Self {
             tid: match tid {
                 Some(tid) => tid,
                 None => Arc::new(tid_alloc()),
             },
+            sig_trampoline,
             process: process.clone(),
             // user_specified_stack,
             inner: UnsafeCell::new(ThreadInner {
@@ -117,30 +126,32 @@ impl Thread {
         thread
     }
 
-    /// Construct a new thread from the current thread
-    pub fn from_current(
-        &self,
+    /// Construct a new thread from another thread
+    pub fn from_another(
+        another: &Arc<Thread>,
         new_process: Arc<Process>,
         stack: Option<usize>,
         tid: Option<Arc<TidHandle>>,
     ) -> Self {
         stack_trace!();
+        let sig_trampoline = SignalTrampoline::new(new_process.clone());
         Self {
             tid: match tid {
                 Some(tid) => tid,
                 None => Arc::new(tid_alloc()),
             },
+            sig_trampoline,
             process: new_process.clone(),
             inner: UnsafeCell::new(ThreadInner {
                 trap_context: {
-                    let mut trap_context = self.trap_context();
+                    let mut trap_context = another.trap_context();
                     if let Some(stack) = stack {
                         trap_context.set_sp(stack);
                     }
                     trap_context
                 },
                 signal_context: None,
-                ustack_top: unsafe { (*self.inner.get()).ustack_top },
+                ustack_top: unsafe { (*another.inner.get()).ustack_top },
                 state: ThreadStateAtomic::new(),
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
@@ -148,12 +159,57 @@ impl Thread {
                 // TODO: not sure whether we should inherit the futexes
                 owned_futexes: OwnedFutexes::new(),
                 pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
-                    &(*self.inner.get()).pending_sigs.lock()
+                    &(*another.inner.get()).pending_sigs.lock()
                 })),
                 // terminated: AtomicBool::new(false),
             }),
         }
     }
+
+    // /// Construct a new thread from the current thread
+    // pub fn from_current(
+    //     &self,
+    //     new_process: Arc<Process>,
+    //     stack: Option<usize>,
+    //     tid: Option<Arc<TidHandle>>,
+    // ) -> Self {
+    //     stack_trace!();
+    //     let sig_trampoline = Arc::new(
+    //         PageBuilder::new()
+    //             .permission(MapPermission::R | MapPermission::W | MapPermission::U)
+    //             .build(),
+    //     );
+
+    //     Self {
+    //         tid: match tid {
+    //             Some(tid) => tid,
+    //             None => Arc::new(tid_alloc()),
+    //         },
+    //         sig_trampoline,
+    //         process: new_process.clone(),
+    //         inner: UnsafeCell::new(ThreadInner {
+    //             trap_context: {
+    //                 let mut trap_context = self.trap_context();
+    //                 if let Some(stack) = stack {
+    //                     trap_context.set_sp(stack);
+    //                 }
+    //                 trap_context
+    //             },
+    //             signal_context: None,
+    //             ustack_top: unsafe { (*self.inner.get()).ustack_top },
+    //             state: ThreadStateAtomic::new(),
+    //             tid_addr: TidAddress::new(),
+    //             time_info: ThreadTimeInfo::new(),
+    //             waker: None,
+    //             // TODO: not sure whether we should inherit the futexes
+    //             owned_futexes: OwnedFutexes::new(),
+    //             pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
+    //                 &(*self.inner.get()).pending_sigs.lock()
+    //             })),
+    //             // terminated: AtomicBool::new(false),
+    //         }),
+    //     }
+    // }
 
     /// We can get whatever we want in the inner by providing a handler
     pub unsafe fn inner_handler<T>(&self, f: impl FnOnce(&mut ThreadInner) -> T) -> T {
@@ -168,15 +224,19 @@ impl Thread {
     }
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {
-        unsafe { &(*self.inner.get()).signal_context.as_ref().unwrap() }
+        self.sig_trampoline.signal_context()
+        // unsafe { &(*self.inner.get()).signal_context.as_ref().unwrap() }
     }
 
     /// Set the signal context for the current thread
     pub fn set_signal_context(&self, signal_context: SignalContext) {
-        unsafe {
-            (*self.inner.get()).signal_context = Some(signal_context);
-        }
+        self.sig_trampoline.set_signal_context(signal_context)
     }
+
+    // /// Signal trampoline start addr
+    // pub fn signal_trampoline_addr(&self) -> usize {
+    //     KernelAddr::from(PhysAddr::from(self.sig_trampoline.data_frame.ppn)).0
+    // }
 
     /// Get the copied trap context
     pub fn trap_context(&self) -> TrapContext {

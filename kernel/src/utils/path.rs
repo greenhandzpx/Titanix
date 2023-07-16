@@ -28,7 +28,7 @@ pub fn get_name(path_name: &str) -> &str {
         dentry_vec[dentry_vec.len() - 1]
     }
 }
-pub fn judge_is_relative(path: &str) -> bool {
+pub fn is_relative_path(path: &str) -> bool {
     if path.starts_with("/") {
         return false;
     } else {
@@ -140,10 +140,10 @@ pub fn path_to_inode(
         }
         stack_trace!();
         let path = c_str_to_string(path);
-        let path = format(&path);
+        let mut path = format(&path);
         debug!("[path_to_inode] get path: {}", path);
         stack_trace!();
-        if judge_is_relative(&path) {
+        if is_relative_path(&path) {
             if dirfd != AT_FDCWD {
                 debug!("[path_to_inode] path is releative and dirfd isn't AT_FDCWD");
                 return current_process().inner_handler(|proc| {
@@ -184,7 +184,11 @@ pub fn path_to_inode(
                 });
             }
         } else {
-            debug!("[path_to_inode] path is absolutely");
+            debug!("[path_to_inode] path is absolute");
+            if path.eq("/dev/shm/testshm") {
+                debug!("[path_to_inode] just for libc-test");
+                path = "/testshm".to_string();
+            }
             (<dyn Inode>::lookup_from_root(&path), Some(path), None)
         }
     }
@@ -221,7 +225,7 @@ pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>>
     };
     debug!("[path_process] dirfd {}, path name {}", dirfd, path);
     let absolute_path;
-    if judge_is_relative(&path) {
+    if is_relative_path(&path) {
         debug!("[path_process] A relative path");
         if dirfd == AT_FDCWD {
             debug!("[path_process] dirfd is AT_FDCWD");

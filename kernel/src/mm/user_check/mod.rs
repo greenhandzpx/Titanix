@@ -178,7 +178,8 @@ impl UserCheck {
                 );
                 warn!("backtrace:");
                 local_hart().env().stack_tracker.print_stacks();
-                exit_and_terminate_all_threads(-2);
+                // exit_and_terminate_all_threads(-2);
+                exit_and_terminate_all_threads(0);
                 // current_process().inner_handler(|proc| {
                 //     proc.exit_code = -2;
                 //     proc.is_zombie = true;

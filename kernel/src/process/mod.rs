@@ -591,8 +591,12 @@ impl Process {
         // create main thread of child process
         // note that we copy the parent's current thread's trap context
         // to child's main thread
-        let main_thread =
-            Arc::new(current_task().from_current(child.clone(), stack, Some(child.pid.clone())));
+        let main_thread = Arc::new(Thread::from_another(
+            current_task(),
+            child.clone(),
+            stack,
+            Some(child.pid.clone()),
+        ));
         // attach task to child process
         child
             .inner

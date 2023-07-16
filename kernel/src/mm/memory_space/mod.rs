@@ -167,6 +167,11 @@ impl MemorySpace {
         Ok(())
     }
 
+    /// Remove vma by start vpn
+    pub fn remove_vm_area(&mut self, start_vpn: VirtPageNum) -> Option<VmArea> {
+        self.areas.get_unchecked_mut().remove(&start_vpn)
+    }
+
     /// Find the immutable ref of map area by the given vpn
     pub fn find_vm_area_by_vpn(&self, vpn: VirtPageNum) -> Option<&VmArea> {
         // Range query to find the map area that this vpn belongs to
@@ -260,7 +265,7 @@ impl MemorySpace {
         } else {
             warn!("memory set len {}", self.areas.get_unchecked_mut().len());
             for area in self.areas.get_unchecked_mut().iter() {
-                warn!(
+                log::debug!(
                     "area start vpn {:#x}, end vpn {:#x}",
                     area.0 .0,
                     area.1.end_vpn().0
@@ -273,6 +278,7 @@ impl MemorySpace {
 
     /// Insert vm area lazily
     pub fn insert_area(&mut self, vma: VmArea) {
+        log::debug!("[insert_area] vpn range {:?}", vma.vpn_range);
         self.push_lazily(vma, None);
     }
 
@@ -955,12 +961,17 @@ impl MemorySpace {
         let mut last_start = MMAP_TOP;
         // traverse reversely
         let length_rounded = (length - 1 + PAGE_SIZE) / PAGE_SIZE * PAGE_SIZE;
-        for vma in self.areas.get_unchecked_mut().iter().rev() {
-            // debug!("start {:#x}, end {:#x}", vma.1.start_vpn().0, vma.1.end_vpn().0);
-            let curr_end = vma.1.end_vpn().0 * PAGE_SIZE;
+        for (start_vpn, vma) in self.areas.get_unchecked_mut().iter().rev() {
+            log::debug!(
+                "key start {:#x}, start {:#x}, end {:#x}",
+                start_vpn.0,
+                vma.start_vpn().0,
+                vma.end_vpn().0
+            );
+            let curr_end = vma.end_vpn().0 * PAGE_SIZE;
             if last_start - curr_end >= length_rounded {
                 let new_start = last_start - length_rounded;
-                debug!("[allocate_area] [{:#x}, {:#x}]", new_start, last_start);
+                log::debug!("[allocate_area] [{:#x}, {:#x}]", new_start, last_start);
                 return Some(VmArea::new(
                     new_start.into(),
                     last_start.into(),
@@ -972,7 +983,7 @@ impl MemorySpace {
                     vma_type,
                 ));
             }
-            last_start = vma.1.start_vpn().0 * PAGE_SIZE;
+            last_start = vma.start_vpn().0 * PAGE_SIZE;
         }
         error!("[allocate area] cannot find any unused vm area!!");
         None

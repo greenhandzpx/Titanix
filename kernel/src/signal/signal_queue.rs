@@ -1,8 +1,6 @@
 use alloc::collections::VecDeque;
 use log::debug;
 
-use crate::config::signal::SIG_NUM;
-
 use super::{KSigAction, SigHandlerManager, SigInfo, SigSet};
 
 pub struct SigQueue {
@@ -40,34 +38,42 @@ impl SigQueue {
         if self.sig_queue.is_empty() {
             return None;
         }
-        let sig_info = self.sig_queue.pop_front().unwrap();
-        assert!(sig_info.signo <= SIG_NUM);
+        // TODO: refactor sig queue to be a bit map,
+        // in order to avoid repeated signo.
+        let total_len = self.sig_queue.len();
+        let mut cnt = 0;
+        while !self.sig_queue.is_empty() {
+            if cnt == total_len {
+                return None;
+            }
+            let sig_info = self.sig_queue.pop_front().unwrap();
+            cnt += 1;
+            let signo = sig_info.signo;
+            let signo_shift = SigSet::from_bits(1 << (sig_info.signo - 1)).unwrap();
 
-        debug!("find a sig {}", sig_info.signo);
+            if self.blocked_sigs.contains(signo_shift) {
+                debug!("sig {} has been blocked", signo);
+                self.sig_queue.push_back(sig_info);
+                continue;
+            }
 
-        let signo = sig_info.signo;
+            let old_blocked_sigs = self.blocked_sigs;
 
-        let signo_shift = SigSet::from_bits(1 << (sig_info.signo - 1)).unwrap();
+            // save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
 
-        if self.blocked_sigs.contains(signo_shift) {
-            debug!("sig {} has been blocked", signo);
-            return None;
+            self.blocked_sigs |= signo_shift;
+            // TODO: only use the first element now
+            self.blocked_sigs |= self.sig_handlers.sigactions[sig_info.signo]
+                .sig_action
+                .sa_mask[0];
+
+            return Some((
+                sig_info,
+                self.sig_handlers.sigactions[signo],
+                old_blocked_sigs,
+            ));
         }
 
-        let old_blocked_sigs = self.blocked_sigs;
-
-        // save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
-
-        self.blocked_sigs |= signo_shift;
-        // TODO: only use the first element now
-        self.blocked_sigs |= self.sig_handlers.sigactions[sig_info.signo]
-            .sig_action
-            .sa_mask[0];
-
-        Some((
-            sig_info,
-            self.sig_handlers.sigactions[signo],
-            old_blocked_sigs,
-        ))
+        None
     }
 }

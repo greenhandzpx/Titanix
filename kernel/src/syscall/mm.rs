@@ -117,7 +117,15 @@ pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
             .find_vm_area_mut_by_vpn(start_vpn)
             .ok_or(SyscallErr::EINVAL)?;
         // TODO: maybe we should check wether the user owns the permission to unmap the vma?
-        if let Some(splited_vma) = vma.unmap_area(VPNRange::new(start_vpn, end_vpn))? {
+        let old_start_vpn = vma.start_vpn();
+        let splited_vma = vma.unmap_area(VPNRange::new(start_vpn, end_vpn))?;
+        if vma.start_vpn() != old_start_vpn {
+            let vma = proc.memory_space.remove_vm_area(old_start_vpn).unwrap();
+            if vma.start_vpn() < vma.end_vpn() {
+                proc.memory_space.insert_area(vma);
+            }
+        }
+        if let Some(splited_vma) = splited_vma {
             proc.memory_space.insert_area(splited_vma);
         }
         Ok(0)

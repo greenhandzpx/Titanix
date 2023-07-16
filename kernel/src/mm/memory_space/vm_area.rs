@@ -89,6 +89,11 @@ pub struct VmArea {
 
 impl Drop for VmArea {
     fn drop(&mut self) {
+        log::debug!(
+            "[VmArea::drop] drop vma, [{:#x}, {:#x}]",
+            self.start_vpn().0,
+            self.end_vpn().0
+        );
         self.do_unmap_area(self.vpn_range);
     }
 }
@@ -350,9 +355,10 @@ impl VmArea {
 
     /// Clip the vm area.
     pub fn clip(&mut self, new_vpn_range: VPNRange) {
-        debug!(
+        log::warn!(
             "[VmArea::clip] old range {:?}, new range {:?}",
-            self.vpn_range, new_vpn_range
+            self.vpn_range,
+            new_vpn_range
         );
         assert!(new_vpn_range.start() >= self.start_vpn() && new_vpn_range.end() <= self.end_vpn());
         if self.start_vpn() < new_vpn_range.start() {
@@ -370,6 +376,11 @@ impl VmArea {
     pub fn unmap_area(&mut self, vpn_range: VPNRange) -> GeneralRet<Option<VmArea>> {
         stack_trace!();
 
+        log::debug!(
+            "[VmArea::unmap_area] old range {:?}, unmap range {:?}",
+            self.vpn_range,
+            vpn_range
+        );
         if vpn_range.start() < self.vpn_range.start() || vpn_range.end() > self.vpn_range.end() {
             warn!("[VmArea::unmap_area] invalid vpn range: {:?}", vpn_range);
             return Err(SyscallErr::EINVAL);

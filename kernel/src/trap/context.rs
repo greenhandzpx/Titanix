@@ -10,8 +10,6 @@
  */
 //! Implementation of [`TrapContext`]
 
-use core::arch::asm;
-
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 /// Trap context structure containing sstatus, sepc and registers
@@ -45,7 +43,10 @@ pub struct TrapContext {
     pub kernel_tp: usize, // 49
 }
 
-/// User context that used for signal handling
+/// User context that used for signal handling and trap handling
+/// Note that:
+/// For signal handling, user_x[0] means sepc.
+#[derive(Clone, Copy)]
 pub struct UserContext {
     /// general regs[0..31]
     pub user_x: [usize; 32],
