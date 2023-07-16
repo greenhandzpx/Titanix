@@ -25,10 +25,19 @@ pub struct UserCheck {
     _sie_guard: SieGuard,
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct TryOpRet {
+    is_err: usize,
+    scause: usize,
+}
+
+const STORE_PAGE_FAULT: usize = 15;
+
 extern "C" {
     fn __try_access_user_error_trap();
-    fn __try_read_user_u8(user_addr: usize) -> (usize, usize);
-    fn __try_write_user_u8(user_addr: usize) -> (usize, usize);
+    fn __try_read_user_u8(user_addr: usize) -> TryOpRet;
+    fn __try_write_user_u8(user_addr: usize) -> TryOpRet;
     fn __trap_from_user();
     fn __trap_from_kernel();
 }
@@ -141,19 +150,19 @@ impl UserCheck {
     fn try_read_u8(&self, user_addr: usize) -> Option<usize> {
         // debug!("satp(2) {:#x}", satp::read().bits());
         // debug!("try read u8, addr {:#x}", user_addr);
-        let (a0, scause) = unsafe { __try_read_user_u8(user_addr) };
-        match a0 {
+        let ret = unsafe { __try_read_user_u8(user_addr) };
+        match ret.is_err {
             0 => None,
-            _ => Some(scause),
+            _ => Some(ret.scause),
         }
     }
 
     fn try_write_u8(&self, user_addr: usize) -> Option<usize> {
-        let (a0, _scause) = unsafe { __try_write_user_u8(user_addr) };
-        match a0 {
+        let ret = unsafe { __try_write_user_u8(user_addr) };
+        match ret.is_err {
             0 => None,
             // TODO: optimize
-            _ => Some(15),
+            _ => Some(STORE_PAGE_FAULT),
         }
     }
 
