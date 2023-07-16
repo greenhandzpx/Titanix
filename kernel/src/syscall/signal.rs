@@ -3,7 +3,7 @@ use log::{debug, info, warn};
 use crate::{
     config::signal::SIG_NUM,
     mm::user_check::UserCheck,
-    process::PROCESS_MANAGER,
+    process::{thread, PROCESS_MANAGER},
     processor::{current_process, current_task, current_trap_cx, SumGuard},
     signal::{ign_sig_handler, KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_ERR, SIG_IGN},
     stack_trace,
@@ -335,4 +335,38 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
         }
     }
     Ok(0)
+}
+
+pub fn sys_umask(_mask: u32) -> SyscallRet {
+    Ok(0x777 as isize)
+}
+
+pub async fn sys_rt_sigsuspend(mask: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_readable_slice(mask as *const u8, core::mem::size_of::<SigSet>())?;
+    let mask = unsafe { *(mask as *const SigSet) };
+    debug!("[sys_rt_sigsuspend] set mask: {:?}", mask);
+    // retore old sigset
+    let old_set = current_process().inner_handler(|proc| {
+        let old = proc.pending_sigs.blocked_sigs;
+        proc.pending_sigs.blocked_sigs = mask;
+        old
+    });
+    loop {
+        thread::yield_now().await;
+        if current_process().is_zombie() {
+            current_process().inner_handler(|proc| {
+                proc.pending_sigs.blocked_sigs = old_set;
+            });
+            return Err(SyscallErr::EINTR);
+        }
+        current_process().inner_handler(|proc| {
+            if !proc.pending_sigs.sig_queue.is_empty() {
+                proc.pending_sigs.blocked_sigs = old_set;
+                return Err(SyscallErr::EINTR);
+            }
+            Ok(())
+        })?;
+    }
 }

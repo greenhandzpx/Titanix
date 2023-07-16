@@ -26,11 +26,11 @@ fn main() -> i32 {
     } else {
         loop {
             let mut exit_code: i32 = 0;
-            let pid = wait(&mut exit_code);
-            println!(
-                "[initproc] Released a zombie process, pid={}, exit_code={}",
-                pid, exit_code,
-            );
+            let _pid = wait(&mut exit_code);
+            // println!(
+            //     "[initproc] Released a zombie process, pid={}, exit_code={}",
+            //     pid, exit_code,
+            // );
         }
     }
     0

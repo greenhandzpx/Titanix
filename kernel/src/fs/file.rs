@@ -30,6 +30,17 @@ impl FileMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
         f(&mut self.inner.lock())
     }
+    pub fn new(flags: OpenFlags) -> Self {
+        Self {
+            inner: Mutex::new(FileMetaInner {
+                flags,
+                inode: None,
+                pos: 0,
+                dirent_index: 0,
+            }),
+            prw_lock: SleepLock::new(()),
+        }
+    }
 }
 pub struct FileMetaInner {
     /// open flags

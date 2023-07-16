@@ -24,6 +24,7 @@ fn insert_app_data() -> Result<()> {
 
     apps.sort();
     apps.push("busybox".to_string());
+    apps.push("true".to_string());
 
     writeln!(
         f,
