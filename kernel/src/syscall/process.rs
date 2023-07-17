@@ -423,22 +423,23 @@ pub fn sys_getuid() -> SyscallRet {
 
 pub fn sys_getpgid(pid: usize) -> SyscallRet {
     stack_trace!();
-    let _sum_guard = SumGuard::new();
-    if pid == 0 {
-        let pgid = current_process().pgid();
-        info!("get pgid, pid {}, pgid {}", pid, pgid);
-        Ok(pgid as isize)
-    } else {
-        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
-        if proc.is_none() {
-            Err(SyscallErr::ESRCH)
-        } else {
-            let proc = proc.unwrap();
-            let pgid = proc.pgid();
-            info!("get pgid, pid {}, pgid {}", pid, pgid);
-            Ok(pgid as isize)
-        }
-    }
+    Ok(0)
+    // let _sum_guard = SumGuard::new();
+    // if pid == 0 {
+    //     let pgid = current_process().pgid();
+    //     info!("get pgid, pid {}, pgid {}", pid, pgid);
+    //     Ok(pgid as isize)
+    // } else {
+    //     let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+    //     if proc.is_none() {
+    //         Err(SyscallErr::ESRCH)
+    //     } else {
+    //         let proc = proc.unwrap();
+    //         let pgid = proc.pgid();
+    //         info!("get pgid, pid {}, pgid {}", pid, pgid);
+    //         Ok(pgid as isize)
+    //     }
+    // }
 }
 
 pub fn sys_setpgid(pid: usize, pgid: usize) -> SyscallRet {

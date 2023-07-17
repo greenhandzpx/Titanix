@@ -56,9 +56,7 @@ pub fn remove_dot(path: &str) -> String {
 /// format path: remove excess "/"
 pub fn format(src: &str) -> String {
     let mut vec = path2vec(src);
-    if vec.len() == 0 {
-        vec.push("");
-    } else if vec[0] != "." && vec[0] != ".." {
+    if !is_relative_path(src) {
         vec.insert(0, "");
     }
     vec.join("/")

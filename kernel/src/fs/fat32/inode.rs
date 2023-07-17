@@ -162,43 +162,41 @@ impl Inode for FAT32Inode {
     fn mkdir(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        let fname = path::get_name(pathname);
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
         let fat = Arc::clone(&self.fat);
-        let s_inode = FAT32Inode::new(fat, this, fname, mode);
+        let s_inode = FAT32Inode::new(fat, this, name, mode);
         let inode: Arc<dyn Inode> = Arc::new(s_inode);
         self.metadata()
             .inner
             .lock()
             .children
-            .insert(fname.to_string(), Arc::clone(&inode));
+            .insert(name.to_string(), Arc::clone(&inode));
         Ok(inode)
     }
 
     fn mknod(
         &self,
         this: Arc<dyn Inode>,
-        pathname: &str,
+        name: &str,
         mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        let fname = path::get_name(pathname);
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
         let fat = Arc::clone(&self.fat);
-        let s_inode = FAT32Inode::new(fat, this, fname, mode);
+        let s_inode = FAT32Inode::new(fat, this, name, mode);
         let inode: Arc<dyn Inode> = Arc::new(s_inode);
         self.metadata()
             .inner
             .lock()
             .children
-            .insert(fname.to_string(), Arc::clone(&inode));
+            .insert(name.to_string(), Arc::clone(&inode));
         Ok(inode)
     }
 

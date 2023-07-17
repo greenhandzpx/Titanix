@@ -117,7 +117,7 @@ pub trait Inode: Send + Sync {
     }
 
     /// You should call this function through the parent inode
-    /// You should give a absolute path
+    /// You should give a child name
     fn mkdir(
         &self,
         _this: Arc<dyn Inode>,

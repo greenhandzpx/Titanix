@@ -14,7 +14,6 @@ mod procfs;
 pub mod socket;
 mod testfs;
 
-use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
@@ -36,13 +35,10 @@ pub use page_cache::PageCache;
 
 use crate::driver::BLOCK_DEVICE;
 use crate::mm::MapPermission;
-use crate::processor::current_process;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
-use crate::timer::posix::current_time_spec;
 use crate::utils::error::GeneralRet;
 use crate::utils::error::SyscallErr;
-use crate::utils::error::SyscallRet;
 use crate::utils::path;
 
 use self::ffi::StatFlags;
@@ -68,21 +64,21 @@ pub fn init() {
     <dyn Inode>::load_children(Arc::clone(&root_inode));
 
     let dev_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "/dev", InodeMode::FileDIR)
+        .mkdir(Arc::clone(&root_inode), "dev", InodeMode::FileDIR)
         .expect("mkdir /dev fail!");
 
     let key = HashKey::new(root_inode.metadata().ino, "dev".to_string());
     INODE_CACHE.lock().insert(key, dev_dir);
 
     let proc_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "/proc", InodeMode::FileDIR)
+        .mkdir(Arc::clone(&root_inode), "proc", InodeMode::FileDIR)
         .expect("mkdir /proc fail!");
 
     let key = HashKey::new(root_inode.metadata().ino, "proc".to_string());
     INODE_CACHE.lock().insert(key, proc_dir);
 
     let tmp_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "/tmp", InodeMode::FileDIR)
+        .mkdir(Arc::clone(&root_inode), "tmp", InodeMode::FileDIR)
         .expect("mkdir /tmp fail!");
 
     let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
