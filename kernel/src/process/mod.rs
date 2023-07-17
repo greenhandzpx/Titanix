@@ -50,6 +50,7 @@ pub use manager::PROCESS_MANAGER;
 pub fn add_initproc() {
     stack_trace!();
     let elf_data = get_app_data_by_name("initproc").unwrap();
+    // let elf_data = get_app_data_by_name("runtestcases").unwrap();
     let _init_proc = Process::new_initproc(elf_data);
     // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
 
