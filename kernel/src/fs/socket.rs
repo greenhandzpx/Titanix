@@ -34,6 +34,14 @@ impl Socket {
 }
 
 impl File for Socket {
+    fn readable(&self) -> bool {
+        true
+    }
+
+    fn writable(&self) -> bool {
+        true
+    }
+
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         Box::pin(async move {
             let _sum_guard = SumGuard::new();

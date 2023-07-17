@@ -25,6 +25,7 @@ mod block_device;
 mod null;
 mod rtc;
 mod tty;
+mod urandom;
 mod zero;
 
 /// i.e. /dev
@@ -82,7 +83,7 @@ const DEV_NAMES: [(
     &str,
     InodeMode,
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
-); 5] = [
+); 6] = [
     ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
         Arc::new(TestRootInode::new(parent, path))
     }),
@@ -96,6 +97,9 @@ const DEV_NAMES: [(
         Arc::new(TtyInode::new(parent, path))
     }),
     ("/dev/rtc", InodeMode::FileCHR, |parent, path| {
+        Arc::new(RtcInode::new(parent, path))
+    }),
+    ("/dev/urandom", InodeMode::FileCHR, |parent, path| {
         Arc::new(RtcInode::new(parent, path))
     }),
 ];

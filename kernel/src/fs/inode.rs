@@ -54,7 +54,7 @@ impl FAST_PATH_CACHE {
     }
 }
 
-pub const FAST_PATH: [&str; 3] = ["/dev/null", "/dev/zero", "/dev/tty"];
+pub const FAST_PATH: [&str; 4] = ["/dev/null", "/dev/zero", "/dev/tty", "/dev/urandom"];
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum InodeMode {
