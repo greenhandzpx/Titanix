@@ -85,8 +85,8 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
                 }
             };
             // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
-            info!(
-                "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}",
+            log::info!(
+                "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:?}, sa_flags: {:#x}, sa_restorer: {:#x}",
                 sig,
                 new_sigaction.sig_action.sa_handler as *const usize as usize,
                 new_sigaction.sig_action.sa_mask[0],
@@ -121,12 +121,6 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
         UserCheck::new()
             .check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
     }
-    if set as usize == 0 {
-        debug!("arg set is null");
-        return Ok(0);
-    }
-    UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
-    let _sum_guard = SumGuard::new();
     debug!("[sys_rt_sigprocmask]: how: {}", how);
     current_process().inner_handler(|proc| {
         if old_set as usize != 0 {
@@ -139,6 +133,12 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 );
             }
         }
+        if set as usize == 0 {
+            debug!("arg set is null");
+            return Ok(0);
+        }
+        UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
+        let _sum_guard = SumGuard::new();
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
                 stack_trace!();
@@ -237,7 +237,7 @@ pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const 
 
 pub fn sys_tkill(tid: usize, signo: i32) -> SyscallRet {
     stack_trace!();
-    if let Some(proc) = PROCESS_MANAGER.get_process_by_tid(tid) {
+    if let Some(proc) = PROCESS_MANAGER.get(tid) {
         if let Some(thread) = proc.inner_handler(|proc| {
             if let Some(thread) = proc.threads.get(&tid) {
                 thread.upgrade()
@@ -252,9 +252,11 @@ pub fn sys_tkill(tid: usize, signo: i32) -> SyscallRet {
             thread.send_signal(sig_info);
             Ok(0)
         } else {
+            log::warn!("No such tid {} in pid {}", tid, proc.pid());
             Err(SyscallErr::ESRCH)
         }
     } else {
+        log::warn!("no such pid for tid {}", tid);
         Err(SyscallErr::ESRCH)
     }
 }
@@ -279,7 +281,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     // TODO: add permission check for sending signal
     debug!("[sys_kill] pid: {}, signo: {}", pid, signo);
     if pid > 0 {
-        if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid as usize) {
+        if let Some(proc) = PROCESS_MANAGER.get(pid as usize) {
             debug!(
                 "proc {} send signal {} to proc {}",
                 current_process().pid(),
@@ -293,7 +295,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
         }
     } else if pid == 0 {
         let pid = current_process().pid();
-        if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid) {
+        if let Some(proc) = PROCESS_MANAGER.get(pid) {
             let pgid = proc.pgid();
             let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pgid);
             for id in vec {
@@ -301,7 +303,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
                 if id == pid {
                     continue;
                 }
-                if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(id) {
+                if let Some(proc) = PROCESS_MANAGER.get(id) {
                     debug!("send signal {} to proc {} in pgid {} ", signo, id, pgid);
                     proc.send_signal(sig_info.clone());
                 } else {
@@ -335,7 +337,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
         let pid = -pid;
         let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pid as usize);
         for id in vec {
-            if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(id) {
+            if let Some(proc) = PROCESS_MANAGER.get(id) {
                 debug!(
                     "proc {} send signal {} to proc {}",
                     current_process().pid(),

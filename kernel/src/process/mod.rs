@@ -18,7 +18,7 @@ pub mod resource;
 
 use crate::{
     config::process::CLONE_STACK_SIZE,
-    fs::FdTable,
+    fs::{FdTable, OpenFlags},
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySpace},
     process::{
@@ -50,7 +50,13 @@ pub use manager::PROCESS_MANAGER;
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();
+
+    #[cfg(feature = "submit")]
+    let elf_data = get_app_data_by_name("runtestcases").unwrap();
+
+    #[cfg(not(feature = "submit"))]
     let elf_data = get_app_data_by_name("initproc").unwrap();
+
     let _init_proc = Process::new_initproc(elf_data);
     // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
 
@@ -238,7 +244,7 @@ impl Process {
             .lock()
             .threads
             .insert(thread.tid(), Arc::downgrade(&thread));
-        PROCESS_MANAGER.add_process(process.pid(), &process);
+        PROCESS_MANAGER.add(process.pid(), &process);
         PROCESS_GROUP_MANAGER.add_group(process.pgid());
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
@@ -248,8 +254,12 @@ impl Process {
 
     /// Fork a new process
     /// `stack` points to the new cloned process's main thread's stack if not `None`
-    pub fn fork(self: &Arc<Self>, stack: Option<usize>) -> GeneralRet<Arc<Self>> {
-        self.clone_process(stack)
+    pub fn fork(
+        self: &Arc<Self>,
+        stack: Option<usize>,
+        flags: CloneFlags,
+    ) -> GeneralRet<Arc<Self>> {
+        self.clone_process(stack, flags)
     }
 
     /// Exec a new program.
@@ -553,7 +563,11 @@ impl Process {
         Ok(tid as isize)
     }
 
-    fn clone_process(self: &Arc<Self>, stack: Option<usize>) -> GeneralRet<Arc<Self>> {
+    fn clone_process(
+        self: &Arc<Self>,
+        stack: Option<usize>,
+        flags: CloneFlags,
+    ) -> GeneralRet<Arc<Self>> {
         stack_trace!();
         let child = self.inner_handler(move |parent_inner| {
             assert_eq!(parent_inner.thread_count(), 1);
@@ -569,10 +583,14 @@ impl Process {
             parent_inner.memory_space.activate();
             // let memory_space = MemorySpace::from_existed_user(&parent_inner.memory_space);
 
-            // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
             // create child process pcb
             let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
+            let child_sig_queue = match flags.contains(CloneFlags::CLONE_SIGHAND) {
+                true => SigQueue::from_another(&parent_inner.pending_sigs),
+                false => SigQueue::new(),
+            };
+
             let child = Arc::new(Self {
                 pid,
                 mailbox: Arc::new(Mailbox::new()),
@@ -583,7 +601,7 @@ impl Process {
                     children: Vec::new(),
                     fd_table: child_fd_table,
                     threads: BTreeMap::new(),
-                    pending_sigs: SigQueue::from_another(&parent_inner.pending_sigs),
+                    pending_sigs: child_sig_queue,
                     // ustack_base: parent_inner.ustack_base,
                     futex_queue: FutexQueue::new(),
                     exit_code: 0,
@@ -593,6 +611,7 @@ impl Process {
                     pgid: parent_inner.pgid,
                 }),
             });
+            debug!("fork: child cwd {}", parent_inner.cwd);
             // add child
             parent_inner.children.push(Arc::clone(&child));
 
@@ -615,7 +634,7 @@ impl Process {
             .threads
             .insert(main_thread.tid(), Arc::downgrade(&main_thread));
 
-        PROCESS_MANAGER.add_process(child.pid(), &child);
+        PROCESS_MANAGER.add(child.pid(), &child);
         PROCESS_GROUP_MANAGER.add_process(child.pgid(), child.pid());
         // add this thread to scheduler
         main_thread.trap_context_mut().user_x[10] = 0;

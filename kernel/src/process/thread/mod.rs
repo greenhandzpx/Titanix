@@ -12,22 +12,13 @@ use self::{
     time::ThreadTimeInfo,
 };
 
-use super::Process;
+use super::{Process, PROCESS_MANAGER};
+use crate::signal::SignalContext;
 use crate::{
-    config::mm::PAGE_SIZE,
     executor,
-    mm::{
-        memory_space::{vm_area::VmAreaType, MapType},
-        MapPermission, Page, PageBuilder, VirtAddr,
-    },
     signal::{signal_queue::SigQueue, SigInfo, SignalTrampoline},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
-};
-use crate::{
-    mm::{KernelAddr, PhysAddr},
-    processor::SumGuard,
-    signal::SignalContext,
 };
 use crate::{sync::OwnedFutexes, trap::TrapContext};
 use alloc::sync::Arc;
@@ -100,11 +91,12 @@ impl Thread {
         tid: Option<Arc<TidHandle>>,
     ) -> Self {
         let sig_trampoline = SignalTrampoline::new(process.clone());
+        let tid = match tid {
+            Some(tid) => tid,
+            None => Arc::new(tid_alloc()),
+        };
         let thread = Self {
-            tid: match tid {
-                Some(tid) => tid,
-                None => Arc::new(tid_alloc()),
-            },
+            tid: tid.clone(),
             sig_trampoline,
             process: process.clone(),
             // user_specified_stack,
@@ -123,6 +115,7 @@ impl Thread {
                 // terminated: AtomicBool::new(false),
             }),
         };
+        PROCESS_MANAGER.add(tid.0, &process);
         thread
     }
 
@@ -135,11 +128,13 @@ impl Thread {
     ) -> Self {
         stack_trace!();
         let sig_trampoline = SignalTrampoline::new(new_process.clone());
+        let tid = match tid {
+            Some(tid) => tid,
+            None => Arc::new(tid_alloc()),
+        };
+        PROCESS_MANAGER.add(tid.0, &new_process);
         Self {
-            tid: match tid {
-                Some(tid) => tid,
-                None => Arc::new(tid_alloc()),
-            },
+            tid: tid.clone(),
             sig_trampoline,
             process: new_process.clone(),
             inner: UnsafeCell::new(ThreadInner {

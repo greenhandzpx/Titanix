@@ -161,7 +161,7 @@ pub fn sys_setitimer(
     let idx = match which {
         ITIMER_REAL => {
             let callback = move || {
-                if let Some(process) = PROCESS_MANAGER.get_process_by_pid(current_pid) {
+                if let Some(process) = PROCESS_MANAGER.get(current_pid) {
                     let mut proc = process.inner.lock();
                     let timer = &mut proc.timers[ITIMER_REAL as usize];
                     if Duration::from(timer.it_value).is_zero() {

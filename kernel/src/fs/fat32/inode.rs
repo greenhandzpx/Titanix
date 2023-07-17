@@ -192,6 +192,7 @@ impl Inode for FAT32Inode {
         let fat = Arc::clone(&self.fat);
         let s_inode = FAT32Inode::new(fat, this, name, mode);
         let inode: Arc<dyn Inode> = Arc::new(s_inode);
+        <dyn Inode>::create_page_cache_if_needed(inode.clone());
         self.metadata()
             .inner
             .lock()

@@ -14,6 +14,18 @@ TEST_DIR := "../$(TEST)-testcases"
 
 STRACE := 
 
+SUBMIT := 
+
+KERNEL_FEATURES := 
+
+ifneq ($(STRACE), )
+	KERNEL_FEATURES += strace
+endif
+ifneq ($(SUBMIT), )
+	KERNEL_FEATURES += submit
+endif
+
+
 # BOARD
 BOARD := qemu
 SBI ?= rustsbi
@@ -74,14 +86,13 @@ $(KERNEL_BIN): kernel
 
 kernel:
 	@echo "build kernel..."
-	# @cd ../user && make build TEST=$(TEST) 
 	@echo Platform: $(BOARD)
 	@cp src/linker64.ld src/linker.ld
 	@cargo fmt
-ifeq ($(STRACE), )
-	@cargo build --$(MODE)
+ifeq ($(KERNEL_FEATURES), )
+	cargo build --$(MODE)
 else
-	@cargo build --$(MODE) --features strace
+	cargo build --$(MODE) --features "$(KERNEL_FEATURES)"
 endif
 	@rm src/linker.ld
 	@echo "build kernel finished"

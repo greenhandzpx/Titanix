@@ -53,7 +53,7 @@ pub fn remove_dot(path: &str) -> String {
         .collect();
     path_vec.join("/")
 }
-/// format path: remove excess "/"
+/// format path: remove extra "/"
 pub fn format(src: &str) -> String {
     let mut vec = path2vec(src);
     if !is_relative_path(src) {
@@ -138,8 +138,9 @@ pub fn path_to_inode(
         }
         stack_trace!();
         let path = c_str_to_string(path);
-        let mut path = format(&path);
         debug!("[path_to_inode] get path: {}", path);
+        let mut path = format(&path);
+        debug!("[path_to_inode] get format path: {}", path);
         stack_trace!();
         if is_relative_path(&path) {
             if dirfd != AT_FDCWD {

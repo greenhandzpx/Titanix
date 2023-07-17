@@ -4,7 +4,7 @@ use core::ptr;
 use core::ptr::copy_nonoverlapping;
 use core::time::Duration;
 
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -360,6 +360,7 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
             }
             // TODO: add to fs's dirty list
             if target_inode.metadata().mode == InodeMode::FileDIR {
+                log::info!("[sys_chdir] change cwd to {}", path);
                 current_process().inner_handler(move |proc| proc.cwd = path.to_string());
                 Ok(0)
             } else {
@@ -633,7 +634,9 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
-    file.read(buf).await
+    let ret = file.read(buf).await;
+    // log::debug!("[sys_read] len {:?} res buf {:?}", ret, buf);
+    ret
     // if buf.len() < 2 {
     //     file.sync_read(buf)
     // } else {

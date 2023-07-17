@@ -165,7 +165,7 @@ pub fn sys_clone(
 
     let clone_flags = clone_flags.unwrap();
 
-    info!("[sys_clone] flags {:?}", clone_flags);
+    log::info!("[sys_clone] flags {:?}", clone_flags);
 
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
@@ -187,7 +187,7 @@ pub fn sys_clone(
                 Some(stack as usize)
             }
         };
-        let new_process = current_process.fork(stack)?;
+        let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
         // // modify trap context of new_task, because it returns immediately after switching
@@ -277,7 +277,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
     envs_vec.push("PATH=/:".to_string());
 
-    if path.ends_with("shell") || path.ends_with("busybox") {
+    if path.ends_with("shell") || path.ends_with("busybox") || path.ends_with("runtestcases") {
         if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
             current_process().exec(elf_data, args_vec, envs_vec)
         } else {
@@ -435,7 +435,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
         info!("get pgid, pid {}, pgid {}", pid, pgid);
         Ok(pgid as isize)
     } else {
-        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+        let proc = PROCESS_MANAGER.get(pid);
         if proc.is_none() {
             Err(SyscallErr::ESRCH)
         } else {
@@ -465,7 +465,7 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SyscallRet {
         PROCESS_GROUP_MANAGER.set_pgid_by_pid(pid, new_pgid, current_pgid);
         current_process().inner_handler(|proc| proc.pgid = new_pgid);
     } else {
-        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+        let proc = PROCESS_MANAGER.get(pid);
         if proc.is_none() {
             return Err(SyscallErr::ESRCH);
         } else {

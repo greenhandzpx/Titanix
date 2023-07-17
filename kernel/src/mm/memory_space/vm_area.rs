@@ -44,6 +44,13 @@ pub struct BackupFile {
     pub file: Arc<dyn File>,
 }
 
+impl BackupFile {
+    /// Construct a backup file
+    pub fn new(offset: usize, file: Arc<dyn File>) -> Self {
+        Self { offset, file }
+    }
+}
+
 /// Vm area type
 #[derive(Debug, Clone, Copy)]
 pub enum VmAreaType {
@@ -329,8 +336,11 @@ impl VmArea {
         }
         // Write back to disk if needed
         if let Some(backup_file) = self.backup_file.as_mut() {
-            backup_file.offset += VirtAddr::from(removed_vpn_range.start()).0
-                - VirtAddr::from(self.vpn_range.start()).0;
+            if removed_vpn_range.start().0 == self.vpn_range.start().0 {
+                backup_file.offset += VirtAddr::from(removed_vpn_range.end()).0
+                    - VirtAddr::from(self.vpn_range.start()).0;
+            }
+            log::debug!("[do_unmap_area] file offset, new {:#x}", backup_file.offset);
             if self.mmap_flags.unwrap().contains(MmapFlags::MAP_SHARED) {
                 // TODO: do we need to sync to the disk?
                 // It seems ok for us to just sync to page cache.
@@ -355,7 +365,7 @@ impl VmArea {
 
     /// Clip the vm area.
     pub fn clip(&mut self, new_vpn_range: VPNRange) {
-        log::warn!(
+        log::debug!(
             "[VmArea::clip] old range {:?}, new range {:?}",
             self.vpn_range,
             new_vpn_range
