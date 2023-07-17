@@ -5,7 +5,7 @@ use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
-use crate::process::PROCESS_MANAGER;
+use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::SigSet;
@@ -71,7 +71,9 @@ pub async fn sys_yield() -> SyscallRet {
 
 pub fn sys_getpid() -> SyscallRet {
     stack_trace!();
-    Ok(current_task().as_ref().process.pid() as isize)
+    let ret = current_process().pid();
+    debug!("[sys_getpid] return {}", ret);
+    Ok(ret as isize)
 }
 
 pub fn sys_getppid() -> SyscallRet {
@@ -79,8 +81,12 @@ pub fn sys_getppid() -> SyscallRet {
     let current_process = current_process();
     let parent_process = current_process.inner_handler(move |proc| proc.parent.clone());
     match parent_process {
-        Some(parent_process) => Ok(parent_process.upgrade().unwrap().pid() as isize),
-        None => Ok(1),
+        Some(parent_process) => {
+            let ret = parent_process.upgrade().unwrap().pid();
+            debug!("[sys_getppid] return {}", ret);
+            Ok(ret as isize)
+        }
+        None => Ok(INITPROC_PID as isize),
     }
 }
 
@@ -423,23 +429,22 @@ pub fn sys_getuid() -> SyscallRet {
 
 pub fn sys_getpgid(pid: usize) -> SyscallRet {
     stack_trace!();
-    Ok(0)
-    // let _sum_guard = SumGuard::new();
-    // if pid == 0 {
-    //     let pgid = current_process().pgid();
-    //     info!("get pgid, pid {}, pgid {}", pid, pgid);
-    //     Ok(pgid as isize)
-    // } else {
-    //     let proc = PROCESS_MANAGER.get_process_by_pid(pid);
-    //     if proc.is_none() {
-    //         Err(SyscallErr::ESRCH)
-    //     } else {
-    //         let proc = proc.unwrap();
-    //         let pgid = proc.pgid();
-    //         info!("get pgid, pid {}, pgid {}", pid, pgid);
-    //         Ok(pgid as isize)
-    //     }
-    // }
+    let _sum_guard = SumGuard::new();
+    if pid == 0 {
+        let pgid = current_process().pgid();
+        info!("get pgid, pid {}, pgid {}", pid, pgid);
+        Ok(pgid as isize)
+    } else {
+        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+        if proc.is_none() {
+            Err(SyscallErr::ESRCH)
+        } else {
+            let proc = proc.unwrap();
+            let pgid = proc.pgid();
+            info!("get pgid, pid {}, pgid {}", pid, pgid);
+            Ok(pgid as isize)
+        }
+    }
 }
 
 pub fn sys_setpgid(pid: usize, pgid: usize) -> SyscallRet {
@@ -450,26 +455,26 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SyscallRet {
     }
     info!("set pgid, pid {}, pgid {}", pid, pgid);
     if pid == 0 {
-        current_process().inner_handler(|proc| {
-            if pgid == 0 {
-                proc.pgid = current_process().pid();
-            } else {
-                proc.pgid = pgid;
-            }
-        });
+        let current_pgid = current_process().pgid();
+        let new_pgid = if pgid == 0 {
+            current_process().pid()
+        } else {
+            pgid
+        };
+        let pid = current_process().pid();
+        PROCESS_GROUP_MANAGER.set_pgid_by_pid(pid, new_pgid, current_pgid);
+        current_process().inner_handler(|proc| proc.pgid = new_pgid);
     } else {
         let proc = PROCESS_MANAGER.get_process_by_pid(pid);
         if proc.is_none() {
             return Err(SyscallErr::ESRCH);
         } else {
             let proc = proc.unwrap();
-            proc.inner_handler(|proc_inner| {
-                if pgid == 0 {
-                    proc_inner.pgid = proc.pid();
-                } else {
-                    proc_inner.pgid = pgid;
-                }
-            });
+            let current_pgid = proc.pgid();
+            let new_pgid = if pgid == 0 { proc.pgid() } else { pgid };
+            let pid = current_process().pid();
+            PROCESS_GROUP_MANAGER.set_pgid_by_pid(pid, new_pgid, current_pgid);
+            current_process().inner_handler(|proc| proc.pgid = new_pgid);
         }
     }
     Ok(0)
@@ -502,6 +507,7 @@ pub fn sys_setsid() -> SyscallRet {
         if pid != proc.pgid {
             debug!("[sys_setsid] current process is a child");
             // create a new session
+            PROCESS_GROUP_MANAGER.set_pgid_by_pid(pid, pid, proc.pgid);
             proc.pgid = pid;
         }
     });

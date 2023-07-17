@@ -170,7 +170,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_DUP => sys_handler!(sys_dup, (args[0])),
         SYSCALL_DUP3 => sys_handler!(sys_dup3, (args[0], args[1], args[2] as u32)),
         SYSCALL_FCNTL => sys_handler!(sys_fcntl, (args[0], args[1] as i32, args[2] as usize)),
-        SYSCALL_IOCTL => sys_handler!(sys_ioctl, (args[0], args[1] as isize, args[2])),
+        SYSCALL_IOCTL => sys_handler!(sys_ioctl, (args[0], args[1], args[2])),
         SYSCALL_UNLINK => sys_handler!(
             sys_unlinkat,
             (args[0] as isize, args[1] as *const u8, args[2] as u32)

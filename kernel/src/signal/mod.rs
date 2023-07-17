@@ -264,6 +264,7 @@ fn save_context_for_sig_handler(blocked_sigs: SigSet) {
     current_task().set_signal_context(signal_context);
 }
 
+#[derive(Clone)]
 pub struct SigInfo {
     pub signo: usize,
     pub errno: usize,

@@ -1,12 +1,18 @@
+use core::ptr;
+
 use log::debug;
 
 use crate::{
     fs::InodeMode,
-    processor::current_process,
+    mm::user_check::UserCheck,
+    processor::{current_process, SumGuard},
     utils::error::{SyscallErr, SyscallRet},
 };
 
-pub fn sys_ioctl(fd: usize, request: isize, arg: usize) -> SyscallRet {
+const TIOCGPGRP: usize = 0x540F;
+
+pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
+    let _sum_guard = SumGuard::new();
     debug!("fd: {}, request: {}, arg:{}", fd, request, arg);
     match fd {
         0 | 1 | 2 => Ok(0),
@@ -19,7 +25,15 @@ pub fn sys_ioctl(fd: usize, request: isize, arg: usize) -> SyscallRet {
                 debug!("[sys_ioctl] not a character device");
                 return Err(SyscallErr::ENOTTY);
             }
-            debug!("[sys_ioctl] unsupported fd resolve");
+            if request == TIOCGPGRP {
+                debug!("[sys_ioctl] for tcgetpgrp");
+                UserCheck::new()
+                    .check_writable_slice(arg as *mut u8, core::mem::size_of::<u32>())?;
+                let pid = current_process().pgid();
+                unsafe {
+                    ptr::write(arg as *mut u32, pid as u32);
+                }
+            }
             Ok(0)
         }
     }

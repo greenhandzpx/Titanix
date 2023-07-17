@@ -1,6 +1,7 @@
 use alloc::{
     collections::BTreeMap,
     sync::{Arc, Weak},
+    vec::Vec,
 };
 
 use crate::{config::process::INITPROC_PID, sync::mutex::SpinNoIrqLock};
@@ -45,4 +46,58 @@ impl ProcessManager {
 lazy_static! {
     /// Process manager that used for looking for a given process
     pub static ref PROCESS_MANAGER: ProcessManager = ProcessManager::new();
+}
+
+/// gid -> pid
+pub struct ProcessGroupManager(pub SpinNoIrqLock<BTreeMap<usize, Vec<usize>>>);
+
+impl ProcessGroupManager {
+    pub fn new() -> Self {
+        Self(SpinNoIrqLock::new(BTreeMap::new()))
+    }
+
+    pub fn add_process(&self, pgid: usize, pid: usize) {
+        let mut inner = self.0.lock();
+        let vec = inner.get(&pgid);
+        let mut vec = vec.cloned().unwrap();
+        vec.push(pid);
+        inner.insert(pgid, vec);
+    }
+
+    pub fn add_group(&self, pgid: usize) {
+        let mut inner = self.0.lock();
+        let mut vec: Vec<usize> = Vec::new();
+        if pgid != INITPROC_PID {
+            vec.push(pgid);
+        }
+        inner.insert(pgid, vec);
+    }
+
+    pub fn get_group_by_pgid(&self, pgid: usize) -> Vec<usize> {
+        self.0.lock().get(&pgid).cloned().unwrap()
+    }
+
+    pub fn set_pgid_by_pid(&self, pid: usize, new_pgid: usize, old_pgid: usize) {
+        let mut inner = self.0.lock();
+        let mut old_group_vec = inner.get(&old_pgid).cloned().unwrap();
+        old_group_vec.retain(|&x| x != pid);
+        let new_group_vec = inner.get(&new_pgid).cloned();
+        let new_group_vec = if new_group_vec.is_none() {
+            let mut vec = Vec::new();
+            vec.push(new_pgid);
+            inner.insert(new_pgid, vec.clone());
+            vec
+        } else {
+            let mut vec = new_group_vec.unwrap();
+            vec.push(pid);
+            vec
+        };
+        inner.insert(old_pgid, old_group_vec);
+        inner.insert(new_pgid, new_group_vec);
+    }
+}
+
+lazy_static! {
+    /// Process group manager that used for a given pgid
+    pub static ref PROCESS_GROUP_MANAGER: ProcessGroupManager = ProcessGroupManager::new();
 }

@@ -44,6 +44,7 @@ use alloc::{
 // use lazy_static::*;
 use thread::Thread;
 
+pub use manager::PROCESS_GROUP_MANAGER;
 pub use manager::PROCESS_MANAGER;
 
 ///Add init process to the manager
@@ -238,6 +239,7 @@ impl Process {
             .threads
             .insert(thread.tid(), Arc::downgrade(&thread));
         PROCESS_MANAGER.add_process(process.pid(), &process);
+        PROCESS_GROUP_MANAGER.add_group(process.pgid());
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
         debug!("create a new process, pid {}", process.pid());
@@ -614,6 +616,7 @@ impl Process {
             .insert(main_thread.tid(), Arc::downgrade(&main_thread));
 
         PROCESS_MANAGER.add_process(child.pid(), &child);
+        PROCESS_GROUP_MANAGER.add_process(child.pgid(), child.pid());
         // add this thread to scheduler
         main_thread.trap_context_mut().user_x[10] = 0;
         // info!("fork return1, sepc: {:#x}", main_thread.trap_context_mut().sepc);

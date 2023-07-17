@@ -688,7 +688,20 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 Ok(newfd as isize)
             })
         }
-        _ if cmd == FcntlCmd::F_SETFD as i32 || cmd == FcntlCmd::F_SETFL as i32 => {
+        _ if cmd == FcntlCmd::F_SETFD as i32 => {
+            let flags = FcntlFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
+            current_process().inner_handler(|proc| {
+                // if proc.fd_table.get_ref(fd).is_none()
+                // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
+                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+                if flags.contains(FcntlFlags::FD_CLOEXEC) {
+                    file.metadata().inner.lock().flags |= OpenFlags::CLOEXEC;
+                    debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                }
+                Ok(0)
+            })
+        }
+        _ if cmd == FcntlCmd::F_SETFL as i32 => {
             let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()

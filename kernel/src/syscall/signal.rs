@@ -1,9 +1,9 @@
 use log::{debug, info, warn};
 
 use crate::{
-    config::signal::SIG_NUM,
+    config::{process::INITPROC_PID, signal::SIG_NUM},
     mm::user_check::UserCheck,
-    process::{thread, PROCESS_MANAGER},
+    process::{thread, PROCESS_GROUP_MANAGER, PROCESS_MANAGER},
     processor::{current_process, current_task, current_trap_cx, SumGuard},
     signal::{ign_sig_handler, KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_ERR, SIG_IGN},
     stack_trace,
@@ -265,69 +265,84 @@ pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
     Ok(0)
 }
 
+/// pid > 0 then sig is sent to the process with the ID specified by pid
+/// pid == 0 then sig is sent to every process in the process group of current process
+/// pid == -1 then sig is sent to every process which current process has permission ( except init proc )
+/// pid < -1 the sig is sent to every process in process group whose ID is -pid
 pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
+    let sig_info = SigInfo {
+        signo: signo as usize,
+        errno: 0,
+    };
     // TODO: add permission check for sending signal
-    match pid {
-        0 => {
-            for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
-                if let Some(proc) = proc.upgrade() {
-                    let sig_info = SigInfo {
-                        signo: signo as usize,
-                        errno: 0,
-                    };
-                    debug!(
-                        "proc {} send signal {} to proc {}",
-                        current_process().pid(),
-                        signo,
-                        proc.pid()
-                    );
-                    proc.send_signal(sig_info);
-                } else {
+    debug!("[sys_kill] pid: {}, signo: {}", pid, signo);
+    if pid > 0 {
+        if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid as usize) {
+            debug!(
+                "proc {} send signal {} to proc {}",
+                current_process().pid(),
+                signo,
+                proc.pid()
+            );
+            proc.send_signal(sig_info);
+        } else {
+            // No such proc
+            return Err(SyscallErr::ESRCH);
+        }
+    } else if pid == 0 {
+        let pid = current_process().pid();
+        if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid) {
+            let pgid = proc.pgid();
+            let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pgid);
+            for id in vec {
+                debug!("[sys_kill] pid {} in pgid {}", id, pgid);
+                if id == pid {
                     continue;
                 }
-            }
-        }
-        1 => {
-            for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
-                if let Some(proc) = proc.upgrade() {
-                    if proc.pid() == 0 {
-                        // init proc
-                        continue;
-                    }
-                    let sig_info = SigInfo {
-                        signo: signo as usize,
-                        errno: 0,
-                    };
-                    debug!(
-                        "proc {} send signal {} to proc {}",
-                        current_process().pid(),
-                        signo,
-                        proc.pid()
-                    );
-                    proc.send_signal(sig_info);
+                if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(id) {
+                    debug!("send signal {} to proc {} in pgid {} ", signo, id, pgid);
+                    proc.send_signal(sig_info.clone());
                 } else {
-                    continue;
+                    // No such proc
+                    debug!("[sys_kill] cannot find proc {}", id);
+                    return Err(SyscallErr::ESRCH);
                 }
             }
+        } else {
+            // No such proc
+            return Err(SyscallErr::ESRCH);
         }
-        _ => {
-            let mut pid = pid;
-            if pid < 0 {
-                pid = -pid;
-            }
-            if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid as usize) {
-                let sig_info = SigInfo {
-                    signo: signo as usize,
-                    errno: 0,
-                };
+    } else if pid == -1 {
+        for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
+            if let Some(proc) = proc.upgrade() {
+                if proc.pid() == INITPROC_PID {
+                    continue;
+                }
                 debug!(
                     "proc {} send signal {} to proc {}",
                     current_process().pid(),
                     signo,
                     proc.pid()
                 );
-                proc.send_signal(sig_info);
+                proc.send_signal(sig_info.clone());
+            } else {
+                continue;
+            }
+        }
+    } else if pid < -1 {
+        let pid = -pid;
+        let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pid as usize);
+        for id in vec {
+            if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(id) {
+                debug!(
+                    "proc {} send signal {} to proc {}",
+                    current_process().pid(),
+                    signo,
+                    proc.pid()
+                );
+                proc.send_signal(sig_info.clone());
             } else {
                 // No such proc
                 return Err(SyscallErr::ESRCH);
