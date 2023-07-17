@@ -65,6 +65,7 @@ const SYSCALL_RT_SIGRETURN: usize = 139;
 const SYSCALL_TIMES: usize = 153;
 const SYSCALL_SETPGID: usize = 154;
 const SYSCALL_GETPGID: usize = 155;
+const SYSCALL_SETSID: usize = 157;
 const SYSCALL_UNAME: usize = 160;
 const SYSCALL_GETRUSAGE: usize = 165;
 const SYSCALL_UMASK: usize = 166;
@@ -316,6 +317,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_TIMES => sys_handler!(sys_times, (args[0] as *mut Tms)),
         SYSCALL_SETPGID => sys_handler!(sys_setpgid, (args[0], args[1])),
         SYSCALL_GETPGID => sys_handler!(sys_getpgid, (args[0])),
+        SYSCALL_SETSID => sys_handler!(sys_setsid, ()),
         SYSCALL_UNAME => sys_handler!(sys_uname, (args[0])),
         SYSCALL_GETRUSAGE => sys_handler!(sys_getrusage, (args[0] as i32, args[1])),
         SYSCALL_UMASK => sys_handler!(sys_umask, (args[0] as u32)),

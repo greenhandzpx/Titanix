@@ -93,6 +93,8 @@ pub struct ProcessInner {
     pub timers: [ITimerval; 3],
     /// Process Resource
     pub rlimit: RLimit,
+    /// gid, the process group id
+    pub pgid: usize,
 }
 
 impl ProcessInner {
@@ -122,6 +124,11 @@ impl Process {
     /// Get the process's pid
     pub fn pid(&self) -> usize {
         self.pid.0
+    }
+
+    /// Get the process's gid
+    pub fn pgid(&self) -> usize {
+        self.inner.lock().pgid
     }
 
     /// We can get whatever we want in the inner by providing a handler
@@ -212,6 +219,7 @@ impl Process {
                 cwd: String::from("/"),
                 timers: [ITimerval::default(); 3],
                 rlimit: RLimit::new(0, 0),
+                pgid: pid.0,
             }),
         });
         let trap_context = TrapContext::app_init_context(entry_point, user_sp_top);
@@ -580,6 +588,7 @@ impl Process {
                     cwd: parent_inner.cwd.clone(),
                     timers: [ITimerval::default(); 3],
                     rlimit: parent_inner.rlimit.clone(),
+                    pgid: parent_inner.pgid,
                 }),
             });
             // add child

@@ -8,17 +8,22 @@
     "rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
     "rust-analyzer.checkOnSave.allTargets": false,
     "vim.handleKeys": {
-    
         "<C-d>": true,
         "<C-s>": false,
         "<C-z>": false
     },
     "vim.insertModeKeyBindings": [
         {
-          "before": ["j", "k"],
-          "after": ["<Esc>"]
+            "before": [
+                "j",
+                "k"
+            ],
+            "after": [
+                "<Esc>"
+            ]
         }
-    ],    
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false,
     // "rust-analyzer.cargo.features": [
     //     "board_qemu"
     // ]
