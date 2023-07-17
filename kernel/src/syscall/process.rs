@@ -5,6 +5,7 @@ use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
+use crate::process::PROCESS_MANAGER;
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sbi::shutdown;
 use crate::signal::SigSet;
@@ -416,34 +417,73 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
 pub fn sys_getuid() -> SyscallRet {
     stack_trace!();
     // TODO: not sure
-    info!("get uid");
+    info!("get uid 0");
     Ok(0)
 }
 
-pub fn sys_getpgid(_pid: usize) -> SyscallRet {
+pub fn sys_getpgid(pid: usize) -> SyscallRet {
     stack_trace!();
-    info!("get pgid, pid {}", _pid);
-    // TODO
-    Ok(0)
+    let _sum_guard = SumGuard::new();
+    if pid == 0 {
+        let pgid = current_process().pgid();
+        info!("get pgid, pid {}, pgid {}", pid, pgid);
+        Ok(pgid as isize)
+    } else {
+        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+        if proc.is_none() {
+            Err(SyscallErr::ESRCH)
+        } else {
+            let proc = proc.unwrap();
+            let pgid = proc.pgid();
+            info!("get pgid, pid {}, pgid {}", pid, pgid);
+            Ok(pgid as isize)
+        }
+    }
 }
 
-pub fn sys_setpgid(_pid: usize, _gid: usize) -> SyscallRet {
+pub fn sys_setpgid(pid: usize, pgid: usize) -> SyscallRet {
     stack_trace!();
-    info!("set pgid, pid {}, gid {}", _pid, _gid);
-    // TODO
+    let _sum_guard = SumGuard::new();
+    if (pgid as isize) < 0 {
+        return Err(SyscallErr::EINVAL);
+    }
+    info!("set pgid, pid {}, pgid {}", pid, pgid);
+    if pid == 0 {
+        current_process().inner_handler(|proc| {
+            if pgid == 0 {
+                proc.pgid = current_process().pid();
+            } else {
+                proc.pgid = pgid;
+            }
+        });
+    } else {
+        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+        if proc.is_none() {
+            return Err(SyscallErr::ESRCH);
+        } else {
+            let proc = proc.unwrap();
+            proc.inner_handler(|proc_inner| {
+                if pgid == 0 {
+                    proc_inner.pgid = proc.pid();
+                } else {
+                    proc_inner.pgid = pgid;
+                }
+            });
+        }
+    }
     Ok(0)
 }
 
 pub fn sys_geteuid() -> SyscallRet {
     stack_trace!();
-    info!("get euid");
+    info!("get euid 0");
     // TODO
     Ok(0)
 }
 
 pub fn sys_getegid() -> SyscallRet {
     stack_trace!();
-    info!("[sys_getegid] get egid");
+    info!("get egid, egid {}", 0);
     Ok(0)
 }
 
@@ -451,6 +491,20 @@ pub fn sys_gettid() -> SyscallRet {
     stack_trace!();
     let tid = current_task().tid();
     Ok(tid as isize)
+}
+
+pub fn sys_setsid() -> SyscallRet {
+    // creates a new session if the calling process is not a process group leader.
+    // its session ID is made the same as its process ID (if it is a leader)
+    let pid = current_process().pid();
+    current_process().inner_handler(|proc| {
+        if pid != proc.pgid {
+            debug!("[sys_setsid] current process is a child");
+            // create a new session
+            proc.pgid = pid;
+        }
+    });
+    Ok(pid as isize)
 }
 
 #[repr(C)]
