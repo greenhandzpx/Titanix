@@ -121,12 +121,6 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
         UserCheck::new()
             .check_writable_slice(old_set as *mut u8, core::mem::size_of::<SigSet>())?;
     }
-    if set as usize == 0 {
-        debug!("arg set is null");
-        return Ok(0);
-    }
-    UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
-    let _sum_guard = SumGuard::new();
     debug!("[sys_rt_sigprocmask]: how: {}", how);
     current_process().inner_handler(|proc| {
         if old_set as usize != 0 {
@@ -139,6 +133,12 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 );
             }
         }
+        if set as usize == 0 {
+            debug!("arg set is null");
+            return Ok(0);
+        }
+        UserCheck::new().check_readable_slice(set as *const u8, core::mem::size_of::<SigSet>())?;
+        let _sum_guard = SumGuard::new();
         match how {
             _ if how == SigProcmaskHow::SigBlock as i32 => {
                 stack_trace!();
@@ -237,7 +237,7 @@ pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const 
 
 pub fn sys_tkill(tid: usize, signo: i32) -> SyscallRet {
     stack_trace!();
-    if let Some(proc) = PROCESS_MANAGER.get_process_by_tid(tid) {
+    if let Some(proc) = PROCESS_MANAGER.get(tid) {
         if let Some(thread) = proc.inner_handler(|proc| {
             if let Some(thread) = proc.threads.get(&tid) {
                 thread.upgrade()
@@ -252,9 +252,11 @@ pub fn sys_tkill(tid: usize, signo: i32) -> SyscallRet {
             thread.send_signal(sig_info);
             Ok(0)
         } else {
+            log::warn!("No such tid {} in pid {}", tid, proc.pid());
             Err(SyscallErr::ESRCH)
         }
     } else {
+        log::warn!("no such pid for tid {}", tid);
         Err(SyscallErr::ESRCH)
     }
 }
@@ -316,7 +318,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
             if pid < 0 {
                 pid = -pid;
             }
-            if let Some(proc) = PROCESS_MANAGER.get_process_by_pid(pid as usize) {
+            if let Some(proc) = PROCESS_MANAGER.get(pid as usize) {
                 let sig_info = SigInfo {
                     signo: signo as usize,
                     errno: 0,

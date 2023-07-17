@@ -8,7 +8,7 @@ use lazy_static::*;
 
 use super::Process;
 
-/// pid -> process
+/// tid -> process
 pub struct ProcessManager(pub SpinNoIrqLock<BTreeMap<usize, Weak<Process>>>);
 
 impl ProcessManager {
@@ -16,22 +16,39 @@ impl ProcessManager {
         Self(SpinNoIrqLock::new(BTreeMap::new()))
     }
 
-    pub fn add_process(&self, pid: usize, process: &Arc<Process>) {
-        self.0.lock().insert(pid, Arc::downgrade(process));
+    pub fn add(&self, tid: usize, process: &Arc<Process>) {
+        self.0.lock().insert(tid, Arc::downgrade(process));
     }
 
-    pub fn get_process_by_pid(&self, pid: usize) -> Option<Arc<Process>> {
-        match self.0.lock().get(&pid) {
+    pub fn remove(&self, tid: usize) {
+        self.0.lock().remove(&tid);
+    }
+
+    pub fn get(&self, tid: usize) -> Option<Arc<Process>> {
+        match self.0.lock().get(&tid) {
             Some(proc) => proc.upgrade(),
             None => None,
         }
     }
-    pub fn get_process_by_tid(&self, tid: usize) -> Option<Arc<Process>> {
-        match self.0.lock().range(..=tid).last() {
-            Some((_, proc)) => proc.upgrade(),
-            None => None,
-        }
-    }
+
+    // pub fn get_process_by_pid(&self, pid: usize) -> Option<Arc<Process>> {
+    //     match self.0.lock().get(&pid) {
+    //         Some(proc) => proc.upgrade(),
+    //         None => None,
+    //     }
+    // }
+    // pub fn get_process_by_tid(&self, tid: usize) -> Option<Arc<Process>> {
+    //     match self.0.lock().range(..=tid).last() {
+    //         Some((pid, proc)) => {
+    //             log::info!("[get_process_by_tid] process pid {}", pid);
+    //             proc.upgrade()
+    //         }
+    //         None => {
+    //             log::warn!("[get_process_by_tid] process len {}", self.0.lock().len());
+    //             None
+    //         }
+    //     }
+    // }
     /// Get the init process
     pub fn init_proc(&self) -> Arc<Process> {
         self.0.lock().get(&INITPROC_PID).unwrap().upgrade().unwrap()

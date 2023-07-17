@@ -18,6 +18,8 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     if thread.process.pid() == INITPROC_PID {
         panic!("initproc die!!!, sepc {:#x}", current_trap_cx().sepc);
     }
+
+    PROCESS_MANAGER.remove(thread.tid());
     // Thread resource(i.e. tid, ustack) will be
     // released when the thread is destructed automatically
 
@@ -58,9 +60,10 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     }
 
     // Final exited thread should:
-    // 1. mark the process as zombie
-    // 2. handle the process's children migration
-    // 3. send signal to parent process
+    // 1. remove its process from process manager
+    // 2. mark the process as zombie
+    // 3. handle the process's children migration
+    // 4. send signal to parent process
     info!(
         "final thread {} terminated, process become zombie",
         thread.tid()
@@ -83,6 +86,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     };
     // In order to avoid dead lock
     drop(process_inner);
+
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
     parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
     parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(SIGCHLD))

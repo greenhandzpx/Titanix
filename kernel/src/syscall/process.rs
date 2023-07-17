@@ -271,7 +271,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
     envs_vec.push("PATH=/:".to_string());
 
-    if path.ends_with("shell") || path.ends_with("busybox") {
+    if path.ends_with("shell") || path.ends_with("busybox") || path.ends_with("runtestcases") {
         if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
             current_process().exec(elf_data, args_vec, envs_vec)
         } else {
@@ -458,7 +458,7 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SyscallRet {
             }
         });
     } else {
-        let proc = PROCESS_MANAGER.get_process_by_pid(pid);
+        let proc = PROCESS_MANAGER.get(pid);
         if proc.is_none() {
             return Err(SyscallErr::ESRCH);
         } else {

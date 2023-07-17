@@ -14,6 +14,11 @@ fn main() -> i32 {
         //     &["shell\0".as_ptr(), core::ptr::null::<u8>()],
         //     &[core::ptr::null::<u8>()],
         // );
+        // execve(
+        //     "runtestcases\0",
+        //     &["runtestcases\0".as_ptr(), core::ptr::null::<u8>()],
+        //     &[core::ptr::null::<u8>()],
+        // );
         execve(
             "busybox\0",
             &[

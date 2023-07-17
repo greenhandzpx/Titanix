@@ -49,7 +49,13 @@ pub use manager::PROCESS_MANAGER;
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();
+
+    #[cfg(feature = "submit")]
+    let elf_data = get_app_data_by_name("runtestcases").unwrap();
+
+    #[cfg(not(feature = "submit"))]
     let elf_data = get_app_data_by_name("initproc").unwrap();
+
     let _init_proc = Process::new_initproc(elf_data);
     // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
 
@@ -237,7 +243,7 @@ impl Process {
             .lock()
             .threads
             .insert(thread.tid(), Arc::downgrade(&thread));
-        PROCESS_MANAGER.add_process(process.pid(), &process);
+        PROCESS_MANAGER.add(process.pid(), &process);
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
         debug!("create a new process, pid {}", process.pid());
@@ -567,7 +573,6 @@ impl Process {
             parent_inner.memory_space.activate();
             // let memory_space = MemorySpace::from_existed_user(&parent_inner.memory_space);
 
-            // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
             // create child process pcb
             let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
@@ -591,6 +596,7 @@ impl Process {
                     pgid: parent_inner.pgid,
                 }),
             });
+            debug!("fork: child cwd {}", parent_inner.cwd);
             // add child
             parent_inner.children.push(Arc::clone(&child));
 
@@ -613,7 +619,7 @@ impl Process {
             .threads
             .insert(main_thread.tid(), Arc::downgrade(&main_thread));
 
-        PROCESS_MANAGER.add_process(child.pid(), &child);
+        PROCESS_MANAGER.add(child.pid(), &child);
         // add this thread to scheduler
         main_thread.trap_context_mut().user_x[10] = 0;
         // info!("fork return1, sepc: {:#x}", main_thread.trap_context_mut().sepc);

@@ -261,3 +261,8 @@ pub fn sys_shmat(shmid: usize, shmaddr: usize, _shmflag: u32) -> SyscallRet {
 
     SHARED_MEMORY_MANAGER.lock().attach(shmid, addr)
 }
+
+pub fn sys_shmctl() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}
