@@ -116,12 +116,12 @@ pub trait Inode: Send + Sync {
         Ok(Arc::new(file))
     }
 
-    /// You should call this function through the parent inode
-    /// You should give a absolute path
+    /// Call this function through the parent inode.
+    /// path: absoulute path.
     fn mkdir(
         &self,
         _this: Arc<dyn Inode>,
-        _name: &str,
+        _path: &str,
         _mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
@@ -131,10 +131,12 @@ pub trait Inode: Send + Sync {
         todo!()
     }
 
+    /// Call this function through the parent inode.
+    /// path: absoulute path.
     fn mknod(
         &self,
         _this: Arc<dyn Inode>,
-        _name: &str,
+        _path: &str,
         _mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
@@ -158,7 +160,12 @@ pub trait Inode: Send + Sync {
         if this.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
-        debug!("[lookup] child name: {}", name);
+        debug!(
+            "[lookup] child name: {}, parent name: {}, parent ino: {}",
+            name,
+            self.metadata().name,
+            self.metadata().ino
+        );
         let key = HashKey::new(self.metadata().ino, name.to_string());
         let value = INODE_CACHE.lock().get(&key).cloned();
         match value {
@@ -233,6 +240,7 @@ pub trait Inode: Send + Sync {
             debug!("[try_find_and_insert_inode] parent is tmp, not need to load children");
             return None;
         }
+        // this.load_children(this.clone());
         <dyn Inode>::load_children(this.clone());
         debug!(
             "[try_find_and_insert_inode] children size {}",
@@ -301,7 +309,7 @@ pub trait Inode: Send + Sync {
 
 impl dyn Inode {
     /// Load children and insert them into INODE_CACHE
-    pub fn load_children(parent: Arc<dyn Inode>) {
+    pub fn load_children(parent: Arc<Self>) {
         debug!("[load_children] enter");
         let state = parent.metadata().inner.lock().state;
         debug!("[load_children] inode state: {:?}", state);
@@ -332,7 +340,7 @@ impl dyn Inode {
     pub fn lookup_from_root(
         // file_system: Arc<dyn FileSystem>,
         path: &str,
-    ) -> GeneralRet<Option<Arc<dyn Inode>>> {
+    ) -> GeneralRet<Option<Arc<Self>>> {
         let path_names = path::path2vec(path);
 
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
@@ -369,7 +377,7 @@ impl dyn Inode {
         Ok(Some(parent))
     }
 
-    pub fn create_page_cache_if_needed(this: Arc<dyn Inode>) {
+    pub fn create_page_cache_if_needed(this: Arc<Self>) {
         let mut meta_locked = this.metadata().inner.lock();
         if meta_locked.page_cache.is_none() {
             meta_locked.page_cache = Some(Arc::new(PageCache::new(this.clone(), 3)));

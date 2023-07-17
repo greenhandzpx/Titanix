@@ -49,8 +49,8 @@ pub use manager::PROCESS_MANAGER;
 ///Add init process to the manager
 pub fn add_initproc() {
     stack_trace!();
-    let elf_data = get_app_data_by_name("initproc").unwrap();
-    // let elf_data = get_app_data_by_name("runtestcases").unwrap();
+    // let elf_data = get_app_data_by_name("initproc").unwrap();
+    let elf_data = get_app_data_by_name("runtestcases").unwrap();
     let _init_proc = Process::new_initproc(elf_data);
     // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
 
@@ -560,7 +560,6 @@ impl Process {
             parent_inner.memory_space.activate();
             // let memory_space = MemorySpace::from_existed_user(&parent_inner.memory_space);
 
-            // alloc a pid
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
             // create child process pcb
             let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
@@ -583,6 +582,7 @@ impl Process {
                     rlimit: parent_inner.rlimit.clone(),
                 }),
             });
+            debug!("fork: child cwd {}", parent_inner.cwd);
             // add child
             parent_inner.children.push(Arc::clone(&child));
 

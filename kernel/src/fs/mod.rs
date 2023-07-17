@@ -40,6 +40,7 @@ use crate::processor::current_process;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::timer::posix::current_time_spec;
+use crate::utils::async_tools::block_on;
 use crate::utils::error::GeneralRet;
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
@@ -87,6 +88,32 @@ pub fn init() {
 
     let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
     INODE_CACHE.lock().insert(key, tmp_dir);
+
+    let etc_dir = root_inode
+        .mkdir(Arc::clone(&root_inode), "/etc", InodeMode::FileDIR)
+        .expect("mkdir /etc fail!");
+    let key = HashKey::new(root_inode.metadata().ino, "etc".to_string());
+    INODE_CACHE.lock().insert(key, etc_dir.clone());
+
+    let musl_dl_path = etc_dir
+        .mknod(
+            Arc::clone(&etc_dir),
+            "/etc/ld-musl-riscv64-sf.path",
+            InodeMode::FileREG,
+            None,
+        )
+        .expect("mknod /etc/ld-musl-riscv64-sf.path fail!");
+    let file = musl_dl_path
+        .open(musl_dl_path.clone(), OpenFlags::RDWR)
+        .unwrap();
+    file.sync_write("/".as_bytes()).unwrap();
+    // block_on(musl_dl_path.write(0, "/".as_bytes())).unwrap();
+    log::debug!("[fs::init] etc dir ino {}", etc_dir.metadata().ino);
+    let key = HashKey::new(
+        etc_dir.metadata().ino,
+        "ld-musl-riscv64-sf.path".to_string(),
+    );
+    INODE_CACHE.lock().insert(key, musl_dl_path);
 
     FILE_SYSTEM_MANAGER
         .mount(

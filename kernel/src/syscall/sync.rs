@@ -142,3 +142,8 @@ pub fn sys_get_robust_list(pid: usize, head_ptr: usize, len_ptr: usize) -> Sysca
     stack_trace!();
     Ok(0)
 }
+
+pub fn sys_membarrier() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}

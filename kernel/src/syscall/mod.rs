@@ -98,6 +98,7 @@ const SYSCALL_MSYNC: usize = 227;
 const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
+const SYSCALL_MEMBARRIER: usize = 283;
 
 mod dev;
 mod fs;
@@ -328,6 +329,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETTID => sys_handler!(sys_gettid, ()),
         SYSCALL_SYSINFO => sys_handler!(sys_sysinfo, (args[0])),
         SYSCALL_SHMGET => sys_handler!(sys_shmget, (args[0], args[1], args[2] as u32)),
+        SYSCALL_SHMCTL => sys_handler!(sys_shmctl, ()),
         SYSCALL_SHMAT => sys_handler!(sys_shmat, (args[0], args[1], args[2] as u32)),
         SYSCALL_SOCKET => {
             sys_handler!(sys_socket, (args[0] as u32, args[1] as u32, args[2] as u32))
@@ -442,6 +444,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[4] as u32,
             )
         ),
+        SYSCALL_MEMBARRIER => sys_handler!(sys_membarrier, ()),
         _ => {
             // panic!("Unsupported syscall_id: {}", syscall_id);
             error!("Unsupported syscall_id: {}", syscall_id);

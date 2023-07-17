@@ -355,7 +355,7 @@ impl VmArea {
 
     /// Clip the vm area.
     pub fn clip(&mut self, new_vpn_range: VPNRange) {
-        log::warn!(
+        log::debug!(
             "[VmArea::clip] old range {:?}, new range {:?}",
             self.vpn_range,
             new_vpn_range

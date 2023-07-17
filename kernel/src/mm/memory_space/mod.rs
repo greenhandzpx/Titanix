@@ -55,7 +55,7 @@ extern "C" {
     fn ekernel();
 }
 
-const DL_INTERP: &str = "libc/libc.so";
+const DL_INTERP: &str = "/libc.so";
 
 /// Kernel Space for all processes
 pub static mut KERNEL_SPACE: Option<MemorySpace> = None;
