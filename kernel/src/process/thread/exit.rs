@@ -60,10 +60,9 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     }
 
     // Final exited thread should:
-    // 1. remove its process from process manager
-    // 2. mark the process as zombie
-    // 3. handle the process's children migration
-    // 4. send signal to parent process
+    // 1. mark the process as zombie
+    // 2. handle the process's children migration
+    // 3. send signal to parent process
     info!(
         "final thread {} terminated, process become zombie",
         thread.tid()

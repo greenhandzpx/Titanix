@@ -159,7 +159,7 @@ pub fn sys_clone(
 
     let clone_flags = clone_flags.unwrap();
 
-    info!("[sys_clone] flags {:?}", clone_flags);
+    log::info!("[sys_clone] flags {:?}", clone_flags);
 
     if clone_flags.contains(CloneFlags::SIGCHLD) || !clone_flags.contains(CloneFlags::CLONE_VM) {
         // fork
@@ -181,7 +181,7 @@ pub fn sys_clone(
                 Some(stack as usize)
             }
         };
-        let new_process = current_process.fork(stack)?;
+        let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
         // // modify trap context of new_task, because it returns immediately after switching
