@@ -10,7 +10,7 @@ use crate::{
     },
     driver::block::MMIO_VIRT,
     fs::{resolve_path, OpenFlags, AT_FDCWD},
-    mm::memory_space::page_fault_handler::SBrkPageFaultHandler,
+    mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
     process::aux::*,
     processor::current_process,
     stack_trace,
@@ -128,7 +128,12 @@ impl MemorySpace {
 
     /// Clip the map areas overlapping with the given vpn range.
     /// Note that there may exist more than one area.
-    pub fn clip_vm_areas_overlapping(&mut self, vpn_range: VPNRange) -> GeneralRet<()> {
+    /// Return the overlapping vma.
+    /// Note that now only
+    pub fn clip_vm_areas_overlapping(
+        &mut self,
+        vpn_range: VPNRange,
+    ) -> GeneralRet<Option<&VmArea>> {
         stack_trace!();
         let mut removed_areas: Vec<VirtPageNum> = Vec::new();
         let mut clipped_area: Option<VirtPageNum> = None;
@@ -149,22 +154,25 @@ impl MemorySpace {
                 clipped_area = Some(*start_vpn);
             }
         }
-        if let Some(clipped_area) = clipped_area {
-            let vma = self.areas.get_mut().remove(&clipped_area).unwrap();
-            self.areas.get_mut().insert(vma.start_vpn(), vma);
-        }
         for start_vpn in removed_areas {
             self.areas.get_mut().remove(&start_vpn);
+        }
+        if let Some(clipped_area) = clipped_area {
+            let vma = self.areas.get_mut().remove(&clipped_area).unwrap();
+            let new_start_vpn = vma.start_vpn();
+            self.areas.get_mut().insert(new_start_vpn, vma);
+            return Ok(self.areas.get_mut().get(&new_start_vpn));
         }
 
         if let Some((_, vma)) = self.areas.get_mut().range_mut(..vpn_range.start()).last() {
             if vma.end_vpn() > vpn_range.start() {
                 debug!("[clip_vm_areas_overlapping] clip vma {:?}", vma.vpn_range);
                 vma.clip(VPNRange::new(vma.start_vpn(), vpn_range.start()));
+                return Ok(Some(vma));
             }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Remove vma by start vpn
@@ -929,22 +937,48 @@ impl MemorySpace {
         }
         // TODO: just sanity check, should find a safer way
         // TODO: check more carefully
-        self.clip_vm_areas_overlapping(VPNRange::new(start_va.floor(), end_va.ceil()))?;
+        if let Some(clipped_vma) =
+            self.clip_vm_areas_overlapping(VPNRange::new(start_va.floor(), end_va.ceil()))?
+        {
+            let backup_file = match clipped_vma.backup_file.as_ref() {
+                Some(bak) => {
+                    let new_offset =
+                        bak.offset + start_va.0 - VirtAddr::from(clipped_vma.start_vpn()).0;
+                    log::debug!(
+                        "[allocate_spec_area] new area offset {:#x}, old area offset {:#x}",
+                        new_offset,
+                        bak.offset
+                    );
+                    Some(BackupFile::new(new_offset, bak.file.clone()))
+                }
+                None => None,
+            };
+            Ok(Some(VmArea::new(
+                start_va,
+                end_va,
+                MapType::Framed,
+                map_permission,
+                clipped_vma.handler.clone(),
+                backup_file,
+                self.page_table.clone(),
+                vma_type,
+            )))
+        } else {
+            Ok(Some(VmArea::new(
+                start_va,
+                end_va,
+                MapType::Framed,
+                map_permission,
+                None,
+                None,
+                self.page_table.clone(),
+                vma_type,
+            )))
+        }
         // if self.find_vm_area_by_vpn(start_va.floor()).is_some() {
         //     warn!("[allocate_spec_area] conflicted vm area!");
         //     return None;
         // }
-
-        Ok(Some(VmArea::new(
-            start_va,
-            end_va,
-            MapType::Framed,
-            map_permission,
-            None,
-            None,
-            self.page_table.clone(),
-            vma_type,
-        )))
     }
 
     /// Allocate an unused area(mostly for mmap).

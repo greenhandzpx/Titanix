@@ -4,7 +4,7 @@ use crate::{
     processor::{current_process, current_trap_cx},
     signal::SIGCHLD,
     stack_trace,
-    sync::{futex_wake, Event},
+    sync::Event,
 };
 use alloc::{sync::Arc, vec::Vec};
 use log::{debug, info};
