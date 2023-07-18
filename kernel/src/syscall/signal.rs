@@ -379,7 +379,7 @@ pub async fn sys_rt_sigsuspend(mask: usize) -> SyscallRet {
             return Err(SyscallErr::EINTR);
         }
         current_process().inner_handler(|proc| {
-            if !proc.pending_sigs.sig_queue.is_empty() {
+            if !proc.pending_sigs.pending_sigs.is_empty() {
                 proc.pending_sigs.blocked_sigs = old_set;
                 return Err(SyscallErr::EINTR);
             }

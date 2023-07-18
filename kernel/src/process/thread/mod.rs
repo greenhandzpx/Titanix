@@ -215,7 +215,7 @@ impl Thread {
     pub fn send_signal(&self, sig_info: SigInfo) {
         log::debug!("[Thread::send_signal] signo {}", sig_info.signo);
         let inner = unsafe { &mut *self.inner.get() };
-        inner.pending_sigs.lock().sig_queue.push_back(sig_info);
+        inner.pending_sigs.lock().pending_sigs.push_back(sig_info);
     }
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {

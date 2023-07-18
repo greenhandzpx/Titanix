@@ -1,6 +1,7 @@
 use alloc::{
     collections::BTreeMap,
     sync::{Arc, Weak},
+    vec,
     vec::Vec,
 };
 
@@ -96,21 +97,20 @@ impl ProcessGroupManager {
 
     pub fn set_pgid_by_pid(&self, pid: usize, new_pgid: usize, old_pgid: usize) {
         let mut inner = self.0.lock();
-        let mut old_group_vec = inner.get(&old_pgid).cloned().unwrap();
+        let old_group_vec = inner.get_mut(&old_pgid).unwrap();
         old_group_vec.retain(|&x| x != pid);
-        let new_group_vec = inner.get(&new_pgid).cloned();
-        let new_group_vec = if new_group_vec.is_none() {
-            let mut vec = Vec::new();
-            vec.push(new_pgid);
-            inner.insert(new_pgid, vec.clone());
-            vec
+        let new_group_vec = inner.get_mut(&new_pgid);
+        if let Some(new_group_vec) = new_group_vec {
+            new_group_vec.push(pid);
         } else {
-            let mut vec = new_group_vec.unwrap();
-            vec.push(pid);
-            vec
-        };
-        inner.insert(old_pgid, old_group_vec);
-        inner.insert(new_pgid, new_group_vec);
+            let new_group: Vec<usize> = vec![new_pgid];
+            // let mut new_group = Vec::new();
+            // new_group.push(new_pgid);
+            inner.insert(new_pgid, new_group);
+
+            // inner.insert(old_pgid, old_group_vec);
+            // inner.insert(new_pgid, new_group_vec);
+        }
     }
 }
 

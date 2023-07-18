@@ -87,8 +87,6 @@ pub struct ProcessInner {
     pub threads: BTreeMap<usize, Weak<Thread>>,
     /// Pending sigs that wait for the prcoess to handle
     pub pending_sigs: SigQueue,
-    // /// UStack base of all threads(the lowest bound)
-    // pub ustack_base: usize,
     /// Futex queue
     pub futex_queue: FutexQueue,
     /// Exit code of the current process
@@ -180,7 +178,11 @@ impl Process {
                 }
             })
         }
-        self.inner.lock().pending_sigs.sig_queue.push_back(sig_info);
+        self.inner
+            .lock()
+            .pending_sigs
+            .pending_sigs
+            .push_back(sig_info);
     }
 
     ///
