@@ -1,3 +1,5 @@
+use core::intrinsics::mul_with_overflow;
+
 use log::debug;
 
 use crate::{
@@ -107,4 +109,27 @@ pub fn sys_setsockopt(
     optlen: u32,
 ) -> SyscallRet {
     Ok(0)
+}
+
+pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {
+    stack_trace!();
+    debug!(
+        "[sys_socketpair] domain {}, type {}, protocol {}, sv {}",
+        domain, socket_type, protocol, sv
+    );
+    let len = 2 * core::mem::size_of::<u32>();
+    UserCheck::new().check_writable_slice(sv as *mut u8, len)?;
+    let _sum_guard = SumGuard::new();
+    let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
+    let socket1 = Socket::new();
+    let socket2 = Socket::new();
+    current_process().inner_handler(move |proc| {
+        let fd1 = proc.fd_table.alloc_fd()?;
+        proc.fd_table.put(fd1, socket1);
+        let fd2 = proc.fd_table.alloc_fd()?;
+        proc.fd_table.put(fd2, socket2);
+        sv[0] = fd1 as u32;
+        sv[1] = fd2 as u32;
+        Ok(0)
+    })
 }

@@ -88,6 +88,7 @@ const SYSCALL_SHMGET: usize = 194;
 const SYSCALL_SHMCTL: usize = 195;
 const SYSCALL_SHMAT: usize = 196;
 const SYSCALL_SOCKET: usize = 198;
+const SYSCALL_SOCKETPAIR: usize = 199;
 const SYSCALL_BIND: usize = 200;
 const SYSCALL_LISTEN: usize = 201;
 const SYSCALL_ACCEPT: usize = 202;
@@ -362,6 +363,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SOCKET => {
             sys_handler!(sys_socket, (args[0] as u32, args[1] as u32, args[2] as u32))
         }
+        SYSCALL_SOCKETPAIR => sys_handler!(
+            sys_socketpair,
+            (args[0] as u32, args[1] as u32, args[2] as u32, args[3])
+        ),
         SYSCALL_BIND => sys_handler!(
             sys_bind,
             (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
