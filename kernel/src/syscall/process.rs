@@ -245,6 +245,9 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         path = "/busybox".to_string();
         args_vec.push("busybox".to_string());
         args_vec.push("sh".to_string());
+    } else if path.ends_with("sleep") || path.ends_with("ls") {
+        path = "/busybox".to_string();
+        args_vec.push("busybox".to_string());
     }
 
     UserCheck::new().check_c_str(args as *const u8)?;
