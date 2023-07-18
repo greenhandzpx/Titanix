@@ -58,6 +58,7 @@ const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_SCHED_SETSCHEDULER: usize = 119;
 const SYSCALL_SCHED_GETSCHEDULER: usize = 120;
 const SYSCALL_SCHED_GETPARAM: usize = 121;
+const SYSCALL_SCHED_SETAFFINITY: usize = 122;
 const SYSCALL_SCHED_GETAFFINITY: usize = 123;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
@@ -307,6 +308,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SCHED_SETSCHEDULER => sys_handler!(sys_sched_setscheduler, ()),
         SYSCALL_SCHED_GETSCHEDULER => sys_handler!(sys_sched_getscheduler, ()),
         SYSCALL_SCHED_GETPARAM => sys_handler!(sys_sched_getparam, ()),
+        SYSCALL_SCHED_SETAFFINITY => {
+            sys_handler!(sys_sched_setaffinity, (args[0], args[1], args[2]))
+        }
         SYSCALL_SCHED_GETAFFINITY => {
             sys_handler!(sys_sched_getaffinity, (args[0], args[1], args[2]))
         }

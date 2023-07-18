@@ -12,7 +12,7 @@ use self::{
     time::ThreadTimeInfo,
 };
 
-use super::{Process, PROCESS_MANAGER};
+use super::{resource::CpuSet, Process, PROCESS_MANAGER};
 use crate::signal::SignalContext;
 use crate::{
     executor,
@@ -75,6 +75,8 @@ pub struct ThreadInner {
     /// Thread local signals.
     /// TODO: should we lock?
     pub pending_sigs: SpinNoIrqLock<SigQueue>,
+    /// Thread cpu affinity
+    pub cpu_set: CpuSet,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -112,7 +114,8 @@ impl Thread {
                 pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(
                     &process.inner.lock().pending_sigs,
                 )),
-                // terminated: AtomicBool::new(false),
+                // TODO: need to change if multi_hart
+                cpu_set: CpuSet::new(1), // terminated: AtomicBool::new(false),
             }),
         };
         PROCESS_MANAGER.add(tid.0, &process);
@@ -156,7 +159,8 @@ impl Thread {
                 pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
                     &(*another.inner.get()).pending_sigs.lock()
                 })),
-                // terminated: AtomicBool::new(false),
+                // TODO: need to change if multi_hart
+                cpu_set: CpuSet::new(1), // terminated: AtomicBool::new(false),
             }),
         }
     }

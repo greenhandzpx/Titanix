@@ -4,7 +4,7 @@ use crate::{
     mm::user_check::UserCheck,
     process::{
         resource::{CpuSet, RLimit, RLIMIT_SIZE},
-        PROCESS_MANAGER,
+        thread, PROCESS_MANAGER,
     },
     processor::{current_process, SumGuard},
     stack_trace,
@@ -44,35 +44,64 @@ pub fn sys_prlimit64(
 
 pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SyscallRet {
     stack_trace!();
+    debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_writable_slice(mask as *mut u8, cpusetsize)?;
-    let proc = if pid == 0 {
-        current_process().clone()
+    if let Some(proc) = PROCESS_MANAGER.get(pid) {
+        if let Some(thread) = proc.inner_handler(|proc| {
+            if let Some(thread) = proc.threads.get(&pid) {
+                thread.upgrade()
+            } else {
+                None
+            }
+        }) {
+            unsafe {
+                let set = (*(thread.inner.get())).cpu_set;
+                *(mask as *mut CpuSet) = set;
+            }
+            Ok(0)
+        } else {
+            debug!(
+                "[sys_sched_getaffinity] No such tid {} in pid {}",
+                pid,
+                proc.pid()
+            );
+            Err(SyscallErr::ESRCH)
+        }
     } else {
-        let proc = PROCESS_MANAGER.get(pid);
-        if proc.is_none() {
-            return Err(SyscallErr::ESRCH);
-        }
-        proc.unwrap()
-    };
-    debug!("[sys_sched_getaffinity] proc {}", proc.pid());
-    #[cfg(not(feature = "multi_hart"))]
-    {
-        let set = CpuSet::new(1);
-        debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
-        unsafe {
-            *(mask as *mut CpuSet) = set;
-        }
-        Ok(0)
+        debug!("[sys_sched_getaffinity] No such process");
+        Err(SyscallErr::ESRCH)
     }
-    #[cfg(feature = "multi_hart")]
-    {
-        let set = CpuSet::new(4);
-        debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
-        unsafe {
-            *(mask as *mut CpuSet) = set;
+}
+
+pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SyscallRet {
+    stack_trace!();
+    debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_readable_slice(mask as *const u8, cpusetsize)?;
+    if let Some(proc) = PROCESS_MANAGER.get(pid) {
+        if let Some(thread) = proc.inner_handler(|proc| {
+            if let Some(thread) = proc.threads.get(&pid) {
+                thread.upgrade()
+            } else {
+                None
+            }
+        }) {
+            unsafe {
+                (*(thread.inner.get())).cpu_set = *(mask as *const CpuSet);
+            }
+            Ok(0)
+        } else {
+            debug!(
+                "[sys_sched_setaffinity] No such tid {} in pid {}",
+                pid,
+                proc.pid()
+            );
+            Err(SyscallErr::ESRCH)
         }
-        Ok(0)
+    } else {
+        debug!("[sys_sched_setaffinity] No such process");
+        Err(SyscallErr::ESRCH)
     }
 }
 
