@@ -344,21 +344,21 @@ impl VmArea {
             if self.mmap_flags.unwrap().contains(MmapFlags::MAP_SHARED) {
                 // TODO: do we need to sync to the disk?
                 // It seems ok for us to just sync to page cache.
-                if block_on(<dyn Inode>::sync(
-                    backup_file
-                        .file
-                        .metadata()
-                        .inner
-                        .lock()
-                        .inode
-                        .as_ref()
-                        .unwrap()
-                        .clone(),
-                ))
-                .is_err()
-                {
-                    error!("[VmArea::do_unmap_area] error when unmapping");
-                }
+                // if block_on(<dyn Inode>::sync(
+                //     backup_file
+                //         .file
+                //         .metadata()
+                //         .inner
+                //         .lock()
+                //         .inode
+                //         .as_ref()
+                //         .unwrap()
+                //         .clone(),
+                // ))
+                // .is_err()
+                // {
+                //     error!("[VmArea::do_unmap_area] error when unmapping");
+                // }
             }
         }
     }

@@ -105,7 +105,7 @@ pub fn sys_mmap(
 pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
     // TODO
     stack_trace!();
-    info!("[sys_munmap] addr {:#x}, len {:#x}", addr, length);
+    info!("[sys_munmap] addr {:#x}, len {:#x}...", addr, length);
     if addr % PAGE_SIZE != 0 {
         return Err(SyscallErr::EINVAL);
     }
@@ -128,6 +128,7 @@ pub fn sys_munmap(addr: usize, length: usize) -> SyscallRet {
         if let Some(splited_vma) = splited_vma {
             proc.memory_space.insert_area(splited_vma);
         }
+        info!("[sys_munmap] addr {:#x}, len {:#x} finished", addr, length);
         Ok(0)
     })
 }
@@ -156,9 +157,11 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
 
 pub fn sys_msync(addr: usize, len: usize, flags: i32) -> SyscallRet {
     stack_trace!();
-    error!(
+    log::warn!(
         "[sys_msync] not yet implemented. addr {:#x}, len {:#x}, flags {:#x}",
-        addr, len, flags
+        addr,
+        len,
+        flags
     );
     Ok(0)
 }

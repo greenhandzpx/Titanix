@@ -181,7 +181,7 @@ pub fn check_signal_for_current_process() -> bool {
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
     if let Some((sig_info, sig_action, old_blocked_sigs)) =
-        current_process().inner_handler(|proc| proc.pending_sigs.check_signal())
+        current_process().inner_handler(|proc| proc.sig_queue.check_signal())
     {
         // Note that serveral sig handlers may be executed at the same time by different threads
         // since we don't hold the process inner lock
@@ -197,7 +197,7 @@ pub fn check_signal_for_current_thread() -> bool {
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
     if let Some((sig_info, sig_action, old_blocked_sigs)) =
-        unsafe { current_task().inner_handler(|thread| thread.pending_sigs.lock().check_signal()) }
+        unsafe { current_task().inner_handler(|thread| thread.sig_queue.lock().check_signal()) }
     {
         log::info!(
             "[check_signal_for_current_thread] handle signal {}",
