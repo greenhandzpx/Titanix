@@ -501,6 +501,16 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
 pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
     stack_trace!();
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    log::info!(
+        "[sys_openat] dirfd {}, flags {:?}, filename {}",
+        dirfd,
+        flags,
+        {
+            let _sum_guard = SumGuard::new();
+            UserCheck::new().check_c_str(filename_addr)?;
+            c_str_to_string(filename_addr)
+        }
+    );
     let inode = resolve_path_with_dirfd(dirfd, filename_addr, flags)?;
     current_process().inner_handler(|proc| proc.fd_table.open(inode, flags))
 }
@@ -1156,7 +1166,7 @@ pub async fn sys_ppoll(
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
         current_process().inner_handler(|proc| {
             if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
-                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                proc.sig_queue.blocked_sigs |= new_sig_mask;
             } else {
                 warn!("[sys_ppoll]: invalid set arg");
             }
@@ -1303,7 +1313,7 @@ pub async fn sys_pselect6(
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
         current_process().inner_handler(|proc| {
             if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
-                proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                proc.sig_queue.blocked_sigs |= new_sig_mask;
             } else {
                 warn!("[sys_pselect]: invalid set arg");
             }

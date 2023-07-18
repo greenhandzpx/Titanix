@@ -74,7 +74,7 @@ pub struct ThreadInner {
     pub owned_futexes: OwnedFutexes,
     /// Thread local signals.
     /// TODO: should we lock?
-    pub pending_sigs: SpinNoIrqLock<SigQueue>,
+    pub sig_queue: SpinNoIrqLock<SigQueue>,
     // /// Soft irq exit status.
     // /// Note that the process may modify this value in the another thread
     // /// (e.g. `exec`)
@@ -109,8 +109,8 @@ impl Thread {
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
                 owned_futexes: OwnedFutexes::new(),
-                pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(
-                    &process.inner.lock().pending_sigs,
+                sig_queue: SpinNoIrqLock::new(SigQueue::from_another(
+                    &process.inner.lock().sig_queue,
                 )),
                 // terminated: AtomicBool::new(false),
             }),
@@ -153,58 +153,13 @@ impl Thread {
                 waker: None,
                 // TODO: not sure whether we should inherit the futexes
                 owned_futexes: OwnedFutexes::new(),
-                pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
-                    &(*another.inner.get()).pending_sigs.lock()
+                sig_queue: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
+                    &(*another.inner.get()).sig_queue.lock()
                 })),
                 // terminated: AtomicBool::new(false),
             }),
         }
     }
-
-    // /// Construct a new thread from the current thread
-    // pub fn from_current(
-    //     &self,
-    //     new_process: Arc<Process>,
-    //     stack: Option<usize>,
-    //     tid: Option<Arc<TidHandle>>,
-    // ) -> Self {
-    //     stack_trace!();
-    //     let sig_trampoline = Arc::new(
-    //         PageBuilder::new()
-    //             .permission(MapPermission::R | MapPermission::W | MapPermission::U)
-    //             .build(),
-    //     );
-
-    //     Self {
-    //         tid: match tid {
-    //             Some(tid) => tid,
-    //             None => Arc::new(tid_alloc()),
-    //         },
-    //         sig_trampoline,
-    //         process: new_process.clone(),
-    //         inner: UnsafeCell::new(ThreadInner {
-    //             trap_context: {
-    //                 let mut trap_context = self.trap_context();
-    //                 if let Some(stack) = stack {
-    //                     trap_context.set_sp(stack);
-    //                 }
-    //                 trap_context
-    //             },
-    //             signal_context: None,
-    //             ustack_top: unsafe { (*self.inner.get()).ustack_top },
-    //             state: ThreadStateAtomic::new(),
-    //             tid_addr: TidAddress::new(),
-    //             time_info: ThreadTimeInfo::new(),
-    //             waker: None,
-    //             // TODO: not sure whether we should inherit the futexes
-    //             owned_futexes: OwnedFutexes::new(),
-    //             pending_sigs: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
-    //                 &(*self.inner.get()).pending_sigs.lock()
-    //             })),
-    //             // terminated: AtomicBool::new(false),
-    //         }),
-    //     }
-    // }
 
     /// We can get whatever we want in the inner by providing a handler
     pub unsafe fn inner_handler<T>(&self, f: impl FnOnce(&mut ThreadInner) -> T) -> T {
@@ -215,7 +170,7 @@ impl Thread {
     pub fn send_signal(&self, sig_info: SigInfo) {
         log::debug!("[Thread::send_signal] signo {}", sig_info.signo);
         let inner = unsafe { &mut *self.inner.get() };
-        inner.pending_sigs.lock().sig_queue.push_back(sig_info);
+        inner.sig_queue.lock().pending_sigs.push_back(sig_info);
     }
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {

@@ -85,7 +85,7 @@ pub struct ProcessInner {
     /// TODO: use BTreeMap to query and delete more quickly
     pub threads: BTreeMap<usize, Weak<Thread>>,
     /// Pending sigs that wait for the prcoess to handle
-    pub pending_sigs: SigQueue,
+    pub sig_queue: SigQueue,
     // /// UStack base of all threads(the lowest bound)
     // pub ustack_base: usize,
     /// Futex queue
@@ -168,7 +168,10 @@ impl Process {
     }
 
     /// Send signal to this process
-    pub fn send_signal(&self, sig_info: SigInfo) {
+    pub fn send_signal(&self, sig_info: SigInfo) -> GeneralRet<()> {
+        if sig_info.signo == 0 {
+            return Err(SyscallErr::EINVAL);
+        }
         if sig_info.signo == SIGKILL {
             self.inner_handler(|proc| {
                 for (_, thread) in proc.threads.iter() {
@@ -179,7 +182,8 @@ impl Process {
                 }
             })
         }
-        self.inner.lock().pending_sigs.sig_queue.push_back(sig_info);
+        self.inner.lock().sig_queue.pending_sigs.push_back(sig_info);
+        Ok(())
     }
 
     ///
@@ -218,7 +222,7 @@ impl Process {
                 children: Vec::new(),
                 fd_table: FdTable::new(),
                 threads: BTreeMap::new(),
-                pending_sigs: SigQueue::new(),
+                sig_queue: SigQueue::new(),
                 // ustack_base: user_sp_base,
                 futex_queue: FutexQueue::new(),
                 exit_code: 0,
@@ -585,7 +589,7 @@ impl Process {
             // create child process pcb
             let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
             let child_sig_queue = match flags.contains(CloneFlags::CLONE_SIGHAND) {
-                true => SigQueue::from_another(&parent_inner.pending_sigs),
+                true => SigQueue::from_another(&parent_inner.sig_queue),
                 false => SigQueue::new(),
             };
 
@@ -599,7 +603,7 @@ impl Process {
                     children: Vec::new(),
                     fd_table: child_fd_table,
                     threads: BTreeMap::new(),
-                    pending_sigs: child_sig_queue,
+                    sig_queue: child_sig_queue,
                     // ustack_base: parent_inner.ustack_base,
                     futex_queue: FutexQueue::new(),
                     exit_code: 0,
