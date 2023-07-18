@@ -289,7 +289,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_CLOCK_GETTIME => {
             sys_handler!(sys_clock_gettime, (args[0], args[1] as *mut TimeSpec))
         }
-        SYSCALL_CLOCK_GETRES => sys_handler!(sys_clock_getres, ()),
+        SYSCALL_CLOCK_GETRES => sys_handler!(sys_clock_getres, (args[0], args[1] as *mut TimeSpec)),
         SYSCALL_SYSLOG => sys_handler!(
             sys_syslog,
             (args[0] as u32, args[1] as *mut u8, args[2] as u32)

@@ -77,13 +77,16 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> Sysc
 }
 
 pub fn sys_sched_setscheduler() -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
 pub fn sys_sched_getscheduler() -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
 pub fn sys_sched_getparam() -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }

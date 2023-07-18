@@ -104,6 +104,29 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
     }
 }
 
+pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(res as *mut u8, core::mem::size_of::<TimeSpec>())?;
+    let manager_locked = CLOCK_MANAGER.lock();
+    let clock = manager_locked.0.get(&clock_id);
+    match clock {
+        Some(_clock) => {
+            trace!("[sys_clock_getres] find the clock, clock id {}", clock_id);
+            let resolution = Duration::from_millis(1);
+            info!("[sys_clock_getres] get time {:?}", resolution);
+            unsafe {
+                res.write_volatile(resolution.into());
+            }
+            Ok(0)
+        }
+        None => {
+            trace!("[sys_clock_getres] Cannot find the clock: {}", clock_id);
+            Err(SyscallErr::EINVAL)
+        }
+    }
+}
+
 pub fn sys_times(buf: *mut Tms) -> SyscallRet {
     stack_trace!();
     UserCheck::new().check_writable_slice(buf as *mut u8, core::mem::size_of::<Tms>())?;
