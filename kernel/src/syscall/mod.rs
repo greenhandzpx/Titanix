@@ -53,6 +53,7 @@ const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_CLOCK_GETRES: usize = 114;
+const SYSCALL_CLOCK_NANOSLEEP: usize = 115;
 const SYSCALL_SYSLOG: usize = 116;
 const SYSCALL_SCHED_SETSCHEDULER: usize = 119;
 const SYSCALL_SCHED_GETSCHEDULER: usize = 120;
@@ -290,6 +291,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_handler!(sys_clock_gettime, (args[0], args[1] as *mut TimeSpec))
         }
         SYSCALL_CLOCK_GETRES => sys_handler!(sys_clock_getres, (args[0], args[1] as *mut TimeSpec)),
+        SYSCALL_CLOCK_NANOSLEEP => sys_handler!(
+            sys_clock_nanosleep,
+            (
+                args[0],
+                args[1] as u32,
+                args[2],
+                args[3]
+            ), await
+        ),
         SYSCALL_SYSLOG => sys_handler!(
             sys_syslog,
             (args[0] as u32, args[1] as *mut u8, args[2] as u32)

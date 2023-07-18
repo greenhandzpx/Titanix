@@ -27,6 +27,9 @@ pub const CLOCK_MONOTONIC: usize = 1;
 pub const UTIME_NOW: usize = 1073741823;
 pub const UTIME_OMIT: usize = 1073741822;
 
+/// for clock_nanosleep
+pub const TIMER_ABSTIME: usize = 1;
+
 /// get current time
 fn get_time() -> usize {
     time::read()
