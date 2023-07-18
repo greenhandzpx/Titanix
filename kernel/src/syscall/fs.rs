@@ -627,7 +627,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_read]: fd {}, len {}", fd, len);
+    info!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
