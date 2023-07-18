@@ -97,3 +97,25 @@ impl RLimit {
         }
     }
 }
+
+/// A cpu set
+/// If you want to set cpu 1, then set = 1 << (1+1) -1
+/// Which means set = 1 << (cpu + 1) -1
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CpuSet {
+    /// cpu set
+    pub set: usize,
+    /// for padding
+    pub dummy: [usize; 15],
+}
+impl CpuSet {
+    /// alloc a cpu set
+    /// you should pass the max number of cpus which you want to set
+    pub fn new(cpus: usize) -> Self {
+        Self {
+            set: (1 << cpus - 1),
+            dummy: [0; 15],
+        }
+    }
+}

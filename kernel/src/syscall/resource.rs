@@ -2,8 +2,11 @@ use log::debug;
 
 use crate::{
     mm::user_check::UserCheck,
-    process::resource::{RLimit, RLIMIT_SIZE},
-    processor::SumGuard,
+    process::{
+        resource::{CpuSet, RLimit, RLIMIT_SIZE},
+        PROCESS_MANAGER,
+    },
+    processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -37,4 +40,38 @@ pub fn sys_prlimit64(
         return Err(SyscallErr::EINVAL);
     }
     new_rlimit.set_rlimit(resource)
+}
+
+pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(mask as *mut u8, cpusetsize)?;
+    let proc = if pid == 0 {
+        current_process().clone()
+    } else {
+        let proc = PROCESS_MANAGER.get(pid);
+        if proc.is_none() {
+            return Err(SyscallErr::ESRCH);
+        }
+        proc.unwrap()
+    };
+    debug!("[sys_sched_getaffinity] proc {}", proc.pid());
+    #[cfg(not(feature = "multi_hart"))]
+    {
+        let set = CpuSet::new(1);
+        debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
+        unsafe {
+            *(mask as *mut CpuSet) = set;
+        }
+        Ok(0)
+    }
+    #[cfg(feature = "multi_hart")]
+    {
+        let set = CpuSet::new(4);
+        debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
+        unsafe {
+            *(mask as *mut CpuSet) = set;
+        }
+        Ok(0)
+    }
 }

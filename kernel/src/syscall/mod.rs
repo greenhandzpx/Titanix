@@ -53,6 +53,10 @@ const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
 const SYSCALL_SYSLOG: usize = 116;
+const SYSCALL_SETSCHEDULER: usize = 119;
+const SYSCALL_SCHED_GETSCHEDULER: usize = 120;
+const SYSCALL_SCHED_GETPARAM: usize = 121;
+const SYSCALL_SCHED_GETAFFINITY: usize = 123;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_TKILL: usize = 130;
@@ -118,6 +122,7 @@ use mm::*;
 use net::*;
 pub use process::CloneFlags;
 use process::*;
+use resource::*;
 use signal::*;
 use sync::*;
 use time::*;
@@ -128,7 +133,6 @@ use crate::{
     process::resource::RLimit,
     signal::{SigAction, SigSet},
     strace,
-    syscall::resource::sys_prlimit64,
     timer::posix::{ITimerval, TimeSpec, TimeVal, Tms},
     utils::error::SyscallRet,
 };
@@ -288,6 +292,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_syslog,
             (args[0] as u32, args[1] as *mut u8, args[2] as u32)
         ),
+        SYSCALL_SCHED_GETAFFINITY => {
+            sys_handler!(sys_sched_getaffinity, (args[0], args[1], args[2]))
+        }
         SYSCALL_YIELD => sys_handler!(sys_yield, (), await),
         SYSCALL_KILL => sys_handler!(sys_kill, (args[0] as isize, args[1] as i32)),
         SYSCALL_RT_SIGACTION => sys_handler!(
