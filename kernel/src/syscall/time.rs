@@ -113,7 +113,7 @@ pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
     match clock {
         Some(_clock) => {
             trace!("[sys_clock_getres] find the clock, clock id {}", clock_id);
-            let resolution = Duration::from_millis(1);
+            let resolution = Duration::from_nanos(1);
             info!("[sys_clock_getres] get time {:?}", resolution);
             unsafe {
                 res.write_volatile(resolution.into());
