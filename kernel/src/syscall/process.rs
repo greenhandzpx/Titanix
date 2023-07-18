@@ -200,7 +200,7 @@ pub fn sys_clone(
             "[sys_clone] return new pid: {}, clone flags {:?}, child flags {:?}",
             new_pid,
             clone_flags,
-            new_process.inner.lock().pending_sigs.blocked_sigs
+            new_process.inner.lock().sig_queue.blocked_sigs
         );
         Ok(new_pid as isize)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
@@ -322,7 +322,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     // TODO: need to find the reason why
     // remove SIGCHLD from blocked_sig
     process.inner_handler(|proc| {
-        proc.pending_sigs.blocked_sigs.remove(SigSet::SIGCHLD);
+        proc.sig_queue.blocked_sigs.remove(SigSet::SIGCHLD);
     });
 
     loop {

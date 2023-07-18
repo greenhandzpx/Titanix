@@ -31,7 +31,7 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
         if oldact as *const u8 != core::ptr::null::<u8>() {
             UserCheck::new()
                 .check_writable_slice(oldact as *mut u8, core::mem::size_of::<SigAction>())?;
-            let oldact_ref = proc.pending_sigs.sig_handlers.get(sig as usize);
+            let oldact_ref = proc.sig_queue.sig_handlers.get(sig as usize);
             unsafe {
                 oldact.copy_from(&oldact_ref.unwrap().sig_action as *const SigAction, 1);
                 debug!(
@@ -86,20 +86,21 @@ pub fn sys_rt_sigaction(sig: i32, act: *const SigAction, oldact: *mut SigAction)
             };
             // debug!("[sys_rt_sigaction]: set new sig handler {:#x}, sa_mask {:#x}, sa_flags: {:#x}, sa_restorer: {:#x}", new_sigaction.sig_action.sa_handler as *const usize as usize, new_sigaction.sig_action.sa_mask[0], new_sigaction.sig_action.sa_flags, new_sigaction.sig_action.sa_restorer);
             log::info!(
-                "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:?}, sa_flags: {:#x}, sa_restorer: {:#x}",
+                "[sys_rt_sigaction]: sig {}, set new sig handler {:#x}, sa_mask {:?}, sa_flags: {:#x}, sa_restorer: {:#x}, current sig mask {:?}",
                 sig,
                 new_sigaction.sig_action.sa_handler as *const usize as usize,
                 new_sigaction.sig_action.sa_mask[0],
                 new_sigaction.sig_action.sa_flags,
                 new_sigaction.sig_action.sa_restorer,
+                proc.sig_queue.blocked_sigs,
             );
-            proc.pending_sigs.sig_handlers
+            proc.sig_queue.sig_handlers
                 .set_sigaction(sig as usize, new_sigaction);
             for (_, thread) in proc.threads.iter() {
                 if let Some(thread) = thread.upgrade() {
                     unsafe {
                         thread.inner_handler(|th| {
-                            th.pending_sigs.lock().sig_handlers.set_sigaction(sig as usize, new_sigaction);
+                            th.sig_queue.lock().sig_handlers.set_sigaction(sig as usize, new_sigaction);
                         })
                     }
                 }
@@ -126,10 +127,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
         if old_set as usize != 0 {
             let _sum_guard = SumGuard::new();
             unsafe {
-                *old_set = proc.pending_sigs.blocked_sigs;
+                *old_set = proc.sig_queue.blocked_sigs;
                 debug!(
                     "[sys_rt_sigprocmask] old set: {:?}",
-                    proc.pending_sigs.blocked_sigs
+                    proc.sig_queue.blocked_sigs
                 );
             }
         }
@@ -144,10 +145,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
                 stack_trace!();
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
-                    proc.pending_sigs.blocked_sigs |= new_sig_mask;
+                    proc.sig_queue.blocked_sigs |= new_sig_mask;
                     unsafe {
                         current_task().inner_handler(|th| {
-                            th.pending_sigs.lock().blocked_sigs |= new_sig_mask;
+                            th.sig_queue.lock().blocked_sigs |= new_sig_mask;
                         });
                     }
                     return Ok(0);
@@ -159,10 +160,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
-                    proc.pending_sigs.blocked_sigs.remove(new_sig_mask);
+                    proc.sig_queue.blocked_sigs.remove(new_sig_mask);
                     unsafe {
                         current_task().inner_handler(|th| {
-                            th.pending_sigs.lock().blocked_sigs.remove(new_sig_mask);
+                            th.sig_queue.lock().blocked_sigs.remove(new_sig_mask);
                         });
                     }
                     return Ok(0);
@@ -177,10 +178,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
                     debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
-                    proc.pending_sigs.blocked_sigs = new_sig_mask;
+                    proc.sig_queue.blocked_sigs = new_sig_mask;
                     unsafe {
                         current_task().inner_handler(|th| {
-                            th.pending_sigs.lock().blocked_sigs = new_sig_mask;
+                            th.sig_queue.lock().blocked_sigs = new_sig_mask;
                         });
                     }
                     return Ok(0);
@@ -202,10 +203,10 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     let signal_context = current_task().signal_context();
     // restore the old sig mask
     current_process().inner_handler(|proc| {
-        proc.pending_sigs.blocked_sigs = signal_context.blocked_sigs;
+        proc.sig_queue.blocked_sigs = signal_context.blocked_sigs;
         info!(
             "[sys_rt_sigreturn] blocked sigs: {:?}",
-            proc.pending_sigs.blocked_sigs
+            proc.sig_queue.blocked_sigs
         );
     });
     // restore the old user context
@@ -267,9 +268,9 @@ pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
     Ok(0)
 }
 
-/// pid > 0 then sig is sent to the process with the ID specified by pid
 /// pid == 0 then sig is sent to every process in the process group of current process
 /// pid == -1 then sig is sent to every process which current process has permission ( except init proc )
+/// pid > 0 then sig is sent to the process with the ID specified by pid
 /// pid < -1 the sig is sent to every process in process group whose ID is -pid
 pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     stack_trace!();
@@ -279,78 +280,84 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
         errno: 0,
     };
     // TODO: add permission check for sending signal
-    debug!("[sys_kill] pid: {}, signo: {}", pid, signo);
-    if pid > 0 {
-        if let Some(proc) = PROCESS_MANAGER.get(pid as usize) {
-            debug!(
-                "proc {} send signal {} to proc {}",
-                current_process().pid(),
-                signo,
-                proc.pid()
-            );
-            proc.send_signal(sig_info);
-        } else {
-            // No such proc
-            return Err(SyscallErr::ESRCH);
-        }
-    } else if pid == 0 {
-        let pid = current_process().pid();
-        if let Some(proc) = PROCESS_MANAGER.get(pid) {
-            let pgid = proc.pgid();
-            let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pgid);
-            for id in vec {
-                debug!("[sys_kill] pid {} in pgid {}", id, pgid);
-                if id == pid {
-                    continue;
+    match pid {
+        0 => {
+            let pid = current_process().pid();
+            if let Some(proc) = PROCESS_MANAGER.get(pid) {
+                let pgid = proc.pgid();
+                let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pgid);
+                for id in vec {
+                    debug!("[sys_kill] pid {} in pgid {}", id, pgid);
+                    if id == pid {
+                        continue;
+                    }
+                    if let Some(proc) = PROCESS_MANAGER.get(id) {
+                        debug!("send signal {} to proc {} in pgid {} ", signo, id, pgid);
+                        proc.send_signal(sig_info.clone())?;
+                    } else {
+                        // No such proc
+                        debug!("[sys_kill] cannot find proc {}", id);
+                        return Err(SyscallErr::ESRCH);
+                    }
                 }
-                if let Some(proc) = PROCESS_MANAGER.get(id) {
-                    debug!("send signal {} to proc {} in pgid {} ", signo, id, pgid);
-                    proc.send_signal(sig_info.clone());
-                } else {
-                    // No such proc
-                    debug!("[sys_kill] cannot find proc {}", id);
-                    return Err(SyscallErr::ESRCH);
-                }
-            }
-        } else {
-            // No such proc
-            return Err(SyscallErr::ESRCH);
-        }
-    } else if pid == -1 {
-        for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
-            if let Some(proc) = proc.upgrade() {
-                if proc.pid() == INITPROC_PID {
-                    continue;
-                }
-                debug!(
-                    "proc {} send signal {} to proc {}",
-                    current_process().pid(),
-                    signo,
-                    proc.pid()
-                );
-                proc.send_signal(sig_info.clone());
-            } else {
-                continue;
-            }
-        }
-    } else if pid < -1 {
-        let pid = -pid;
-        let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pid as usize);
-        for id in vec {
-            if let Some(proc) = PROCESS_MANAGER.get(id) {
-                debug!(
-                    "proc {} send signal {} to proc {}",
-                    current_process().pid(),
-                    signo,
-                    proc.pid()
-                );
-                proc.send_signal(sig_info.clone());
             } else {
                 // No such proc
                 return Err(SyscallErr::ESRCH);
             }
         }
+        -1 => {
+            for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
+                if let Some(proc) = proc.upgrade() {
+                    if proc.pid() == INITPROC_PID {
+                        continue;
+                    }
+                    debug!(
+                        "proc {} send signal {} to proc {}",
+                        current_process().pid(),
+                        signo,
+                        proc.pid()
+                    );
+                    proc.send_signal(sig_info.clone())?;
+                } else {
+                    continue;
+                }
+            }
+        }
+        _ if pid > 0 => {
+            if let Some(proc) = PROCESS_MANAGER.get(pid as usize) {
+                debug!(
+                    "proc {} send signal {} to proc {}",
+                    current_process().pid(),
+                    signo,
+                    proc.pid()
+                );
+                proc.send_signal(sig_info)?;
+            } else {
+                // No such proc
+                return Err(SyscallErr::ESRCH);
+            }
+        }
+        _ if pid < -1 => {
+            let pid = -pid;
+            let vec = PROCESS_GROUP_MANAGER.get_group_by_pgid(pid as usize);
+            for id in vec {
+                if let Some(proc) = PROCESS_MANAGER.get(id) {
+                    debug!(
+                        "proc {} send signal {} to proc {}",
+                        current_process().pid(),
+                        signo,
+                        proc.pid()
+                    );
+                    proc.send_signal(sig_info.clone())?;
+                } else {
+                    // No such proc
+                    return Err(SyscallErr::ESRCH);
+                }
+            }
+        }
+        _ => {}
     }
+
     Ok(0)
 }
 
@@ -366,21 +373,21 @@ pub async fn sys_rt_sigsuspend(mask: usize) -> SyscallRet {
     debug!("[sys_rt_sigsuspend] set mask: {:?}", mask);
     // retore old sigset
     let old_set = current_process().inner_handler(|proc| {
-        let old = proc.pending_sigs.blocked_sigs;
-        proc.pending_sigs.blocked_sigs = mask;
+        let old = proc.sig_queue.blocked_sigs;
+        proc.sig_queue.blocked_sigs = mask;
         old
     });
     loop {
         thread::yield_now().await;
         if current_process().is_zombie() {
             current_process().inner_handler(|proc| {
-                proc.pending_sigs.blocked_sigs = old_set;
+                proc.sig_queue.blocked_sigs = old_set;
             });
             return Err(SyscallErr::EINTR);
         }
         current_process().inner_handler(|proc| {
-            if !proc.pending_sigs.pending_sigs.is_empty() {
-                proc.pending_sigs.blocked_sigs = old_set;
+            if !proc.sig_queue.pending_sigs.is_empty() {
+                proc.sig_queue.blocked_sigs = old_set;
                 return Err(SyscallErr::EINTR);
             }
             Ok(())

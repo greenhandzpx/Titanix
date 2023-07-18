@@ -88,7 +88,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
 
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
     parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
-    parent_prcess.inner_handler(|proc| proc.pending_sigs.send_signal(SIGCHLD))
+    parent_prcess.inner_handler(|proc| proc.sig_queue.send_signal(SIGCHLD))
 }
 
 /// Exit and terminate all threads of the current process.

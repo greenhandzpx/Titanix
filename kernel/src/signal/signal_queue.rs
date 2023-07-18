@@ -7,8 +7,8 @@ pub struct SigQueue {
     /// Pending sigs
     pub pending_sigs: VecDeque<SigInfo>,
     /// Blocked sigs
-    /// Signal handlers for every signal
     pub blocked_sigs: SigSet,
+    /// Signal handlers for every signal
     pub sig_handlers: SigHandlerManager,
 }
 
@@ -49,10 +49,15 @@ impl SigQueue {
             let sig_info = self.pending_sigs.pop_front().unwrap();
             cnt += 1;
             let signo = sig_info.signo;
-            let signo_shift = SigSet::from_bits(1 << (sig_info.signo - 1)).unwrap();
+            let signo_shift = SigSet::from_bits(1 << (sig_info.signo - 1));
+            if signo_shift.is_none() {
+                log::error!("[check_signal] unsupported signal {}", sig_info.signo);
+                continue;
+            }
+            let signo_shift = signo_shift.unwrap();
 
             if self.blocked_sigs.contains(signo_shift) {
-                debug!("sig {} has been blocked", signo);
+                log::info!("sig {} has been blocked", signo);
                 self.pending_sigs.push_back(sig_info);
                 continue;
             }
@@ -61,11 +66,13 @@ impl SigQueue {
 
             // save_context_for_sig_handler(proc.pending_sigs.blocked_sigs);
 
-            self.blocked_sigs |= signo_shift;
-            // TODO: only use the first element now
-            self.blocked_sigs |= self.sig_handlers.sigactions[sig_info.signo]
-                .sig_action
-                .sa_mask[0];
+            if self.sig_handlers.sigactions[signo].is_user_defined {
+                self.blocked_sigs |= signo_shift;
+                // TODO: only use the first element now
+                self.blocked_sigs |= self.sig_handlers.sigactions[sig_info.signo]
+                    .sig_action
+                    .sa_mask[0];
+            }
 
             return Some((
                 sig_info,

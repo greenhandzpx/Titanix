@@ -91,7 +91,7 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             //     sec: (dev_spec.sec as isize + clock.sec) as usize,
             //     nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
             // };
-            info!("[sys_clock_gettime] get time {:?}", clock_time);
+            debug!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {
                 time_spec_ptr.write_volatile(clock_time.into());
             }
@@ -170,7 +170,7 @@ pub fn sys_setitimer(
                     } else {
                         let expired_time = current_time_duration() + interval;
                         timer.it_value = expired_time.into();
-                        proc.pending_sigs.send_signal(SIGALRM)
+                        proc.sig_queue.send_signal(SIGALRM)
                     }
                     if interval.is_zero() {
                         false
