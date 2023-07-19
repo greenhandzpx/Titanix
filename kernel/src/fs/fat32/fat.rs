@@ -306,6 +306,10 @@ impl FileAllocTable {
 
     fn alloc_cluster_inner(&self) -> Option<usize> {
         let mut fatmeta_locked = self.fatmeta.lock();
+        // println!(
+        //     "[FileAllocTable::alloc_cluster_inner] tot_cluster_count: {}, nxt_free: {}",
+        //     self.info.tot_cluster_count, fatmeta_locked.nxt_free
+        // );
         if fatmeta_locked.nxt_free != self.info.tot_cluster_count + 1 {
             fatmeta_locked.nxt_free += 1;
             fatmeta_locked.free_count -= 1;
