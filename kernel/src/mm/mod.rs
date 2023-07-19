@@ -8,6 +8,9 @@
 mod address;
 mod frame_allocator;
 pub mod heap_allocator;
+
+mod buf;
+
 ///
 pub mod memory_space;
 mod page;

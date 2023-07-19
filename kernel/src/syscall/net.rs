@@ -18,9 +18,12 @@ const SOCK_DGRAM: u32 = 2;
 const IPPROTO_UDP: u32 = 17;
 
 pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
-    debug!(
+    stack_trace!();
+    log::info!(
         "[sys_socket] domain: {}, type: {}, protocol: {}",
-        domain, socket_type, protocol
+        domain,
+        socket_type,
+        protocol
     );
     let socket = Socket::new();
     current_process().inner_handler(move |proc| {
@@ -31,22 +34,27 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
 }
 
 pub fn sys_bind(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
 pub fn sys_listen(sockfd: u32, backlog: u32) -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
 pub fn sys_accept(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
 pub fn sys_connect(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
 pub fn sys_getsockname(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }
 
@@ -106,5 +114,6 @@ pub fn sys_setsockopt(
     optval: usize,
     optlen: u32,
 ) -> SyscallRet {
+    stack_trace!();
     Ok(0)
 }

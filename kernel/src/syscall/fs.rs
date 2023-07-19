@@ -13,6 +13,7 @@ use log::{debug, info, trace, warn};
 
 use super::PollFd;
 use crate::config::fs::RLIMIT_OFILE;
+use crate::config::mm::PAGE_SIZE;
 use crate::fs::ffi::{
     Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, SEEK_CUR, SEEK_END, SEEK_SET, STAT,
     STATFS_SIZE, STAT_SIZE, SYSINFO_SIZE,
@@ -639,7 +640,11 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
         return Ok(0);
     }
 
-    UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
+    if len <= PAGE_SIZE * 10 {
+        UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
+    } else {
+        log::warn!("[sys_read] buf too large {:#x}, no check", len);
+    }
 
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };

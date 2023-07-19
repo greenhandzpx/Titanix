@@ -77,10 +77,11 @@ pub trait File: Send + Sync {
         flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
     }
 
-    /// For default file, data must be read from page cache first
+    /// For default file, data must be read from page cache first.
+    /// Note that only guarantee the safety of the first PAGE_SIZE bytes
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
 
-    /// For default file, data must be written to page cache first
+    /// For default file, data must be written to page cache first.
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
     fn pread<'a>(&'a self, buf: &'a mut [u8], off: usize) -> AsyscallRet {
@@ -207,11 +208,11 @@ pub trait File: Send + Sync {
 }
 
 impl dyn File {
-    pub fn open(inode: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
-        let file = inode.open(inode.clone(), flags)?;
-        file.metadata().inner.lock().inode = Some(inode);
-        Ok(file)
-    }
+    // pub fn open(inode: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    //     let file = inode.open(inode.clone(), flags)?;
+    //     file.metadata().inner.lock().inode = Some(inode);
+    //     Ok(file)
+    // }
 }
 
 /// Default file(i.e. files in the disk)

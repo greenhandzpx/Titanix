@@ -4,7 +4,7 @@ use alloc::{
     sync::Arc,
 };
 
-use crate::{processor::SumGuard, utils::error::AsyscallRet};
+use crate::{mm::user_check::UserCheck, processor::SumGuard, utils::error::AsyscallRet};
 
 use super::{file::FileMeta, File, Mutex, OpenFlags};
 
@@ -47,6 +47,7 @@ impl File for Socket {
             let _sum_guard = SumGuard::new();
             let mut inner = self.buf.lock();
             let len = inner.len().min(buf.len());
+            UserCheck::new().check_writable_slice(buf.as_ptr() as *mut u8, len)?;
             inner
                 .drain(..len)
                 .zip(buf.into_iter())

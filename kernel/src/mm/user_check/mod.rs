@@ -62,7 +62,6 @@ impl UserCheck {
 
     /// Check wether the given user addr is readable or not
     pub fn check_readable_slice(&self, buf: *const u8, len: usize) -> GeneralRet<()> {
-        // let _sum_guard = SumGuard::new();
         stack_trace!();
         let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
         let mut buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
@@ -70,12 +69,6 @@ impl UserCheck {
             buf_end.0 = usize::MAX;
         }
         let mut va = buf_start;
-        // debug!(
-        //     "[proc {}] check read sva {:#x} eva {:#x}",
-        //     current_process().pid(),
-        //     buf_start.0,
-        //     buf_end.0
-        // );
         while va < buf_end {
             if let Some(scause) = self.try_read_u8(va.into()) {
                 block_on(self.handle_page_fault(va, scause))?
@@ -87,7 +80,6 @@ impl UserCheck {
 
     /// Check wether the given user addr is writable or not
     pub fn check_writable_slice(&self, buf: *mut u8, len: usize) -> GeneralRet<()> {
-        // let _sum_guard = SumGuard::new();
         stack_trace!();
         let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
         let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
