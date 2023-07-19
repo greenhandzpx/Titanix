@@ -245,6 +245,9 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         path = "/busybox".to_string();
         args_vec.push("busybox".to_string());
         args_vec.push("sh".to_string());
+    } else if path.ends_with("sleep") || path.ends_with("ls") {
+        path = "/busybox".to_string();
+        args_vec.push("busybox".to_string());
     }
 
     UserCheck::new().check_c_str(args as *const u8)?;
@@ -318,12 +321,6 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
 
     let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
-
-    // TODO: need to find the reason why
-    // remove SIGCHLD from blocked_sig
-    process.inner_handler(|proc| {
-        proc.sig_queue.blocked_sigs.remove(SigSet::SIGCHLD);
-    });
 
     loop {
         if let Some((os_exit, found_pid, exit_code)) = process.inner_handler(|proc| {

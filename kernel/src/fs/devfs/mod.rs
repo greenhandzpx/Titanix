@@ -22,6 +22,7 @@ use super::{
 };
 
 mod block_device;
+mod cpu_dma_latency;
 mod null;
 mod rtc;
 mod tty;
@@ -83,7 +84,7 @@ const DEV_NAMES: [(
     &str,
     InodeMode,
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
-); 6] = [
+); 7] = [
     ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
         Arc::new(TestRootInode::new(parent, path))
     }),
@@ -102,6 +103,11 @@ const DEV_NAMES: [(
     ("/dev/urandom", InodeMode::FileCHR, |parent, path| {
         Arc::new(RtcInode::new(parent, path))
     }),
+    (
+        "/dev/cpu_dma_latency",
+        InodeMode::FileCHR,
+        |parent, path| Arc::new(RtcInode::new(parent, path)),
+    ),
 ];
 
 pub struct DevFs {

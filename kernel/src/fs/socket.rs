@@ -4,13 +4,17 @@ use alloc::{
     sync::Arc,
 };
 
-use crate::{mm::user_check::UserCheck, processor::SumGuard, utils::error::AsyscallRet};
+use crate::{
+    mm::user_check::UserCheck, process::thread, processor::SumGuard, utils::error::AsyscallRet,
+};
 
 use super::{file::FileMeta, File, Mutex, OpenFlags};
 
 use lazy_static::*;
 
 pub const SOCKETADDR_SIZE: usize = core::mem::size_of::<SocketAddr>();
+
+pub const MAX_BUFFER_SIZE: usize = 1 << 16 - 1;
 
 pub struct Socket {
     pub flags: OpenFlags,
@@ -59,9 +63,21 @@ impl File for Socket {
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
-            let mut inner = self.buf.lock();
-            buf.into_iter().for_each(|ch| inner.push_back(*ch));
-            Ok(buf.len() as isize)
+            loop {
+                if {
+                    let mut inner = self.buf.lock();
+                    if inner.len() + buf.len() > MAX_BUFFER_SIZE {
+                        true
+                    } else {
+                        buf.into_iter().for_each(|ch| inner.push_back(*ch));
+                        false
+                    }
+                } {
+                    thread::yield_now().await;
+                } else {
+                    return Ok(buf.len() as isize);
+                }
+            }
         })
     }
 

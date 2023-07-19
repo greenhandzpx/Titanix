@@ -52,7 +52,14 @@ const SYSCALL_NANOSLEEP: usize = 101;
 const SYSCALL_SETITIMER: usize = 103;
 const SYSCALL_CLOCK_SETTIME: usize = 112;
 const SYSCALL_CLOCK_GETTIME: usize = 113;
+const SYSCALL_CLOCK_GETRES: usize = 114;
+const SYSCALL_CLOCK_NANOSLEEP: usize = 115;
 const SYSCALL_SYSLOG: usize = 116;
+const SYSCALL_SCHED_SETSCHEDULER: usize = 119;
+const SYSCALL_SCHED_GETSCHEDULER: usize = 120;
+const SYSCALL_SCHED_GETPARAM: usize = 121;
+const SYSCALL_SCHED_SETAFFINITY: usize = 122;
+const SYSCALL_SCHED_GETAFFINITY: usize = 123;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_KILL: usize = 129;
 const SYSCALL_TKILL: usize = 130;
@@ -81,6 +88,7 @@ const SYSCALL_SHMGET: usize = 194;
 const SYSCALL_SHMCTL: usize = 195;
 const SYSCALL_SHMAT: usize = 196;
 const SYSCALL_SOCKET: usize = 198;
+const SYSCALL_SOCKETPAIR: usize = 199;
 const SYSCALL_BIND: usize = 200;
 const SYSCALL_LISTEN: usize = 201;
 const SYSCALL_ACCEPT: usize = 202;
@@ -97,6 +105,7 @@ const SYSCALL_EXECVE: usize = 221;
 const SYSCALL_MMAP: usize = 222;
 const SYSCALL_MPROTECT: usize = 226;
 const SYSCALL_MSYNC: usize = 227;
+const SYSCALL_MADVISE: usize = 233;
 const SYSCALL_WAIT4: usize = 260;
 const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
@@ -119,6 +128,7 @@ use mm::*;
 use net::*;
 pub use process::CloneFlags;
 use process::*;
+use resource::*;
 use signal::*;
 use sync::*;
 use time::*;
@@ -129,7 +139,6 @@ use crate::{
     process::resource::RLimit,
     signal::{SigAction, SigSet},
     strace,
-    syscall::resource::sys_prlimit64,
     timer::posix::{ITimerval, TimeSpec, TimeVal, Tms},
     utils::error::SyscallRet,
 };
@@ -285,10 +294,29 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_CLOCK_GETTIME => {
             sys_handler!(sys_clock_gettime, (args[0], args[1] as *mut TimeSpec))
         }
+        SYSCALL_CLOCK_GETRES => sys_handler!(sys_clock_getres, (args[0], args[1] as *mut TimeSpec)),
+        SYSCALL_CLOCK_NANOSLEEP => sys_handler!(
+            sys_clock_nanosleep,
+            (
+                args[0],
+                args[1] as u32,
+                args[2],
+                args[3]
+            ), await
+        ),
         SYSCALL_SYSLOG => sys_handler!(
             sys_syslog,
             (args[0] as u32, args[1] as *mut u8, args[2] as u32)
         ),
+        SYSCALL_SCHED_SETSCHEDULER => sys_handler!(sys_sched_setscheduler, ()),
+        SYSCALL_SCHED_GETSCHEDULER => sys_handler!(sys_sched_getscheduler, ()),
+        SYSCALL_SCHED_GETPARAM => sys_handler!(sys_sched_getparam, ()),
+        SYSCALL_SCHED_SETAFFINITY => {
+            sys_handler!(sys_sched_setaffinity, (args[0], args[1], args[2]))
+        }
+        SYSCALL_SCHED_GETAFFINITY => {
+            sys_handler!(sys_sched_getaffinity, (args[0], args[1], args[2]))
+        }
         SYSCALL_YIELD => sys_handler!(sys_yield, (), await),
         SYSCALL_KILL => sys_handler!(sys_kill, (args[0] as isize, args[1] as i32)),
         SYSCALL_RT_SIGACTION => sys_handler!(
@@ -337,6 +365,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_SOCKET => {
             sys_handler!(sys_socket, (args[0] as u32, args[1] as u32, args[2] as u32))
         }
+        SYSCALL_SOCKETPAIR => sys_handler!(
+            sys_socketpair,
+            (args[0] as u32, args[1] as u32, args[2] as u32, args[3])
+        ),
         SYSCALL_BIND => sys_handler!(
             sys_bind,
             (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
@@ -425,6 +457,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_MPROTECT => sys_handler!(sys_mprotect, (args[0], args[1], args[2] as i32)),
         SYSCALL_MSYNC => sys_handler!(sys_msync, (args[0], args[1], args[2] as i32)),
+        SYSCALL_MADVISE => sys_handler!(sys_madvise, ()),
         SYSCALL_WAIT4 => {
             sys_handler!(sys_wait4, (args[0] as isize, args[1], args[2] as i32), await)
         }

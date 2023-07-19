@@ -2,8 +2,11 @@ use log::debug;
 
 use crate::{
     mm::user_check::UserCheck,
-    process::resource::{RLimit, RLIMIT_SIZE},
-    processor::SumGuard,
+    process::{
+        resource::{CpuSet, RLimit, RLIMIT_SIZE},
+        thread, PROCESS_MANAGER,
+    },
+    processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -37,4 +40,82 @@ pub fn sys_prlimit64(
         return Err(SyscallErr::EINVAL);
     }
     new_rlimit.set_rlimit(resource)
+}
+
+pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SyscallRet {
+    stack_trace!();
+    debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(mask as *mut u8, cpusetsize)?;
+    if let Some(proc) = PROCESS_MANAGER.get(pid) {
+        if let Some(thread) = proc.inner_handler(|proc| {
+            if let Some(thread) = proc.threads.get(&pid) {
+                thread.upgrade()
+            } else {
+                None
+            }
+        }) {
+            unsafe {
+                let set = (*(thread.inner.get())).cpu_set;
+                *(mask as *mut CpuSet) = set;
+            }
+            Ok(0)
+        } else {
+            debug!(
+                "[sys_sched_getaffinity] No such tid {} in pid {}",
+                pid,
+                proc.pid()
+            );
+            Err(SyscallErr::ESRCH)
+        }
+    } else {
+        debug!("[sys_sched_getaffinity] No such process");
+        Err(SyscallErr::ESRCH)
+    }
+}
+
+pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SyscallRet {
+    stack_trace!();
+    debug_assert_eq!(cpusetsize, core::mem::size_of::<CpuSet>());
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_readable_slice(mask as *const u8, cpusetsize)?;
+    if let Some(proc) = PROCESS_MANAGER.get(pid) {
+        if let Some(thread) = proc.inner_handler(|proc| {
+            if let Some(thread) = proc.threads.get(&pid) {
+                thread.upgrade()
+            } else {
+                None
+            }
+        }) {
+            unsafe {
+                (*(thread.inner.get())).cpu_set = *(mask as *const CpuSet);
+            }
+            Ok(0)
+        } else {
+            debug!(
+                "[sys_sched_setaffinity] No such tid {} in pid {}",
+                pid,
+                proc.pid()
+            );
+            Err(SyscallErr::ESRCH)
+        }
+    } else {
+        debug!("[sys_sched_setaffinity] No such process");
+        Err(SyscallErr::ESRCH)
+    }
+}
+
+pub fn sys_sched_setscheduler() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}
+
+pub fn sys_sched_getscheduler() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}
+
+pub fn sys_sched_getparam() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
 }

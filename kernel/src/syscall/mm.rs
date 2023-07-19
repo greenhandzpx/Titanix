@@ -269,3 +269,8 @@ pub fn sys_shmctl() -> SyscallRet {
     stack_trace!();
     Ok(0)
 }
+
+pub fn sys_madvise() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}

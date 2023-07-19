@@ -16,7 +16,7 @@ use crate::{
         posix::{ITimerval, TimeSpec},
         timed_task::TimedTaskFuture,
         timeout_task::ksleep,
-        CLOCK_MANAGER, CLOCK_REALTIME,
+        CLOCK_MANAGER, CLOCK_REALTIME, TIMER_ABSTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -101,6 +101,67 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             trace!("[sys_clock_gettime] Cannot find the clock: {}", clock_id);
             Err(SyscallErr::EINVAL)
         }
+    }
+}
+
+pub fn sys_clock_getres(clock_id: usize, res: *mut TimeSpec) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(res as *mut u8, core::mem::size_of::<TimeSpec>())?;
+    let manager_locked = CLOCK_MANAGER.lock();
+    let clock = manager_locked.0.get(&clock_id);
+    match clock {
+        Some(_clock) => {
+            trace!("[sys_clock_getres] find the clock, clock id {}", clock_id);
+            let resolution = Duration::from_nanos(1);
+            info!("[sys_clock_getres] get time {:?}", resolution);
+            unsafe {
+                res.write_volatile(resolution.into());
+            }
+            Ok(0)
+        }
+        None => {
+            trace!("[sys_clock_getres] Cannot find the clock: {}", clock_id);
+            Err(SyscallErr::EINVAL)
+        }
+    }
+}
+
+pub async fn sys_clock_nanosleep(
+    _clock_id: usize,
+    flags: u32,
+    request: usize,
+    remain: usize,
+) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    let size = core::mem::size_of::<TimeSpec>();
+    UserCheck::new().check_readable_slice(request as *const u8, size)?;
+    let request: Duration = unsafe { *(request as *const TimeSpec) }.into();
+    let has_remain = if (remain as *mut TimeSpec).is_null() {
+        false
+    } else {
+        true
+    };
+    let current = current_time_duration();
+    if flags as usize == TIMER_ABSTIME {
+        // request time is absolutely
+        if request.le(&current) {
+            return Ok(0);
+        }
+        let sleep = request - current;
+        ksleep(sleep).await;
+        return Ok(0);
+    } else {
+        // request time is relative
+        ksleep(request).await;
+        if has_remain {
+            UserCheck::new().check_writable_slice(remain as *mut u8, size)?;
+            unsafe {
+                *(remain as *mut TimeSpec) = Duration::ZERO.into();
+            }
+        }
+        return Ok(0);
     }
 }
 

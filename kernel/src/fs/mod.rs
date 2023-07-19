@@ -90,6 +90,19 @@ pub fn init() {
     let key = HashKey::new(root_inode.metadata().ino, "etc".to_string());
     INODE_CACHE.lock().insert(key, etc_dir.clone());
 
+    // for build in command
+    let sleep = root_inode
+        .mknod(Arc::clone(&root_inode), "/sleep", InodeMode::FileREG, None)
+        .expect("mknod /sleep fail!");
+    let key = HashKey::new(root_inode.metadata().ino, "sleep".to_string());
+    INODE_CACHE.lock().insert(key, sleep.clone());
+
+    let ls = root_inode
+        .mknod(Arc::clone(&root_inode), "/ls", InodeMode::FileREG, None)
+        .expect("mknod /ls fail!");
+    let key = HashKey::new(root_inode.metadata().ino, "ls".to_string());
+    INODE_CACHE.lock().insert(key, ls.clone());
+
     let musl_dl_path = etc_dir
         .mknod(
             Arc::clone(&etc_dir),

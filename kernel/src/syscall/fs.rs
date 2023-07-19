@@ -628,7 +628,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_read]: fd {}, len {}", fd, len);
+    info!("[sys_read]: fd {}, len {}", fd, len);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -714,7 +714,10 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
                 if flags.contains(FcntlFlags::FD_CLOEXEC) {
                     file.metadata().inner.lock().flags |= OpenFlags::CLOEXEC;
-                    debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                    debug!(
+                        "[sys_fcntl]: set file flags to {:?}",
+                        file.metadata().inner.lock().flags
+                    );
                 }
                 Ok(0)
             })
