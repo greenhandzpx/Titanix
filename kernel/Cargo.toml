@@ -16,16 +16,27 @@ xmas-elf = "0.7.0"
 log = "0.4"
 hashbrown = "0.14"
 rand_core = "0.6.4"
-intrusive-collections = { version = "0.9", features = ["nightly"] }
+# intrusive-collections = { version = "0.9", features = ["nightly"] }
+smoltcp = { version = "0.10.0", default-features = false, features = [
+    "log",                           
+    "medium-ethernet",
+    # "medium-ip",
+    # "phy-raw_socket",
+    "proto-ipv4",
+    "proto-ipv4-fragmentation",
+    "socket-raw",
+    "socket-udp",
+    "socket-tcp",
+    "async",
+] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
 async-task = { path = "../dependencies/async-task", default-features = false }
 fu740-pac = { path = "../dependencies/fu740-pac" }
 fu740-hal = { path = "../dependencies/fu740-hal" }
 
+
 [features]
-# default = ["stack_trace", "board_qemu", "kernel_interrupt"]
-# default = ["stack_trace", "board_qemu", "user_spin"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 default = ["stack_trace", "board_qemu", "kernel_interrupt"]
 board_qemu = []
@@ -35,6 +46,7 @@ user_spin = []
 strace = []
 multi_hart = []
 submit = []
+async_flush = []
 
 [profile.release]
 debug = true

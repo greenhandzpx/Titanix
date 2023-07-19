@@ -251,21 +251,24 @@ impl FileSystemManager {
         let mut fs_locked = self.fs_mgr.lock();
         fs_locked.insert(mount_point.to_string(), Arc::clone(&fs));
 
-        // Write back in background
-        let fs_moved = fs.clone();
-        spawn_kernel_thread(async move {
-            loop {
-                ksleep(Duration::from_secs(5)).await;
-                // log::error!("I'm going to write back!!");
-                if fs_moved.sync_fs().await.is_err() {
-                    info!(
-                        "[fs write back] fs {} must have already been umounted",
-                        fs_moved.metadata().mount_point
-                    );
-                    break;
+        #[cfg(feature = "async_flush")]
+        {
+            // Write back in background
+            let fs_moved = fs.clone();
+            spawn_kernel_thread(async move {
+                loop {
+                    ksleep(Duration::from_secs(5)).await;
+                    // log::error!("I'm going to write back!!");
+                    if fs_moved.sync_fs().await.is_err() {
+                        info!(
+                            "[fs write back] fs {} must have already been umounted",
+                            fs_moved.metadata().mount_point
+                        );
+                        break;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         Ok(fs)
     }

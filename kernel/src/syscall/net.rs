@@ -107,6 +107,18 @@ pub async fn sys_recvfrom(
     Ok(len)
 }
 
+pub fn sys_getsockopt(
+    sockfd: u32,
+    level: u32,
+    optname: u32,
+    optval_ptr: usize,
+    optlen: u32,
+) -> SyscallRet {
+    stack_trace!();
+
+    Ok(0)
+}
+
 pub fn sys_setsockopt(
     sockfd: u32,
     level: u32,
@@ -115,5 +127,6 @@ pub fn sys_setsockopt(
     optlen: u32,
 ) -> SyscallRet {
     stack_trace!();
+
     Ok(0)
 }
