@@ -709,7 +709,10 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
                 if flags.contains(FcntlFlags::FD_CLOEXEC) {
                     file.metadata().inner.lock().flags |= OpenFlags::CLOEXEC;
-                    debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                    debug!(
+                        "[sys_fcntl]: set file flags to {:?}",
+                        file.metadata().inner.lock().flags
+                    );
                 }
                 Ok(0)
             })
