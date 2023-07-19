@@ -322,12 +322,6 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
 
     let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
 
-    // TODO: need to find the reason why
-    // remove SIGCHLD from blocked_sig
-    process.inner_handler(|proc| {
-        proc.sig_queue.blocked_sigs.remove(SigSet::SIGCHLD);
-    });
-
     loop {
         if let Some((os_exit, found_pid, exit_code)) = process.inner_handler(|proc| {
             if process.pid() == INITPROC_PID && proc.children.is_empty() {
