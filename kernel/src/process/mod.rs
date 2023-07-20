@@ -519,9 +519,10 @@ impl Process {
             unsafe {
                 *(child_tid_ptr as *mut usize) = 0;
             }
-            debug!(
+            log::info!(
                 "[clone_thread] CLONE_CHILD_CLEARTID: child tid ptr {:#x}, tid {}",
-                child_tid_ptr, tid
+                child_tid_ptr,
+                tid
             );
         }
         if flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
@@ -531,9 +532,10 @@ impl Process {
             unsafe {
                 *(child_tid_ptr as *mut usize) = tid;
             }
-            debug!(
+            log::info!(
                 "[clone_thread] CLONE_CHILD_SETTID: child tid ptr {:#x}, tid {}",
-                child_tid_ptr, tid
+                child_tid_ptr,
+                tid
             );
         }
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) {
@@ -542,9 +544,10 @@ impl Process {
             unsafe {
                 *(parent_tid_ptr as *mut usize) = tid;
             }
-            debug!(
+            log::info!(
                 "[clone_thread] CLONE_PARENT_SETTID: parent tid ptr {:#x}, tid {}",
-                parent_tid_ptr, tid
+                parent_tid_ptr,
+                tid
             );
         }
         // if flags.contains(CloneFlags::CLONE_SIGHAND) {
