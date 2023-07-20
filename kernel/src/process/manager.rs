@@ -6,7 +6,6 @@ use alloc::{
 };
 
 use crate::{config::process::INITPROC_PID, sync::mutex::SpinNoIrqLock};
-use lazy_static::*;
 
 use super::Process;
 
@@ -14,7 +13,7 @@ use super::Process;
 pub struct ProcessManager(pub SpinNoIrqLock<BTreeMap<usize, Weak<Process>>>);
 
 impl ProcessManager {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(SpinNoIrqLock::new(BTreeMap::new()))
     }
 
@@ -61,16 +60,14 @@ impl ProcessManager {
     }
 }
 
-lazy_static! {
-    /// Process manager that used for looking for a given process
-    pub static ref PROCESS_MANAGER: ProcessManager = ProcessManager::new();
-}
+/// Process manager that used for looking for a given process
+pub static PROCESS_MANAGER: ProcessManager = ProcessManager::new();
 
 /// gid -> pid
 pub struct ProcessGroupManager(pub SpinNoIrqLock<BTreeMap<usize, Vec<usize>>>);
 
 impl ProcessGroupManager {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(SpinNoIrqLock::new(BTreeMap::new()))
     }
 
@@ -114,7 +111,5 @@ impl ProcessGroupManager {
     }
 }
 
-lazy_static! {
-    /// Process group manager that used for a given pgid
-    pub static ref PROCESS_GROUP_MANAGER: ProcessGroupManager = ProcessGroupManager::new();
-}
+/// Process group manager that used for a given pgid
+pub static PROCESS_GROUP_MANAGER: ProcessGroupManager = ProcessGroupManager::new();

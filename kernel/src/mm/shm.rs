@@ -3,21 +3,17 @@ use alloc::{
     sync::{Arc, Weak},
     vec::Vec,
 };
-use lazy_static::*;
 
 use crate::{
     config::mm::{PAGE_SIZE, PAGE_SIZE_BITS},
-    mm::{
-        frame_alloc, memory_space::vm_area::VmAreaType, page_table::PTEFlags, MapPermission,
-        PageBuilder,
-    },
+    mm::{memory_space::vm_area::VmAreaType, page_table::PTEFlags, MapPermission, PageBuilder},
     processor::current_process,
     stack_trace,
     sync::mutex::SpinNoIrqLock,
     utils::error::{GeneralRet, SyscallErr},
 };
 
-use super::{memory_space::VmArea, Page, RecycleAllocator, VirtAddr};
+use super::{Page, RecycleAllocator, VirtAddr};
 
 pub struct SharedMemoryManager {
     id_allocator: RecycleAllocator,
@@ -28,7 +24,7 @@ pub struct SharedMemoryManager {
 }
 
 impl SharedMemoryManager {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             id_allocator: RecycleAllocator::new(0),
             key_map: BTreeMap::new(),
@@ -137,8 +133,6 @@ impl SharedMemory {
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
-lazy_static! {
-    /// Global shared memory manager
-    pub static ref SHARED_MEMORY_MANAGER: Mutex<SharedMemoryManager> =
-        Mutex::new(SharedMemoryManager::new());
-}
+/// Global shared memory manager
+pub static SHARED_MEMORY_MANAGER: Mutex<SharedMemoryManager> =
+    Mutex::new(SharedMemoryManager::new());

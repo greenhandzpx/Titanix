@@ -5,13 +5,10 @@ use crate::processor::SumGuard;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
 use crate::{config::process::INITPROC_PID, sync::futex_wake};
-use lazy_static::*;
 use log::{debug, warn};
 
-lazy_static! {
-    static ref TID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
-        SpinNoIrqLock::new(RecycleAllocator::new(INITPROC_PID));
-}
+static TID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
+    SpinNoIrqLock::new(RecycleAllocator::new(INITPROC_PID));
 ///Bind pid lifetime to `TidHandle`
 pub struct TidHandle(pub usize);
 

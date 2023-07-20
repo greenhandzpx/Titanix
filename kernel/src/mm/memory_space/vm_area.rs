@@ -1,9 +1,9 @@
 use alloc::{collections::BTreeMap, sync::Arc};
-use log::{debug, error, trace, warn};
+use log::{trace, warn};
 
 use crate::{
     config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE},
-    fs::{File, Inode},
+    fs::File,
     mm::{
         address::{StepByOne, VPNRange},
         frame_alloc,
@@ -14,7 +14,6 @@ use crate::{
     stack_trace,
     syscall::MmapFlags,
     utils::{
-        async_tools::block_on,
         cell::SyncUnsafeCell,
         error::{GeneralRet, SyscallErr},
     },

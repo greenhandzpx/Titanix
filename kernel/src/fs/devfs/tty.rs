@@ -1,7 +1,4 @@
-use alloc::{
-    string::{String, ToString},
-    sync::Arc,
-};
+use alloc::sync::Arc;
 
 use crate::{
     fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
@@ -12,7 +9,6 @@ use core::{
     sync::atomic::{AtomicU8, Ordering},
     task::Waker,
 };
-use lazy_static::*;
 
 use crate::{
     process, processor::SumGuard, sbi::console_getchar, sync::mutex::SleepLock,
@@ -58,10 +54,9 @@ impl Inode for TtyInode {
 
 const PRINT_LOCKED: bool = true;
 
-lazy_static! {
-    static ref PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
-}
+// static PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
 
+static PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
 pub struct TtyFile {
     /// Temporarily save poll in data
     buf: AtomicU8,

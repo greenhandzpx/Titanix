@@ -20,7 +20,7 @@ use alloc::{collections::VecDeque, sync::Arc};
 struct MutexInner {
     locked: bool,
     // queue: LinkedList<SMQueueAdapter>,
-    queue: VecDeque<Arc<GrantInfo>>,
+    queue: UnsafeCell<Option<VecDeque<Arc<GrantInfo>>>>,
 }
 
 /// SleepMutex can step over `await`
@@ -34,15 +34,14 @@ unsafe impl<T: ?Sized + Send, S: MutexSupport> Sync for SleepMutex<T, S> {}
 
 impl<'a, T, S: MutexSupport> SleepMutex<T, S> {
     /// Construct a SleepMutex
-    pub fn new(user_data: T) -> Self {
+    pub const fn new(user_data: T) -> Self {
         SleepMutex {
             lock: SpinMutex::new(MutexInner {
                 locked: false,
-                queue: VecDeque::new(),
+                queue: UnsafeCell::new(None),
             }),
             // _marker: PhantomData,
             data: UnsafeCell::new(user_data),
-            // debug_cnt: UnsafeCell::new(0),
         }
     }
 }
@@ -92,8 +91,13 @@ impl<'a, T: ?Sized, S: MutexSupport> SleepMutexFuture<'a, T, S> {
                 .0
                 .store(true, Ordering::Release);
         } else {
+            log::trace!("[SleepMutexFuture::init] wait for lock...");
             unsafe { &mut *this.grant.inner.get() }.1 = Some(async_tools::take_waker().await);
-            inner.queue.push_back(this.grant.clone());
+            let queue = unsafe { &mut (*inner.queue.get()) };
+            if queue.is_none() {
+                *queue = Some(VecDeque::new());
+            }
+            queue.as_mut().unwrap().push_back(this.grant.clone());
         }
         unsafe { Pin::new_unchecked(this) }
     }
@@ -108,7 +112,10 @@ impl<'a, T: ?Sized, S: MutexSupport> Future for SleepMutexFuture<'a, T, S> {
             .load(Ordering::Acquire);
         match granted {
             false => Poll::Pending,
-            true => Poll::Ready(SleepMutexGuard { mutex: self.mutex }),
+            true => {
+                log::trace!("[SleepMutexFuture::poll] granted");
+                Poll::Ready(SleepMutexGuard { mutex: self.mutex })
+            }
         }
     }
 }
@@ -138,12 +145,20 @@ impl<'a, T: ?Sized, S: MutexSupport> DerefMut for SleepMutexGuard<'a, T, S> {
 impl<'a, T: ?Sized, S: MutexSupport> Drop for SleepMutexGuard<'a, T, S> {
     #[inline]
     fn drop(&mut self) {
+        log::trace!("[SleepMutexGuard::drop] drop...");
         let mut inner = self.mutex.lock.lock();
         debug_assert!(inner.locked);
-        let waiter = match inner.queue.pop_front() {
+        let queue = unsafe { &mut (*inner.queue.get()) };
+        if queue.is_none() {
+            inner.locked = false;
+            log::trace!("[SleepMutexGuard::drop] queue is none");
+            return;
+        }
+        let waiter = match queue.as_mut().unwrap().pop_front() {
             None => {
                 // The wait queue is empty
                 inner.locked = false;
+                log::trace!("[SleepMutexGuard::drop] queue is empty");
                 return;
             }
             Some(waiter) => waiter,
@@ -155,5 +170,6 @@ impl<'a, T: ?Sized, S: MutexSupport> Drop for SleepMutexGuard<'a, T, S> {
         let waker = grant_inner.1.take().unwrap();
         grant_inner.0.store(true, Ordering::Release);
         waker.wake();
+        log::trace!("[SleepMutexGuard::drop] grant someone...");
     }
 }

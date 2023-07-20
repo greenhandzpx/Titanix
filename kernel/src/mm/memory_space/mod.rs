@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, string::ToString, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, trace, warn};
 use xmas_elf::ElfFile;
 
@@ -9,7 +9,7 @@ use crate::{
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
     driver::block::MMIO_VIRT,
-    fs::{resolve_path, OpenFlags, AT_FDCWD},
+    fs::{resolve_path, OpenFlags},
     mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
     process::aux::*,
     processor::current_process,

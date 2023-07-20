@@ -1,15 +1,11 @@
 use core::sync::atomic::AtomicUsize;
 
-use alloc::{
-    string::{String, ToString},
-    sync::Arc,
-    vec::Vec,
-};
-use log::{debug, info};
+use alloc::{string::ToString, sync::Arc, vec::Vec};
+use log::debug;
 
 use crate::{
     fs::{ffi::StatFlags, hash_key::HashKey, inode::INODE_CACHE, FileSystemType},
-    utils::{error::GeneralRet, path},
+    utils::error::GeneralRet,
 };
 
 use self::{meminfo::MeminfoInode, mounts::MountsInode};
@@ -102,7 +98,6 @@ impl ProcFs {
 
         let id_allocator = AtomicUsize::new(0);
 
-        let mut cache_lock = INODE_CACHE.lock();
         let parent_ino = root_inode.metadata().ino;
         for (proc_name, inode_mode, _) in PROC_NAME {
             let child = root_inode.mknod(
@@ -113,7 +108,7 @@ impl ProcFs {
             )?;
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);
-            cache_lock.insert(key, child);
+            INODE_CACHE.insert(key, child);
             debug!("insert {} finished", proc_name);
         }
 

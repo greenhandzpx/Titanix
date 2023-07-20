@@ -12,11 +12,7 @@ use crate::{
 
 use super::{file::File, resolve_path, Inode, OpenFlags};
 
-use lazy_static::*;
-
-lazy_static! {
-    pub static ref MAX_FD: AtomicUsize = AtomicUsize::new(1024);
-}
+pub static MAX_FD: AtomicUsize = AtomicUsize::new(1024);
 
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,

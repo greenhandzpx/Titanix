@@ -41,7 +41,6 @@ use alloc::{
     vec,
     vec::Vec,
 };
-// use lazy_static::*;
 use thread::Thread;
 
 pub use manager::PROCESS_GROUP_MANAGER;

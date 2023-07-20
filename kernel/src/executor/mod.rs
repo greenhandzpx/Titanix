@@ -2,39 +2,33 @@ use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::VecDeque;
 use async_task::{Runnable, Task};
 use core::future::Future;
-use lazy_static::*;
 
 struct TaskQueue {
-    queue: SpinNoIrqLock<VecDeque<Runnable>>,
+    queue: SpinNoIrqLock<Option<VecDeque<Runnable>>>,
 }
 
 impl TaskQueue {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
-            queue: SpinNoIrqLock::new(VecDeque::new()),
+            queue: SpinNoIrqLock::new(None),
         }
     }
-    // pub fn init(&self) {
-    //     *self.queue.lock() = Some(VecDeque::new());
-    // }
+    pub fn init(&self) {
+        *self.queue.lock() = Some(VecDeque::new());
+    }
     pub fn push_task(&self, runnable: Runnable) {
-        // self.queue.lock().as_mut().unwrap().push_back(runnable);
-        self.queue.lock().push_back(runnable);
+        self.queue.lock().as_mut().unwrap().push_back(runnable);
     }
     pub fn fetch_task(&self) -> Option<Runnable> {
-        // debug!("fetch a task inside");
-        self.queue.lock().pop_front()
+        self.queue.lock().as_mut().unwrap().pop_front()
     }
 }
 
-lazy_static! {
-    static ref TASK_QUEUE: TaskQueue = TaskQueue::new();
-}
-// static TASK_QUEUE: TaskQueue = TaskQueue::new();
+static TASK_QUEUE: TaskQueue = TaskQueue::new();
 
-// pub fn init() {
-//     TASK_QUEUE.init();
-// }
+pub fn init() {
+    TASK_QUEUE.init();
+}
 
 /// Add a task into task queue
 pub fn spawn<F>(future: F) -> (Runnable, Task<F::Output>)

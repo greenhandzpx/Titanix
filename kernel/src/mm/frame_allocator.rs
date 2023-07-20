@@ -11,7 +11,6 @@ use crate::{
 // use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
-use lazy_static::*;
 use log::info;
 
 /// manage a frame which has the same lifecycle as the tracker
@@ -45,7 +44,6 @@ impl Drop for FrameTracker {
 }
 
 trait FrameAllocator {
-    fn new() -> Self;
     fn alloc(&mut self) -> Option<PhysPageNum>;
     fn dealloc(&mut self, ppn: PhysPageNum);
 }
@@ -57,6 +55,13 @@ pub struct StackFrameAllocator {
 }
 
 impl StackFrameAllocator {
+    const fn new() -> Self {
+        Self {
+            current: 0,
+            end: 0,
+            recycled: Vec::new(),
+        }
+    }
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
         self.end = r.0;
@@ -68,13 +73,6 @@ impl StackFrameAllocator {
     }
 }
 impl FrameAllocator for StackFrameAllocator {
-    fn new() -> Self {
-        Self {
-            current: 0,
-            end: 0,
-            recycled: Vec::new(),
-        }
-    }
     fn alloc(&mut self) -> Option<PhysPageNum> {
         if let Some(ppn) = self.recycled.pop() {
             Some(ppn.into())
@@ -99,11 +97,8 @@ impl FrameAllocator for StackFrameAllocator {
 
 type FrameAllocatorImpl = StackFrameAllocator;
 
-lazy_static! {
-    /// frame allocator instance through lazy_static!
-    pub static ref FRAME_ALLOCATOR: SpinNoIrqLock<FrameAllocatorImpl> =
-        SpinNoIrqLock::new(FrameAllocatorImpl::new());
-}
+pub static FRAME_ALLOCATOR: SpinNoIrqLock<FrameAllocatorImpl> =
+    SpinNoIrqLock::new(FrameAllocatorImpl::new());
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`
 pub fn init_frame_allocator() {
     extern "C" {

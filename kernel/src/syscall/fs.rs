@@ -173,7 +173,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                     parent_inode.mkdir(parent_inode.clone(), child_name, InodeMode::FileDIR)?;
                 // insert to cache
                 let key = HashKey::new(parent_inode.metadata().ino, child.metadata().name.clone());
-                INODE_CACHE.lock().insert(key, child);
+                INODE_CACHE.insert(key, child);
                 Ok(0)
             }
             _ => {
@@ -856,7 +856,7 @@ pub fn sys_renameat2(
                 .unwrap();
             oldparent.remove_child(oldinode.clone())?;
             let key = HashKey::new(oldparent.metadata().ino, oldname);
-            INODE_CACHE.lock().remove(&key);
+            INODE_CACHE.remove(&key);
 
             let newparent = newparent.unwrap();
             let newname = path::get_name(&newpath);
@@ -880,7 +880,7 @@ pub fn sys_renameat2(
             old_inner.parent = Some(Arc::downgrade(&newparent));
             newinode.metadata().inner_set(old_inner);
             let key = HashKey::new(newparent.metadata().ino, newinode.metadata().name.clone());
-            INODE_CACHE.lock().insert(key, newinode.clone());
+            INODE_CACHE.insert(key, newinode.clone());
             Ok(0)
         }
     } else {
@@ -961,7 +961,8 @@ pub fn sys_renameat2(
                 oldinner.parent = Some(Arc::downgrade(&new_parent));
                 newinode.metadata().inner_set(oldinner);
                 // add to cache
-                let mut cache_lock = INODE_CACHE.lock();
+                let mut cache_inner = INODE_CACHE.0.lock();
+                let cache_lock = cache_inner.as_mut().unwrap();
                 let key = HashKey::new(old_parent.metadata().ino, newname);
                 cache_lock.insert(key, newinode.clone());
                 let key = HashKey::new(new_parent.metadata().ino, oldname);
@@ -988,9 +989,8 @@ pub fn sys_renameat2(
                     let new_inner_lock = new_parent.metadata().inner.lock();
                     let newinode = new_inner_lock.children.get(newname.as_str()).unwrap();
                     newinode.metadata().inner_set(oldinner);
-                    let mut cache_lock = INODE_CACHE.lock();
                     let key = HashKey::new(new_parent.metadata().ino, newname);
-                    cache_lock.insert(key, newinode.clone());
+                    INODE_CACHE.insert(key, newinode.clone());
                     Ok(0)
                 } else {
                     panic!("not support");
