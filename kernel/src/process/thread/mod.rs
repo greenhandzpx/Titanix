@@ -17,7 +17,7 @@ use crate::signal::SignalContext;
 use crate::trap::TrapContext;
 use crate::{
     executor,
-    signal::{signal_queue::SigQueue, SigInfo, SignalTrampoline},
+    signal::{signal_queue::SigQueue, SignalTrampoline},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
 };
@@ -166,10 +166,10 @@ impl Thread {
     }
 
     /// Send signal to this process
-    pub fn send_signal(&self, sig_info: SigInfo) {
-        log::debug!("[Thread::send_signal] signo {}", sig_info.signo);
+    pub fn send_signal(&self, signo: usize) {
+        log::debug!("[Thread::send_signal] signo {}", signo);
         let inner = unsafe { &mut *self.inner.get() };
-        inner.sig_queue.lock().pending_sigs.push_back(sig_info);
+        inner.sig_queue.lock().pending_sigs.add(signo);
     }
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {

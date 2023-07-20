@@ -1,7 +1,6 @@
 use core::fmt::Display;
 
 use alloc::vec::Vec;
-use log::warn;
 
 use crate::processor::local_hart;
 
@@ -64,10 +63,6 @@ impl StackInfo {
     pub fn new(msg: Msg, file: &'static str, line: u32) -> Self {
         Self { msg, file, line }
     }
-
-    // pub fn print(&self) {
-    //     warn!("[{}:{}]:{}", self.file, self.line, self.msg)
-    // }
 }
 
 impl Display for StackInfo {

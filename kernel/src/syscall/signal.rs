@@ -5,7 +5,7 @@ use crate::{
     mm::user_check::UserCheck,
     process::{thread, PROCESS_GROUP_MANAGER, PROCESS_MANAGER},
     processor::{current_process, current_task, current_trap_cx, SumGuard},
-    signal::{ign_sig_handler, KSigAction, SigAction, SigInfo, SigSet, SIG_DFL, SIG_ERR, SIG_IGN},
+    signal::{ign_sig_handler, KSigAction, SigAction, SigSet, SIG_DFL, SIG_ERR, SIG_IGN},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -246,11 +246,7 @@ pub fn sys_tkill(tid: usize, signo: i32) -> SyscallRet {
                 None
             }
         }) {
-            let sig_info = SigInfo {
-                signo: signo as usize,
-                errno: 0,
-            };
-            thread.send_signal(sig_info);
+            thread.send_signal(signo as usize);
             Ok(0)
         } else {
             log::warn!("No such tid {} in pid {}", tid, proc.pid());
@@ -275,10 +271,10 @@ pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
 pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let sig_info = SigInfo {
-        signo: signo as usize,
-        errno: 0,
-    };
+    // let sig_info = SigInfo {
+    //     signo: signo as usize,
+    //     errno: 0,
+    // };
     // TODO: add permission check for sending signal
     match pid {
         0 => {
@@ -293,7 +289,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
                     }
                     if let Some(proc) = PROCESS_MANAGER.get(id) {
                         debug!("send signal {} to proc {} in pgid {} ", signo, id, pgid);
-                        proc.send_signal(sig_info.clone())?;
+                        proc.send_signal(signo as usize)?;
                     } else {
                         // No such proc
                         debug!("[sys_kill] cannot find proc {}", id);
@@ -317,7 +313,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
                         signo,
                         proc.pid()
                     );
-                    proc.send_signal(sig_info.clone())?;
+                    proc.send_signal(signo as usize)?;
                 } else {
                     continue;
                 }
@@ -331,7 +327,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
                     signo,
                     proc.pid()
                 );
-                proc.send_signal(sig_info)?;
+                proc.send_signal(signo as usize)?;
             } else {
                 // No such proc
                 return Err(SyscallErr::ESRCH);
@@ -348,7 +344,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
                         signo,
                         proc.pid()
                     );
-                    proc.send_signal(sig_info.clone())?;
+                    proc.send_signal(signo as usize)?;
                 } else {
                     // No such proc
                     return Err(SyscallErr::ESRCH);

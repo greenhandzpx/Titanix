@@ -18,7 +18,7 @@ pub mod resource;
 
 use crate::{
     config::process::CLONE_STACK_SIZE,
-    fs::{FdTable, OpenFlags},
+    fs::FdTable,
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySpace},
     process::{
@@ -26,7 +26,7 @@ use crate::{
         thread::{terminate_all_threads_except_main, tid::tid_alloc},
     },
     processor::{current_process, current_task, current_trap_cx, hart::local_hart, SumGuard},
-    signal::{signal_queue::SigQueue, SigInfo, SIGKILL},
+    signal::{signal_queue::SigQueue, SIGKILL},
     stack_trace,
     sync::{mutex::SpinNoIrqLock, FutexQueue, Mailbox},
     syscall::CloneFlags,
@@ -168,11 +168,11 @@ impl Process {
     }
 
     /// Send signal to this process
-    pub fn send_signal(&self, sig_info: SigInfo) -> GeneralRet<()> {
-        if sig_info.signo == 0 {
+    pub fn send_signal(&self, signo: usize) -> GeneralRet<()> {
+        if signo == 0 {
             return Err(SyscallErr::EINVAL);
         }
-        if sig_info.signo == SIGKILL {
+        if signo == SIGKILL {
             self.inner_handler(|proc| {
                 for (_, thread) in proc.threads.iter() {
                     if let Some(thread) = thread.upgrade() {
@@ -182,7 +182,7 @@ impl Process {
                 }
             })
         }
-        self.inner.lock().sig_queue.pending_sigs.push_back(sig_info);
+        self.inner.lock().sig_queue.pending_sigs.add(signo);
         Ok(())
     }
 

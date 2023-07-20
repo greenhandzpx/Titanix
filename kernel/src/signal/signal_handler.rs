@@ -26,16 +26,18 @@ pub fn core_sig_handler(signo: usize) {
     // TODO: add core dump ?
 }
 
-pub fn stop_sig_handler(signo: usize) {
+pub fn stop_sig_handler(_signo: usize) {
     // TODO: add process `stop` state
     todo!()
 }
 
-pub fn cont_sig_handler(signo: usize) {
+#[allow(unused)]
+pub fn cont_sig_handler(_signo: usize) {
     // TODO: implement here when finishing `stop_sig_handler`
     todo!()
 }
 
+#[allow(unused)]
 pub fn default_sig_handler(signo: usize) {
     // Nothing to do here
     stack_trace!();

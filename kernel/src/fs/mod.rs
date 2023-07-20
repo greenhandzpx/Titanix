@@ -89,20 +89,20 @@ pub fn init() {
     INODE_CACHE.insert(key, tmp_dir);
 
     let etc_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "/etc", InodeMode::FileDIR)
+        .mkdir(Arc::clone(&root_inode), "etc", InodeMode::FileDIR)
         .expect("mkdir /etc fail!");
     let key = HashKey::new(root_inode.metadata().ino, "etc".to_string());
     INODE_CACHE.insert(key, etc_dir.clone());
 
     // for build in command
     let sleep = root_inode
-        .mknod(Arc::clone(&root_inode), "/sleep", InodeMode::FileREG, None)
+        .mknod(Arc::clone(&root_inode), "sleep", InodeMode::FileREG, None)
         .expect("mknod /sleep fail!");
     let key = HashKey::new(root_inode.metadata().ino, "sleep".to_string());
     INODE_CACHE.insert(key, sleep.clone());
 
     let ls = root_inode
-        .mknod(Arc::clone(&root_inode), "/ls", InodeMode::FileREG, None)
+        .mknod(Arc::clone(&root_inode), "ls", InodeMode::FileREG, None)
         .expect("mknod /ls fail!");
     let key = HashKey::new(root_inode.metadata().ino, "ls".to_string());
     INODE_CACHE.insert(key, ls.clone());

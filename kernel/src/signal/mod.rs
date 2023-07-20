@@ -92,6 +92,20 @@ bitflags! {
     }
 }
 
+impl SigSet {
+    pub fn add_sig(&mut self, signo: usize) {
+        self.insert(SigSet::from_bits(1 << (signo - 1)).unwrap());
+    }
+
+    pub fn contain_sig(&self, signo: usize) -> bool {
+        self.contains(SigSet::from_bits(1 << (signo - 1)).unwrap())
+    }
+
+    pub fn remove_sig(&mut self, signo: usize) {
+        self.remove(SigSet::from_bits(1 << (signo - 1)).unwrap())
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct SigHandlerManager {
     sigactions: [KSigAction; SIG_NUM + 1],
@@ -180,12 +194,12 @@ impl KSigAction {
 pub fn check_signal_for_current_process() -> bool {
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
-    if let Some((sig_info, sig_action, old_blocked_sigs)) =
+    if let Some((signo, sig_action, old_blocked_sigs)) =
         current_process().inner_handler(|proc| proc.sig_queue.check_signal())
     {
         // Note that serveral sig handlers may be executed at the same time by different threads
         // since we don't hold the process inner lock
-        handle_signal(sig_info.signo, sig_action, old_blocked_sigs)
+        handle_signal(signo, sig_action, old_blocked_sigs)
     } else {
         false
     }
@@ -196,16 +210,13 @@ pub fn check_signal_for_current_process() -> bool {
 pub fn check_signal_for_current_thread() -> bool {
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
-    if let Some((sig_info, sig_action, old_blocked_sigs)) =
+    if let Some((signo, sig_action, old_blocked_sigs)) =
         unsafe { current_task().inner_handler(|thread| thread.sig_queue.lock().check_signal()) }
     {
-        log::info!(
-            "[check_signal_for_current_thread] handle signal {}",
-            sig_info.signo
-        );
+        log::info!("[check_signal_for_current_thread] handle signal {}", signo);
         // Note that serveral sig handlers may be executed at the same time by different threads
         // since we don't hold the process inner lock
-        handle_signal(sig_info.signo, sig_action, old_blocked_sigs)
+        handle_signal(signo, sig_action, old_blocked_sigs)
     } else {
         false
     }
@@ -262,10 +273,4 @@ fn save_context_for_sig_handler(blocked_sigs: SigSet) {
         signal_context.user_context.sepc
     );
     current_task().set_signal_context(signal_context);
-}
-
-#[derive(Clone)]
-pub struct SigInfo {
-    pub signo: usize,
-    pub errno: usize,
 }
