@@ -245,6 +245,11 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
     })
 }
 
+pub fn sys_madvise() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}
+
 const IPC_PRIVATE: usize = 0;
 
 pub fn sys_shmget(key: usize, len: usize, _shmflag: u32) -> SyscallRet {

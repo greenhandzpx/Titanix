@@ -9,7 +9,7 @@ use user_lib::{execve, fork, wait, waitpid};
 #[macro_use]
 extern crate user_lib;
 
-const TESTCASES: [&str; 7] = [
+const TESTCASES: [&str; 9] = [
     "busybox_testcode.sh",
     "time-test",
     "libctest_testcode.sh",
@@ -17,6 +17,8 @@ const TESTCASES: [&str; 7] = [
     "iozone_testcode.sh",
     "lmbench_testcode.sh",
     "unixbench_testcode.sh",
+    "libc-bench",
+    "cyclictest_testcode.sh",
 ];
 
 #[no_mangle]

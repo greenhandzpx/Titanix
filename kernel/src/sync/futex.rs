@@ -78,6 +78,7 @@ impl FutexQueue {
                     return i;
                 }
                 let waiter = waiters.pop_first().unwrap();
+                log::info!("[FutexQueue::wake] wake up {}", waiter.0);
                 waiter.1.wake();
             }
             nval
@@ -153,6 +154,7 @@ impl FutexWaiter {
     fn wake(self) {
         self.waker.wake();
     }
+    #[allow(unused)]
     fn wake_by_ref(&self) {
         self.waker.wake_by_ref();
     }
@@ -187,6 +189,7 @@ impl Future for FutexFuture {
         // Because If the waker wakes up us after we load the value and
         // before we add the waiter, then we will sleep forever.
         current_process().inner_handler(|proc| {
+            let addr = unsafe { *self.addr.get() };
             if !unsafe { *self.has_added_waiter.get() } {
                 proc.futex_queue.emplace_waiter(
                     self.addr.clone(),
@@ -196,19 +199,37 @@ impl Future for FutexFuture {
                 unsafe {
                     *self.has_added_waiter.get() = true;
                 }
-            }
-            // let addr_locked = self.addr.lock();
-            let addr = unsafe { *self.addr.get() };
-            if unsafe { atomic_load_acquire(addr.0 as *const u32) } != self.expected_val {
-                proc.futex_queue.remove_waiter(addr, current_task().tid());
-                // TODO: change thread's owned futexes when requeue
-                unsafe {
-                    (*current_task().inner.get()).owned_futexes.0.insert(addr);
+
+                // Check the value in case that someone change that value before waking us up.
+                if unsafe { atomic_load_acquire(addr.0 as *const u32) } != self.expected_val {
+                    return Poll::Ready(());
+                } else {
+                    return Poll::Pending;
                 }
-                Poll::Ready(())
-            } else {
-                Poll::Pending
             }
+            log::info!(
+                "[FutexFuture::poll] wake up, addr {:#x}, val {:#x}",
+                addr.0,
+                unsafe { atomic_load_acquire(addr.0 as *const u32) }
+            );
+            proc.futex_queue.remove_waiter(addr, current_task().tid());
+            // TODO: change thread's owned futexes when requeue
+            unsafe {
+                (*current_task().inner.get()).owned_futexes.0.insert(addr);
+            }
+            Poll::Ready(())
+            // // let addr_locked = self.addr.lock();
+            // let addr = unsafe { *self.addr.get() };
+            // if unsafe { atomic_load_acquire(addr.0 as *const u32) } != self.expected_val {
+            //     proc.futex_queue.remove_waiter(addr, current_task().tid());
+            //     // TODO: change thread's owned futexes when requeue
+            //     unsafe {
+            //         (*current_task().inner.get()).owned_futexes.0.insert(addr);
+            //     }
+            //     Poll::Ready(())
+            // } else {
+            //     Poll::Pending
+            // }
         })
     }
 }

@@ -48,7 +48,7 @@ impl TidAddress {
     pub fn thread_died(&self) {
         stack_trace!();
         if let Some(clear_tid_address) = self.clear_tid_address {
-            debug!("Drop tid address {:#x}", clear_tid_address);
+            log::info!("Drop tid address {:#x}", clear_tid_address);
             if UserCheck::new()
                 .check_writable_slice(clear_tid_address as *mut u8, core::mem::size_of::<usize>())
                 .is_ok()

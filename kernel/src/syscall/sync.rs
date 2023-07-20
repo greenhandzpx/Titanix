@@ -1,10 +1,10 @@
 use core::{intrinsics::atomic_load_acquire, time::Duration};
 
-use log::{debug, error, info};
+use log::{debug, info};
 
 use crate::{
     mm::user_check::UserCheck,
-    process::thread::tid::TidAddress,
+    process::thread,
     processor::{current_process, current_task, SumGuard},
     stack_trace,
     sync::{futex_wake, FutexFuture},
@@ -37,13 +37,6 @@ pub async fn sys_futex(
     val3: u32,
 ) -> SyscallRet {
     stack_trace!();
-    // todo!("[sys_futex]: not yet implemented!");
-    // if futex_op & FutexOperations::FutexPrivateFlag as u32 == 0 {
-    //     error!("[sys_futex] unsupported operation");
-    //     return Ok(0);
-    // } else {
-    //     futex_op &= !(FutexOperations::FutexPrivateFlag as u32);
-    // }
     futex_op &= !(FutexOperations::FutexPrivateFlag as u32);
     info!(
         "[sys_futex] uaddr {:#x}, futex_op {:#x}, val {:#x}, timeout_ptr(or val2) {:#x}, uaddr2 {:#x}, val3 {:#x}",
@@ -76,11 +69,16 @@ pub async fn sys_futex(
                     future.await;
                 }
             } else {
+                log::info!("[sys_futex] wait: val has changed, return");
                 return Err(SyscallErr::EAGAIN);
             }
         }
         _ if futex_op == FutexOperations::FutexWake as u32 => {
-            return futex_wake(uaddr, val);
+            let ret = futex_wake(uaddr, val);
+            log::info!("[sys_futex] futex wake number {:?}", ret);
+            // Yield and let the waiter to fetch the lock
+            thread::yield_now().await;
+            return ret;
         }
         _ if futex_op == FutexOperations::FutexRequeue as u32
             || futex_op == FutexOperations::FutexCmpRequeue as u32 =>
@@ -135,11 +133,13 @@ pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
 
 pub fn sys_set_robust_list(head: usize, len: usize) -> SyscallRet {
     stack_trace!();
+    log::warn!("[sys_set_robust_list]");
     Ok(0)
 }
 
 pub fn sys_get_robust_list(pid: usize, head_ptr: usize, len_ptr: usize) -> SyscallRet {
     stack_trace!();
+    log::warn!("[sys_get_robust_list]");
     Ok(0)
 }
 
