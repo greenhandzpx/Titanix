@@ -3,7 +3,7 @@ use core::intrinsics::mul_with_overflow;
 use log::debug;
 
 use crate::{
-    fs::socket::{Socket, SocketAddr, SOCKETADDR_SIZE, SOCKETBUF_MANAGER},
+    fs::socket::{Socket, SocketAddr, SOCKETADDR_SIZE, SOCKETBUF_MANAGER, TCP_MSS},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
@@ -18,6 +18,9 @@ const SOCK_DGRAM: u32 = 2;
 
 /// protocol
 const IPPROTO_UDP: u32 = 17;
+
+/// option name
+const TCP_MAXSEG: u32 = 2;
 
 pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
     stack_trace!();
@@ -114,10 +117,23 @@ pub fn sys_getsockopt(
     level: u32,
     optname: u32,
     optval_ptr: usize,
-    optlen: u32,
+    optlen: usize,
 ) -> SyscallRet {
     stack_trace!();
-
+    let _sum_guard = SumGuard::new();
+    match optname {
+        TCP_MAXSEG => {
+            // return max tcp fregment size (MSS)
+            let len = core::mem::size_of::<u32>();
+            UserCheck::new().check_writable_slice(optval_ptr as *mut u8, len)?;
+            UserCheck::new().check_writable_slice(optlen as *mut u8, len)?;
+            unsafe {
+                *(optval_ptr as *mut u32) = TCP_MSS;
+                *(optlen as *mut u32) = len as u32;
+            }
+        }
+        _ => {}
+    }
     Ok(0)
 }
 
@@ -129,7 +145,6 @@ pub fn sys_setsockopt(
     optlen: u32,
 ) -> SyscallRet {
     stack_trace!();
-
     Ok(0)
 }
 

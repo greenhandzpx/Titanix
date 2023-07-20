@@ -16,6 +16,8 @@ pub const SOCKETADDR_SIZE: usize = core::mem::size_of::<SocketAddr>();
 
 pub const MAX_BUFFER_SIZE: usize = 1 << 16 - 1;
 
+pub const TCP_MSS: u32 = 32768;
+
 pub struct Socket {
     pub flags: OpenFlags,
     pub buf: Mutex<VecDeque<u8>>,

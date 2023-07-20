@@ -4,8 +4,10 @@ use alloc::vec::Vec;
 use alloc::{string::ToString, sync::Arc};
 use log::debug;
 
+use self::cpu_dma_latency::LatencyInode;
 use self::null::NullInode;
 use self::rtc::RtcInode;
+use self::urandom::UrandomInode;
 use self::{tty::TtyInode, zero::ZeroInode};
 use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
@@ -101,12 +103,12 @@ const DEV_NAMES: [(
         Arc::new(RtcInode::new(parent, path))
     }),
     ("/dev/urandom", InodeMode::FileCHR, |parent, path| {
-        Arc::new(RtcInode::new(parent, path))
+        Arc::new(UrandomInode::new(parent, path))
     }),
     (
         "/dev/cpu_dma_latency",
         InodeMode::FileCHR,
-        |parent, path| Arc::new(RtcInode::new(parent, path)),
+        |parent, path| Arc::new(LatencyInode::new(parent, path)),
     ),
 ];
 
