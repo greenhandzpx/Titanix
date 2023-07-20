@@ -1,17 +1,11 @@
 use core::fmt;
 
-use lazy_static::lazy_static;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
 use crate::{
     processor::{current_process, current_task, hart_idle_now, local_hart},
-    sync::mutex::SpinNoIrqLock as Mutex,
     timer::current_time_duration,
 };
-
-lazy_static! {
-    static ref LOG_LOCK: Mutex<()> = Mutex::new(());
-}
 
 pub fn init() {
     static LOGGER: SimpleLogger = SimpleLogger;

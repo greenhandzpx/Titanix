@@ -11,7 +11,6 @@ use crate::config::board::CLOCK_FREQ;
 use crate::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::{BTreeMap, BinaryHeap};
-use lazy_static::*;
 use log::info;
 use riscv::register::time;
 
@@ -57,13 +56,13 @@ pub fn set_next_trigger() {
 /// clock stores the deviation: arg time - dev time(current_time)
 pub struct ClockManager(pub BTreeMap<usize, Duration>);
 
-lazy_static! {
-    /// Clock manager that used for looking for a given process
-    pub static ref CLOCK_MANAGER: SpinNoIrqLock<ClockManager> =
-        SpinNoIrqLock::new(ClockManager(BTreeMap::new()));
-}
+/// Clock manager that used for looking for a given process
+pub static CLOCK_MANAGER: SpinNoIrqLock<ClockManager> =
+    SpinNoIrqLock::new(ClockManager(BTreeMap::new()));
 
 pub fn init() {
+    TIMER_QUEUE.init();
+
     CLOCK_MANAGER
         .lock()
         .0
@@ -80,7 +79,8 @@ pub fn init() {
 pub fn handle_timeout_events() {
     // debug!("[handle_timeout_events]: start..., sepc {:#x}", sepc::read());
     let current_time = current_time_duration();
-    let mut timers = TIMER_QUEUE.timers.lock();
+    let mut inner = TIMER_QUEUE.timers.lock();
+    let timers = inner.as_mut().unwrap();
     // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time may be a little long.
     loop {
         if let Some(timer) = timers.peek() {
@@ -102,25 +102,30 @@ pub fn handle_timeout_events() {
 }
 
 struct TimerQueue {
-    timers: SpinNoIrqLock<BinaryHeap<Reverse<Timer>>>,
+    timers: SpinNoIrqLock<Option<BinaryHeap<Reverse<Timer>>>>,
 }
 
 impl TimerQueue {
+    const fn new() -> Self {
+        Self {
+            timers: SpinNoIrqLock::new(None),
+        }
+    }
+
+    fn init(&self) {
+        *self.timers.lock() = Some(BinaryHeap::new());
+    }
     fn add_timer(&self, timer: Timer) {
-        self.timers.lock().push(Reverse(timer))
+        self.timers.lock().as_mut().unwrap().push(Reverse(timer))
     }
 }
 
-lazy_static! {
-    static ref TIMER_QUEUE: TimerQueue = TimerQueue {
-        timers: SpinNoIrqLock::new(BinaryHeap::new())
-    };
-}
+static TIMER_QUEUE: TimerQueue = TimerQueue::new();
 
 struct Timer {
     expired_time: Duration,
     waker: Option<Waker>,
-    // waker: SyncUnsafeCell<Option<Waker>>,
+    // waker: SyncUnsafeCell<Option<Waker>>ssssss
 }
 
 impl PartialEq for Timer {

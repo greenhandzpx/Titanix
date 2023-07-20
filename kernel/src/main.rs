@@ -14,6 +14,7 @@
 #![feature(const_mut_refs)]
 #![feature(poll_ready)]
 #![feature(let_chains)]
+#![feature(once_cell)]
 
 extern crate alloc;
 // extern crate intrusive_collections;
@@ -120,7 +121,10 @@ pub fn rust_main(hart_id: usize) {
         mm::heap_allocator::heap_test();
         mm::remap_test();
         trap::init();
-        // executor::init();
+        executor::init();
+        loader::init();
+
+        driver::init();
 
         fs::init();
 

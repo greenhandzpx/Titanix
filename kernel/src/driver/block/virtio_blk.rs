@@ -1,5 +1,4 @@
 use super::BlockDevice;
-use crate::config::mm::PAGE_SIZE_BITS;
 use crate::config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE};
 use crate::mm::{
     frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PhysAddr, PhysPageNum, StepByOne,
@@ -7,8 +6,7 @@ use crate::mm::{
 };
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::vec::Vec;
-use lazy_static::*;
-use log::{debug, info};
+use log::debug;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 
 #[allow(unused)]
@@ -17,9 +15,7 @@ const VIRTIO0: usize = 0x10001000 + KERNEL_DIRECT_OFFSET * PAGE_SIZE;
 
 pub struct VirtIOBlock(SpinNoIrqLock<VirtIOBlk<'static, VirtioHal>>);
 
-lazy_static! {
-    static ref QUEUE_FRAMES: SpinNoIrqLock<Vec<FrameTracker>> = SpinNoIrqLock::new(Vec::new());
-}
+static QUEUE_FRAMES: SpinNoIrqLock<Vec<FrameTracker>> = SpinNoIrqLock::new(Vec::new());
 
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
@@ -38,29 +34,12 @@ impl BlockDevice for VirtIOBlock {
     }
 }
 impl VirtIOBlock {
-    #[allow(unused)]
     pub fn new() -> Self {
         unsafe {
-            let pa = unsafe {
-                (*KERNEL_SPACE
-                    .as_ref()
-                    .expect("KERENL SPACE not init yet")
-                    .page_table
-                    .get())
-                .translate_va(VirtAddr::from(VIRTIO0))
-                .unwrap()
-                .0
-            };
-            let bt = unsafe {
-                *(VIRTIO0 as *mut u8)
-                // *(header as *mut VirtIOHeader as *mut u8)
-            };
             let header = &mut *(VIRTIO0 as *mut VirtIOHeader);
-            // println!("ver {}", header.verify());
-            let ret = Self(SpinNoIrqLock::new(
+            Self(SpinNoIrqLock::new(
                 VirtIOBlk::<VirtioHal>::new(header).unwrap(),
-            ));
-            ret
+            ))
         }
     }
 }

@@ -10,8 +10,6 @@ use crate::{
 
 use super::{file::FileMeta, File, Mutex, OpenFlags};
 
-use lazy_static::*;
-
 pub const SOCKETADDR_SIZE: usize = core::mem::size_of::<SocketAddr>();
 
 pub const MAX_BUFFER_SIZE: usize = 1 << 16 - 1;
@@ -95,13 +93,11 @@ pub struct SocketBufManager {
 }
 
 impl SocketBufManager {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             socketbuf_mgr: Mutex::new(BTreeMap::new()),
         }
     }
 }
 
-lazy_static! {
-    pub static ref SOCKETBUF_MANAGER: SocketBufManager = SocketBufManager::new();
-}
+pub static SOCKETBUF_MANAGER: SocketBufManager = SocketBufManager::new();

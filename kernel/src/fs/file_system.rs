@@ -7,7 +7,6 @@ use alloc::{
     vec::Vec,
 };
 
-use lazy_static::*;
 use log::info;
 
 use crate::{
@@ -133,7 +132,7 @@ pub struct FileSystemManager {
 }
 
 impl FileSystemManager {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             fs_mgr: SpinNoIrqLock::new(BTreeMap::new()),
         }
@@ -242,9 +241,7 @@ impl FileSystemManager {
         };
         // insert root inode into inode cache
         let meta = fs.metadata();
-        INODE_CACHE
-            .lock()
-            .insert(key.clone(), Arc::clone(&meta.root_inode));
+        INODE_CACHE.insert(key.clone(), Arc::clone(&meta.root_inode));
         // insert file system into file system manager
         let mut fs_locked = self.fs_mgr.lock();
         fs_locked.insert(mount_point.to_string(), Arc::clone(&fs));
@@ -313,19 +310,15 @@ impl FileSystemManager {
         };
         let mount_point_name = path::get_name(mount_point);
         let key = HashKey::new(fa_ino, mount_point_name.to_string());
-        INODE_CACHE.lock().remove(&key);
+        INODE_CACHE.remove(&key);
         // remove file system from file system manager
         self.fs_mgr.lock().remove(mount_point);
         if meta.covered_inode.is_some() {
-            INODE_CACHE
-                .lock()
-                .insert(key, Arc::clone(&meta.covered_inode.as_ref().unwrap()));
+            INODE_CACHE.insert(key, Arc::clone(&meta.covered_inode.as_ref().unwrap()));
         }
         Ok(())
         // fs will be dropped automatically because Arc = 0
     }
 }
 
-lazy_static! {
-    pub static ref FILE_SYSTEM_MANAGER: FileSystemManager = FileSystemManager::new();
-}
+pub static FILE_SYSTEM_MANAGER: FileSystemManager = FileSystemManager::new();

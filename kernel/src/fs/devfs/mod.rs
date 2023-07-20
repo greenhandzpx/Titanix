@@ -131,8 +131,6 @@ impl DevFs {
 
         let id_allocator = AtomicUsize::new(0);
 
-        let mut cache_lock = INODE_CACHE.lock();
-        let mut fast_path = FAST_PATH_CACHE.lock();
         let parent_ino = root_inode.metadata().ino;
         for (dev_name2, inode_mode, _) in DEV_NAMES {
             let child = root_inode.mknod(
@@ -143,10 +141,10 @@ impl DevFs {
             )?;
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);
-            cache_lock.insert(key, child.clone());
+            INODE_CACHE.insert(key, child.clone());
             if FAST_PATH.contains(&dev_name2) {
                 debug!("inster {} into fast path cache", dev_name2);
-                fast_path.insert(dev_name2.to_string(), child);
+                FAST_PATH_CACHE.insert(dev_name2.to_string(), child);
             }
             debug!("insert {} finished", dev_name2);
         }

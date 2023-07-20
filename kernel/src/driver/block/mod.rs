@@ -6,11 +6,13 @@ mod virtio_blk;
 use core::any::Any;
 
 use alloc::sync::Arc;
-use lazy_static::*;
 
-use crate::config::{
-    board::MMIO,
-    mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+use crate::{
+    config::{
+        board::MMIO,
+        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+    },
+    sync::mutex::SpinNoIrqLock,
 };
 
 #[cfg(feature = "board_qemu")]
@@ -25,11 +27,12 @@ pub const MMIO_VIRT: &[(usize, usize)] = &[(
     MMIO[0].1,
 )];
 
-lazy_static! {
-    pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = {
-        let ret = Arc::new(BlockDeviceImpl::new());
-        ret
-    };
+type Mutex<T> = SpinNoIrqLock<T>;
+
+pub static BLOCK_DEVICE: Mutex<Option<Arc<dyn BlockDevice>>> = Mutex::new(None);
+
+pub fn init() {
+    *BLOCK_DEVICE.lock() = Some(Arc::new(BlockDeviceImpl::new()));
 }
 
 pub trait BlockDevice: Send + Sync + Any {

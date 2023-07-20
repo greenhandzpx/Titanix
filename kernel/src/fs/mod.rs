@@ -34,6 +34,7 @@ use log::warn;
 pub use page_cache::PageCache;
 
 use crate::driver::BLOCK_DEVICE;
+use crate::fs::inode::FAST_PATH_CACHE;
 use crate::mm::MapPermission;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
@@ -48,11 +49,14 @@ use self::inode::INODE_CACHE;
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub fn init() {
+    INODE_CACHE.init();
+    FAST_PATH_CACHE.init();
+
     FILE_SYSTEM_MANAGER
         .mount(
             "/",
             "/dev/mmcblk0",
-            file_system::FsDevice::BlockDevice(Arc::clone(&BLOCK_DEVICE)),
+            file_system::FsDevice::BlockDevice(BLOCK_DEVICE.lock().as_ref().unwrap().clone()),
             FileSystemType::VFAT,
             StatFlags::ST_NOSUID,
         )
@@ -68,27 +72,27 @@ pub fn init() {
         .expect("mkdir /dev fail!");
 
     let key = HashKey::new(root_inode.metadata().ino, "dev".to_string());
-    INODE_CACHE.lock().insert(key, dev_dir);
+    INODE_CACHE.insert(key, dev_dir);
 
     let proc_dir = root_inode
         .mkdir(Arc::clone(&root_inode), "proc", InodeMode::FileDIR)
         .expect("mkdir /proc fail!");
 
     let key = HashKey::new(root_inode.metadata().ino, "proc".to_string());
-    INODE_CACHE.lock().insert(key, proc_dir);
+    INODE_CACHE.insert(key, proc_dir);
 
     let tmp_dir = root_inode
         .mkdir(Arc::clone(&root_inode), "tmp", InodeMode::FileDIR)
         .expect("mkdir /tmp fail!");
 
     let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
-    INODE_CACHE.lock().insert(key, tmp_dir);
+    INODE_CACHE.insert(key, tmp_dir);
 
     let etc_dir = root_inode
         .mkdir(Arc::clone(&root_inode), "/etc", InodeMode::FileDIR)
         .expect("mkdir /etc fail!");
     let key = HashKey::new(root_inode.metadata().ino, "etc".to_string());
-    INODE_CACHE.lock().insert(key, etc_dir.clone());
+    INODE_CACHE.insert(key, etc_dir.clone());
 
     // for build in command
     let sleep = root_inode
@@ -121,7 +125,7 @@ pub fn init() {
         etc_dir.metadata().ino,
         "ld-musl-riscv64-sf.path".to_string(),
     );
-    INODE_CACHE.lock().insert(key, musl_dl_path);
+    INODE_CACHE.insert(key, musl_dl_path);
 
     FILE_SYSTEM_MANAGER
         .mount(
@@ -282,7 +286,7 @@ pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> 
                 }
             };
             let key = HashKey::new(parent.metadata().ino, child_name.to_string());
-            INODE_CACHE.lock().insert(key, res.clone());
+            INODE_CACHE.insert(key, res.clone());
             res.create_page_cache_if_needed();
             Ok(res)
         } else {
@@ -334,7 +338,7 @@ pub fn resolve_path_with_dirfd(
             }
         };
         let key = HashKey::new(parent.metadata().ino, child_name.to_string());
-        INODE_CACHE.lock().insert(key, res.clone());
+        INODE_CACHE.insert(key, res.clone());
         res.create_page_cache_if_needed();
         Ok(res)
     } else {

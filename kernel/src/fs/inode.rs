@@ -8,7 +8,6 @@ use alloc::{
     vec::Vec,
 };
 use hashbrown::HashMap;
-use lazy_static::*;
 use log::debug;
 
 use crate::sync::mutex::SleepLock;
@@ -31,26 +30,58 @@ use super::{
     File, Mutex, OpenFlags,
 };
 
-lazy_static! {
-    /// Dcache: cache: (parent ino, child name) -> dentry
-    /// TODO: add max capacity limit and lru policy
-    ///
-    pub static ref INODE_CACHE: Mutex<HashMap<HashKey, Arc<dyn Inode>>> = Mutex::new(HashMap::new());
-    pub static ref FAST_PATH_CACHE: Mutex<HashMap<String, Arc<dyn Inode>>> = Mutex::new(HashMap::new());
+/// Dcache: cache: (parent ino, child name) -> dentry.
+/// TODO: add max capacity limit and lru policy
+pub static INODE_CACHE: InodeCache = InodeCache::new();
+
+pub struct InodeCache(pub Mutex<Option<HashMap<HashKey, Arc<dyn Inode>>>>);
+
+impl InodeCache {
+    pub const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    pub fn init(&self) {
+        *self.0.lock() = Some(HashMap::new());
+    }
+
+    pub fn get(&self, key: &HashKey) -> Option<Arc<dyn Inode>> {
+        self.0.lock().as_ref().unwrap().get(key).cloned()
+    }
+
+    pub fn insert(&self, key: HashKey, inode: Arc<dyn Inode>) {
+        self.0.lock().as_mut().unwrap().insert(key, inode);
+    }
+
+    pub fn remove(&self, key: &HashKey) -> Option<Arc<dyn Inode>> {
+        self.0.lock().as_mut().unwrap().remove(key)
+    }
 }
 
-impl FAST_PATH_CACHE {
+pub static FAST_PATH_CACHE: FastPathCache = FastPathCache::new();
+
+pub struct FastPathCache(Mutex<Option<HashMap<String, Arc<dyn Inode>>>>);
+
+impl FastPathCache {
+    pub const fn new() -> Self {
+        Self(Mutex::new(None))
+    }
+
+    pub fn init(&self) {
+        *self.0.lock() = Some(HashMap::new());
+    }
+
     /// return (target inode, is in fast path)
-    pub fn get(path: String) -> (Option<Arc<dyn Inode>>, bool) {
+    pub fn get(&self, path: String) -> (Option<Arc<dyn Inode>>, bool) {
         if FAST_PATH.contains(&path.as_str()) {
-            let target = FAST_PATH_CACHE.lock().get(&path).cloned();
+            let target = self.0.lock().as_ref().unwrap().get(&path).cloned();
             return (target, true);
         } else {
             return (None, false);
         }
     }
-    pub fn insert(path: String, inode: Arc<dyn Inode>) {
-        FAST_PATH_CACHE.lock().insert(path, inode);
+    pub fn insert(&self, path: String, inode: Arc<dyn Inode>) {
+        self.0.lock().as_mut().unwrap().insert(path, inode);
     }
 }
 
@@ -186,7 +217,6 @@ impl dyn Inode {
                 // load children from disk
                 self.load_children_from_disk(self.clone());
                 self.metadata().inner.lock().state = InodeState::Synced;
-                let mut cache_lock = INODE_CACHE.lock();
                 let children = self.metadata().inner.lock().children.clone();
                 for child in children {
                     debug!(
@@ -194,7 +224,7 @@ impl dyn Inode {
                         child.1.metadata().name
                     );
                     let key = HashKey::new(self.metadata().ino, child.1.metadata().name.clone());
-                    cache_lock.insert(key, child.1);
+                    INODE_CACHE.insert(key, child.1);
                 }
             }
             _ => {
@@ -208,7 +238,7 @@ impl dyn Inode {
     pub fn remove_child(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         debug!("Try to delete child in INODE_CACHE");
-        INODE_CACHE.lock().remove(&key);
+        INODE_CACHE.remove(&key);
         let child_name = child.metadata().name.clone();
         self.metadata().inner.lock().children.remove(&child_name);
         Ok(0)
@@ -219,7 +249,7 @@ impl dyn Inode {
     pub fn unlink(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         debug!("Try to delete child in INODE_CACHE");
-        INODE_CACHE.lock().remove(&key);
+        INODE_CACHE.remove(&key);
         let child_name = child.metadata().name.clone();
         self.metadata().inner.lock().children.remove(&child_name);
         self.delete_child(&child_name);
@@ -237,7 +267,7 @@ impl dyn Inode {
             self.metadata().ino
         );
         let key = HashKey::new(self.metadata().ino, name.to_string());
-        let value = INODE_CACHE.lock().get(&key).cloned();
+        let value = INODE_CACHE.get(&key);
         match value {
             Some(value) => Ok(Some(value.clone())),
             None => {
@@ -261,7 +291,7 @@ impl dyn Inode {
 
         let path = path::merge(&self.metadata().path, path);
         let path = path::format(&path);
-        let (target, fast_path) = FAST_PATH_CACHE::get(path.clone());
+        let (target, fast_path) = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_root] find in fast path cache");
             return Ok(target);
@@ -287,7 +317,7 @@ impl dyn Inode {
 
         if fast_path {
             debug!("[lookup_from_root] insert into fast path cache: {}", path);
-            FAST_PATH_CACHE::insert(path, parent.clone());
+            FAST_PATH_CACHE.insert(path, parent.clone());
         }
         Ok(Some(parent))
     }
@@ -312,7 +342,7 @@ impl dyn Inode {
         );
 
         let key = HashKey::new(self.metadata().ino, child_name.to_string());
-        let target_inode = INODE_CACHE.lock().get(&key).cloned();
+        let target_inode = INODE_CACHE.get(&key);
 
         match target_inode {
             Some(target_inode) => {
@@ -336,7 +366,7 @@ impl dyn Inode {
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         let path = path::format(path);
-        let (target, fast_path) = FAST_PATH_CACHE::get(path.clone());
+        let (target, fast_path) = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_root] find in fast path cache");
             return Ok(target);
@@ -362,7 +392,7 @@ impl dyn Inode {
 
         if fast_path {
             debug!("[lookup_from_root] insert into fast path cache: {}", path);
-            FAST_PATH_CACHE::insert(path, parent.clone());
+            FAST_PATH_CACHE.insert(path, parent.clone());
         }
         Ok(Some(parent))
     }

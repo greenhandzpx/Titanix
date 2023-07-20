@@ -11,7 +11,6 @@ use alloc::sync::Arc;
 use core::convert::TryInto;
 use fu740_hal::prelude::*;
 use fu740_pac::{gpio, Peripherals, SPI0};
-use lazy_static::*;
 use log::warn;
 
 // need to change
@@ -799,10 +798,8 @@ const SD_CS: u32 = 0;
 //     fpioa::set_io_pull(io::SPI0_CS0, fpioa::pull::DOWN); // GPIO output=pull down
 // }
 
-lazy_static! {
-    static ref PERIPHERALS: SpinNoIrqLock<Peripherals> =
-        SpinNoIrqLock::new(Peripherals::take().unwrap());
-}
+static PERIPHERALS: SpinNoIrqLock<Option<Peripherals>> = SpinNoIrqLock::new(None);
+// SpinNoIrqLock::new(Peripherals::take().unwrap());
 
 fn init_sdcard() -> SDCard<SPIImpl> {
     //<SPI>

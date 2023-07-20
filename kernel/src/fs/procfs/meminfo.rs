@@ -3,7 +3,6 @@ use alloc::{
     string::{String, ToString},
     sync::Arc,
 };
-use lazy_static::*;
 use log::debug;
 
 use crate::{
@@ -17,9 +16,7 @@ use crate::{
     utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
-lazy_static! {
-    pub static ref MEM_INFO: Mutex<Arc<Meminfo>> = Mutex::new(Arc::new(Meminfo::new()));
-}
+pub static MEM_INFO: Mutex<Meminfo> = Mutex::new(Meminfo::new());
 
 const TOTAL_MEM: usize = 16251136;
 const FREE_MEM: usize = 327680;
@@ -44,7 +41,7 @@ pub struct Meminfo {
     pub slab: usize,
 }
 impl Meminfo {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             total_mem: TOTAL_MEM,
             free_mem: FREE_MEM,
@@ -119,11 +116,11 @@ impl Inode for MeminfoInode {
         self.metadata = meta;
     }
 
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         panic!("Unsupported operation")
     }
 
-    fn delete_child(&self, child_name: &str) {
+    fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation")
     }
 }
@@ -140,7 +137,7 @@ impl File for MeminfoFile {
         false
     }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        debug!("[MeminfoFile] read");
+        log::info!("[MeminfoFile] read");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
             let meminfo = MEM_INFO.lock();
@@ -159,8 +156,8 @@ impl File for MeminfoFile {
         })
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
-        debug!("[MeminfoFile] cannot write");
+    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
+        log::info!("[MeminfoFile] cannot write");
         Box::pin(async move { Err(SyscallErr::EACCES) })
     }
 
