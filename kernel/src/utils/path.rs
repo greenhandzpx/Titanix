@@ -166,7 +166,7 @@ pub fn path_to_inode(
                                 let absolute_path =
                                     change_relative_to_absolute(&path, &proc.cwd).unwrap();
                                 (
-                                    inode.lookup_from_this(inode.clone(), &path),
+                                    inode.lookup_from_current(&path),
                                     Some(absolute_path),
                                     Some(inode),
                                 )

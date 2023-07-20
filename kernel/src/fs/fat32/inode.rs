@@ -136,7 +136,7 @@ impl Inode for FAT32Inode {
         while let Some(dentry) = FAT32DirEntry::read_dentry(&mut dentry_content) {
             let inode = FAT32Inode::from_dentry(Arc::clone(&fat), Some(Arc::clone(&this)), &dentry);
             let inode_rc: Arc<dyn Inode> = Arc::new(inode);
-            <dyn Inode>::create_page_cache_if_needed(Arc::clone(&inode_rc));
+            inode_rc.create_page_cache_if_needed();
             meta_inner
                 .children
                 .insert(dentry.fname(), Arc::clone(&inode_rc));
@@ -192,7 +192,7 @@ impl Inode for FAT32Inode {
         let fat = Arc::clone(&self.fat);
         let s_inode = FAT32Inode::new(fat, this, name, mode);
         let inode: Arc<dyn Inode> = Arc::new(s_inode);
-        <dyn Inode>::create_page_cache_if_needed(inode.clone());
+        inode.create_page_cache_if_needed();
         self.metadata()
             .inner
             .lock()

@@ -287,7 +287,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             debug!("[getdents] inode state: {:?}", state);
 
             // load children from disk
-            <dyn Inode>::load_children(inode.clone());
+            inode.load_children();
 
             let _sum_guard = SumGuard::new();
             UserCheck::new().check_writable_slice(dirp as *mut u8, count)?;

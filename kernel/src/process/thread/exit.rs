@@ -28,8 +28,6 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     debug!("clear tid address");
     inner.tid_addr.thread_died();
 
-    inner.owned_futexes.owner_died();
-
     // We should visit the process inner exclusively
     // since different harts may arrive here at the
     // same time
