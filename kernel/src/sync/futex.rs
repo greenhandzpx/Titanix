@@ -129,6 +129,11 @@ impl FutexQueue {
         //     None
         // }
         if let Some(waiters) = self.0.get_mut(&addr) {
+            log::info!(
+                "[FutexQueue::wake_one] addr {:#x} waiters len {}",
+                addr.0,
+                waiters.len()
+            );
             if let Some((tid, waiter)) = waiters.pop_first() {
                 waiter.wake();
                 Some(tid)
@@ -214,9 +219,9 @@ impl Future for FutexFuture {
             );
             proc.futex_queue.remove_waiter(addr, current_task().tid());
             // TODO: change thread's owned futexes when requeue
-            unsafe {
-                (*current_task().inner.get()).owned_futexes.0.insert(addr);
-            }
+            // unsafe {
+            //     (*current_task().inner.get()).owned_futexes.0.insert(addr);
+            // }
             Poll::Ready(())
             // // let addr_locked = self.addr.lock();
             // let addr = unsafe { *self.addr.get() };
@@ -285,6 +290,10 @@ impl OwnedFutexes {
     ///
     pub fn owner_died(&mut self) {
         stack_trace!();
+        log::info!(
+            "[OwnedFutexes::owner_died] owned futexes len {}",
+            self.0.len()
+        );
         let _sum_guard = SumGuard::new();
         while let Some(addr) = self.0.pop_first() {
             if let Some(tid) = futex_wake_one(addr.0).ok() {
@@ -298,7 +307,7 @@ impl OwnedFutexes {
                         *(addr.0 as *mut u32) |= FUTEX_OWNER_DIED;
                     }
                 }
-                log::debug!("[owner_died] futex word {:#x}", unsafe {
+                log::info!("[owner_died] futex word val {:#x}", unsafe {
                     *(addr.0 as *const u32)
                 });
             } else {
