@@ -26,7 +26,12 @@ impl StackTracker {
     }
     pub fn print_stacks(&self) {
         for stack_info in &self.stack_info_trace {
-            warn!("{}", stack_info);
+            log::warn!("{}", stack_info);
+        }
+    }
+    pub fn print_stacks_err(&self) {
+        for stack_info in &self.stack_info_trace {
+            log::error!("{}", stack_info);
         }
     }
 }

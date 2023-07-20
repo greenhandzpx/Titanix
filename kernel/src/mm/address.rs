@@ -2,10 +2,13 @@
 use log::warn;
 
 use super::PageTableEntry;
-use crate::config::{
-    mm::PAGE_SIZE,
-    mm::PAGE_TABLE_LEVEL_NUM,
-    mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+use crate::{
+    config::{
+        mm::PAGE_SIZE,
+        mm::PAGE_TABLE_LEVEL_NUM,
+        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+    },
+    processor::{current_task, hart::local_hart},
 };
 use core::fmt::{self, Debug, Formatter};
 /// physical address
@@ -108,7 +111,8 @@ impl From<usize> for VirtAddr {
         // Self(v & ((1 << VA_WIDTH_SV39) - 1))
         let tmp = (v as isize >> VA_WIDTH_SV39) as isize;
         if tmp != 0 && tmp != -1 {
-            warn!("v {:#x}, tmp {:#x}", v, tmp);
+            log::error!("v {:#x}, tmp {:#x}", v, tmp);
+            local_hart().env().stack_tracker.print_stacks_err();
         }
         assert!(tmp == 0 || tmp == -1, "invalid va: {:#x}", v);
         Self(v)

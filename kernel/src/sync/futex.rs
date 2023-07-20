@@ -6,19 +6,13 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use alloc::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
-    sync::Arc,
-};
+use alloc::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     mm::{user_check::UserCheck, VirtAddr},
-    processor::{current_process, current_task, SumGuard},
+    processor::{current_process, current_task},
     stack_trace,
-    utils::{
-        cell::SyncUnsafeCell,
-        error::{GeneralRet, SyscallRet},
-    },
+    utils::{cell::SyncUnsafeCell, error::SyscallRet},
 };
 
 /// Futex queue that stores: uaddr -> waiters(tid -> waiter)
@@ -243,76 +237,7 @@ impl Future for FutexFuture {
 pub fn futex_wake(uaddr: usize, val: u32) -> SyscallRet {
     stack_trace!();
     UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
-    unsafe {
-        (*current_task().inner.get())
-            .owned_futexes
-            .0
-            .remove(&crate::mm::VirtAddr(uaddr));
-    }
     let cnt =
         current_process().inner_handler(|proc| proc.futex_queue.wake(uaddr.into(), val as usize));
     return Ok(cnt as isize);
-}
-
-/// Wake up one waiter.
-/// Return the waiter's tid
-pub fn futex_wake_one(uaddr: usize) -> GeneralRet<Option<usize>> {
-    stack_trace!();
-    // if UserCheck::new()
-    //     .check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())
-    //     .is_err()
-    // {
-    //     log::warn!("[futex_wake_one] invalid addr {:#x}", uaddr);
-    //     return Ok(None);
-    // }
-    UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
-    unsafe {
-        (*current_task().inner.get())
-            .owned_futexes
-            .0
-            .remove(&crate::mm::VirtAddr(uaddr));
-    }
-    Ok(current_process().inner_handler(|proc| proc.futex_queue.wake_one(uaddr.into())))
-}
-
-// pub fn futex_
-
-pub const FUTEX_OWNER_DIED: u32 = 1 << 30;
-///
-pub struct OwnedFutexes(pub BTreeSet<VirtAddr>);
-
-impl OwnedFutexes {
-    ///
-    pub fn new() -> Self {
-        Self(BTreeSet::new())
-    }
-
-    ///
-    pub fn owner_died(&mut self) {
-        stack_trace!();
-        log::info!(
-            "[OwnedFutexes::owner_died] owned futexes len {}",
-            self.0.len()
-        );
-        let _sum_guard = SumGuard::new();
-        while let Some(addr) = self.0.pop_first() {
-            if let Some(tid) = futex_wake_one(addr.0).ok() {
-                if let Some(tid) = tid {
-                    unsafe {
-                        *(addr.0 as *mut u32) = tid as u32;
-                        *(addr.0 as *mut u32) |= FUTEX_OWNER_DIED;
-                    }
-                } else {
-                    unsafe {
-                        *(addr.0 as *mut u32) |= FUTEX_OWNER_DIED;
-                    }
-                }
-                log::info!("[owner_died] futex word val {:#x}", unsafe {
-                    *(addr.0 as *const u32)
-                });
-            } else {
-                log::warn!("[handle_exit] futex wake err?!");
-            }
-        }
-    }
 }

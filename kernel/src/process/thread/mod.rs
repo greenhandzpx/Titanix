@@ -14,13 +14,13 @@ use self::{
 
 use super::{resource::CpuSet, Process, PROCESS_MANAGER};
 use crate::signal::SignalContext;
+use crate::trap::TrapContext;
 use crate::{
     executor,
     signal::{signal_queue::SigQueue, SigInfo, SignalTrampoline},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
 };
-use crate::{sync::OwnedFutexes, trap::TrapContext};
 use alloc::sync::Arc;
 use core::future::Future;
 use core::{cell::UnsafeCell, task::Waker};
@@ -70,8 +70,6 @@ pub struct ThreadInner {
     pub waker: Option<Waker>,
     /// Ustack top
     pub ustack_top: usize,
-    /// Futexes this thread owns
-    pub owned_futexes: OwnedFutexes,
     /// Thread local signals.
     /// TODO: should we lock?
     pub sig_queue: SpinNoIrqLock<SigQueue>,
@@ -110,7 +108,6 @@ impl Thread {
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
-                owned_futexes: OwnedFutexes::new(),
                 sig_queue: SpinNoIrqLock::new(SigQueue::from_another(
                     &process.inner.lock().sig_queue,
                 )),
@@ -154,8 +151,6 @@ impl Thread {
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
-                // TODO: not sure whether we should inherit the futexes
-                owned_futexes: OwnedFutexes::new(),
                 sig_queue: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
                     &(*another.inner.get()).sig_queue.lock()
                 })),

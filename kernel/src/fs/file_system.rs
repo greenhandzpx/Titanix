@@ -103,8 +103,7 @@ pub trait FileSystem: Send + Sync {
     fn metadata(&self) -> &FileSystemMeta;
 
     fn sync_fs<'a>(&self) -> AgeneralRet<'a, ()> {
-        let root_inode = self.metadata().root_inode.clone();
-        <dyn Inode>::sync(root_inode)
+        self.metadata().root_inode.clone().sync()
     }
 }
 
@@ -185,8 +184,7 @@ impl FileSystemManager {
             }
             let fa_inode_unwrap = Arc::clone(fa_inode.as_ref().unwrap());
             fa_ino = fa_inode_unwrap.metadata().ino;
-            let maybe_covered_inode =
-                fa_inode_unwrap.lookup(Arc::clone(&fa_inode_unwrap), mount_point_name)?;
+            let maybe_covered_inode = fa_inode_unwrap.lookup(mount_point_name)?;
             if maybe_covered_inode.is_none() {
                 return Err(SyscallErr::EEXIST);
             }

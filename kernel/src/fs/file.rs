@@ -207,14 +207,6 @@ pub trait File: Send + Sync {
     }
 }
 
-impl dyn File {
-    // pub fn open(inode: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
-    //     let file = inode.open(inode.clone(), flags)?;
-    //     file.metadata().inner.lock().inode = Some(inode);
-    //     Ok(file)
-    // }
-}
-
 /// Default file(i.e. files in the disk)
 pub struct DefaultFile {
     metadata: FileMeta,
