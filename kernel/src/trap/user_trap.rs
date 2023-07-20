@@ -1,4 +1,4 @@
-use log::{debug, error, info, warn};
+use log::warn;
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc, stval,
@@ -9,7 +9,7 @@ use crate::{
     process::thread::{self, exit_and_terminate_all_threads},
     processor::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
-        open_interrupt, SumGuard,
+        open_interrupt,
     },
     signal::{check_signal_for_current_process, check_signal_for_current_thread},
     stack_trace,

@@ -44,9 +44,12 @@ extern "C" {
 
 impl Drop for UserCheck {
     fn drop(&mut self) {
+        // In Rust, the components drop after the container.
+        // So at this time, the _sie_guard is still alive.
         set_kernel_trap_entry();
     }
 }
+
 impl UserCheck {
     /// Create a new UserCheck
     pub fn new() -> Self {
