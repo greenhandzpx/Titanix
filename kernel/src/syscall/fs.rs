@@ -640,7 +640,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
         return Ok(0);
     }
 
-    if len <= PAGE_SIZE * 10 {
+    if len <= PAGE_SIZE * 64 {
         UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
     } else {
         log::warn!("[sys_read] buf too large {:#x}, no check", len);
