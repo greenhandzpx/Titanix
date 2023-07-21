@@ -286,6 +286,13 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             warn!("[sys_exec] Cannot find this elf file {}", path);
             Err(SyscallErr::EACCES)
         }
+    } else if path.eq("/bin/true") {
+        if let Some(elf_data) = get_app_data_by_name(&path[5..]) {
+            current_process().exec(elf_data, args_vec, envs_vec)
+        } else {
+            warn!("[sys_exec] Cannot find this elf file {}", path);
+            Err(SyscallErr::EACCES)
+        }
     } else {
         let app_inode = resolve_path(path.as_str(), OpenFlags::RDONLY)?;
         let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
