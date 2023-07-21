@@ -13,7 +13,7 @@ const TIOCGPGRP: usize = 0x540F;
 
 pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
-    debug!("fd: {}, request: {}, arg:{}", fd, request, arg);
+    log::error!("[sys_ioctl] fd: {}, request: {}, arg:{}", fd, request, arg);
     match fd {
         0 | 1 | 2 => Ok(0),
         _ => {
