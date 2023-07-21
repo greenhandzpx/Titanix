@@ -1,6 +1,4 @@
 //! Implementation of physical and virtual address and page number.
-use log::warn;
-
 use super::PageTableEntry;
 use crate::{
     config::{
@@ -8,12 +6,13 @@ use crate::{
         mm::PAGE_TABLE_LEVEL_NUM,
         mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     },
-    processor::{current_task, hart::local_hart},
+    processor::hart::local_hart,
 };
 use core::fmt::{self, Debug, Formatter};
 /// physical address
 const PA_WIDTH_SV39: usize = 56;
-const VA_WIDTH_SV39: usize = 39;
+///
+pub const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
@@ -106,6 +105,18 @@ impl From<KernelAddr> for PhysPageNum {
         pa.floor()
     }
 }
+
+// impl TryFrom<usize> for VirtAddr {
+//     fn try_from(v: usize) -> Result<Self, Self::Error> {
+//         let tmp = (v as isize >> VA_WIDTH_SV39) as isize;
+//         if tmp != 0 && tmp != -1 {
+//             log::error!("v {:#x}, tmp {:#x}", v, tmp);
+//             local_hart().env().stack_tracker.print_stacks_err();
+//             return Err(SyscallErr::EFAULT);
+//         }
+//         Ok(Self(v))
+//     }
+// }
 impl From<usize> for VirtAddr {
     fn from(v: usize) -> Self {
         // Self(v & ((1 << VA_WIDTH_SV39) - 1))

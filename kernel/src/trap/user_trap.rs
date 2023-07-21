@@ -5,7 +5,7 @@ use riscv::register::{
 };
 
 use crate::{
-    mm::{memory_space, VirtAddr},
+    mm::{memory_space, VirtAddr, VA_WIDTH_SV39},
     process::thread::{self, exit_and_terminate_all_threads},
     processor::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
@@ -16,6 +16,7 @@ use crate::{
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
     trap::set_user_trap_entry,
+    utils::error::SyscallErr,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -78,6 +79,13 @@ pub async fn trap_handler() {
                 scause.cause()
             );
             stack_trace!();
+
+            let tmp = (stval as isize >> VA_WIDTH_SV39) as isize;
+            if tmp != 0 && tmp != -1 {
+                log::error!("v {:#x}, tmp {:#x}", stval, tmp);
+                local_hart().env().stack_tracker.print_stacks_err();
+                exit_and_terminate_all_threads(-2);
+            }
             match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
                 Ok(()) => {
                     log::trace!(

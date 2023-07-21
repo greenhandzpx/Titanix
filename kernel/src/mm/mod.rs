@@ -24,7 +24,9 @@ pub mod user_check;
 
 // use address::StepByOne;
 pub use address::VPNRange;
-pub use address::{KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+pub use address::{
+    KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, VA_WIDTH_SV39,
+};
 pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 use log::info;
 pub use memory_space::remap_test;
