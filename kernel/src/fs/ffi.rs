@@ -13,6 +13,7 @@ use log::debug;
 
 pub const STAT_SIZE: usize = size_of::<STAT>() as usize;
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct STAT {
     pub st_dev: u64,
