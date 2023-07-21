@@ -6,6 +6,7 @@ use crate::{
         board::MEMORY_END,
         mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     },
+    mm::KernelAddr,
     sync::mutex::SpinNoIrqLock,
 };
 // use crate::sync::UPSafeCell;
@@ -80,6 +81,7 @@ impl FrameAllocator for StackFrameAllocator {
             println!("cannot alloc!!!!!!! current {:#x}", self.current);
             None
         } else {
+            // log::error!("[FrameAllocator::alloc] current {:#x}", self.current);
             self.current += 1;
             Some((self.current - 1).into())
         }
@@ -105,8 +107,8 @@ pub fn init_frame_allocator() {
         fn ekernel();
     }
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(ekernel as usize - (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).ceil(),
-        PhysAddr::from(MEMORY_END).floor(),
+        PhysAddr::from(KernelAddr::from(ekernel as usize)).ceil(),
+        PhysAddr::from(KernelAddr::from(MEMORY_END)).floor(),
     );
     info!(
         "frame allocator init finshed, start {:#x}, end {:#x}",

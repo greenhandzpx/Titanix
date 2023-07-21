@@ -240,6 +240,7 @@ impl PageTable {
     ///
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+        stack_trace!();
         // println!("{:#x}", vpn.0);
         let pte = self.find_pte_create(vpn).unwrap();
         if pte.is_valid() {

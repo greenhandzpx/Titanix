@@ -723,7 +723,7 @@ impl MemorySpace {
             memory_space.page_table.clone(),
             VmAreaType::Stack,
         );
-        memory_space.push(ustack_vma, 0, None);
+        memory_space.push_lazily(ustack_vma, None);
         log::info!(
             "[from_elf] map ustack: {:#x}, {:#x}",
             user_stack_bottom,
