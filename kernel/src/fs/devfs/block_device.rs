@@ -3,6 +3,7 @@ use alloc::sync::Arc;
 use crate::{
     driver::block::BlockDevice,
     fs::{
+        fat32::SECTOR_SIZE,
         file::FileMeta,
         inode::{DevWrapper, InodeDevice, InodeMeta},
         File, Inode, OpenFlags,
@@ -51,7 +52,7 @@ impl BlockDeviceInode {
             Some(parent),
             path,
             crate::fs::InodeMode::FileBLK,
-            0,
+            SECTOR_SIZE,
             Some(InodeDevice::Device(DevWrapper {
                 block_device,
                 dev_id,

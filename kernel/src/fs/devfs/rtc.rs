@@ -1,5 +1,6 @@
 use crate::{
     fs::{
+        fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
         File, Inode, Mutex, OpenFlags,
@@ -18,7 +19,13 @@ pub struct RtcInode {
 
 impl RtcInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
-        let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
+        let metadata = InodeMeta::new(
+            Some(parent),
+            path,
+            crate::fs::InodeMode::FileCHR,
+            SECTOR_SIZE,
+            None,
+        );
         Self { metadata }
     }
 }

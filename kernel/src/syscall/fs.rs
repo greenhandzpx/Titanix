@@ -434,9 +434,24 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
         "[_fstat] inode name: {}, mode: {:?}",
         inode_meta.name, inode_meta.mode
     );
+    let mut inner_lock = inode_meta.inner.lock();
+    let size = if inode_meta.mode == InodeMode::FileDIR {
+        if inner_lock.data_len != 0 {
+            inner_lock.data_len
+        } else {
+            let children = inner_lock.children.clone();
+            let mut size = 0;
+            for child in children {
+                size += child.1.metadata().inner.lock().data_len;
+            }
+            inner_lock.data_len = size;
+            size
+        }
+    } else {
+        inner_lock.data_len
+    };
+    kstat.st_size = size as u64;
     kstat.st_blocks = (kstat.st_size / kstat.st_blksize as u64) as u64;
-    let inner_lock = inode_meta.inner.lock();
-    kstat.st_size = inner_lock.data_len as u64;
     kstat.st_atim = inner_lock.st_atim;
     kstat.st_mtim = inner_lock.st_mtim;
     kstat.st_ctim = inner_lock.st_ctim;

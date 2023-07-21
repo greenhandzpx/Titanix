@@ -7,6 +7,7 @@ use log::debug;
 
 use crate::{
     fs::{
+        fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
         File, Inode, InodeMode, Mutex, OpenFlags,
@@ -88,7 +89,7 @@ pub struct MeminfoInode {
 impl MeminfoInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
         Self {
-            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, 0, None),
+            metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, SECTOR_SIZE, None),
         }
     }
 }
