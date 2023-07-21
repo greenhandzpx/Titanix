@@ -110,7 +110,7 @@ pub fn init() {
     let musl_dl_path = etc_dir
         .mknod(
             Arc::clone(&etc_dir),
-            "/etc/ld-musl-riscv64-sf.path",
+            "ld-musl-riscv64-sf.path",
             InodeMode::FileREG,
             None,
         )
