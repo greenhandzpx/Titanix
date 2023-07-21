@@ -76,18 +76,18 @@ impl FAT32DirEntry {
             let ext = &self.sname[8..11];
             let mut base_len = 8;
             let mut ext_len = 3;
-            while base_len > 0 && base[base_len - 1] != b' ' {
+            while base_len > 0 && base[base_len - 1] == b' ' {
                 base_len -= 1;
             }
-            while ext_len > 0 && ext[ext_len - 1] != b' ' {
+            while ext_len > 0 && ext[ext_len - 1] == b' ' {
                 ext_len -= 1;
             }
             if ext_len > 0 {
-                String::from_utf8_lossy(&base).to_string()
+                String::from_utf8_lossy(&base[0..base_len]).to_string()
                     + "."
-                    + &String::from_utf8_lossy(&ext).to_string()
+                    + &String::from_utf8_lossy(&ext[0..ext_len]).to_string()
             } else {
-                String::from_utf8_lossy(&base).to_string()
+                String::from_utf8_lossy(&base[0..base_len]).to_string()
             }
         }
     }
