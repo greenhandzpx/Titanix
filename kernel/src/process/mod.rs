@@ -442,12 +442,13 @@ impl Process {
         trap_cx.user_x[11] = argv_base;
         trap_cx.user_x[12] = envp_base;
         trap_cx.user_x[13] = auxv_base;
-        debug!(
-            "a0(argc) {:#x}, a1(argv) {:#x}, a2(envp) {:#x} a3(auxv) {:#x}",
+        log::info!(
+            "a0(argc) {:#x}, a1(argv) {:#x}, a2(envp) {:#x} a3(auxv) {:#x} sp {:#x}",
             args.len(),
             argv_base,
             envp_base,
-            auxv_base
+            auxv_base,
+            trap_cx.user_x[2],
         );
 
         main_thread_inner.trap_context = trap_cx;

@@ -16,7 +16,6 @@ use crate::{
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
     trap::set_user_trap_entry,
-    utils::error::SyscallErr,
 };
 
 use super::{set_kernel_trap_entry, TrapContext};
@@ -63,7 +62,8 @@ pub async fn trap_handler() {
                     log::info!("[trap_handler] syscall return, err {}", err as usize);
                     -(err as isize) as usize
                 }
-            }
+            };
+            // log::info!("[trap_handler] user sp {:#x}", cx.user_x[2]);
             // TODO: Change into async syscall
         }
         Trap::Exception(Exception::StoreFault)
@@ -103,9 +103,13 @@ pub async fn trap_handler() {
                         current_trap_cx().sepc,
                         current_process().pid()
                     );
+                    // warn!("[kernel] user sp {:#x}", current_trap_cx().user_x[2]);
+
                     #[cfg(feature = "stack_trace")]
-                    warn!("backtrace:");
-                    local_hart().env().stack_tracker.print_stacks();
+                    {
+                        warn!("backtrace:");
+                        local_hart().env().stack_tracker.print_stacks();
+                    }
 
                     exit_and_terminate_all_threads(-2);
                 }

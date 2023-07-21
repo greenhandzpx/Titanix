@@ -1,7 +1,8 @@
 /// boot
 pub const HART_START_ADDR: usize = 0x80200000;
 
-pub const USER_STACK_SIZE: usize = 4096 * 8;
+// pub const USER_STACK_SIZE: usize = 4096 * 8;
+pub const USER_STACK_SIZE: usize = 1024 * 1024 * 8;
 
 pub const _KERNEL_STACK_SIZE: usize = 4096 * 2;
 

@@ -273,7 +273,7 @@ impl MemorySpace {
         } else {
             warn!("memory set len {}", self.areas.get_unchecked_mut().len());
             for area in self.areas.get_unchecked_mut().iter() {
-                log::debug!(
+                log::warn!(
                     "area start vpn {:#x}, end vpn {:#x}",
                     area.0 .0,
                     area.1.end_vpn().0
@@ -724,9 +724,10 @@ impl MemorySpace {
             VmAreaType::Stack,
         );
         memory_space.push(ustack_vma, 0, None);
-        debug!(
+        log::info!(
             "[from_elf] map ustack: {:#x}, {:#x}",
-            user_stack_bottom, user_stack_top,
+            user_stack_bottom,
+            user_stack_top,
         );
 
         // guard page
@@ -744,9 +745,10 @@ impl MemorySpace {
         );
         memory_space.push(heap_vma, 0, None);
         memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
-        debug!(
+        log::info!(
             "[from_elf] map heap: {:#x}, {:#x}",
-            heap_start_va, heap_start_va
+            heap_start_va,
+            heap_start_va
         );
 
         (memory_space, user_stack_top, entry_point, auxv)

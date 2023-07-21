@@ -127,9 +127,10 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
 /// Return zero on sucess.
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRet {
     stack_trace!();
+    log::info!("[sys_mkdirat] dirfd {}", dirfd);
     let res = path::path_to_inode(dirfd, pathname);
     if res.0?.is_some() {
-        debug!("[sys_mkdirat] already exists");
+        log::info!("[sys_mkdirat] already exists");
         return Err(SyscallErr::EEXIST);
     } else {
         // if have inode, the path also would be have
@@ -149,6 +150,10 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                 <dyn Inode>::lookup_from_root(&parent)?.unwrap()
             }
         };
+        log::info!(
+            "[sys_mkdirat] parent inode name {}",
+            parent_inode.metadata().name
+        );
         match parent_inode.metadata().mode {
             InodeMode::FileDIR => {
                 let mut inner_lock = parent_inode.metadata().inner.lock();
@@ -171,6 +176,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                 let child_name = path::get_name(&path);
                 let child =
                     parent_inode.mkdir(parent_inode.clone(), child_name, InodeMode::FileDIR)?;
+                log::info!("[sys_mkdirat] child inode name {}", child_name);
                 // insert to cache
                 let key = HashKey::new(parent_inode.metadata().ino, child.metadata().name.clone());
                 INODE_CACHE.insert(key, child);
@@ -413,6 +419,7 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SyscallRet {
 fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
     let mut kstat = STAT::new();
     let inode_meta = inode.metadata().clone();
+    log::info!("[_fstat] inode name {}", inode_meta.name);
     if let Some(dev) = inode_meta.device.as_ref() {
         match dev {
             inode::InodeDevice::Device(dev) => {
@@ -455,7 +462,7 @@ pub fn sys_newfstatat(
     flags: u32,
 ) -> SyscallRet {
     stack_trace!();
-    debug!("[newfstatat] drifd:{}, flags:{}", dirfd, flags);
+    log::info!("[newfstatat] drifd:{}, flags:{}", dirfd, flags);
     let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
