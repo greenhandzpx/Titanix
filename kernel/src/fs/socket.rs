@@ -3,22 +3,29 @@ use alloc::{
     collections::{BTreeMap, VecDeque},
     sync::Arc,
 };
+use log::info;
 
 use crate::{
-    mm::user_check::UserCheck, process::thread, processor::SumGuard, utils::error::AsyscallRet,
+    mm::user_check::UserCheck,
+    process::thread,
+    processor::SumGuard,
+    utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
 
-use super::{file::FileMeta, File, Mutex, OpenFlags};
+use super::{
+    file::FileMeta,
+    inode::{InodeDevice, InodeMeta},
+    File, Inode, Mutex, OpenFlags,
+};
 
 pub const SOCKETADDR_SIZE: usize = core::mem::size_of::<SocketAddr>();
 
-pub const MAX_BUFFER_SIZE: usize = 1 << 16 - 1;
+pub const MAX_BUFFER_SIZE: u32 = 1 << 16 - 1;
 
 pub const TCP_MSS: u32 = 32768;
 
 pub struct Socket {
-    pub flags: OpenFlags,
-    pub buf: Mutex<VecDeque<u8>>,
+    pub inner: Mutex<SocketInner>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -28,16 +35,86 @@ pub struct SocketAddr {
     sa_data: [u8; 14],
 }
 
+pub struct SocketInner {
+    pub buf: VecDeque<u8>,
+    pub sendbuf_size: u32,
+    pub recvbuf_size: u32,
+}
+
+impl SocketInner {
+    pub fn new() -> Self {
+        Self {
+            buf: VecDeque::new(),
+            sendbuf_size: MAX_BUFFER_SIZE,
+            recvbuf_size: MAX_BUFFER_SIZE,
+        }
+    }
+}
+
 impl Socket {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            flags: OpenFlags::CLOEXEC | OpenFlags::NONBLOCK,
-            buf: Mutex::new(VecDeque::new()),
+            inner: Mutex::new(SocketInner::new()),
         })
     }
 }
 
-impl File for Socket {
+pub struct SocketInode {
+    metadata: InodeMeta,
+}
+
+impl SocketInode {
+    pub fn new(socket: Arc<Socket>) -> Self {
+        let metadata = InodeMeta::new(
+            None,
+            "this is a socket",
+            super::InodeMode::FileSOCK,
+            0,
+            Some(InodeDevice::Socket(socket)),
+        );
+        Self { metadata }
+    }
+}
+
+impl Inode for SocketInode {
+    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+        let meta = FileMeta::new(flags);
+        meta.inner.lock().inode = Some(this);
+        Ok(Arc::new(SocketFile { meta }))
+    }
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
+
+    fn set_metadata(&mut self, meta: InodeMeta) {
+        self.metadata = meta;
+    }
+
+    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+        todo!()
+    }
+
+    fn delete_child(&self, child_name: &str) {
+        todo!()
+    }
+}
+
+pub struct SocketFile {
+    meta: FileMeta,
+}
+
+impl SocketFile {
+    pub fn new() -> GeneralRet<Arc<dyn File>> {
+        let socket = Socket::new();
+        let socket_inode = Arc::new(SocketInode::new(socket));
+        socket_inode.open(
+            socket_inode.clone(),
+            OpenFlags::CLOEXEC | OpenFlags::NONBLOCK,
+        )
+    }
+}
+
+impl File for SocketFile {
     fn readable(&self) -> bool {
         true
     }
@@ -49,27 +126,51 @@ impl File for Socket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
-            let mut inner = self.buf.lock();
-            let len = inner.len().min(buf.len());
-            UserCheck::new().check_writable_slice(buf.as_ptr() as *mut u8, len)?;
-            inner
-                .drain(..len)
-                .zip(buf.into_iter())
-                .for_each(|(src, dst)| *dst = src);
-            Ok(len as isize)
+            self.meta.inner_get(|inner| {
+                let inode = inner.inode.as_ref().unwrap();
+                let socket = inode.metadata().device.as_ref().unwrap();
+                match socket {
+                    InodeDevice::Socket(socket) => {
+                        let mut inner = socket.inner.lock();
+                        let len = inner.buf.len().min(buf.len());
+                        UserCheck::new().check_writable_slice(buf.as_ptr() as *mut u8, len)?;
+                        inner
+                            .buf
+                            .drain(..len)
+                            .zip(buf.into_iter())
+                            .for_each(|(src, dst)| *dst = src);
+                        Ok(len as isize)
+                    }
+                    _ => {
+                        info!("[Socket::read] inode device is not Socket");
+                        Err(SyscallErr::EBADF)
+                    }
+                }
+            })
         })
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
+            let socket = self.meta.inner_get(|inner| {
+                let inode = inner.inode.as_ref().unwrap();
+                let socket = inode.metadata().device.as_ref().unwrap();
+                match socket {
+                    InodeDevice::Socket(socket) => Ok(socket.clone()),
+                    _ => {
+                        info!("[Socket::read] inode device is not Socket");
+                        Err(SyscallErr::EBADF)
+                    }
+                }
+            })?;
             loop {
                 if {
-                    let mut inner = self.buf.lock();
-                    if inner.len() + buf.len() > MAX_BUFFER_SIZE {
+                    let mut inner = socket.inner.lock();
+                    if inner.buf.len() + buf.len() > MAX_BUFFER_SIZE as usize {
                         true
                     } else {
-                        buf.into_iter().for_each(|ch| inner.push_back(*ch));
+                        buf.into_iter().for_each(|ch| inner.buf.push_back(*ch));
                         false
                     }
                 } {
@@ -82,11 +183,11 @@ impl File for Socket {
     }
 
     fn metadata(&self) -> &FileMeta {
-        todo!()
+        &self.meta
     }
 
     fn flags(&self) -> OpenFlags {
-        self.flags
+        self.meta.inner.lock().flags
     }
 }
 
