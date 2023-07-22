@@ -90,11 +90,11 @@ impl Inode for SocketInode {
         self.metadata = meta;
     }
 
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         todo!()
     }
 
-    fn delete_child(&self, child_name: &str) {
+    fn delete_child(&self, _child_name: &str) {
         todo!()
     }
 }

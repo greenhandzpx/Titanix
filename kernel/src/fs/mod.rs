@@ -12,7 +12,6 @@ mod page_cache;
 pub mod pipe;
 mod procfs;
 pub mod socket;
-mod testfs;
 pub mod tmpfs;
 
 use alloc::string::ToString;
