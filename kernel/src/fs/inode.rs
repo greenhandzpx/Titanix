@@ -117,7 +117,11 @@ pub enum InodeState {
 static INODE_NUMBER: AtomicUsize = AtomicUsize::new(0);
 
 pub trait Inode: Send + Sync {
-    fn init(
+    /// Root inode init.
+    /// Note that this method must be called for root inode
+    /// when creating a new fs or the fs itself should guarantee
+    /// that it has init the root inode's metadata correctly
+    fn root_init(
         &mut self,
         parent: Option<Arc<dyn Inode>>,
         path: &str,
@@ -148,26 +152,26 @@ pub trait Inode: Send + Sync {
     }
 
     /// Call this function through the parent inode.
-    /// path: absoulute path.
+    /// name: file name(not absolute path)
     fn mkdir(
         &self,
         _this: Arc<dyn Inode>,
-        _path: &str,
+        _name: &str,
         _mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
         todo!()
     }
 
-    fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
-        todo!()
-    }
+    // fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
+    //     todo!()
+    // }
 
     /// Call this function through the parent inode.
-    /// path: absoulute path.
+    /// name: file name(not absolute path)
     fn mknod(
         &self,
         _this: Arc<dyn Inode>,
-        _path: &str,
+        _name: &str,
         _mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {

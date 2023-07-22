@@ -9,7 +9,7 @@ use crate::{
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
     driver::block::MMIO_VIRT,
-    fs::{resolve_path, OpenFlags},
+    fs::{resolve_path, OpenFlags, AT_FDCWD},
     mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
     process::aux::*,
     processor::current_process,
@@ -772,7 +772,7 @@ impl MemorySpace {
 
         if is_dl {
             info!("[load_dl] encounter a dl elf");
-            let interp_inode = resolve_path(DL_INTERP, OpenFlags::RDONLY).ok().unwrap();
+            let interp_inode = resolve_path(AT_FDCWD, DL_INTERP.as_ptr(), OpenFlags::RDONLY).ok().unwrap();
             let interp_file = interp_inode
                 .open(interp_inode.clone(), OpenFlags::RDONLY)
                 .ok()

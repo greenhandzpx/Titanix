@@ -287,11 +287,13 @@ impl Process {
             // process_inner.memory_space = memory_space;
             proc.threads.get(&self.pid()).unwrap().upgrade().unwrap()
         });
+        stack_trace!();
 
         terminate_all_threads_except_main();
 
         // TODO: not sure whether we should dealloc ustack here?
 
+        stack_trace!();
         self.inner_handler(|proc| {
             // proc.ustack_base = ustack_base;
             proc.memory_space = memory_space;
@@ -306,6 +308,7 @@ impl Process {
 
         // // alloc new ustack
         // main_thread.alloc_ustack();
+        stack_trace!();
 
         // ----- The following to to push arguments on user stack -----
         let mut user_sp = main_thread_inner.ustack_top;
@@ -333,6 +336,7 @@ impl Process {
         }
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
+        stack_trace!();
         // Copy each arg to the newly allocated stack
         for i in 0..args.len() {
             // Here we leave one byte to store a '\0' as a terminator
@@ -347,23 +351,29 @@ impl Process {
         }
         user_sp -= user_sp % core::mem::size_of::<usize>();
 
+        stack_trace!();
+
         // Copy `platform`
         let platform = "RISC-V64";
         user_sp -= platform.len() + 1;
         user_sp -= user_sp % core::mem::size_of::<usize>();
         let p = user_sp as *mut u8;
+        UserCheck::new().check_writable_slice(p as *mut u8, platform.len())?;
         unsafe {
             p.copy_from(platform.as_ptr(), platform.len());
             *((p as usize + platform.len()) as *mut u8) = 0;
         }
 
+        stack_trace!();
         // Copy 16 random bytes(here is 0)
         user_sp -= 16;
+        UserCheck::new().check_writable_slice(user_sp as *mut u8, 16)?;
         auxs.push(AuxHeader {
             aux_type: AT_RANDOM,
             value: user_sp,
         });
 
+        stack_trace!();
         // Padding
         user_sp -= user_sp % 16;
 
@@ -376,6 +386,7 @@ impl Process {
             value: 0,
         }); // end
 
+        stack_trace!();
         // Construct auxv
         debug!("auxv len {}", auxs.len());
         let len = auxs.len() * core::mem::size_of::<AuxHeader>();
@@ -391,6 +402,7 @@ impl Process {
                     as *mut usize) = auxs[i].value;
             }
         }
+        stack_trace!();
         // Construct envp
         let len = (envs.len() + 1) * core::mem::size_of::<usize>();
         user_sp -= len;
@@ -425,6 +437,7 @@ impl Process {
             *(user_sp as *mut usize) = args.len();
         }
         // let argc_addr = user_sp;
+        stack_trace!();
 
         // // // Make the user_sp aligned to 8B for k210 platform
         // // let len = user_sp % core::mem::size_of::<usize>();

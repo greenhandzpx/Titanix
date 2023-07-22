@@ -129,7 +129,7 @@ impl TestFs {
         covered_inode: Option<Arc<dyn Inode>>,
     ) -> GeneralRet<Self> {
         let mut root_inode = TestRootInode { metadata: None };
-        root_inode.init(
+        root_inode.root_init(
             Option::clone(&fa_inode),
             mount_point,
             super::InodeMode::FileDIR,

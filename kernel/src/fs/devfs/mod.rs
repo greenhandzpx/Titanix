@@ -128,7 +128,7 @@ impl DevFs {
         covered_inode: Option<Arc<dyn Inode>>,
     ) -> GeneralRet<Self> {
         let mut raw_root_inode = DevRootInode::new();
-        raw_root_inode.init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
+        raw_root_inode.root_init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
         let root_inode = Arc::new(raw_root_inode);
 
         let id_allocator = AtomicUsize::new(0);

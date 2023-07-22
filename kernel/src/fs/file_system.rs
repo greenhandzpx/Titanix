@@ -1,5 +1,3 @@
-use core::time::Duration;
-
 use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
@@ -7,14 +5,10 @@ use alloc::{
     vec::Vec,
 };
 
-use log::info;
-
 use crate::{
     driver::block::BlockDevice,
     fs::{hash_key::HashKey, inode::INODE_CACHE},
-    process::thread::spawn_kernel_thread,
     sync::mutex::SpinNoIrqLock,
-    timer::timeout_task::ksleep,
     utils::{
         async_tools::block_on,
         error::{AgeneralRet, GeneralRet, SyscallErr},
@@ -23,7 +17,8 @@ use crate::{
 };
 
 use super::{
-    devfs::DevFs, ffi::StatFlags, inode::InodeDevice, procfs::ProcFs, FAT32FileSystem, Inode,
+    devfs::DevFs, ffi::StatFlags, inode::InodeDevice, procfs::ProcFs, tmpfs::TmpFs,
+    FAT32FileSystem, Inode,
 };
 
 #[derive(Clone)]
@@ -54,6 +49,7 @@ pub enum FileSystemType {
     VFAT,
     EXT2,
     NFS,
+    TmpFS,
     DevTmpFS,
     Proc,
 }
@@ -74,6 +70,7 @@ impl FileSystemType {
             Self::VFAT => "vfat".to_string(),
             Self::EXT2 => "ext2".to_string(),
             Self::NFS => "nfs".to_string(),
+            Self::TmpFS => "tmpfs".to_string(),
             Self::DevTmpFS => "devtmpfs".to_string(),
             Self::Proc => "proc".to_string(),
         }
@@ -237,6 +234,17 @@ impl FileSystemManager {
                 )?;
                 Arc::new(ret)
             }
+            FileSystemType::TmpFS => {
+                let ret = TmpFs::new(
+                    mount_point,
+                    dev_name,
+                    fstype,
+                    flags,
+                    fa_inode,
+                    covered_inode,
+                )?;
+                Arc::new(ret)
+            }
             _ => todo!(),
         };
         // insert root inode into inode cache
@@ -250,12 +258,12 @@ impl FileSystemManager {
         {
             // Write back in background
             let fs_moved = fs.clone();
-            spawn_kernel_thread(async move {
+            crate::process::thread::spawn_kernel_thread(async move {
                 loop {
-                    ksleep(Duration::from_secs(5)).await;
+                    crate::timer::timeout_task::ksleep(core::time::Duration::from_secs(5)).await;
                     // log::error!("I'm going to write back!!");
                     if fs_moved.sync_fs().await.is_err() {
-                        info!(
+                        log::info!(
                             "[fs write back] fs {} must have already been umounted",
                             fs_moved.metadata().mount_point
                         );

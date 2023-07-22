@@ -294,7 +294,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             Err(SyscallErr::EACCES)
         }
     } else {
-        let app_inode = resolve_path(path.as_str(), OpenFlags::RDONLY)?;
+        let app_inode = resolve_path(AT_FDCWD, path.as_ptr(), OpenFlags::RDONLY)?;
         let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
         let elf_data = app_file.sync_read_all()?;
         current_process().exec(&elf_data, args_vec, envs_vec)

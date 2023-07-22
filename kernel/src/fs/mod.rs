@@ -13,6 +13,7 @@ pub mod pipe;
 mod procfs;
 pub mod socket;
 mod testfs;
+pub mod tmpfs;
 
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -52,15 +53,27 @@ pub fn init() {
     INODE_CACHE.init();
     FAST_PATH_CACHE.init();
 
+    // First we mount root fs
     FILE_SYSTEM_MANAGER
         .mount(
             "/",
-            "/dev/mmcblk0",
-            file_system::FsDevice::BlockDevice(BLOCK_DEVICE.lock().as_ref().unwrap().clone()),
-            FileSystemType::VFAT,
+            // TODO: not sure
+            "/dev/tmp",
+            file_system::FsDevice::None,
+            FileSystemType::TmpFS,
             StatFlags::ST_NOSUID,
         )
         .expect("rootfs init fail!");
+    // FILE_SYSTEM_MANAGER
+    //     .mount(
+    //         "/",
+    //         "/dev/mmcblk0",
+    //         file_system::FsDevice::BlockDevice(BLOCK_DEVICE.lock().as_ref().unwrap().clone()),
+    //         FileSystemType::VFAT,
+    //         StatFlags::ST_NOSUID,
+    //     )
+    //     .expect("rootfs init fail!");
+
     // FILE_SYSTEM_MANAGER.mount("/", "/dev/vda2", FsDevice::None, FileSystemType::VFAT, StatFlags::ST_NOSUID);
 
     let root_inode = FILE_SYSTEM_MANAGER.root_inode();
@@ -259,47 +272,47 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
     }
 }
 
-/// Try not to use this when you have dirfd
-pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
-    debug!("[resolve_path]: path: {}, flags: {:?}", path, flags);
-    let inode = <dyn Inode>::lookup_from_root(path)?;
-    // inode
-    if inode.is_some() {
-        return Ok(inode.unwrap());
-    }
-    if flags.contains(OpenFlags::CREATE) {
-        let parent_path = path::get_parent_dir(path).unwrap();
-        let parent = <dyn Inode>::lookup_from_root(&parent_path)?;
-        let child_name = path::get_name(path);
-        if let Some(parent) = parent {
-            debug!("create file {}", path);
-            let res = {
-                if flags.contains(OpenFlags::DIRECTORY) {
-                    parent
-                        .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
-                        .unwrap()
-                } else {
-                    // TODO dev id
-                    parent
-                        .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
-                        .unwrap()
-                }
-            };
-            let key = HashKey::new(parent.metadata().ino, child_name.to_string());
-            INODE_CACHE.insert(key, res.clone());
-            res.create_page_cache_if_needed();
-            Ok(res)
-        } else {
-            warn!("parent dir {} doesn't exist", parent_path);
-            return Err(SyscallErr::ENOENT);
-        }
-    } else {
-        return Err(SyscallErr::ENOENT);
-    }
-}
+// /// Try not to use this when you have dirfd
+// pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
+//     debug!("[resolve_path]: path: {}, flags: {:?}", path, flags);
+//     let inode = <dyn Inode>::lookup_from_root(path)?;
+//     // inode
+//     if inode.is_some() {
+//         return Ok(inode.unwrap());
+//     }
+//     if flags.contains(OpenFlags::CREATE) {
+//         let parent_path = path::get_parent_dir(path).unwrap();
+//         let parent = <dyn Inode>::lookup_from_root(&parent_path)?;
+//         let child_name = path::get_name(path);
+//         if let Some(parent) = parent {
+//             debug!("create file {}", path);
+//             let res = {
+//                 if flags.contains(OpenFlags::DIRECTORY) {
+//                     parent
+//                         .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
+//                         .unwrap()
+//                 } else {
+//                     // TODO dev id
+//                     parent
+//                         .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
+//                         .unwrap()
+//                 }
+//             };
+//             let key = HashKey::new(parent.metadata().ino, child_name.to_string());
+//             INODE_CACHE.insert(key, res.clone());
+//             res.create_page_cache_if_needed();
+//             Ok(res)
+//         } else {
+//             warn!("parent dir {} doesn't exist", parent_path);
+//             return Err(SyscallErr::ENOENT);
+//         }
+//     } else {
+//         return Err(SyscallErr::ENOENT);
+//     }
+// }
 
 /// You should try using this when you have dirfd and path(*const u8), do not use resolve_path.
-pub fn resolve_path_with_dirfd(
+pub fn resolve_path(
     dirfd: isize,
     path: *const u8,
     flags: OpenFlags,
@@ -348,6 +361,7 @@ pub fn resolve_path_with_dirfd(
 }
 
 pub fn list_rootfs() {
+    stack_trace!();
     FILE_SYSTEM_MANAGER.root_inode().load_children();
     for sb in FILE_SYSTEM_MANAGER
         .root_inode()

@@ -10,7 +10,7 @@ use crate::{
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 
-use super::{file::File, resolve_path, Inode, OpenFlags};
+use super::{file::File, resolve_path, Inode, OpenFlags, AT_FDCWD};
 
 pub static MAX_FD: AtomicUsize = AtomicUsize::new(1024);
 
@@ -20,7 +20,7 @@ pub struct FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
-        let tty_inode = resolve_path("/dev/tty", OpenFlags::empty()).ok().unwrap();
+        let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty()).ok().unwrap();
         // .unwrap();
         let stdin = tty_inode
             .open(tty_inode.clone(), OpenFlags::RDONLY)
