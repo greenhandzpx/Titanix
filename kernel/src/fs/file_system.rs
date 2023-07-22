@@ -37,6 +37,7 @@ impl FsDevice {
         match dev {
             InodeDevice::Pipe(_) => Self::None,
             InodeDevice::Device(d) => Self::BlockDevice(d.block_device),
+            InodeDevice::Socket(_) => Self::None,
         }
     }
 
