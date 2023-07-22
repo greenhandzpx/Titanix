@@ -772,7 +772,9 @@ impl MemorySpace {
 
         if is_dl {
             info!("[load_dl] encounter a dl elf");
-            let interp_inode = resolve_path(AT_FDCWD, DL_INTERP.as_ptr(), OpenFlags::RDONLY).ok().unwrap();
+            let interp_inode = resolve_path(AT_FDCWD, DL_INTERP, OpenFlags::RDONLY)
+                .ok()
+                .unwrap();
             let interp_file = interp_inode
                 .open(interp_inode.clone(), OpenFlags::RDONLY)
                 .ok()

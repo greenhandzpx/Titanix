@@ -91,17 +91,17 @@ pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<Str
     }
     Some(res.join("/"))
 }
+
 /// return (target_inode, absolute_path, parent_inode)
 pub fn path_to_inode(
     dirfd: isize,
-    path: *const u8,
+    path: Option<&str>,
 ) -> (
     GeneralRet<Option<Arc<dyn Inode>>>,
     Option<String>,
     Option<Arc<dyn Inode>>,
 ) {
-    let _sum_guard = SumGuard::new();
-    if path.is_null() {
+    if path.is_none() {
         if dirfd != AT_FDCWD {
             debug!("[path_to_inode] path is null and dirfd is not AT_FDCWD");
             return current_process().inner_handler(|proc| {
@@ -131,13 +131,14 @@ pub fn path_to_inode(
             });
         }
     } else {
+        let path = path.unwrap();
         debug!("[path_to_inode] path is not null");
-        let check = UserCheck::new().check_c_str(path);
-        if check.is_err() {
-            return (Err(SyscallErr::EFAULT), None, None);
-        }
-        stack_trace!();
-        let path = c_str_to_string(path);
+        // let check = UserCheck::new().check_c_str(path);
+        // if check.is_err() {
+        //     return (Err(SyscallErr::EFAULT), None, None);
+        // }
+        // stack_trace!();
+        // let path = c_str_to_string(path);
         debug!("[path_to_inode] get path: {}", path);
         let mut path = format(&path);
         debug!("[path_to_inode] get format path: {}", path);
@@ -191,6 +192,35 @@ pub fn path_to_inode(
             (<dyn Inode>::lookup_from_root(&path), Some(path), None)
         }
     }
+}
+
+/// return (target_inode, absolute_path, parent_inode)
+pub fn path_to_inode_ffi(
+    dirfd: isize,
+    path: *const u8,
+) -> (
+    GeneralRet<Option<Arc<dyn Inode>>>,
+    Option<String>,
+    Option<Arc<dyn Inode>>,
+) {
+    let _sum_guard = SumGuard::new();
+    let path = if path.is_null() {
+        None
+    } else {
+        let check = UserCheck::new().check_c_str(path);
+        if check.is_err() {
+            return (Err(SyscallErr::EFAULT), None, None);
+        }
+        stack_trace!();
+        Some(c_str_to_string(path))
+    };
+    path_to_inode(dirfd, {
+        let ref this = path;
+        match *this {
+            Some(ref x) => Some(x),
+            None => None,
+        }
+    })
 }
 
 pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>> {

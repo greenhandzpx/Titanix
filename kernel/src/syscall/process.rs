@@ -279,26 +279,26 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
     envs_vec.push("PATH=/:".to_string());
 
-    if path.ends_with("shell") || path.ends_with("busybox") || path.ends_with("runtestcases") {
-        if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
-            current_process().exec(elf_data, args_vec, envs_vec)
-        } else {
-            warn!("[sys_exec] Cannot find this elf file {}", path);
-            Err(SyscallErr::EACCES)
-        }
-    } else if path.eq("/bin/true") {
-        if let Some(elf_data) = get_app_data_by_name(&path[5..]) {
-            current_process().exec(elf_data, args_vec, envs_vec)
-        } else {
-            warn!("[sys_exec] Cannot find this elf file {}", path);
-            Err(SyscallErr::EACCES)
-        }
-    } else {
-        let app_inode = resolve_path(AT_FDCWD, path.as_ptr(), OpenFlags::RDONLY)?;
-        let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
-        let elf_data = app_file.sync_read_all()?;
-        current_process().exec(&elf_data, args_vec, envs_vec)
-    }
+    // if path.ends_with("shell") || path.ends_with("busybox") || path.ends_with("runtestcases") {
+    //     if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
+    //         current_process().exec(elf_data, args_vec, envs_vec)
+    //     } else {
+    //         warn!("[sys_exec] Cannot find this elf file {}", path);
+    //         Err(SyscallErr::EACCES)
+    //     }
+    // } else if path.eq("/bin/true") {
+    //     if let Some(elf_data) = get_app_data_by_name(&path[5..]) {
+    //         current_process().exec(elf_data, args_vec, envs_vec)
+    //     } else {
+    //         warn!("[sys_exec] Cannot find this elf file {}", path);
+    //         Err(SyscallErr::EACCES)
+    //     }
+    // } else {
+    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY)?;
+    let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
+    let elf_data = app_file.sync_read_all()?;
+    current_process().exec(&elf_data, args_vec, envs_vec)
+    // }
 }
 
 bitflags! {

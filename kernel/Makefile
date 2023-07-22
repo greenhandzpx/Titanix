@@ -102,6 +102,7 @@ user-build:
 	@echo "build user..."
 	@cd ../user && make build PRELIMINARY=$(PRELIMINARY)
 	@cp ../22-testcases/busybox ../user/target/riscv64gc-unknown-none-elf/release/busybox
+	@cp ../23-testcases/lmbench_all ../user/target/riscv64gc-unknown-none-elf/release/lmbench_all
 	@cp $(TEST_DIR)/true ../user/target/riscv64gc-unknown-none-elf/release/true
 	@echo "build user finished"
 

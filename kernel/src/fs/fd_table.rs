@@ -20,7 +20,9 @@ pub struct FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
-        let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty()).ok().unwrap();
+        let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty())
+            .ok()
+            .unwrap();
         // .unwrap();
         let stdin = tty_inode
             .open(tty_inode.clone(), OpenFlags::RDONLY)

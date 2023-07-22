@@ -1,10 +1,11 @@
 use alloc::{string::String, vec::Vec};
 
-use crate::{fs::ffi::MAX_NAME_LEN, stack_trace};
+use crate::{fs::ffi::MAX_NAME_LEN, processor::SumGuard, stack_trace};
 
 /// Convert C-style string(end with '\0') to rust string
 pub fn c_str_to_string(ptr: *const u8) -> String {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
     let mut ptr = ptr as usize;
     let mut ret = String::new();
     loop {

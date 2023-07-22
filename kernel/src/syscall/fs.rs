@@ -26,7 +26,7 @@ use crate::fs::{
     Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
-use crate::fs::{HashKey, SeekFrom, resolve_path};
+use crate::fs::{resolve_path, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, SumGuard};
 use crate::signal::SigSet;
@@ -96,7 +96,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallRet {
 
 pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
     stack_trace!();
-    let res = path::path_to_inode(dirfd, path);
+    let res = path::path_to_inode_ffi(dirfd, path);
     stack_trace!();
     let target_inode = res.0?;
     if target_inode.is_none() {
@@ -128,7 +128,7 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRet {
     stack_trace!();
     log::info!("[sys_mkdirat] dirfd {}", dirfd);
-    let res = path::path_to_inode(dirfd, pathname);
+    let res = path::path_to_inode_ffi(dirfd, pathname);
     if res.0?.is_some() {
         log::info!("[sys_mkdirat] already exists");
         return Err(SyscallErr::EEXIST);
@@ -481,8 +481,7 @@ pub fn sys_newfstatat(
     let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
-    stack_trace!();
-    let res = path::path_to_inode(dirfd, pathname);
+    let res = path::path_to_inode_ffi(dirfd, pathname);
     let inode = res.0?;
     if inode.is_some() {
         // find inode
@@ -534,7 +533,9 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
             c_str_to_string(filename_addr)
         }
     );
-    let inode = resolve_path(dirfd, filename_addr, flags)?;
+    UserCheck::new().check_c_str(filename_addr)?;
+    let path = c_str_to_string(filename_addr);
+    let inode = resolve_path(dirfd, &path, flags)?;
     current_process().inner_handler(|proc| proc.fd_table.open(inode, flags))
 }
 
@@ -842,9 +843,10 @@ pub fn sys_renameat2(
     {
         return Err(SyscallErr::EINVAL);
     }
-    let old_res = path::path_to_inode(olddirfd, oldpath);
+
+    let old_res = path::path_to_inode_ffi(olddirfd, oldpath);
     let oldinode = old_res.0?;
-    let new_res = path::path_to_inode(newdirfd, newpath);
+    let new_res = path::path_to_inode_ffi(newdirfd, newpath);
     let newinode = new_res.0?;
     // change path
     if oldinode.is_none() {
@@ -1055,7 +1057,7 @@ pub fn sys_utimensat(
 ) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let res = path::path_to_inode(dirfd, pathname);
+    let res = path::path_to_inode_ffi(dirfd, pathname);
     let inode = res.0?;
     if inode.is_none() {
         debug!("[sys_utimensat] cannot find inode relatived to pathname");
@@ -1108,7 +1110,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     let _mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
     let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     stack_trace!();
-    let res = path::path_to_inode(dirfd, pathname);
+    let res = path::path_to_inode_ffi(dirfd, pathname);
     if res.0?.is_none() {
         debug!("[sys_faccessat] don't find inode");
         Err(SyscallErr::ENOENT)

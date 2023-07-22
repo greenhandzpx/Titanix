@@ -36,6 +36,7 @@ pub use page_cache::PageCache;
 
 use crate::driver::BLOCK_DEVICE;
 use crate::fs::inode::FAST_PATH_CACHE;
+use crate::loader::get_app_data_by_name;
 use crate::mm::MapPermission;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
@@ -49,11 +50,23 @@ use self::inode::INODE_CACHE;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
+fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
+    let inode = parent_inode
+        .mknod(parent_inode.clone(), name, InodeMode::FileREG, None)
+        .unwrap();
+    let key = HashKey::new(parent_inode.metadata().ino, name.to_string());
+    INODE_CACHE.insert(key, inode.clone());
+    let file = inode.open(inode.clone(), OpenFlags::RDWR).unwrap();
+    file.sync_write(get_app_data_by_name(name).unwrap())
+        .unwrap();
+}
+
 pub fn init() {
     INODE_CACHE.init();
     FAST_PATH_CACHE.init();
 
     // First we mount root fs
+    #[cfg(feature = "tmpfs")]
     FILE_SYSTEM_MANAGER
         .mount(
             "/",
@@ -64,21 +77,37 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("rootfs init fail!");
-    // FILE_SYSTEM_MANAGER
-    //     .mount(
-    //         "/",
-    //         "/dev/mmcblk0",
-    //         file_system::FsDevice::BlockDevice(BLOCK_DEVICE.lock().as_ref().unwrap().clone()),
-    //         FileSystemType::VFAT,
-    //         StatFlags::ST_NOSUID,
-    //     )
-    //     .expect("rootfs init fail!");
+    #[cfg(not(feature = "tmpfs"))]
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/",
+            "/dev/mmcblk0",
+            file_system::FsDevice::BlockDevice(BLOCK_DEVICE.lock().as_ref().unwrap().clone()),
+            FileSystemType::VFAT,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("rootfs init fail!");
 
-    // FILE_SYSTEM_MANAGER.mount("/", "/dev/vda2", FsDevice::None, FileSystemType::VFAT, StatFlags::ST_NOSUID);
+    #[cfg(feature = "preliminary")]
+    FILE_SYSTEM_MANAGER.mount(
+        "/",
+        "/dev/vda2",
+        FsDevice::None,
+        FileSystemType::VFAT,
+        StatFlags::ST_NOSUID,
+    );
 
     let root_inode = FILE_SYSTEM_MANAGER.root_inode();
 
     root_inode.load_children();
+
+    #[cfg(feature = "tmpfs")]
+    let mem_apps = ["busybox", "runtestcases", "shell", "lmbench_all"];
+    #[cfg(not(feature = "tmpfs"))]
+    let mem_apps = ["busybox", "runtestcases", "shell"];
+    for app in mem_apps {
+        create_mem_file(&root_inode, app);
+    }
 
     let dev_dir = root_inode
         .mkdir(Arc::clone(&root_inode), "dev", InodeMode::FileDIR)
@@ -312,12 +341,8 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
 // }
 
 /// You should try using this when you have dirfd and path(*const u8), do not use resolve_path.
-pub fn resolve_path(
-    dirfd: isize,
-    path: *const u8,
-    flags: OpenFlags,
-) -> GeneralRet<Arc<dyn Inode>> {
-    let res = path::path_to_inode(dirfd, path);
+pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
+    let res = path::path_to_inode(dirfd, Some(path));
     let inode = res.0?;
     stack_trace!();
     let path = res.1.unwrap();
