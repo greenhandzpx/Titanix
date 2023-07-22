@@ -1,9 +1,12 @@
-use core::intrinsics::mul_with_overflow;
-
-use log::debug;
+use log::{debug, info};
 
 use crate::{
-    fs::socket::{Socket, SocketAddr, SOCKETADDR_SIZE, SOCKETBUF_MANAGER, TCP_MSS},
+    fs::{
+        inode::InodeDevice,
+        socket::{
+            SocketAddr, SocketFile, MAX_BUFFER_SIZE, SOCKETADDR_SIZE, SOCKETBUF_MANAGER, TCP_MSS,
+        },
+    },
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
@@ -21,6 +24,8 @@ const IPPROTO_UDP: u32 = 17;
 
 /// option name
 const TCP_MAXSEG: u32 = 2;
+const SO_SNDBUF: u32 = 7;
+const SO_RCVBUF: u32 = 8;
 
 pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
     stack_trace!();
@@ -30,10 +35,10 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
         socket_type,
         protocol
     );
-    let socket = Socket::new();
+    let socket_file = SocketFile::new()?;
     current_process().inner_handler(move |proc| {
         let fd = proc.fd_table.alloc_fd()?;
-        proc.fd_table.put(fd, socket);
+        proc.fd_table.put(fd, socket_file);
         Ok(fd as isize)
     })
 }
@@ -132,7 +137,47 @@ pub fn sys_getsockopt(
                 *(optlen as *mut u32) = len as u32;
             }
         }
-        _ => {}
+        SO_SNDBUF | SO_RCVBUF => {
+            let socket_file =
+                current_process().inner_handler(|proc| proc.fd_table.get(sockfd as usize));
+            if socket_file.is_none() {
+                info!("[sys_setsockopt] sockfd is bad");
+                return Err(SyscallErr::EBADF);
+            }
+            let socket_file = socket_file.unwrap();
+            let file_inner = socket_file.metadata().inner.lock();
+            let socket = file_inner
+                .inode
+                .as_ref()
+                .unwrap()
+                .metadata()
+                .device
+                .as_ref()
+                .unwrap();
+            match socket {
+                InodeDevice::Socket(socket) => {
+                    let size = match optname {
+                        SO_RCVBUF => socket.inner.lock().recvbuf_size,
+                        SO_SNDBUF => socket.inner.lock().sendbuf_size,
+                        _ => MAX_BUFFER_SIZE,
+                    };
+                    let len = core::mem::size_of::<u32>();
+                    UserCheck::new().check_writable_slice(optval_ptr as *mut u8, len)?;
+                    UserCheck::new().check_writable_slice(optlen as *mut u8, len)?;
+                    unsafe {
+                        *(optval_ptr as *mut u32) = size;
+                        *(optlen as *mut u32) = len as u32;
+                    }
+                }
+                _ => {
+                    info!("[sys_getsockopt] device isn't Socket");
+                    return Err(SyscallErr::EBADF);
+                }
+            }
+        }
+        _ => {
+            debug!("[sys_getsockopt] optname: {}", optname);
+        }
     }
     Ok(0)
 }
@@ -141,10 +186,54 @@ pub fn sys_setsockopt(
     sockfd: u32,
     level: u32,
     optname: u32,
-    optval: usize,
+    optval_ptr: usize,
     optlen: u32,
 ) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
+    match optname {
+        SO_SNDBUF | SO_RCVBUF => {
+            let socket_file =
+                current_process().inner_handler(|proc| proc.fd_table.get(sockfd as usize));
+            if socket_file.is_none() {
+                info!("[sys_setsockopt] sockfd is bad");
+                return Err(SyscallErr::EBADF);
+            }
+            let socket_file = socket_file.unwrap();
+            let file_inner = socket_file.metadata().inner.lock();
+            let socket = file_inner
+                .inode
+                .as_ref()
+                .unwrap()
+                .metadata()
+                .device
+                .as_ref()
+                .unwrap();
+            match socket {
+                InodeDevice::Socket(socket) => {
+                    let len = core::mem::size_of::<u32>();
+                    UserCheck::new().check_readable_slice(optval_ptr as *mut u8, len)?;
+                    let size = unsafe { *(optval_ptr as *const u32) };
+                    match optname {
+                        SO_RCVBUF => {
+                            socket.inner.lock().recvbuf_size = size;
+                        }
+                        SO_SNDBUF => {
+                            socket.inner.lock().sendbuf_size = size;
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {
+                    info!("[sys_getsockopt] device isn't Socket");
+                    return Err(SyscallErr::EBADF);
+                }
+            }
+        }
+        _ => {
+            debug!("[sys_getsockopt] optname: {}", optname);
+        }
+    }
     Ok(0)
 }
 
@@ -158,8 +247,8 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;
     let _sum_guard = SumGuard::new();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
-    let socket1 = Socket::new();
-    let socket2 = Socket::new();
+    let socket1 = SocketFile::new()?;
+    let socket2 = SocketFile::new()?;
     current_process().inner_handler(move |proc| {
         let fd1 = proc.fd_table.alloc_fd()?;
         proc.fd_table.put(fd1, socket1);

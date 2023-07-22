@@ -1473,3 +1473,8 @@ pub async fn sys_pwrite64(fd: usize, buf_ptr: usize, len: usize, offset: usize) 
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
     file.pwrite(buf, offset).await
 }
+
+pub fn sys_fchmodat() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}

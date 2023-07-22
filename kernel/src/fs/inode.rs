@@ -23,6 +23,7 @@ use crate::{
     },
 };
 
+use super::socket::Socket;
 use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
@@ -541,6 +542,7 @@ impl InodeMeta {
 pub enum InodeDevice {
     Pipe(Arc<Pipe>),
     Device(DevWrapper),
+    Socket(Arc<Socket>),
     // TODO: add more
 }
 
