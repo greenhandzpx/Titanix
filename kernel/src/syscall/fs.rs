@@ -4,7 +4,7 @@ use core::ptr;
 use core::ptr::copy_nonoverlapping;
 use core::time::Duration;
 
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -284,6 +284,9 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
 
     match inode {
         Some(inode) => {
+            if inode.metadata().mode != InodeMode::FileDIR {
+                return Err(SyscallErr::ENOTDIR);
+            }
             let state = inode.metadata().inner.lock().state;
             debug!("[getdents] inode state: {:?}", state);
 
@@ -336,7 +339,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
             );
             Ok(num_bytes as isize)
         }
-        None => Err(SyscallErr::ENOTDIR),
+        None => Err(SyscallErr::ENOENT),
     }
 }
 
@@ -699,21 +702,19 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     Ok(0)
 }
 
-enum FcntlCmd {
-    F_DUPFD = 0,
-    F_DUPFD_CLOEXEC = 1030,
-    F_GETFD = 1,
-    F_SETFD = 2,
-    F_GETFL = 3,
-    F_SETFL = 4,
-}
+const F_DUPFD: i32 = 0;
+const F_DUPFD_CLOEXEC: i32 = 1030;
+const F_GETFD: i32 = 1;
+const F_SETFD: i32 = 2;
+const F_GETFL: i32 = 3;
+const F_SETFL: i32 = 4;
 
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     stack_trace!();
     debug!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
     // TODO
     match cmd {
-        _ if cmd == FcntlCmd::F_DUPFD as i32 || cmd == FcntlCmd::F_DUPFD_CLOEXEC as i32 => {
+        F_DUPFD | F_DUPFD_CLOEXEC => {
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
                 // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
@@ -724,7 +725,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 Ok(newfd as isize)
             })
         }
-        _ if cmd == FcntlCmd::F_SETFD as i32 => {
+        F_SETFD => {
             let flags = FcntlFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
@@ -740,7 +741,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 Ok(0)
             })
         }
-        _ if cmd == FcntlCmd::F_SETFL as i32 => {
+        F_SETFL => {
             let flags = OpenFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
@@ -751,18 +752,16 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 Ok(0)
             })
         }
-        _ if cmd == FcntlCmd::F_GETFD as i32 || cmd == FcntlCmd::F_GETFL as i32 => {
-            current_process().inner_handler(|proc| {
-                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                let flags = file.flags();
-                debug!("[sys_fcntl]: get file flags {:?}", flags);
-                if flags.contains(OpenFlags::CLOEXEC) && cmd == FcntlCmd::F_GETFD as i32 {
-                    Ok(FcntlFlags::bits(&FcntlFlags::FD_CLOEXEC) as isize)
-                } else {
-                    Ok(OpenFlags::bits(&flags) as isize)
-                }
-            })
-        }
+        F_GETFD | F_GETFL => current_process().inner_handler(|proc| {
+            let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+            let flags = file.flags();
+            debug!("[sys_fcntl]: get file flags {:?}", flags);
+            if flags.contains(OpenFlags::CLOEXEC) && cmd == F_GETFD {
+                Ok(FcntlFlags::bits(&FcntlFlags::FD_CLOEXEC) as isize)
+            } else {
+                Ok(OpenFlags::bits(&flags) as isize)
+            }
+        }),
         _ => {
             todo!()
         }
@@ -1392,7 +1391,7 @@ pub async fn sys_ftruncate(fd: usize, len: usize) -> SyscallRet {
     Ok(0)
 }
 
-pub async fn sys_fsync(fd: usize) -> SyscallRet {
+pub async fn sys_fsync(_fd: usize) -> SyscallRet {
     stack_trace!();
     // let file = current_process()
     //     .inner_handler(|proc| proc.fd_table.get(fd))

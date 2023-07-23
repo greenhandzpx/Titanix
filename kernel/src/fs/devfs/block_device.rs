@@ -4,7 +4,6 @@ use crate::{
     driver::block::BlockDevice,
     fs::{
         fat32::SECTOR_SIZE,
-        file::FileMeta,
         inode::{DevWrapper, InodeDevice, InodeMeta},
         File, Inode, OpenFlags,
     },
@@ -12,10 +11,6 @@ use crate::{
 };
 
 use super::DevFs;
-
-pub struct BlockDeviceFile {
-    meta: FileMeta,
-}
 
 pub struct BlockDeviceInode {
     metadata: InodeMeta,

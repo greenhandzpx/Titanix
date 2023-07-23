@@ -1,7 +1,5 @@
 use core::time::Duration;
 
-use log::{debug, info};
-
 use crate::timer::current_time_duration;
 
 /// Used for sys_getrusage

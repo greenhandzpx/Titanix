@@ -12,7 +12,6 @@ mod procfs;
 pub mod socket;
 pub mod tmpfs;
 
-use alloc::string::ToString;
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::FdTable;

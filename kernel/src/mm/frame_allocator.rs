@@ -1,14 +1,7 @@
 //! Implementation of [`FrameAllocator`] which
 //! controls all the frames in the operating system.
 use super::{PhysAddr, PhysPageNum};
-use crate::{
-    config::{
-        board::MEMORY_END,
-        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
-    },
-    mm::KernelAddr,
-    sync::mutex::SpinNoIrqLock,
-};
+use crate::{config::board::MEMORY_END, mm::KernelAddr, sync::mutex::SpinNoIrqLock};
 // use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};

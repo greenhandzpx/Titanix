@@ -50,12 +50,12 @@ impl Inode for ProcRootInode {
         self.metadata = Some(meta);
     }
 
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         debug!("[ProcRootInode::load_children_from_disk]: there is nothing we should do.");
     }
 
-    fn delete_child(&self, child_name: &str) {
-        todo!()
+    fn delete_child(&self, _child_name: &str) {
+        // todo!()
     }
 }
 
@@ -80,7 +80,7 @@ const PROC_NAME: [(
 
 pub struct ProcFs {
     metadata: FileSystemMeta,
-    id_allocator: AtomicUsize,
+    // id_allocator: AtomicUsize,
 }
 
 impl ProcFs {
@@ -123,7 +123,7 @@ impl ProcFs {
                 covered_inode,
                 s_dirty: Vec::new(),
             },
-            id_allocator,
+            // id_allocator,
         })
     }
 }

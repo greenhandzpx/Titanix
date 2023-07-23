@@ -2,7 +2,6 @@ use core::time::Duration;
 
 use crate::config::process::INITPROC_PID;
 use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
-use crate::loader::get_app_data_by_name;
 use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};

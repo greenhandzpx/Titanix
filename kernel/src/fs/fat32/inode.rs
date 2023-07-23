@@ -125,10 +125,10 @@ impl Inode for FAT32Inode {
             return;
         }
         let meta = self.meta.as_ref().unwrap();
-        if meta.mode != InodeMode::FileDIR {
-            info!("inode is not dir!");
-            return;
-        }
+        // if meta.mode != InodeMode::FileDIR {
+        //     info!("inode is not dir!");
+        //     return;
+        // }
         let mut meta_inner = meta.inner.lock();
         let mut content = self.file.lock();
         let fat = Arc::clone(&content.fat);

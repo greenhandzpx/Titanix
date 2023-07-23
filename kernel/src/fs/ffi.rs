@@ -159,6 +159,8 @@ impl Dirent {
         }
         dirents
     }
+
+    #[allow(unused)]
     fn station_debug(&self) {
         debug!("station d_ino: {:#x}", &self.d_ino as *const usize as usize);
         debug!("station d_off: {:#x}", &self.d_off as *const usize as usize);
@@ -176,10 +178,14 @@ impl Dirent {
 
 /// STATFS
 pub const STATFS_SIZE: usize = size_of::<Statfs>();
+#[repr(C)]
+#[allow(unused)]
 pub struct Fsid_t {
     val: [i32; 2],
 }
 
+#[repr(C)]
+#[allow(unused)]
 pub struct Statfs {
     /// Type of filesystem.
     f_type: i64,

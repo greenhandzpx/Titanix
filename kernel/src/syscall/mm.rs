@@ -1,4 +1,4 @@
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 
 use crate::{
     config::mm::PAGE_SIZE,

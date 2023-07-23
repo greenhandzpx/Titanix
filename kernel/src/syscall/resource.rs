@@ -4,9 +4,9 @@ use crate::{
     mm::user_check::UserCheck,
     process::{
         resource::{CpuSet, RLimit, RLIMIT_SIZE},
-        thread, PROCESS_MANAGER,
+        PROCESS_MANAGER,
     },
-    processor::{current_process, SumGuard},
+    processor::SumGuard,
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };

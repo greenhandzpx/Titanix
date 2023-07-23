@@ -12,21 +12,37 @@ use crate::{
 /// Infinity for RLimit
 pub static mut RLIM_INFINITY: usize = usize::MAX;
 
+#[allow(unused)]
 const RLIMIT_CPU: u32 = 0;
+#[allow(unused)]
 const RLIMIT_FSIZE: u32 = 1;
+#[allow(unused)]
 const RLIMIT_DATA: u32 = 2;
+#[allow(unused)]
 const RLIMIT_STACK: u32 = 3;
+#[allow(unused)]
 const RLIMIT_CORE: u32 = 4;
+#[allow(unused)]
 const RLIMIT_RSS: u32 = 5;
+#[allow(unused)]
 const RLIMIT_NPROC: u32 = 6;
+#[allow(unused)]
 const RLIMIT_NOFILE: u32 = 7;
+#[allow(unused)]
 const RLIMIT_MEMLOCK: u32 = 8;
+#[allow(unused)]
 const RLIMIT_AS: u32 = 9;
+#[allow(unused)]
 const RLIMIT_LOCKS: u32 = 10;
+#[allow(unused)]
 const RLIMIT_SIGPENDING: u32 = 11;
+#[allow(unused)]
 const RLIMIT_MSGQUEUE: u32 = 12;
+#[allow(unused)]
 const RLIMIT_NICE: u32 = 13;
+#[allow(unused)]
 const RLIMIT_RTPRIO: u32 = 14;
+#[allow(unused)]
 const RLIMIT_RTTIME: u32 = 15;
 
 /// RLimit size

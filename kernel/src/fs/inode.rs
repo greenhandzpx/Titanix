@@ -187,8 +187,10 @@ pub trait Inode: Send + Sync {
         todo!()
     }
 
+    /// Get metedata of this inode
     fn metadata(&self) -> &InodeMeta;
 
+    /// Set metedata of this inode
     fn set_metadata(&mut self, meta: InodeMeta);
 
     /// Load the children dirs of the current dir.
@@ -206,6 +208,11 @@ pub trait Inode: Send + Sync {
     fn sync_metedata(&self) {
         // TODO: not yet implement
         // log::error!("sync dir!!");
+    }
+
+    /// Iterate in the children
+    fn iter_children(&self) -> Option<Arc<dyn Inode>> {
+        todo!()
     }
 }
 
@@ -281,7 +288,7 @@ impl dyn Inode {
         Ok(0)
     }
 
-    /// unlink() system call will call this method.
+    /// Unlink the child.
     /// This method will delete the inode in inode cache and call delete() function to delete inode in disk.
     pub fn unlink(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
@@ -293,6 +300,7 @@ impl dyn Inode {
         Ok(0)
     }
 
+    /// Lookup the target inode of the given name from the parent
     pub fn lookup(self: &Arc<Self>, name: &str) -> GeneralRet<Option<Arc<dyn Inode>>> {
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
@@ -321,7 +329,11 @@ impl dyn Inode {
         }
     }
 
+    /// Lookup the target inode of the given path from the parent
     pub fn lookup_from_current(self: &Arc<Self>, path: &str) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        if self.metadata().mode != InodeMode::FileDIR {
+            return Err(SyscallErr::ENOTDIR);
+        }
         let path_names = path::path2vec(path);
 
         let mut parent = self.clone();
@@ -369,12 +381,11 @@ impl dyn Inode {
             debug!("[try_find_and_insert_inode] find in children");
             return target_inode;
         }
-        if self.metadata().name.eq("tmp") {
-            // tmp in memory, don't load children
-            debug!("[try_find_and_insert_inode] parent is tmp, not need to load children");
-            return None;
-        }
-        // this.load_children(this.clone());
+        // if self.metadata().name.eq("tmp") {
+        //     // tmp in memory, don't load children
+        //     debug!("[try_find_and_insert_inode] parent is tmp, not need to load children");
+        //     return None;
+        // }
         self.load_children();
         debug!(
             "[try_find_and_insert_inode] children size {}",

@@ -5,7 +5,7 @@ use core::{
     time::Duration,
 };
 
-use log::{info, trace};
+use log::trace;
 
 use super::{current_time_duration, Timer, TIMER_QUEUE};
 

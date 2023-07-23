@@ -2,12 +2,10 @@ mod exit;
 mod schedule;
 #[allow(clippy::module_inception)]
 mod thread_loop;
-mod thread_state;
 pub mod tid;
 mod time;
 
 use self::{
-    thread_state::{ThreadState, ThreadStateAtomic},
     tid::{tid_alloc, TidAddress, TidHandle},
     time::ThreadTimeInfo,
 };
@@ -22,8 +20,8 @@ use crate::{
     sync::mutex::SpinNoIrqLock,
 };
 use alloc::sync::Arc;
-use core::future::Future;
 use core::{cell::UnsafeCell, task::Waker};
+use core::{future::Future, sync::atomic::AtomicBool};
 
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
@@ -58,10 +56,6 @@ pub struct ThreadInner {
     pub trap_context: TrapContext,
     /// Used for signal handle
     pub signal_context: Option<SignalContext>,
-    /// Thread state.
-    /// Note that this may be modified by another thread, which
-    /// need to be sync
-    pub state: ThreadStateAtomic,
     /// Tid address, which may be modified by `set_tid_address` syscall
     pub tid_addr: TidAddress,
     /// Time info
@@ -75,10 +69,9 @@ pub struct ThreadInner {
     pub sig_queue: SpinNoIrqLock<SigQueue>,
     /// Thread cpu affinity
     pub cpu_set: CpuSet,
-    // /// Soft irq exit status.
-    // /// Note that the process may modify this value in the another thread
-    // /// (e.g. `exec`)
-    // pub terminated: AtomicBool,
+    /// Note that the process may modify this value in the another thread
+    /// (e.g. `exec`)
+    pub terminated: AtomicBool,
 }
 
 impl Thread {
@@ -104,7 +97,6 @@ impl Thread {
                 trap_context,
                 signal_context: None,
                 ustack_top,
-                state: ThreadStateAtomic::new(),
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
@@ -112,7 +104,8 @@ impl Thread {
                     &process.inner.lock().sig_queue,
                 )),
                 // TODO: need to change if multi_hart
-                cpu_set: CpuSet::new(1), // terminated: AtomicBool::new(false),
+                cpu_set: CpuSet::new(1),
+                terminated: AtomicBool::new(false),
             }),
         };
         PROCESS_MANAGER.add(tid.0, &process);
@@ -147,7 +140,6 @@ impl Thread {
                 },
                 signal_context: None,
                 ustack_top: unsafe { (*another.inner.get()).ustack_top },
-                state: ThreadStateAtomic::new(),
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
@@ -155,7 +147,8 @@ impl Thread {
                     &(*another.inner.get()).sig_queue.lock()
                 })),
                 // TODO: need to change if multi_hart
-                cpu_set: CpuSet::new(1), // terminated: AtomicBool::new(false),
+                cpu_set: CpuSet::new(1),
+                terminated: AtomicBool::new(false),
             }),
         }
     }
@@ -167,25 +160,20 @@ impl Thread {
 
     /// Send signal to this process
     pub fn send_signal(&self, signo: usize) {
-        log::debug!("[Thread::send_signal] signo {}", signo);
+        log::info!("[Thread::send_signal] signo {}", signo);
         let inner = unsafe { &mut *self.inner.get() };
         inner.sig_queue.lock().pending_sigs.add(signo);
     }
+
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {
         self.sig_trampoline.signal_context()
-        // unsafe { &(*self.inner.get()).signal_context.as_ref().unwrap() }
     }
 
     /// Set the signal context for the current thread
     pub fn set_signal_context(&self, signal_context: SignalContext) {
         self.sig_trampoline.set_signal_context(signal_context)
     }
-
-    // /// Signal trampoline start addr
-    // pub fn signal_trampoline_addr(&self) -> usize {
-    //     KernelAddr::from(PhysAddr::from(self.sig_trampoline.data_frame.ppn)).0
-    // }
 
     /// Get the copied trap context
     pub fn trap_context(&self) -> TrapContext {
@@ -204,49 +192,32 @@ impl Thread {
 
     /// Terminate this thread
     pub fn terminate(&self) {
-        // unsafe {
-        //     (*self.inner.get()).state.store(ThreadState::Zombie);
-        //     // (*self.inner.get())
-        //     //     .terminated
-        //     //     .store(true, Ordering::Relaxed)
-        // }
         let inner = unsafe { &mut (*self.inner.get()) };
-        inner.state.store(ThreadState::Zombie);
+        inner
+            .terminated
+            .store(true, core::sync::atomic::Ordering::Release)
     }
 
     /// Whether this thread has been terminated or not
     pub fn is_zombie(&self) -> bool {
-        unsafe { (*self.inner.get()).state.load() == ThreadState::Zombie }
-    }
-    /// Whether this thread is runnable or not
-    pub fn is_runnable(&self) -> bool {
-        unsafe { (*self.inner.get()).state.load() == ThreadState::Runnable }
-    }
-    /// Whether this thread is sleep or not
-    pub fn is_sleep(&self) -> bool {
-        unsafe { (*self.inner.get()).state.load() == ThreadState::Sleep }
-    }
-    /// Let this thread sleep
-    /// Note that we now only use this state in sys_futex
-    pub fn sleep(&self) {
         unsafe {
-            (*self.inner.get()).state.store(ThreadState::Sleep);
+            (*self.inner.get())
+                .terminated
+                .load(core::sync::atomic::Ordering::Acquire)
         }
     }
-    // /// Wake up this thread
-    // pub fn wake_up(&self) {
-    //     unsafe {
-    //         (*self.inner.get()).state.store(ThreadState::Runnable);
-    //     }
-    // }
+
     /// Tid of this thread
     pub fn tid(&self) -> usize {
         self.tid.0
     }
-    /// Wake up this thread
+
+    /// Wake up this thread.
+    /// This is called mostly because of signal
     pub fn wake_up(&self) {
         unsafe { (*self.inner.get()).waker.as_ref().unwrap().wake_by_ref() }
     }
+
     /// Set waker for this thread
     pub fn set_waker(&self, waker: Waker) {
         unsafe {

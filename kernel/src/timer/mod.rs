@@ -1,7 +1,7 @@
 //! RISC-V timer-related functionality
 
-pub mod io_multiplex;
 pub mod ffi;
+pub mod io_multiplex;
 pub mod timed_task;
 pub mod timeout_task;
 

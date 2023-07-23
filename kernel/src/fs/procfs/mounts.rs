@@ -46,11 +46,11 @@ impl Inode for MountsInode {
         self.metadata = meta;
     }
 
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         panic!("Unsupported operation")
     }
 
-    fn delete_child(&self, child_name: &str) {
+    fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation")
     }
 }
@@ -84,7 +84,7 @@ impl File for MountsFile {
         })
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
         debug!("[MountsFile] cannot write");
         Box::pin(async move { Err(SyscallErr::EACCES) })
     }

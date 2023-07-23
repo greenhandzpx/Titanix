@@ -207,9 +207,8 @@ impl Drop for Process {
 impl Process {
     /// Create a new process
     pub fn new_initproc(elf_data: &[u8]) -> Arc<Self> {
-        let (memory_space, user_sp_top, entry_point, auxv) = MemorySpace::from_elf(elf_data);
-        // let debug_pa = memory_space.translate(VirtAddr::from(entry_point).floor()).unwrap().ppn().0;
-        // println!("entry pa {:#x}", debug_pa);
+        let (memory_space, user_sp_top, entry_point, _auxv) = MemorySpace::from_elf(elf_data);
+
         // Alloc a pid
         let pid = Arc::new(tid_alloc());
         let process = Arc::new(Self {
@@ -240,7 +239,6 @@ impl Process {
             user_sp_top,
             Some(pid),
         ));
-        // thread.alloc_ustack();
 
         process
             .inner

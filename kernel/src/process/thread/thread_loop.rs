@@ -3,7 +3,7 @@ use log::debug;
 
 use crate::{
     process::thread::exit::handle_exit,
-    processor::{close_interrupt, current_task, open_interrupt},
+    processor::current_task,
     trap::{self, TrapContext},
     utils::async_tools,
 };
@@ -19,10 +19,7 @@ pub async fn threadloop(thread: Arc<Thread>) {
     );
     loop {
         trap::user_trap::trap_return();
-        // error!(
-        //     "[thread_loop] sepc {:#x}",
-        //     current_task().trap_context_ref().sepc
-        // );
+
         // next time when user traps into kernel, it will come back here
         trap::user_trap::trap_handler().await;
 
