@@ -6,11 +6,14 @@ use core::{
 };
 use log::trace;
 
-use crate::processor::{self, context::UserTaskContext};
+use crate::{
+    executor,
+    processor::{self, context::UserTaskContext},
+};
 // use crate::process::context::TaskContext;
 use crate::processor::context::LocalContext;
 
-use super::Thread;
+use super::{thread_loop::threadloop, Thread};
 
 pub struct YieldFuture(pub bool);
 
@@ -117,4 +120,26 @@ impl<F: Future<Output = ()> + Send + 'static> Future for KernelTaskFuture<F> {
         ret
         // todo!("Finish kernel task switch");
     }
+}
+
+/// Yield the current thread (and the scheduler will switch to next thread)
+pub async fn yield_now() {
+    YieldFuture(false).await;
+}
+
+/// Spawn a new user thread
+pub fn spawn_thread(thread: Arc<Thread>) {
+    // let future = schedule::OutermostFuture::new(thread.clone(), async {});
+    let future = UserTaskFuture::new(thread.clone(), threadloop(thread));
+    let (runnable, task) = executor::spawn(future);
+    runnable.schedule();
+    task.detach();
+}
+
+/// Spawn a new kernel thread(used for doing some kernel init work or timed tasks)
+pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(kernel_thread: F) {
+    let future = KernelTaskFuture::new(kernel_thread);
+    let (runnable, task) = executor::spawn(future);
+    runnable.schedule();
+    task.detach();
 }

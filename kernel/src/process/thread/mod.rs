@@ -14,20 +14,18 @@ use super::{resource::CpuSet, Process, PROCESS_MANAGER};
 use crate::signal::SignalContext;
 use crate::trap::TrapContext;
 use crate::{
-    executor,
     signal::{signal_queue::SigQueue, SignalTrampoline},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
 };
 use alloc::sync::Arc;
+use core::sync::atomic::AtomicBool;
 use core::{cell::UnsafeCell, task::Waker};
-use core::{future::Future, sync::atomic::AtomicBool};
+pub use schedule::{spawn_kernel_thread, spawn_thread, yield_now};
 
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,
 };
-
-use thread_loop::threadloop;
 
 // pub use task::TaskControlBlock;
 // pub use task::TaskStatus;
@@ -224,26 +222,4 @@ impl Thread {
             (*self.inner.get()).waker = Some(waker);
         }
     }
-}
-
-/// Yield the current thread (and the scheduler will switch to next thread)
-pub async fn yield_now() {
-    schedule::YieldFuture(false).await;
-}
-
-/// Spawn a new user thread
-pub fn spawn_thread(thread: Arc<Thread>) {
-    // let future = schedule::OutermostFuture::new(thread.clone(), async {});
-    let future = schedule::UserTaskFuture::new(thread.clone(), threadloop(thread));
-    let (runnable, task) = executor::spawn(future);
-    runnable.schedule();
-    task.detach();
-}
-
-/// Spawn a new kernel thread(used for doing some kernel init work or timed tasks)
-pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(kernel_thread: F) {
-    let future = schedule::KernelTaskFuture::new(kernel_thread);
-    let (runnable, task) = executor::spawn(future);
-    runnable.schedule();
-    task.detach();
 }

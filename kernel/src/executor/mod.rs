@@ -1,6 +1,6 @@
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::VecDeque;
-use async_task::{Runnable, Task};
+use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use core::future::Future;
 
 struct TaskQueue {
@@ -16,10 +16,13 @@ impl TaskQueue {
     pub fn init(&self) {
         *self.queue.lock() = Some(VecDeque::new());
     }
-    pub fn push_task(&self, runnable: Runnable) {
+    pub fn push(&self, runnable: Runnable) {
         self.queue.lock().as_mut().unwrap().push_back(runnable);
     }
-    pub fn fetch_task(&self) -> Option<Runnable> {
+    pub fn push_preempt(&self, runnable: Runnable) {
+        self.queue.lock().as_mut().unwrap().push_front(runnable);
+    }
+    pub fn fetch(&self) -> Option<Runnable> {
         self.queue.lock().as_mut().unwrap().pop_front()
     }
 }
@@ -36,9 +39,16 @@ where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
 {
-    async_task::spawn(future, |runnable| {
-        TASK_QUEUE.push_task(runnable);
-    })
+    let schedule = move |runnable: Runnable, info: ScheduleInfo| {
+        if info.woken_while_running {
+            // i.e `yield_now()`
+            TASK_QUEUE.push(runnable);
+        } else {
+            // i.e. woken up by some signal
+            TASK_QUEUE.push_preempt(runnable);
+        }
+    };
+    async_task::spawn(future, WithInfo(schedule))
 }
 
 /// Return the number of the tasks executed
@@ -46,7 +56,7 @@ where
 pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
-        if let Some(task) = TASK_QUEUE.fetch_task() {
+        if let Some(task) = TASK_QUEUE.fetch() {
             // info!("fetch a task");
             task.run();
             n += 1;
@@ -59,11 +69,9 @@ pub fn run_until_idle() -> usize {
 
 pub fn run_forever() -> ! {
     loop {
-        if let Some(task) = TASK_QUEUE.fetch_task() {
+        if let Some(task) = TASK_QUEUE.fetch() {
             // info!("fetch a task");
             task.run();
-            // } else {
-            // debug!("no task");
         }
     }
 }
