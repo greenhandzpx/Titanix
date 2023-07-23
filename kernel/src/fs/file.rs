@@ -10,7 +10,7 @@ use crate::{
     processor::SumGuard,
     stack_trace,
     sync::mutex::SleepLock,
-    timer::posix::current_time_spec,
+    timer::ffi::current_time_spec,
     utils::{
         async_tools::block_on,
         error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallErr, SyscallRet},

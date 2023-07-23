@@ -364,7 +364,8 @@ impl MemorySpace {
             .insert(vm_area.start_vpn(), vm_area);
         // self.areas.push(vm_area);
     }
-    /// Without kernel stacks.
+
+    /// Create a kernel space
     pub fn new_kernel() -> Self {
         let mut memory_space = Self::new_bare();
         info!("[kernel] trampoline {:#x}", sigreturn_trampoline as usize);
@@ -518,24 +519,27 @@ impl MemorySpace {
             0,
             None,
         );
-        info!("[kernel]mapping memory-mapped registers");
-        for pair in MMIO_VIRT {
-            // println!("start va: {:#x}", (*pair).0);
-            // println!("end va: {:#x}", (*pair).0 + (*pair).1);
-            memory_space.push(
-                VmArea::new(
-                    (*pair).0.into(),
-                    ((*pair).0 + (*pair).1).into(),
-                    MapType::Direct,
-                    MapPermission::R | MapPermission::W,
+        #[cfg(not(feature = "tmpfs"))]
+        {
+            info!("[kernel]mapping memory-mapped registers");
+            for pair in MMIO_VIRT {
+                // println!("start va: {:#x}", (*pair).0);
+                // println!("end va: {:#x}", (*pair).0 + (*pair).1);
+                memory_space.push(
+                    VmArea::new(
+                        (*pair).0.into(),
+                        ((*pair).0 + (*pair).1).into(),
+                        MapType::Direct,
+                        MapPermission::R | MapPermission::W,
+                        None,
+                        None,
+                        memory_space.page_table.clone(),
+                        VmAreaType::MMIO,
+                    ),
+                    0,
                     None,
-                    None,
-                    memory_space.page_table.clone(),
-                    VmAreaType::MMIO,
-                ),
-                0,
-                None,
-            );
+                );
+            }
         }
         memory_space
     }

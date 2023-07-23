@@ -30,7 +30,7 @@ use crate::{
     stack_trace,
     sync::{mutex::SpinNoIrqLock, FutexQueue, Mailbox},
     syscall::CloneFlags,
-    timer::posix::ITimerval,
+    timer::ffi::ITimerval,
     trap::TrapContext,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };

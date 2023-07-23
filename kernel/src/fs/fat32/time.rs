@@ -1,6 +1,6 @@
 use alloc::vec;
 
-use crate::timer::posix::TimeSpec;
+use crate::timer::ffi::TimeSpec;
 
 #[derive(Copy, Clone, Default)]
 pub struct FAT32Timestamp {

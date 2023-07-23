@@ -1,13 +1,11 @@
 mod devfs;
 pub mod fat32;
 mod fd_table;
+pub mod ffi;
 mod file;
 pub mod file_system;
 mod hash_key;
 pub mod inode;
-// pub mod inode_fat32_tmp;
-// pub mod fat32_tmp;
-pub mod ffi;
 mod page_cache;
 pub mod pipe;
 mod procfs;
@@ -51,10 +49,8 @@ type Mutex<T> = SpinNoIrqLock<T>;
 
 fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
     let inode = parent_inode
-        .mknod(parent_inode.clone(), name, InodeMode::FileREG, None)
+        .mknod_v(name, InodeMode::FileREG, None)
         .unwrap();
-    let key = HashKey::new(parent_inode.metadata().ino, name.to_string());
-    INODE_CACHE.insert(key, inode.clone());
     let file = inode.open(inode.clone(), OpenFlags::RDWR).unwrap();
     file.sync_write(get_app_data_by_name(name).unwrap())
         .unwrap();
@@ -108,65 +104,26 @@ pub fn init() {
         create_mem_file(&root_inode, app);
     }
 
-    let dev_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "dev", InodeMode::FileDIR)
-        .expect("mkdir /dev fail!");
+    // For builtin commands
+    let builtin_cmds = ["sleep", "ls"];
+    for cmd in builtin_cmds {
+        root_inode.mknod_v(cmd, InodeMode::FileREG, None).unwrap();
+    }
 
-    let key = HashKey::new(root_inode.metadata().ino, "dev".to_string());
-    INODE_CACHE.insert(key, dev_dir);
+    // Create some necessary dirs
+    let dirs = ["dev", "proc", "tmp"];
+    for dir in dirs {
+        root_inode.mkdir_v(dir, InodeMode::FileDIR).unwrap();
+    }
 
-    let proc_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "proc", InodeMode::FileDIR)
-        .expect("mkdir /proc fail!");
-
-    let key = HashKey::new(root_inode.metadata().ino, "proc".to_string());
-    INODE_CACHE.insert(key, proc_dir);
-
-    let tmp_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "tmp", InodeMode::FileDIR)
-        .expect("mkdir /tmp fail!");
-
-    let key = HashKey::new(root_inode.metadata().ino, "tmp".to_string());
-    INODE_CACHE.insert(key, tmp_dir);
-
-    let etc_dir = root_inode
-        .mkdir(Arc::clone(&root_inode), "etc", InodeMode::FileDIR)
-        .expect("mkdir /etc fail!");
-    let key = HashKey::new(root_inode.metadata().ino, "etc".to_string());
-    INODE_CACHE.insert(key, etc_dir.clone());
-
-    // for build in command
-    let sleep = root_inode
-        .mknod(Arc::clone(&root_inode), "sleep", InodeMode::FileREG, None)
-        .expect("mknod /sleep fail!");
-    let key = HashKey::new(root_inode.metadata().ino, "sleep".to_string());
-    INODE_CACHE.insert(key, sleep.clone());
-
-    let ls = root_inode
-        .mknod(Arc::clone(&root_inode), "ls", InodeMode::FileREG, None)
-        .expect("mknod /ls fail!");
-    let key = HashKey::new(root_inode.metadata().ino, "ls".to_string());
-    INODE_CACHE.insert(key, ls.clone());
-
+    let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
     let musl_dl_path = etc_dir
-        .mknod(
-            Arc::clone(&etc_dir),
-            "ld-musl-riscv64-sf.path",
-            InodeMode::FileREG,
-            None,
-        )
+        .mknod_v("ld-musl-riscv64-sf.path", InodeMode::FileREG, None)
         .expect("mknod /etc/ld-musl-riscv64-sf.path fail!");
     let file = musl_dl_path
         .open(musl_dl_path.clone(), OpenFlags::RDWR)
         .unwrap();
     file.sync_write("/".as_bytes()).unwrap();
-    // block_on(musl_dl_path.write(0, "/".as_bytes())).unwrap();
-    log::debug!("[fs::init] etc dir ino {}", etc_dir.metadata().ino);
-    let key = HashKey::new(
-        etc_dir.metadata().ino,
-        "ld-musl-riscv64-sf.path".to_string(),
-    );
-    INODE_CACHE.insert(key, musl_dl_path);
 
     FILE_SYSTEM_MANAGER
         .mount(
@@ -187,6 +144,16 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("procfs init fail!");
+
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/tmp",
+            "tmp",
+            FsDevice::None,
+            FileSystemType::TmpFS,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("tmpfs init fail!");
 
     list_rootfs();
 }
@@ -300,46 +267,7 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
     }
 }
 
-// /// Try not to use this when you have dirfd
-// pub fn resolve_path(path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
-//     debug!("[resolve_path]: path: {}, flags: {:?}", path, flags);
-//     let inode = <dyn Inode>::lookup_from_root(path)?;
-//     // inode
-//     if inode.is_some() {
-//         return Ok(inode.unwrap());
-//     }
-//     if flags.contains(OpenFlags::CREATE) {
-//         let parent_path = path::get_parent_dir(path).unwrap();
-//         let parent = <dyn Inode>::lookup_from_root(&parent_path)?;
-//         let child_name = path::get_name(path);
-//         if let Some(parent) = parent {
-//             debug!("create file {}", path);
-//             let res = {
-//                 if flags.contains(OpenFlags::DIRECTORY) {
-//                     parent
-//                         .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
-//                         .unwrap()
-//                 } else {
-//                     // TODO dev id
-//                     parent
-//                         .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
-//                         .unwrap()
-//                 }
-//             };
-//             let key = HashKey::new(parent.metadata().ino, child_name.to_string());
-//             INODE_CACHE.insert(key, res.clone());
-//             res.create_page_cache_if_needed();
-//             Ok(res)
-//         } else {
-//             warn!("parent dir {} doesn't exist", parent_path);
-//             return Err(SyscallErr::ENOENT);
-//         }
-//     } else {
-//         return Err(SyscallErr::ENOENT);
-//     }
-// }
-
-/// You should try using this when you have dirfd and path(*const u8), do not use resolve_path.
+/// Resolve path at dirfd(except that `path` is absolute path)
 pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
     let res = path::path_to_inode(dirfd, Some(path));
     let inode = res.0?;
@@ -364,19 +292,14 @@ pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Ar
         debug!("create file {}", path);
         let res = {
             if flags.contains(OpenFlags::DIRECTORY) {
-                parent
-                    .mkdir(parent.clone(), child_name, InodeMode::FileDIR)
-                    .unwrap()
+                parent.mkdir_v(child_name, InodeMode::FileDIR).unwrap()
             } else {
                 // TODO dev id
                 parent
-                    .mknod(parent.clone(), child_name, InodeMode::FileREG, None)
+                    .mknod_v(child_name, InodeMode::FileREG, None)
                     .unwrap()
             }
         };
-        let key = HashKey::new(parent.metadata().ino, child_name.to_string());
-        INODE_CACHE.insert(key, res.clone());
-        res.create_page_cache_if_needed();
         Ok(res)
     } else {
         warn!("parent dir {} doesn't exist", path);

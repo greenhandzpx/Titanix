@@ -16,7 +16,7 @@ use crate::{
     driver::block::BlockDevice,
     fs::HashKey,
     fs::PageCache,
-    timer::posix::TimeSpec,
+    timer::ffi::TimeSpec,
     utils::{
         error::{AgeneralRet, GeneralRet},
         path,
@@ -153,7 +153,8 @@ pub trait Inode: Send + Sync {
     }
 
     /// Call this function through the parent inode.
-    /// name: file name(not absolute path)
+    /// name: file name(not absolute path).
+    /// Only need to create a new inode.
     fn mkdir(
         &self,
         _this: Arc<dyn Inode>,
@@ -163,12 +164,9 @@ pub trait Inode: Send + Sync {
         todo!()
     }
 
-    // fn rmdir(&self, _name: &str, _mode: InodeMode) -> GeneralRet<()> {
-    //     todo!()
-    // }
-
     /// Call this function through the parent inode.
-    /// name: file name(not absolute path)
+    /// name: file name(not absolute path).
+    /// Only need to create a new inode.
     fn mknod(
         &self,
         _this: Arc<dyn Inode>,
@@ -239,6 +237,40 @@ impl dyn Inode {
         debug!("[load_children] leave");
     }
 
+    pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> GeneralRet<Arc<dyn Inode>> {
+        let child = self.mkdir(self.clone(), name, mode)?;
+        log::info!("[mkdir_v] child inode name {}", name);
+        self.metadata()
+            .inner
+            .lock()
+            .children
+            .insert(name.to_string(), child.clone());
+        // insert to cache
+        let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        INODE_CACHE.insert(key, child.clone());
+        Ok(child)
+    }
+
+    pub fn mknod_v(
+        self: &Arc<Self>,
+        name: &str,
+        mode: InodeMode,
+        _dev_id: Option<usize>,
+    ) -> GeneralRet<Arc<dyn Inode>> {
+        let child = self.mknod(self.clone(), name, mode, None)?;
+        log::info!("[mknod_v] child inode name {}", name);
+        self.metadata()
+            .inner
+            .lock()
+            .children
+            .insert(name.to_string(), child.clone());
+        // insert to cache
+        let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        INODE_CACHE.insert(key, child.clone());
+        child.create_page_cache_if_needed();
+        Ok(child)
+    }
+
     /// This method will delete the inode in cache (which means deleting inode in parent's children list).
     pub fn remove_child(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
@@ -298,17 +330,17 @@ impl dyn Inode {
         let path = path::format(&path);
         let (target, fast_path) = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
-            debug!("[lookup_from_root] find in fast path cache");
+            debug!("[lookup_from_current] find in fast path cache");
             return Ok(target);
         }
 
-        debug!("[lookup_from_root] mismatch in fast path cache");
+        debug!("[lookup_from_current] mismatch in fast path cache");
 
         for (i, name) in path_names.clone().into_iter().enumerate() {
-            debug!("[lookup_from_inode] round: {}, name: {}", i, name);
+            debug!("[lookup_from_current] round: {}, name: {}", i, name);
             match parent.lookup(name)? {
                 Some(p) => {
-                    debug!("[lookup_from_this] inode name: {}", p.metadata().name);
+                    debug!("[lookup_from_current] inode name: {}", p.metadata().name);
                     parent = p;
                 }
                 None => {
@@ -321,7 +353,10 @@ impl dyn Inode {
         }
 
         if fast_path {
-            debug!("[lookup_from_root] insert into fast path cache: {}", path);
+            debug!(
+                "[lookup_from_current] insert into fast path cache: {}",
+                path
+            );
             FAST_PATH_CACHE.insert(path, parent.clone());
         }
         Ok(Some(parent))

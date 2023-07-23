@@ -47,8 +47,8 @@ impl Inode for TmpInode {
         // There is nothing we should do
     }
 
-    fn delete_child(&self, child_name: &str) {
-        self.metadata().inner.lock().children.remove(child_name);
+    fn delete_child(&self, _child_name: &str) {
+        // There is nothing we should do
     }
 
     fn mkdir(
@@ -58,13 +58,7 @@ impl Inode for TmpInode {
         mode: crate::fs::InodeMode,
     ) -> crate::utils::error::GeneralRet<alloc::sync::Arc<dyn Inode>> {
         let child_inode = TmpInode::new(Some(this), name, mode);
-        let child_inode = Arc::new(child_inode);
-        self.metadata
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), child_inode.clone());
-        Ok(child_inode)
+        Ok(Arc::new(child_inode))
     }
 
     fn mknod(
@@ -75,13 +69,6 @@ impl Inode for TmpInode {
         _dev_id: Option<usize>,
     ) -> crate::utils::error::GeneralRet<alloc::sync::Arc<dyn Inode>> {
         let child_inode = TmpInode::new(Some(this), name, mode);
-        let child_inode: Arc<dyn Inode> = Arc::new(child_inode);
-        child_inode.create_page_cache_if_needed();
-        self.metadata
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), child_inode.clone());
-        Ok(child_inode)
+        Ok(Arc::new(child_inode))
     }
 }

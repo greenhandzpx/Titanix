@@ -170,13 +170,7 @@ impl Inode for FAT32Inode {
         }
         let fat = Arc::clone(&self.fat);
         let s_inode = FAT32Inode::new(fat, this, name, mode);
-        let inode: Arc<dyn Inode> = Arc::new(s_inode);
-        self.metadata()
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), Arc::clone(&inode));
-        Ok(inode)
+        Ok(Arc::new(s_inode))
     }
 
     fn mknod(
@@ -191,17 +185,10 @@ impl Inode for FAT32Inode {
         }
         let fat = Arc::clone(&self.fat);
         let s_inode = FAT32Inode::new(fat, this, name, mode);
-        let inode: Arc<dyn Inode> = Arc::new(s_inode);
-        inode.create_page_cache_if_needed();
-        self.metadata()
-            .inner
-            .lock()
-            .children
-            .insert(name.to_string(), Arc::clone(&inode));
-        Ok(inode)
+        Ok(Arc::new(s_inode))
     }
 
-    fn delete_child(&self, child_name: &str) {
-        self.metadata().inner.lock().children.remove(child_name);
+    fn delete_child(&self, _child_name: &str) {
+        // self.metadata().inner.lock().children.remove(child_name);
     }
 }

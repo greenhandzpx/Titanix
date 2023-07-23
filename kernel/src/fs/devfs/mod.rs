@@ -15,8 +15,8 @@ use crate::fs::inode::{FAST_PATH, INODE_CACHE};
 use crate::utils::error::GeneralRet;
 
 use super::inode::FAST_PATH_CACHE;
-use super::FileSystemType;
 use super::tmpfs::inode::TmpInode;
+use super::FileSystemType;
 use super::{
     file_system::{FileSystem, FileSystemMeta},
     inode::{InodeMeta, InodeMode},
@@ -88,8 +88,7 @@ const DEV_NAMES: [(
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
 ); 7] = [
     ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
-        Arc::new(TmpInode::new(Some(parent), path, InodeMode::FileDIR
-    ))
+        Arc::new(TmpInode::new(Some(parent), path, InodeMode::FileDIR))
     }),
     ("/dev/zero", InodeMode::FileCHR, |parent, path| {
         Arc::new(ZeroInode::new(parent, path))

@@ -8,7 +8,7 @@ use crate::{
     processor::{current_process, current_task, SumGuard},
     stack_trace,
     sync::{futex_wake, FutexFuture},
-    timer::{posix::TimeSpec, timeout_task::TimeoutTaskFuture},
+    timer::{ffi::TimeSpec, timeout_task::TimeoutTaskFuture},
     utils::error::{SyscallErr, SyscallRet},
 };
 

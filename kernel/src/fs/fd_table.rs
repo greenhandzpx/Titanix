@@ -6,7 +6,7 @@ use log::debug;
 use crate::{
     fs::InodeState,
     stack_trace,
-    timer::posix::current_time_spec,
+    timer::ffi::current_time_spec,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 

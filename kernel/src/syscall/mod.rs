@@ -140,7 +140,7 @@ use crate::{
     process::resource::RLimit,
     signal::{SigAction, SigSet},
     strace,
-    timer::posix::{ITimerval, TimeSpec, TimeVal, Tms},
+    timer::ffi::{ITimerval, TimeSpec, TimeVal, Tms},
     utils::error::SyscallRet,
 };
 
@@ -191,7 +191,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_mkdirat,
             (args[0] as isize, args[1] as *const u8, args[2])
         ),
-        SYSCALL_UMOUNT => sys_handler!(sys_umount, (args[0] as *const u8, args[1] as u32)),
+        SYSCALL_UMOUNT => sys_handler!(sys_umount, (args[0], args[1] as u32), await),
         SYSCALL_MOUNT => sys_handler!(
             sys_mount,
             (

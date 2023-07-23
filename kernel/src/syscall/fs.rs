@@ -34,8 +34,8 @@ use crate::stack_trace;
 use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
 use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
-use crate::timer::{posix::current_time_spec, UTIME_NOW};
-use crate::timer::{posix::TimeSpec, UTIME_OMIT};
+use crate::timer::{ffi::current_time_spec, UTIME_NOW};
+use crate::timer::{ffi::TimeSpec, UTIME_OMIT};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
@@ -174,12 +174,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                 drop(inner_lock);
                 stack_trace!();
                 let child_name = path::get_name(&path);
-                let child =
-                    parent_inode.mkdir(parent_inode.clone(), child_name, InodeMode::FileDIR)?;
-                log::info!("[sys_mkdirat] child inode name {}", child_name);
-                // insert to cache
-                let key = HashKey::new(parent_inode.metadata().ino, child.metadata().name.clone());
-                INODE_CACHE.insert(key, child);
+                parent_inode.mkdir_v(child_name, InodeMode::FileDIR)?;
                 Ok(0)
             }
             _ => {
@@ -252,9 +247,9 @@ pub fn sys_mount(
     Ok(0)
 }
 
-pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
+pub async fn sys_umount(target_path_ptr: usize, _flags: u32) -> SyscallRet {
     stack_trace!();
-    let target_path = path::path_process(AT_FDCWD, target_path)?;
+    let target_path = path::path_process(AT_FDCWD, target_path_ptr as *const u8)?;
     if target_path.is_none() {
         return Err(SyscallErr::ENOENT);
     }
@@ -262,13 +257,13 @@ pub fn sys_umount(target_path: *const u8, _flags: u32) -> SyscallRet {
     if target_path == "/" {
         return Err(SyscallErr::EPERM);
     }
-    let mut fs_mgr = FILE_SYSTEM_MANAGER.fs_mgr.lock();
-    let target_fs = fs_mgr.get(&target_path);
+    let target_fs = FILE_SYSTEM_MANAGER.fs_mgr.lock().get(&target_path).cloned();
     if target_fs.is_none() {
         return Err(SyscallErr::ENOENT);
     }
     let target_fs = target_fs.unwrap();
     // sync fs
+    target_fs.sync_fs().await?;
 
     FILE_SYSTEM_MANAGER.unmount(&target_path)?;
     Ok(0)
@@ -951,24 +946,14 @@ pub fn sys_renameat2(
                 debug!("[sys_renameat2] exchange old and new");
                 // If flag is RENAME_EXCHANGE, exchange old and new one.
                 if newtype == InodeMode::FileDIR {
-                    old_parent.mkdir(old_parent.clone(), &newname, newtype)?;
+                    old_parent.mkdir_v(&newname, newtype)?;
                 } else {
-                    old_parent.mknod(
-                        old_parent.clone(),
-                        &newname,
-                        newtype,
-                        newinode.clone().metadata().rdev,
-                    )?;
+                    old_parent.mknod_v(&newname, newtype, newinode.clone().metadata().rdev)?;
                 }
                 if oldtype == InodeMode::FileDIR {
-                    new_parent.mkdir(new_parent.clone(), &oldname, oldtype)?;
+                    new_parent.mkdir_v(&oldname, oldtype)?;
                 } else {
-                    new_parent.mknod(
-                        new_parent.clone(),
-                        &oldname,
-                        oldtype,
-                        oldinode.clone().metadata().rdev,
-                    )?;
+                    new_parent.mknod_v(&oldname, oldtype, oldinode.clone().metadata().rdev)?;
                 }
                 // inner exchange
                 let old_inner_lock = old_parent.metadata().inner.lock();

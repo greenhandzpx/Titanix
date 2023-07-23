@@ -32,7 +32,10 @@ type Mutex<T> = SpinNoIrqLock<T>;
 pub static BLOCK_DEVICE: Mutex<Option<Arc<dyn BlockDevice>>> = Mutex::new(None);
 
 pub fn init() {
-    *BLOCK_DEVICE.lock() = Some(Arc::new(BlockDeviceImpl::new()));
+    #[cfg(not(feature = "tmpfs"))]
+    {
+        *BLOCK_DEVICE.lock() = Some(Arc::new(BlockDeviceImpl::new()));
+    }
 }
 
 pub trait BlockDevice: Send + Sync + Any {

@@ -16,6 +16,8 @@ STRACE :=
 
 SUBMIT := 
 
+TMPFS :=
+
 KERNEL_FEATURES := 
 
 ifneq ($(STRACE), )
@@ -23,6 +25,9 @@ ifneq ($(STRACE), )
 endif
 ifneq ($(SUBMIT), )
 	KERNEL_FEATURES += submit
+endif
+ifneq ($(TMPFS), )
+	KERNEL_FEATURES += tmpfs
 endif
 
 
