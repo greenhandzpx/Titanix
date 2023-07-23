@@ -386,7 +386,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_GETSOCKNAME => sys_handler!(
             sys_getsockname,
-            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
+            (args[0] as u32, args[1] as *mut SocketAddr, args[2])
         ),
         SYSCALL_SENDTO => sys_handler!(
             sys_sendto,

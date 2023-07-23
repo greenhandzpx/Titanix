@@ -13,9 +13,6 @@ use crate::{
     utils::error::{SyscallErr, SyscallRet},
 };
 
-/// domain
-const AF_INET: u32 = 2;
-
 /// socket type
 const SOCK_DGRAM: u32 = 2;
 
@@ -45,6 +42,29 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
 
 pub fn sys_bind(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_readable_slice(addr as *const u8, addrlen as usize)?;
+    let addr = unsafe { *addr };
+    let socket_file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(sockfd as usize).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    let file_inner = socket_file.metadata().inner.lock();
+    let socket = file_inner
+        .inode
+        .as_ref()
+        .unwrap()
+        .metadata()
+        .device
+        .as_ref()
+        .unwrap();
+    match socket {
+        InodeDevice::Socket(socket) => {
+            socket.inner.lock().addr = addr;
+        }
+        _ => {
+            return Err(SyscallErr::EBADF);
+        }
+    }
     Ok(0)
 }
 
@@ -63,8 +83,36 @@ pub fn sys_connect(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> Syscal
     Ok(0)
 }
 
-pub fn sys_getsockname(sockfd: u32, addr: *const SocketAddr, addrlen: u32) -> SyscallRet {
+pub fn sys_getsockname(sockfd: u32, addr: *mut SocketAddr, addrlen: usize) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(addr as *mut u8, SOCKETADDR_SIZE)?;
+    UserCheck::new().check_writable_slice(addrlen as *mut u8, core::mem::size_of::<u32>())?;
+    let socket_file = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(sockfd as usize).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+    let file_inner = socket_file.metadata().inner.lock();
+    let socket = file_inner
+        .inode
+        .as_ref()
+        .unwrap()
+        .metadata()
+        .device
+        .as_ref()
+        .unwrap();
+    match socket {
+        InodeDevice::Socket(socket) => {
+            let socket_addr = socket.inner.lock().addr.clone();
+            debug!("[sys_getsockname] get addr: {:?}", socket_addr);
+            unsafe {
+                *addr = socket_addr;
+                *(addrlen as *mut u32) = SOCKETADDR_SIZE as u32;
+            }
+        }
+        _ => {
+            return Err(SyscallErr::EBADF);
+        }
+    }
     Ok(0)
 }
 
@@ -138,13 +186,9 @@ pub fn sys_getsockopt(
             }
         }
         SO_SNDBUF | SO_RCVBUF => {
-            let socket_file =
-                current_process().inner_handler(|proc| proc.fd_table.get(sockfd as usize));
-            if socket_file.is_none() {
-                info!("[sys_setsockopt] sockfd is bad");
-                return Err(SyscallErr::EBADF);
-            }
-            let socket_file = socket_file.unwrap();
+            let socket_file = current_process()
+                .inner_handler(|proc| proc.fd_table.get(sockfd as usize))
+                .ok_or(SyscallErr::EBADF)?;
             let file_inner = socket_file.metadata().inner.lock();
             let socket = file_inner
                 .inode

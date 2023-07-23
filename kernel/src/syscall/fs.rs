@@ -521,7 +521,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
 pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32) -> SyscallRet {
     stack_trace!();
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    log::info!(
+    println!(
         "[sys_openat] dirfd {}, flags {:?}, filename {}",
         dirfd,
         flags,
