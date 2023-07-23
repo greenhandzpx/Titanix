@@ -6,7 +6,7 @@ pub mod kernel_trap;
 pub mod user_trap;
 
 use core::arch::global_asm;
-use riscv::register::{mtvec::TrapMode, scause, sie, stval, stvec};
+use riscv::register::{mtvec::TrapMode, sie, stvec};
 
 global_asm!(include_str!("trap.S"));
 

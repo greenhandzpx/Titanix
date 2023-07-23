@@ -1,4 +1,4 @@
-use log::{error, warn};
+use log::error;
 use riscv::register::{
     scause::{self, Interrupt, Trap},
     sepc, stval,

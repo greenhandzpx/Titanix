@@ -27,20 +27,6 @@ pub async fn threadloop(thread: Arc<Thread>) {
             debug!("thread {} terminated", current_task().tid());
             break;
         }
-        // if unsafe {
-        //     // TODO: not sure what memory order should be used
-        //     (*thread.inner.get()).terminated.load(Ordering::Relaxed)
-        // } {
-        //     debug!("thread {} terminated", current_task().tid());
-        //     break;
-        // }
-
-        // // TODO: find a more elegant way to know whether the process
-        // // has become zombie. The following way will lock the process
-        // // inner and it may become a bottleneck
-        // if  current_process().is_zombie() {
-        //     break;
-        // }
     }
 
     // When the process becomes zombie, all of its threads should exit too

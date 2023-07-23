@@ -10,9 +10,6 @@ use super::{current_time_duration, Timer, TIMER_QUEUE};
 pub struct TimedTaskFuture<F: Fn() -> bool> {
     interval: Duration,
     next_expired_time: Duration,
-    // /// First trigger timeout
-    // first_trigger_timeout: Option<Duration>,
-    /// Callback: return false if the timer should be over
     callback: F,
 }
 

@@ -134,24 +134,6 @@ pub fn rust_main(hart_id: usize) {
             process::add_initproc();
         });
 
-        thread::spawn_kernel_thread(async move {
-            // use crate::timer::{timed_task::TimedTaskFuture, timeout_task::ksleep};
-            // let timeout = core::time::Duration::from_secs(3);
-            // TimedTaskFuture::new(
-            //     timeout,
-            //     || {
-            //         log::info!("I'm awake!! hhh just ignore me");
-            //         return true;
-            //     },
-            //     crate::timer::current_time_duration() + timeout,
-            // )
-            // .await;
-            // loop {
-            //     ksleep(core::time::Duration::from_secs(5)).await;
-            //     log::debug!("I'm awake!! hhh just ignore me");
-            // }
-        });
-
         // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);
 

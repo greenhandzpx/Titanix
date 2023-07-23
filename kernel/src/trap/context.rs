@@ -10,7 +10,7 @@
  */
 //! Implementation of [`TrapContext`]
 
-use riscv::register::sstatus::{self, Sstatus, SPP};
+use riscv::register::sstatus::{self, SPP};
 
 /// Trap context structure containing sstatus, sepc and registers
 #[derive(Clone, Copy, Debug)]

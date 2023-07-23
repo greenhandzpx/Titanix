@@ -18,7 +18,7 @@ hashbrown = "0.14"
 rand_core = "0.6.4"
 # intrusive-collections = { version = "0.9", features = ["nightly"] }
 smoltcp = { version = "0.10.0", default-features = false, features = [
-    "log",                           
+    "log",
     "medium-ethernet",
     # "medium-ip",
     # "phy-raw_socket",
@@ -29,9 +29,10 @@ smoltcp = { version = "0.10.0", default-features = false, features = [
     "socket-tcp",
     "async",
 ] }
+async-task = { version = "4.4.0", default-features = false }
+# async-task = { path = "../dependencies/async-task", default-features = false }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
-async-task = { path = "../dependencies/async-task", default-features = false }
 fu740-pac = { path = "../dependencies/fu740-pac" }
 fu740-hal = { path = "../dependencies/fu740-hal" }
 
