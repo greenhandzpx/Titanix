@@ -50,12 +50,12 @@ pub fn init() {
     }
     frame_allocator::init_frame_allocator();
     memory_space::init_kernel_space();
+    info!("KERNEL SPACE init finish1");
     unsafe {
         KERNEL_SPACE
             .as_ref()
             .expect("KERNEL SPACE not init yet")
             .activate();
     }
-    info!("KERNEL SPACE init finished");
-    // KERNEL_SPACE.exclusive_access().activate();
+    info!("KERNEL SPACE init finish2");
 }

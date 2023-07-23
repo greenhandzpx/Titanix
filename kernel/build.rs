@@ -25,9 +25,23 @@ fn insert_app_data() -> Result<()> {
         .collect();
 
     apps.sort();
-    apps.push("busybox".to_string());
-    apps.push("lmbench_all".to_string());
-    apps.push("true".to_string());
+
+    let testcases = [
+        "true",
+        "time-test",
+        "busybox_testcode.sh",
+        "busybox_cmd.txt",
+        "busybox",
+        "lmbench_all",
+        "lmbench_testcode.sh",
+        "runtest.exe",
+        "entry-static.exe",
+        "run-static.sh",
+    ];
+
+    for testcase in testcases {
+        apps.push(testcase.to_string());
+    }
 
     writeln!(
         f,

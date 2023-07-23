@@ -541,6 +541,7 @@ impl MemorySpace {
                 );
             }
         }
+        info!("[kernel]new kernel finished");
         memory_space
     }
 

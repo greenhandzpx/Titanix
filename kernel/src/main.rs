@@ -137,12 +137,15 @@ pub fn rust_main(hart_id: usize) {
         // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);
 
-        let hart_num = unsafe { HARTS.len() };
-        for i in 0..hart_num {
-            if i == hart_id {
-                continue;
+        #[cfg(feature = "multi_hart")]
+        {
+            let hart_num = unsafe { HARTS.len() };
+            for i in 0..hart_num {
+                if i == hart_id {
+                    continue;
+                }
+                hart_start(i, HART_START_ADDR);
             }
-            hart_start(i, HART_START_ADDR);
         }
 
         trap::enable_timer_interrupt();

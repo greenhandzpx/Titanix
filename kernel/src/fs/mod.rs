@@ -71,6 +71,7 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("rootfs init fail!");
+
     #[cfg(not(feature = "tmpfs"))]
     FILE_SYSTEM_MANAGER
         .mount(
@@ -96,7 +97,19 @@ pub fn init() {
     root_inode.load_children();
 
     #[cfg(feature = "tmpfs")]
-    let mem_apps = ["busybox", "runtestcases", "shell", "lmbench_all"];
+    let mem_apps = [
+        "time-test",
+        "busybox_testcode.sh",
+        "busybox_cmd.txt",
+        "busybox",
+        "runtestcases",
+        "shell",
+        "lmbench_all",
+        "lmbench_testcode.sh",
+        "runtest.exe",
+        "entry-static.exe",
+        "run-static.sh",
+    ];
     #[cfg(not(feature = "tmpfs"))]
     let mem_apps = ["busybox", "runtestcases", "shell"];
     for app in mem_apps {
