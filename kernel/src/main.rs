@@ -22,9 +22,17 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
+#[cfg(feature = "board_qemu")]
 #[path = "boards/qemu.rs"]
 mod board;
-// mod boards;
+
+#[cfg(feature = "board_u740")]
+#[path = "boards/u740.rs"]
+mod board;
+
+#[cfg(not(any(feature = "board_qemu", feature = "board_u740")))]
+#[path = "boards/qemu.rs"]
+mod board;
 
 #[macro_use]
 mod console;

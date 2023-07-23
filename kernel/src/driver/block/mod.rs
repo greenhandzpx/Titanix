@@ -8,19 +8,20 @@ use core::any::Any;
 use alloc::sync::Arc;
 
 use crate::{
-    config::{
-        board::MMIO,
-        mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
-    },
+    config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     sync::mutex::SpinNoIrqLock,
 };
+
+#[cfg(feature = "board_u740")]
+pub type BlockDeviceImpl = sdcard::SDCardWrapper;
 
 #[cfg(feature = "board_qemu")]
 pub type BlockDeviceImpl = virtio_blk::VirtIOBlock;
 
-#[cfg(feature = "board_fu740")]
-pub type BlockDeviceImpl = sdcard::SDCardWrapper;
+#[cfg(not(any(feature = "board_qemu", feature = "board_u740")))]
+pub type BlockDeviceImpl = virtio_blk::VirtIOBlock;
 
+use crate::config::board::MMIO;
 /// MMIO virtual address
 pub const MMIO_VIRT: &[(usize, usize)] = &[(
     MMIO[0].0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS),

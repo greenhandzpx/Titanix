@@ -18,6 +18,8 @@ SUBMIT :=
 
 TMPFS :=
 
+BOARD := qemu
+
 KERNEL_FEATURES := 
 
 ifneq ($(STRACE), )
@@ -29,10 +31,10 @@ endif
 ifneq ($(TMPFS), )
 	KERNEL_FEATURES += tmpfs
 endif
+ifeq ($(BOARD), u740)
+	KERNEL_FEATURES += board_u740
+endif
 
-
-# BOARD
-BOARD := qemu
 SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 
