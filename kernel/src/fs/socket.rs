@@ -17,6 +17,8 @@ use super::{
     inode::{InodeDevice, InodeMeta},
     File, Inode, Mutex, OpenFlags,
 };
+/// domain
+pub const AF_INET: u32 = 2;
 
 pub const SOCKETADDR_SIZE: usize = core::mem::size_of::<SocketAddr>();
 
@@ -35,10 +37,20 @@ pub struct SocketAddr {
     sa_data: [u8; 14],
 }
 
+impl SocketAddr {
+    pub fn new() -> Self {
+        Self {
+            sa_family: AF_INET,
+            sa_data: [0; 14],
+        }
+    }
+}
+
 pub struct SocketInner {
     pub buf: VecDeque<u8>,
     pub sendbuf_size: u32,
     pub recvbuf_size: u32,
+    pub addr: SocketAddr,
 }
 
 impl SocketInner {
@@ -47,6 +59,7 @@ impl SocketInner {
             buf: VecDeque::new(),
             sendbuf_size: MAX_BUFFER_SIZE,
             recvbuf_size: MAX_BUFFER_SIZE,
+            addr: SocketAddr::new(),
         }
     }
 }
