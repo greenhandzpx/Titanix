@@ -46,7 +46,7 @@ int tftp_send_data(in_addr_t raw_client_ip, in_port_t raw_client_port, FILE *fp,
 	uint8_t *p = buf;
 	*(unsigned short *)p = htons(TFTP_OP_DATA);
 	p += sizeof(unsigned short);
-	*(unsigned short *)p = htons(blkid);
+	*(unsigned short *)p = htons(blkid & 0xFFFF);
 	p += sizeof(unsigned short);
 	int readn = fread(p, 1, blksz, fp);
 	udp_out(raw_client_ip, raw_client_port, buf, sizeof(unsigned short) * 2 + readn);
@@ -60,12 +60,17 @@ int tftp_send_data(in_addr_t raw_client_ip, in_port_t raw_client_port, FILE *fp,
 void work_rrq(in_addr_t raw_client_ip, in_port_t raw_client_port, uint8_t *buf, int len)
 {
 	printf("receive rrq, %s port %d, %s\n", inet_ntoa((struct in_addr){raw_client_ip}), ntohs(raw_client_port), buf);
-	if (strcmp((char *)buf, FILE_NAME))
+	int fid;
+	for (fid = 0; fid < NFILE; fid++)
+	{
+		if (strcmp((char *)buf, file_name[fid]) == 0) break;
+	}
+	if (fid == NFILE)
 	{
 		tftp_send_error(raw_client_ip, raw_client_port, 1, "File not found");
 		return;
 	}
-	FILE *fp = fopen(FILE_PATH, "rb");
+	FILE *fp = fopen(file_path[fid], "rb");
 	if (fp == NULL)
 	{
 		tftp_send_error(raw_client_ip, raw_client_port, 1, "File not found");
@@ -127,9 +132,20 @@ void work_ack(in_addr_t raw_client_ip, in_port_t raw_client_port, uint8_t *buf, 
 		struct tftp_connect *conn = &connect_list[i];
 		if (conn->available == 1 && conn->raw_client_ip == raw_client_ip && conn->raw_client_port == raw_client_port)
 		{
+			if (acked_blk == 0 && ((conn->acked_blk + 1) & 0xFFFF) == 0)
+			{
+				acked_blk = conn->acked_blk + 1;
+			}
+			else
+			{
+				acked_blk += (conn->acked_blk & 0xFFFF0000);
+			}
+			if (acked_blk == conn->lst_blk_id || acked_blk != conn->acked_blk + 1)
+			{
+				printf("receive ack %d, %s port %d, last ack %d\n", acked_blk, inet_ntoa((struct in_addr){raw_client_ip}), ntohs(raw_client_port), conn->acked_blk);
+			}
 			if (acked_blk == conn->lst_blk_id)
 			{
-				printf("receive ack, %s port %d, last blk %d\n", inet_ntoa((struct in_addr){raw_client_ip}), ntohs(raw_client_port), acked_blk);
 				conn->available = 0;
 				fclose(conn->fp);
 				return;
