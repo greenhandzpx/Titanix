@@ -192,8 +192,11 @@ pub fn trap_return() {
         //     current_trap_cx().sepc,
         //     current_trap_cx() as *mut _ as usize
         // );
+        current_trap_cx().user_fx.load();
 
         __return_to_user(current_trap_cx());
+
+        current_trap_cx().user_fx.store();
 
         // Open interrupt in `trap_handler`
 
