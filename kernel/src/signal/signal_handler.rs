@@ -8,7 +8,7 @@ pub const SIG_IGN: usize = 1;
 
 pub fn term_sig_handler(signo: usize) {
     stack_trace!();
-    debug!("term sig handler, sig {}", signo);
+    log::info!("term sig handler, sig {}", signo);
     // TODO: not sure what the exit code should be here
     exit_and_terminate_all_threads(-1);
 }
@@ -20,7 +20,7 @@ pub fn ign_sig_handler(signo: usize) {
 
 pub fn core_sig_handler(signo: usize) {
     stack_trace!();
-    debug!("core sig handler, sig {}", signo);
+    log::info!("core sig handler, sig {}", signo);
     // TODO: not sure what the exit code should be here
     exit_and_terminate_all_threads(-1);
     // TODO: add core dump ?

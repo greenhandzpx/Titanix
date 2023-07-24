@@ -211,11 +211,9 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     });
     // restore the old user context
     let trap_context_mut = current_task().trap_context_mut();
-    trap_context_mut.user_x = signal_context.user_context.user_x;
-    trap_context_mut.user_x[0] = 0;
-    trap_context_mut.sstatus = signal_context.user_context.sstatus;
-    // trap_context_mut.sepc = signal_context.user_context.sepc;
-    trap_context_mut.sepc = signal_context.user_context.user_x[0];
+    signal_context
+        .user_context
+        .restore_trap_context(trap_context_mut);
     info!(
         "[sys_rt_sigreturn] sig return, sepc {:#x}",
         trap_context_mut.sepc
