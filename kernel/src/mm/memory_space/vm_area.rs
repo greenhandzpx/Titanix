@@ -189,7 +189,7 @@ impl VmArea {
         let page_table = self.page_table.get_unchecked_mut();
         match self.map_type {
             MapType::Identical => {
-                ppn = PhysPageNum(vpn.0 - KERNEL_DIRECT_OFFSET);
+                ppn = PhysPageNum(vpn.0);
                 // println!("ppn {:#x}, vpn {:#x}", ppn.0, vpn.0);
                 // ppn = PhysPageNum(vpn.0);
             }

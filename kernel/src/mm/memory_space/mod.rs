@@ -403,7 +403,7 @@ impl MemorySpace {
             VmArea::new(
                 (stext as usize).into(),
                 (strampoline as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
@@ -417,7 +417,7 @@ impl MemorySpace {
             VmArea::new(
                 (etrampoline as usize).into(),
                 (etext as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
@@ -432,7 +432,7 @@ impl MemorySpace {
             VmArea::new(
                 (srodata as usize).into(),
                 (erodata as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R,
                 None,
                 None,
@@ -447,7 +447,7 @@ impl MemorySpace {
             VmArea::new(
                 (sdata as usize).into(),
                 (edata as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -463,7 +463,7 @@ impl MemorySpace {
             VmArea::new(
                 (sstack as usize).into(),
                 (estack as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -478,7 +478,7 @@ impl MemorySpace {
             VmArea::new(
                 (sbss as usize).into(),
                 (ebss as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -493,7 +493,7 @@ impl MemorySpace {
             VmArea::new(
                 (strampoline as usize).into(),
                 (etrampoline as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X | MapPermission::U,
                 None,
                 None,
@@ -509,7 +509,7 @@ impl MemorySpace {
             VmArea::new(
                 (ekernel as usize).into(),
                 MEMORY_END.into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -521,15 +521,15 @@ impl MemorySpace {
         );
         #[cfg(not(feature = "tmpfs"))]
         {
-            info!("[kernel]mapping memory-mapped registers");
+            println!("[kernel]mapping memory-mapped registers");
             for pair in MMIO_VIRT {
-                // println!("start va: {:#x}", (*pair).0);
-                // println!("end va: {:#x}", (*pair).0 + (*pair).1);
+                println!("start va: {:#x}", (*pair).0);
+                println!("end va: {:#x}", (*pair).0 + (*pair).1);
                 memory_space.push(
                     VmArea::new(
                         (*pair).0.into(),
                         ((*pair).0 + (*pair).1).into(),
-                        MapType::Direct,
+                        MapType::Identical,
                         MapPermission::R | MapPermission::W,
                         None,
                         None,
