@@ -169,10 +169,20 @@ impl Process {
 
     /// Send signal to this process
     pub fn send_signal(&self, signo: usize) -> GeneralRet<()> {
+        log::info!(
+            "[Process:send_signal] proc {} recv signo {}",
+            self.pid(),
+            signo
+        );
         if signo == 0 {
             return Err(SyscallErr::EINVAL);
         }
         if signo == SIGKILL {
+            log::info!(
+                "[Process:send_signal] proc {} recv sigkill signo {}",
+                self.pid(),
+                signo
+            );
             self.inner_handler(|proc| {
                 for (_, thread) in proc.threads.iter() {
                     if let Some(thread) = thread.upgrade() {
