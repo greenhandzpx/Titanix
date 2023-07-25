@@ -130,6 +130,11 @@ pub fn init() {
         root_inode.mkdir_v(dir, InodeMode::FileDIR).unwrap();
     }
 
+    let var_dir = root_inode.mkdir_v("var", InodeMode::FileDIR).unwrap();
+    var_dir
+        .mkdir_v("tmp", InodeMode::FileDIR)
+        .expect("mkdir /var/tmp fail!");
+
     let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
     let musl_dl_path = etc_dir
         .mknod_v("ld-musl-riscv64-sf.path", InodeMode::FileREG, None)
@@ -163,6 +168,16 @@ pub fn init() {
         .mount(
             "/tmp",
             "tmp",
+            FsDevice::None,
+            FileSystemType::TmpFS,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("tmpfs init fail!");
+
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/var/tmp",
+            "var_tmp",
             FsDevice::None,
             FileSystemType::TmpFS,
             StatFlags::ST_NOSUID,

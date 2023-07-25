@@ -86,7 +86,17 @@ impl FastPathCache {
     }
 }
 
-pub const FAST_PATH: [&str; 4] = ["/dev/null", "/dev/zero", "/dev/tty", "/dev/urandom"];
+pub const FAST_PATH: [&str; 9] = [
+    "/dev/null",
+    "/dev/zero",
+    "/dev/tty",
+    "/dev/urandom",
+    "/dev",
+    "/proc",
+    "/tmp",
+    "/var/tmp",
+    "/etc",
+];
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum InodeMode {
@@ -246,6 +256,7 @@ impl dyn Inode {
 
     pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> GeneralRet<Arc<dyn Inode>> {
         let child = self.mkdir(self.clone(), name, mode)?;
+        let path = child.metadata().path.clone();
         log::info!("[mkdir_v] child inode name {}", name);
         self.metadata()
             .inner
@@ -253,8 +264,14 @@ impl dyn Inode {
             .children
             .insert(name.to_string(), child.clone());
         // insert to cache
-        let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        let key = HashKey::new(self.metadata().ino, name.to_string());
+        log::info!("[mkdir_v] insert {} into INODE_CACHE", path);
         INODE_CACHE.insert(key, child.clone());
+        // insert to FAST_PATH
+        if FAST_PATH.contains(&path.as_str()) {
+            log::info!("[mkdir_v] insert {} into FAST_PATH_CACHE", path);
+            FAST_PATH_CACHE.insert(path, child.clone());
+        }
         Ok(child)
     }
 
@@ -381,11 +398,6 @@ impl dyn Inode {
             debug!("[try_find_and_insert_inode] find in children");
             return target_inode;
         }
-        // if self.metadata().name.eq("tmp") {
-        //     // tmp in memory, don't load children
-        //     debug!("[try_find_and_insert_inode] parent is tmp, not need to load children");
-        //     return None;
-        // }
         self.load_children();
         debug!(
             "[try_find_and_insert_inode] children size {}",

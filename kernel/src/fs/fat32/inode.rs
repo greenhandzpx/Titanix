@@ -89,10 +89,17 @@ impl FAT32Inode {
     pub fn new(
         fat: Arc<FileAllocTable>,
         fa_inode: Arc<dyn Inode>,
-        filename: &str,
+        name: &str,
         mode: InodeMode,
     ) -> Self {
-        let meta = InodeMeta::new(Some(fa_inode), filename, mode, 0, None);
+        let parent_path = fa_inode.metadata().path.clone();
+        let path = path::merge(&parent_path, name);
+        log::debug!(
+            "[Fat32Indoe::new] parent_path: {}, path: {}",
+            parent_path,
+            path
+        );
+        let meta = InodeMeta::new(Some(fa_inode), &path, mode, 0, None);
         let file = FAT32File::new(
             Arc::clone(&fat),
             0,

@@ -229,7 +229,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
 
-    UserCheck::new().check_c_str(path)?;
     let mut path = path::path_process(AT_FDCWD, path as *const u8)?.unwrap();
     info!("[sys_execve] path {}", path);
 

@@ -1,6 +1,9 @@
 use alloc::{boxed::Box, string::ToString, sync::Arc};
 
-use crate::fs::{inode::InodeMeta, Inode, InodeMode};
+use crate::{
+    fs::{inode::InodeMeta, Inode, InodeMode},
+    utils::path,
+};
 
 pub struct TmpInode {
     metadata: InodeMeta,
@@ -9,9 +12,10 @@ pub struct TmpInode {
 impl TmpInode {
     pub fn new(parent: Option<Arc<dyn Inode>>, name: &str, mode: InodeMode) -> Self {
         let path = match parent {
-            Some(ref parent) => parent.metadata().path.clone() + name,
+            Some(ref parent) => path::merge(&parent.metadata().path.clone(), name),
             None => name.to_string(),
         };
+        log::debug!("[TmpInode::new] path: {}", path);
         Self {
             metadata: InodeMeta::new(parent, &path, mode, 0, None),
         }
