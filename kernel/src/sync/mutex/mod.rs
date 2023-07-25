@@ -1,7 +1,9 @@
 use riscv::register::sstatus;
 
-use self::{sleep_mutex::SleepMutex, spin_mutex::SpinMutex};
+use self::{remutex::ReentrantMutex, sleep_mutex::SleepMutex, spin_mutex::SpinMutex};
 
+/// ReentrantMutex
+pub mod remutex;
 /// SleepMutex
 pub mod sleep_mutex;
 /// SpinMutex
@@ -13,6 +15,8 @@ pub type SpinLock<T> = SpinMutex<T, Spin>;
 pub type SpinNoIrqLock<T> = SpinMutex<T, SpinNoIrq>;
 /// SleepLock
 pub type SleepLock<T> = SleepMutex<T, SpinNoIrq>;
+/// ReentrantMutex
+pub type ReentrantLock<T> = ReentrantMutex<T, SpinNoIrq>;
 
 /// Low-level support for mutex(spinlock, sleeplock, etc)
 pub trait MutexSupport {
