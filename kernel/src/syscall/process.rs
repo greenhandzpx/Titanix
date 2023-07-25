@@ -295,7 +295,12 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     // } else {
     let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY)?;
     let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
-    let elf_data = app_file.sync_read_all()?;
+    let elf_data_arc = app_inode.metadata().inner.lock().elf_data.clone();
+    let elf_data = elf_data_arc.get_unchecked_mut();
+    // let mut elf_data = Vec::new();
+    if elf_data.is_empty() {
+        app_file.read_all_from_start(elf_data)?;
+    }
     current_process().exec(&elf_data, args_vec, envs_vec)
     // }
 }

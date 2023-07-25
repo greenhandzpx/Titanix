@@ -592,6 +592,11 @@ impl MemorySpace {
                     map_offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
+                // self.push(
+                //     vm_area,
+                //     map_offset,
+                //     None
+                // );
                 info!(
                     "[map_elf]: {:#x}, {:#x}, map_perm: {:?}",
                     start_va.0, end_va.0, map_perm
@@ -783,7 +788,11 @@ impl MemorySpace {
                 .open(interp_inode.clone(), OpenFlags::RDONLY)
                 .ok()
                 .unwrap();
-            let interp_elf_data = interp_file.sync_read_all().ok().unwrap();
+            let mut interp_elf_data = Vec::new();
+            interp_file
+                .read_all_from_start(&mut interp_elf_data)
+                .ok()
+                .unwrap();
             let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
             self.map_elf(&interp_elf, DL_INTERP_OFFSET.into());
 
