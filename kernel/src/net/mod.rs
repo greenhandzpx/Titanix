@@ -26,4 +26,3 @@ impl SocketTable {
         Self(BTreeMap::new())
     }
 }
-
