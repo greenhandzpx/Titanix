@@ -152,7 +152,7 @@ impl File for SocketFile {
                             .drain(..len)
                             .zip(buf.into_iter())
                             .for_each(|(src, dst)| *dst = src);
-                        Ok(len as isize)
+                        Ok(len)
                     }
                     _ => {
                         info!("[Socket::read] inode device is not Socket");
@@ -189,7 +189,7 @@ impl File for SocketFile {
                 } {
                     thread::yield_now().await;
                 } else {
-                    return Ok(buf.len() as isize);
+                    return Ok(buf.len());
                 }
             }
         })

@@ -71,7 +71,7 @@ pub fn sys_getpid() -> SyscallRet {
     stack_trace!();
     let ret = current_process().pid();
     debug!("[sys_getpid] return {}", ret);
-    Ok(ret as isize)
+    Ok(ret)
 }
 
 pub fn sys_getppid() -> SyscallRet {
@@ -82,9 +82,9 @@ pub fn sys_getppid() -> SyscallRet {
         Some(parent_process) => {
             let ret = parent_process.upgrade().unwrap().pid();
             debug!("[sys_getppid] return {}", ret);
-            Ok(ret as isize)
+            Ok(ret)
         }
-        None => Ok(INITPROC_PID as isize),
+        None => Ok(INITPROC_PID),
     }
 }
 
@@ -200,7 +200,7 @@ pub fn sys_clone(
             clone_flags,
             new_process.inner.lock().sig_queue.blocked_sigs
         );
-        Ok(new_pid as isize)
+        Ok(new_pid)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
 
@@ -361,7 +361,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                     found_pid, exit_code
                 );
 
-                Ok(Some((false, found_pid as isize, exit_code as i32)))
+                Ok(Some((false, found_pid, exit_code as i32)))
             } else {
                 // the child still alive
                 debug!(
@@ -371,7 +371,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 if proc.children.len() > 0 {
                     debug!("[sys_wait4] first child pid {}", proc.children[0].pid());
                 }
-                // Ok((-1 as isize, 0))
+                // Ok((-1  , 0))
                 Ok(None)
             }
         })? {
@@ -428,7 +428,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
     if pid == 0 {
         let pgid = current_process().pgid();
         info!("get pgid, pid {}, pgid {}", pid, pgid);
-        Ok(pgid as isize)
+        Ok(pgid)
     } else {
         let proc = PROCESS_MANAGER.get(pid);
         if proc.is_none() {
@@ -437,7 +437,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
             let proc = proc.unwrap();
             let pgid = proc.pgid();
             info!("get pgid, pid {}, pgid {}", pid, pgid);
-            Ok(pgid as isize)
+            Ok(pgid)
         }
     }
 }
@@ -491,7 +491,7 @@ pub fn sys_getegid() -> SyscallRet {
 pub fn sys_gettid() -> SyscallRet {
     stack_trace!();
     let tid = current_task().tid();
-    Ok(tid as isize)
+    Ok(tid)
 }
 
 pub fn sys_setsid() -> SyscallRet {
@@ -506,7 +506,7 @@ pub fn sys_setsid() -> SyscallRet {
             proc.pgid = pid;
         }
     });
-    Ok(pid as isize)
+    Ok(pid)
 }
 
 #[repr(C)]

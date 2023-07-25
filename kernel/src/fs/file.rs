@@ -157,9 +157,9 @@ pub trait File: Send + Sync {
                 }
             }
         }
-        Ok(meta.pos as isize)
+        Ok(meta.pos)
         // self.metadata().inner.lock().pos = offset;
-        // Ok(offset as isize)
+        // Ok(offset  )
     }
 
     /// Read all data from this file synchronously
@@ -280,7 +280,7 @@ impl File for DefaultFile {
 
             self.metadata().inner.lock().pos = file_offset;
             trace!("[DefaultFile::read]: read {} bytes", res);
-            Ok(res as isize)
+            Ok(res)
         })
     }
 
@@ -355,7 +355,7 @@ impl File for DefaultFile {
                 res,
                 buf.len()
             );
-            Ok(res as isize)
+            Ok(res)
         })
     }
 

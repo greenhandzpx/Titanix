@@ -72,12 +72,12 @@ impl File for ZeroFile {
             let _sum_guard = SumGuard::new();
             buf.fill(0);
             debug!("/dev/zero: fill 0");
-            Ok(buf.len() as isize)
+            Ok(buf.len())
         })
     }
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         debug!("[write] /dev/zero");
-        Box::pin(async move { Ok(buf.len() as isize) })
+        Box::pin(async move { Ok(buf.len()) })
     }
 
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
@@ -85,12 +85,12 @@ impl File for ZeroFile {
         let _sum_guard = SumGuard::new();
         buf.fill(0);
         debug!("[sync_read] /dev/zero: fill 0");
-        Ok(buf.len() as isize)
+        Ok(buf.len())
     }
 
     fn sync_write(&self, buf: &[u8]) -> SyscallRet {
         debug!("[sync_write] /dev/zero");
-        Ok(buf.len() as isize)
+        Ok(buf.len())
     }
     fn flags(&self) -> OpenFlags {
         self.meta.inner.lock().flags

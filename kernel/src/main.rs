@@ -42,6 +42,7 @@ mod executor;
 mod fs;
 mod loader;
 pub mod mm;
+mod net;
 mod panic;
 pub mod process;
 mod processor;
@@ -60,12 +61,11 @@ use core::{
 };
 
 use crate::{
-    config::mm::{HART_START_ADDR, KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+    config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
     process::thread,
-    processor::{hart, HARTS},
-    sbi::hart_start,
+    processor::hart,
 };
 
 global_asm!(include_str!("entry.S"));
@@ -131,11 +131,8 @@ pub fn rust_main(hart_id: usize) {
         trap::init();
         executor::init();
         loader::init();
-
         driver::init();
-
         fs::init();
-
         timer::init();
 
         thread::spawn_kernel_thread(async move {
@@ -147,6 +144,9 @@ pub fn rust_main(hart_id: usize) {
 
         #[cfg(feature = "multi_hart")]
         {
+            use crate::config::mm::HART_START_ADDR;
+            use crate::processor::HARTS;
+            use crate::sbi::hart_start;
             let hart_num = unsafe { HARTS.len() };
             for i in 0..hart_num {
                 if i == hart_id {
@@ -161,8 +161,8 @@ pub fn rust_main(hart_id: usize) {
     } else {
         // The other harts
 
-        #[cfg(not(feature = "multi_hart"))]
-        return;
+        // #[cfg(not(feature = "multi_hart"))]
+        // return;
 
         // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}

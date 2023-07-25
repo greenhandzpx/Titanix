@@ -239,5 +239,5 @@ pub fn futex_wake(uaddr: usize, val: u32) -> SyscallRet {
     UserCheck::new().check_readable_slice(uaddr as *const u8, core::mem::size_of::<usize>())?;
     let cnt =
         current_process().inner_handler(|proc| proc.futex_queue.wake(uaddr.into(), val as usize));
-    return Ok(cnt as isize);
+    return Ok(cnt);
 }

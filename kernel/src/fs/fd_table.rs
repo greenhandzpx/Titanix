@@ -14,6 +14,8 @@ use super::{file::File, resolve_path, Inode, OpenFlags, AT_FDCWD};
 
 pub static MAX_FD: AtomicUsize = AtomicUsize::new(1024);
 
+pub type Fd = usize;
+
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,
 }
@@ -68,7 +70,7 @@ impl FdTable {
 
         self.put(fd, file);
         debug!("[FdTable::open] find fd: {}", fd);
-        Ok(fd as isize)
+        Ok(fd)
     }
 
     pub fn from_another(fd_table: &FdTable) -> GeneralRet<Self> {
@@ -87,7 +89,7 @@ impl FdTable {
     }
 
     /// Get a ref of the given fd
-    pub fn get_ref(&self, fd: usize) -> Option<&Arc<dyn File>> {
+    pub fn get_ref(&self, fd: Fd) -> Option<&Arc<dyn File>> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -101,7 +103,7 @@ impl FdTable {
     }
 
     /// Get the ownership of the given fd by clone
-    pub fn get(&self, fd: usize) -> Option<Arc<dyn File>> {
+    pub fn get(&self, fd: Fd) -> Option<Arc<dyn File>> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -110,7 +112,7 @@ impl FdTable {
     }
 
     /// Take the ownership of the given fd
-    pub fn take(&mut self, fd: usize) -> Option<Arc<dyn File>> {
+    pub fn take(&mut self, fd: Fd) -> Option<Arc<dyn File>> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -118,7 +120,7 @@ impl FdTable {
         }
     }
 
-    pub fn put(&mut self, fd: usize, file: Arc<dyn File>) {
+    pub fn put(&mut self, fd: Fd, file: Arc<dyn File>) {
         assert!(fd < self.fd_table.len());
         assert!(self.fd_table[fd].is_none());
         self.fd_table[fd] = Some(file);
@@ -135,7 +137,7 @@ impl FdTable {
             Ok(self.fd_table.len() - 1)
         }
     }
-    pub fn alloc_fd_lower_bound(&mut self, bound: usize) -> GeneralRet<usize> {
+    pub fn alloc_fd_lower_bound(&mut self, bound: Fd) -> GeneralRet<usize> {
         if let Some(fd) =
             (0..self.fd_table.len()).find(|fd| *fd >= bound && self.fd_table[*fd].is_none())
         {
@@ -156,7 +158,7 @@ impl FdTable {
         }
     }
 
-    pub fn alloc_spec_fd(&mut self, newfd: usize) -> GeneralRet<usize> {
+    pub fn alloc_spec_fd(&mut self, newfd: Fd) -> GeneralRet<usize> {
         if newfd >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
             return Err(SyscallErr::EMFILE);
         }

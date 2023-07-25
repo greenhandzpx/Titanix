@@ -152,7 +152,7 @@ impl File for MeminfoFile {
             } else {
                 buf[..len].copy_from_slice(info.as_bytes());
                 inner.pos = len;
-                Ok(len as isize)
+                Ok(len)
             }
         })
     }

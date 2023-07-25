@@ -72,7 +72,7 @@ impl File for NullFile {
     }
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         debug!("[write] /dev/null");
-        Box::pin(async move { Ok(buf.len() as isize) })
+        Box::pin(async move { Ok(buf.len()) })
     }
     fn sync_read(&self, _buf: &mut [u8]) -> SyscallRet {
         debug!("[sync_read] /dev/null");
@@ -80,7 +80,7 @@ impl File for NullFile {
     }
     fn sync_write(&self, buf: &[u8]) -> SyscallRet {
         debug!("[sync_write] /dev/null");
-        Ok(buf.len() as isize)
+        Ok(buf.len())
     }
     fn flags(&self) -> OpenFlags {
         self.meta.inner.lock().flags

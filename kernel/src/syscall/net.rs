@@ -36,7 +36,7 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
     current_process().inner_handler(move |proc| {
         let fd = proc.fd_table.alloc_fd()?;
         proc.fd_table.put(fd, socket_file);
-        Ok(fd as isize)
+        Ok(fd)
     })
 }
 

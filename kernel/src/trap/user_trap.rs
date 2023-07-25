@@ -186,26 +186,12 @@ pub fn trap_return() {
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
-        // error!(
-        //     "[trap_return] user sp {:#x}, sepc {:#x}, trap cx addr {:#x}",
-        //     current_trap_cx().user_x[2],
-        //     current_trap_cx().sepc,
-        //     current_trap_cx() as *mut _ as usize
-        // );
-        current_trap_cx().user_fx.load();
+        current_trap_cx().user_fx.restore();
 
         __return_to_user(current_trap_cx());
 
-        current_trap_cx().user_fx.store();
-
-        // Open interrupt in `trap_handler`
-
-        // error!(
-        //     "[trap_in] sepc {:#x}, x10 {:#x} x11 {:#x}",
-        //     current_trap_cx().sepc,
-        //     current_trap_cx().user_x[10],
-        //     current_trap_cx().user_x[11],
-        // );
+        // Next trap will arrive here
+        current_trap_cx().user_fx.save();
 
         (*current_task().inner.get()).time_info.when_trap_in();
     }

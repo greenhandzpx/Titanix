@@ -157,7 +157,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
         stack_trace!();
         Box::pin(async move {
             debug!("handle mmap page fault asynchronously");
-            let (inode, map_perm, mmap_flags, start_vpn) = process.inner_handler(|proc| {
+            let (backup_file, map_perm, mmap_flags, start_vpn) = process.inner_handler(|proc| {
                 let vma = proc
                     .memory_space
                     .find_vm_area_by_vpn(va.floor())
@@ -173,9 +173,12 @@ impl PageFaultHandler for MmapPageFaultHandler {
                 ))
             })?;
 
-            let offset = inode.offset + (va.0 - VirtAddr::from(start_vpn).0);
-            debug!("handle mmap page fault, offset {:#x}", offset);
-            let page = inode
+            let offset = backup_file.offset + (va.0 - VirtAddr::from(start_vpn).0);
+            debug!(
+                "handle mmap page fault, offset {:#x}, backup file offset {:#x}",
+                offset, backup_file.offset
+            );
+            let page = backup_file
                 .file
                 .metadata()
                 .inner

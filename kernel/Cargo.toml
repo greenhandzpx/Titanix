@@ -18,6 +18,7 @@ hashbrown = "0.14"
 rand_core = "0.6.4"
 # intrusive-collections = { version = "0.9", features = ["nightly"] }
 smoltcp = { version = "0.10.0", default-features = false, features = [
+    "alloc",
     "log",
     "medium-ethernet",
     # "medium-ip",

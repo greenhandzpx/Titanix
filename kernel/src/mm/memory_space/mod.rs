@@ -129,7 +129,6 @@ impl MemorySpace {
     /// Clip the map areas overlapping with the given vpn range.
     /// Note that there may exist more than one area.
     /// Return the overlapping vma.
-    /// Note that now only
     pub fn clip_vm_areas_overlapping(
         &mut self,
         vpn_range: VPNRange,

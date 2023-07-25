@@ -113,7 +113,7 @@ impl File for TtyFile {
                     break;
                 }
             }
-            Ok(buf.len() as isize)
+            Ok(buf.len())
         })
     }
 
@@ -135,7 +135,7 @@ impl File for TtyFile {
             } else {
                 print!("{}", core::str::from_utf8(buf).unwrap());
             }
-            Ok(buf.len() as isize)
+            Ok(buf.len())
         })
     }
 
