@@ -7,6 +7,13 @@ use self::{tcp::TcpSocket, udp::UdpSocket};
 mod tcp;
 mod udp;
 
+/// domain
+pub const AF_INET: u32 = 2;
+
+pub const MAX_BUFFER_SIZE: usize = (1 << 16) - 1;
+
+pub const TCP_MSS: u32 = 32768;
+
 pub enum Socket {
     TcpSocket(TcpSocket),
     UdpSocket(UdpSocket),
@@ -20,4 +27,3 @@ impl SocketTable {
     }
 }
 
-pub struct SocketFile {}
