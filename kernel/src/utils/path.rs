@@ -67,12 +67,9 @@ pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<Str
     debug!("absolute path: {:?}", absolute_path_vec);
     debug!("relative path: {:?}", relative_path_vec);
     let mut res: Vec<&str> = Vec::new();
-    if absolute_path_vec.len() == 0 {
-        res.push("");
-    } else {
-        for i in 0..absolute_path_vec.len() {
-            res.push(absolute_path_vec[i]);
-        }
+    res.push("");
+    for i in 0..absolute_path_vec.len() {
+        res.push(absolute_path_vec[i]);
     }
     for i in 0..relative_path_vec.len() {
         match relative_path_vec[i] {
