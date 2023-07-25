@@ -9,8 +9,6 @@
 #define BUF_LEN 2048
 #define FILENAME_MAXLEN 256
 #define MAX_CONNS 16
-#define FILE_PATH "../kernel/target/riscv64gc-unknown-none-elf/release/kernel.bin"
-#define FILE_NAME "Titanix-kernel"
 #define BLK_SIZE 512
 
 #define TFTP_OP_RRQ 1
@@ -19,6 +17,10 @@
 #define TFTP_OP_ACK 4
 #define TFTP_OP_ERROR 5
 
+#define NFILE 2
+
+const char *file_name[NFILE] = {"kernel.bin", "sdcard.img"};
+const char *file_path[NFILE] = {"../kernel/target/riscv64gc-unknown-none-elf/release/kernel.bin", "../fs-img-src/sdcard.img"};
 struct tftp_connect
 {
 	in_addr_t raw_client_ip;
