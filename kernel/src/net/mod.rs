@@ -27,3 +27,9 @@ impl SocketTable {
     }
 }
 
+
+// pub trait SocketOp {
+//     fn bind() {}
+//     fn connect() {}
+//     fn accept() {}
+// }

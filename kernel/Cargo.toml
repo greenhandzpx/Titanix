@@ -3,7 +3,7 @@
 [package]
 name = "kernel"
 version = "0.1.0"
-authors = ["Peixin Tsang <893522573@qq.com>"]
+authors = ["Peixin Tsang <893522573@qq.com>", "Straho Chen", "ghj1222"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -31,7 +31,7 @@ smoltcp = { version = "0.10.0", default-features = false, features = [
     "async",
 ] }
 async-task = { version = "4.4.0", default-features = false }
-# async-task = { path = "../dependencies/async-task", default-features = false }
+managed = { version = "0.8", default-features = false, features = ["map"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
 fu740-pac = { path = "../dependencies/fu740-pac" }
