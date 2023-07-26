@@ -1,11 +1,9 @@
-// 不管coreclk, 先整hfpclk
 use crate::{pac::PRCI, time::Hertz};
 
 const HFXCLK: u32 = 26_000_000;
 
 pub trait PrciExt {
     fn setup(self) -> ClockSetup;
-    fn get_coreclk(self) -> Hertz;
 }
 
 impl PrciExt for PRCI {
@@ -15,38 +13,6 @@ impl PrciExt for PRCI {
             coreclk: None,
             pclk: None,
         }
-    }
-    // todo 完成获取当前core_clock的函数
-    fn get_coreclk(self) -> Hertz {
-        // 把corePllConfig相关读出来，然后计算输出
-        // if self.bypass {
-        //     input
-        // } else {
-        //     let vco = (input as u64) * 2 * (self.f as u64 + 1) / (self.r as u64 + 1);
-        //     (vco >> self.q) as u32
-        // }
-        // todo ??? 基于 prci.corepllsel.is_corepll 判断是否是使用corepll：0或者 HFXCLK：1 
-        // self.prci.core_pllcfg.write_with_zero(|w| {
-        //     w.pllr().bits(core_pll.r);
-        //     w.pllf().bits(core_pll.f);
-        //     w.pllq().bits(core_pll.q);
-        //     w.pllrange().bits(core_pll.range);  pllrange
-        //     w.pllbypass().bit(core_pll.bypass);  pllbypass
-        
-        // unsafe{
-        let core_pllr = self.core_pllcfg.read().pllr().bits();      //[5:0]
-        let core_pllf = self.core_pllcfg.read().pllf().bits();      //[14:6]
-        let core_pllq = self.core_pllcfg.read().pllq().bits();      //[17:15]
-        let core_pllbypass = self.core_pllcfg.read().pllbypass().bits();  // [24]
-        // let core_pllsel = self.corepllsel.read().source().is_corepll();
-        // }
-        if core_pllbypass {
-            Hertz(HFXCLK)
-        } else {
-            let vco = (HFXCLK as u64) * 2 * (core_pllf as u64 + 1) / (core_pllr as u64 + 1);
-            Hertz((vco >> core_pllq) as u32) 
-        }
-        // Hertz(15000000)
     }
 }
 
@@ -198,7 +164,7 @@ impl ClockSetup {
                 .modify(|_, w| w.source().pll_mux());
         }
 
-        // Switch peripheral clock to HFXCLK hfpclkpll
+        // Switch peripheral clock to HFXCLK
         self.prci.hfpclkpllsel.modify(|_, w| w.source().hfclk());
 
         // Apply PLL configuration
@@ -238,60 +204,6 @@ impl ClockSetup {
             pclk: hfpclk_pll.output_frequency(HFXCLK) / 2,
         }
     }
-    // todo  coreclock的设置
-    // 直接参考上面那个freez函数
-    // 或者： freedom_metal/src/drivers/sifive_fe310-g000_pll.c 等
-    pub fn set_pclk(self, hfpclk_rate:u32) -> Clocks{
-        //coreclock设置为k210的PLL1时钟频率
-        let coreclk = self.coreclk.unwrap_or(800_000_000);
-        let pclk = self.pclk.unwrap_or(hfpclk_rate);
-        let core_pll = PllConfig::calculate(800_000_000, coreclk).expect("Invalid PLL input parameters");
-        let hfpclk_pll =
-            PllConfig::calculate(hfpclk_rate, pclk * 2).expect("Invalid PLL input parameters");
-
-        //coreclk_pll todo
-
-        // hfpclk_pll 
-        // Switch peripheral clock to HFXCLK
-        self.prci.hfpclkpllsel.modify(|_, w| w.source().hfclk());
-
-        // Apply PLL configuration
-        unsafe {
-            self.prci.hfpclk_pllcfg.write_with_zero(|w| {
-                w.pllr().bits(hfpclk_pll.r);
-                w.pllf().bits(hfpclk_pll.f);
-                w.pllq().bits(hfpclk_pll.q);
-                w.pllrange().bits(hfpclk_pll.range);
-                w.pllbypass().bit(hfpclk_pll.bypass);
-                w.pllfsebypass().set_bit()
-            });
-        }
-
-        if !hfpclk_pll.bypass {
-            // Wait for lock
-            while self.prci.hfpclk_pllcfg.read().plllock().bit_is_clear() {}
-        }
-
-        // Enable clock
-        self.prci
-            .hfpclk_plloutdiv
-            .modify(|r, w| unsafe { w.bits(r.bits() | 1u32 << 31) });
-
-        if pclk != hfpclk_rate {
-            // Select PLL as a peripheral clock source
-            self.prci.hfpclkpllsel.modify(|_, w| w.source().hfpclkpll());
-        }
-
-        // Set divider to 0 (divide by 2)
-        unsafe {
-            self.prci.hfpclk_div_reg.write_with_zero(|w| w.bits(0));
-        }
-
-        Clocks {
-            coreclk: core_pll.output_frequency(800_000_000),
-            pclk: hfpclk_pll.output_frequency(hfpclk_rate),
-        }
-    }
 }
 
 pub struct Clocks {
@@ -300,12 +212,6 @@ pub struct Clocks {
 }
 
 impl Clocks {
-    pub fn new() -> Self {
-        Self {
-            coreclk: 403_000_000,
-            pclk: 195_000_000,
-        }
-    }
     pub fn coreclk(&self) -> Hertz {
         Hertz(self.coreclk)
     }
@@ -314,32 +220,3 @@ impl Clocks {
         Hertz(self.pclk)
     }
 }
-
-// pub struct myclock<PRCI> {
-//     prci: PRCI,
-//     coreclk: Option<u32>,
-//     pclk: Option<u32>,
-// }
-
-
-// impl</*'a,*/ X: PRCI> myclock</*'a,*/ X> {
-//     pub fn new(spi: X, spi_cs: u32, cs_gpionum: u8/*, dmac: &'a DMAC, channel: dma_channel*/) -> Self {
-//         Self {
-//             spi,
-//             spi_cs,
-//             cs_gpionum,
-//             /*
-//             dmac,
-//             channel,
-//             */
-//         }
-//     }
-// }
-// pub fn clocks_init() -> Clocks {
-//     let clock_setup =  ClockSetup {
-//         prci: PRCI,
-//         coreclk: None,
-//         pclk: None,
-//     };
-//     clock_setup.freeze()
-// }

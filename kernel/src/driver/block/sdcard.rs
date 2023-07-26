@@ -814,10 +814,11 @@ fn init_sdcard() -> SDCard<SPIImpl> {
     // 生成冻结的时钟
     // let clocks = peripherals.PRCI.setup().set_pclk(300_000_000);
     //
-
+    /*
     println!("[sdcard] new clocks start !");
     let clocks = fu740_hal::clock::Clocks::new();
     println!("[sdcard] new clocks finish !");
+    */
 
     // 是否需要初始化UARTHS ?
     // peripherals.UARTHS.configure(115_200.bps(), &clocks);
