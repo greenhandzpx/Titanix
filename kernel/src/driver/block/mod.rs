@@ -24,17 +24,6 @@ pub type BlockDeviceImpl = virtio_blk::VirtIOBlock;
 
 use crate::config::board::MMIO;
 
-#[cfg(not(feature = "board_u740"))]
-/// MMIO virtual address
-pub const MMIO_VIRT: &[(usize, usize, MapPermission)] = &[(
-    MMIO[0].0, /* + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)*/
-    MMIO[0].1,
-    MapPermission::union(MapPermission::R, MapPermission::W),
-)];
-
-#[cfg(feature = "board_u740")]
-pub const MMIO_VIRT: &[(usize, usize, MapPermission)] = MMIO;
-
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub static BLOCK_DEVICE: Mutex<Option<Arc<dyn BlockDevice>>> = Mutex::new(None);

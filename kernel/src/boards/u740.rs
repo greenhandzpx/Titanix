@@ -4,8 +4,7 @@ use crate::{
 };
 
 pub const CLOCK_FREQ: usize = 1000000;
-// pub const MEMORY_END: usize = 0x81000000;
-pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x88000000;
+pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x480000000;
 
 pub const PERMISSION_NONE: MapPermission = MapPermission::empty();
 pub const PERMISSION_RW: MapPermission = MapPermission::union(MapPermission::R, MapPermission::W);

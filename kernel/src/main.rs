@@ -34,9 +34,8 @@ mod board;
 #[path = "boards/qemu.rs"]
 mod board;
 
-#[macro_use]
-mod console;
 mod config;
+#[macro_use]
 mod driver;
 mod executor;
 mod fs;

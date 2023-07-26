@@ -3,17 +3,20 @@ pub const CLOCK_FREQ: usize = 10000000;
 // pub const MEMORY_END: usize = 0x81000000;
 pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x88000000;
 
-pub const MMIO: &[(usize, usize)] = &[
-    (0x0010001000, 0x1000), // VIRT_TEST/RTC  in virt machine
+pub const PERMISSION_RW: MapPermission = MapPermission::union(MapPermission::R, MapPermission::W);
+
+pub const MMIO: &[(usize, usize, MapPermission)] = &[
+    (0x10000000, 0x1000, PERMISSION_RW), // UART
+    (0x10001000, 0x1000, PERMISSION_RW), // VIRT_TEST/RTC  in virt machine
 ];
-// pub const MMIO: &[(usize, usize)] = &[
-//     (0x0010001000, 0x1000), // VIRT_TEST/RTC  in virt machine
-// ];
 
 //ref:: https://github.com/andre-richter/qemu-exit
 use core::arch::asm;
 
-use crate::config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS};
+use crate::{
+    config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+    mm::MapPermission,
+};
 
 const EXIT_SUCCESS: u32 = 0x5555; // Equals `exit(0)`. qemu successful exit
 

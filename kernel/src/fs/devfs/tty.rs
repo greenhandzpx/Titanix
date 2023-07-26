@@ -11,7 +11,7 @@ use core::{
 };
 
 use crate::{
-    process, processor::SumGuard, sbi::console_getchar, sync::mutex::SleepLock,
+    driver::uart::getchar, process, processor::SumGuard, sync::mutex::SleepLock,
     utils::error::AsyscallRet,
 };
 
@@ -98,7 +98,7 @@ impl File for TtyFile {
                         c = self_buf;
                         break;
                     }
-                    c = console_getchar();
+                    c = getchar();
                     // debug!("stdin read a char {}", c);
                     if c as i8 == -1 {
                         process::yield_now().await;

@@ -8,7 +8,7 @@ pub mod timeout_task;
 use core::{cmp::Reverse, task::Waker, time::Duration};
 
 use crate::config::board::CLOCK_FREQ;
-use crate::sbi::set_timer;
+use crate::driver::sbi::set_timer;
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::collections::{BTreeMap, BinaryHeap};
 use log::info;

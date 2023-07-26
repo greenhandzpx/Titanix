@@ -9,7 +9,6 @@ use crate::{
         mm::{DL_INTERP_OFFSET, KERNEL_DIRECT_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS},
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
-    driver::block::MMIO_VIRT,
     fs::{resolve_path, OpenFlags, AT_FDCWD},
     mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
     process::aux::*,
@@ -519,28 +518,25 @@ impl MemorySpace {
             0,
             None,
         );
-        #[cfg(not(feature = "tmpfs"))]
-        {
-            println!("[kernel] mapping mmio registers");
-            for pair in MMIO_VIRT {
-                println!("start va: {:#x}", (*pair).0);
-                println!("end va: {:#x}", (*pair).0 + (*pair).1);
-                println!("permission: {:?}", (*pair).2);
-                memory_space.push(
-                    VmArea::new(
-                        ((*pair).0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
-                        ((*pair).0 + (*pair).1 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
-                        MapType::Direct,
-                        (*pair).2,
-                        None,
-                        None,
-                        memory_space.page_table.clone(),
-                        VmAreaType::MMIO,
-                    ),
-                    0,
+        info!("[kernel] mapping mmio registers");
+        for pair in MMIO {
+            info!("start va: {:#x}", (*pair).0);
+            info!("end va: {:#x}", (*pair).0 + (*pair).1);
+            info!("permission: {:?}", (*pair).2);
+            memory_space.push(
+                VmArea::new(
+                    ((*pair).0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                    ((*pair).0 + (*pair).1 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                    MapType::Direct,
+                    (*pair).2,
                     None,
-                );
-            }
+                    None,
+                    memory_space.page_table.clone(),
+                    VmAreaType::MMIO,
+                ),
+                0,
+                None,
+            );
         }
         info!("[kernel]new kernel finished");
         memory_space
