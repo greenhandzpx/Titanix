@@ -5,8 +5,8 @@ use xmas_elf::ElfFile;
 
 use crate::{
     config::{
-        board::MEMORY_END,
-        mm::{DL_INTERP_OFFSET, PAGE_SIZE},
+        board::{MEMORY_END, MMIO},
+        mm::{DL_INTERP_OFFSET, KERNEL_DIRECT_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS},
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
     driver::block::MMIO_VIRT,
@@ -521,16 +521,17 @@ impl MemorySpace {
         );
         #[cfg(not(feature = "tmpfs"))]
         {
-            println!("[kernel]mapping memory-mapped registers");
+            println!("[kernel] mapping mmio registers");
             for pair in MMIO_VIRT {
                 println!("start va: {:#x}", (*pair).0);
                 println!("end va: {:#x}", (*pair).0 + (*pair).1);
+                println!("permission: {:?}", (*pair).2);
                 memory_space.push(
                     VmArea::new(
-                        (*pair).0.into(),
-                        ((*pair).0 + (*pair).1).into(),
-                        MapType::Identical,
-                        MapPermission::R | MapPermission::W,
+                        ((*pair).0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                        ((*pair).0 + (*pair).1 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                        MapType::Direct,
+                        (*pair).2,
                         None,
                         None,
                         memory_space.page_table.clone(),

@@ -9,6 +9,7 @@ use alloc::sync::Arc;
 
 use crate::{
     config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
+    mm::MapPermission,
     sync::mutex::SpinNoIrqLock,
 };
 
@@ -25,13 +26,14 @@ use crate::config::board::MMIO;
 
 #[cfg(not(feature = "board_u740"))]
 /// MMIO virtual address
-pub const MMIO_VIRT: &[(usize, usize)] = &[(
+pub const MMIO_VIRT: &[(usize, usize, MapPermission)] = &[(
     MMIO[0].0, /* + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)*/
     MMIO[0].1,
+    MapPermission::union(MapPermission::R, MapPermission::W),
 )];
 
 #[cfg(feature = "board_u740")]
-pub const MMIO_VIRT: &[(usize, usize)] = MMIO;
+pub const MMIO_VIRT: &[(usize, usize, MapPermission)] = MMIO;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
