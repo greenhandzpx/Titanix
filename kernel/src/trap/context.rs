@@ -54,6 +54,8 @@ pub struct TrapContext {
 pub struct UserFloatContext {
     pub user_fx: [f64; 32], // 50 - 81
     pub fcsr: u32,          // 32bit
+    pub need_save: u8,
+    pub need_restore: u8,
 }
 
 impl UserFloatContext {
@@ -61,7 +63,18 @@ impl UserFloatContext {
         unsafe { core::mem::zeroed() }
     }
 
-    pub fn store(&mut self) {
+    pub fn should_save(&mut self) {
+        self.need_save = 1;
+    }
+
+    pub fn should_restore(&mut self) {
+        self.need_restore = 1;
+    }
+
+    pub fn save(&mut self) {
+        // if self.need_save == 0 {
+        //     return;
+        // }
         unsafe {
             let mut _t: usize = 1; // alloc a register but not zero.
             asm!("
@@ -102,9 +115,13 @@ impl UserFloatContext {
         ", in(reg) self,
                 inout(reg) _t
             );
-        }
+        };
     }
-    pub fn load(&self) {
+
+    pub fn restore(&self) {
+        // if self.need_restore == 0 {
+        //     return;
+        // }
         unsafe {
             asm!("
             fld  f0,  0*8({0})
@@ -167,7 +184,7 @@ impl UserContext {
     /// Construct a new user context from trap context
     pub fn from_trap_context(trap_context: &TrapContext) -> Self {
         let mut user_fx = UserFloatContext::new();
-        user_fx.store();
+        user_fx.save();
         // log::error!("store fx, fs1 {}", user_fx.user_fx[9]);
         Self {
             user_x: trap_context.user_x,
@@ -178,7 +195,7 @@ impl UserContext {
     }
     ///
     pub fn restore_trap_context(&self, trap_context: &mut TrapContext) {
-        self.user_fx.load();
+        self.user_fx.restore();
         // log::error!("load fx, fs1 {}", self.user_fx.user_fx[9]);
         trap_context.user_x = self.user_x;
         trap_context.user_x[0] = 0;
@@ -199,10 +216,6 @@ impl TrapContext {
         sstatus.set_spp(SPP::User);
         sstatus.set_sie(false);
         sstatus.set_spie(false);
-        // let tp: usize;
-        // unsafe {
-        //     asm!("mv {}, tp", out(reg) tp);
-        // }
         let mut cx = Self {
             user_x: [0; 32],
             sstatus: sstatus.bits(),

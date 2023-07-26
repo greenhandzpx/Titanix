@@ -226,7 +226,7 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     //     "[sys_rt_sigreturn] sig return, dummy {:?}",
     //     signal_context.blocked_sigs_dummy.dummy
     // );
-    Ok(trap_context_mut.user_x[10] as isize)
+    Ok(trap_context_mut.user_x[10])
 }
 
 pub fn sys_rt_sigtimedwait(_set: *const u32, _info: *const u8, _timeout: *const u8) -> SyscallRet {
@@ -356,7 +356,7 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
 }
 
 pub fn sys_umask(_mask: u32) -> SyscallRet {
-    Ok(0x777 as isize)
+    Ok(0x777)
 }
 
 pub async fn sys_rt_sigsuspend(mask: usize) -> SyscallRet {

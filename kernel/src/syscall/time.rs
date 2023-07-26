@@ -60,8 +60,8 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     let dev_spec = current_time_spec();
     let diff_time = Duration::from(*time_spec) - current_time_duration();
     // let diff_spec = TimeDiff {
-    //     sec: time_spec.sec as isize - dev_spec.sec as isize,
-    //     nsec: time_spec.nsec as isize - dev_spec.nsec as isize,
+    //     sec: time_spec.sec   - dev_spec.sec  ,
+    //     nsec: time_spec.nsec   - dev_spec.nsec  ,
     // };
     info!(
         "[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}",
@@ -88,8 +88,8 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             let dev_time = current_time_duration();
             let clock_time = dev_time + *clock;
             // let time_spec = TimeSpec {
-            //     sec: (dev_spec.sec as isize + clock.sec) as usize,
-            //     nsec: (dev_spec.nsec as isize + clock.nsec) as usize,
+            //     sec: (dev_spec.sec   + clock.sec) as usize,
+            //     nsec: (dev_spec.nsec   + clock.nsec) as usize,
             // };
             debug!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {

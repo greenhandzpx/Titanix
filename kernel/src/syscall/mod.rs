@@ -236,8 +236,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_PWRITE64 => sys_handler!(sys_pwrite64, (args[0], args[1], args[2], args[3]), await),
         SYSCALL_SENDFILE => sys_handler!(
             sys_sendfile, (
-                args[0] as isize,
-                args[1] as isize,
+                args[0] as isize  ,
+                args[1] as isize  ,
                 args[2],
                 args[3] as usize,
             )
@@ -471,7 +471,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_MSYNC => sys_handler!(sys_msync, (args[0], args[1], args[2] as i32)),
         SYSCALL_MADVISE => sys_handler!(sys_madvise, ()),
         SYSCALL_WAIT4 => {
-            sys_handler!(sys_wait4, (args[0] as isize, args[1], args[2] as i32), await)
+            sys_handler!(sys_wait4, (args[0] as isize  , args[1], args[2] as i32), await)
         }
         SYSCALL_PRLIMIT64 => sys_handler!(
             sys_prlimit64,

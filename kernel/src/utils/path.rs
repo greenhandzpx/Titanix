@@ -67,12 +67,9 @@ pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<Str
     debug!("absolute path: {:?}", absolute_path_vec);
     debug!("relative path: {:?}", relative_path_vec);
     let mut res: Vec<&str> = Vec::new();
-    if absolute_path_vec.len() == 0 {
-        res.push("");
-    } else {
-        for i in 0..absolute_path_vec.len() {
-            res.push(absolute_path_vec[i]);
-        }
+    res.push("");
+    for i in 0..absolute_path_vec.len() {
+        res.push(absolute_path_vec[i]);
     }
     for i in 0..relative_path_vec.len() {
         match relative_path_vec[i] {
@@ -223,6 +220,7 @@ pub fn path_to_inode_ffi(
     })
 }
 
+/// Return absolute path
 pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>> {
     debug!("[path_process] dirfd: {}", dirfd);
     let _sum_guard = SumGuard::new();
@@ -306,6 +304,14 @@ pub fn get_parent_dir(path_name: &str) -> Option<String> {
 }
 pub fn merge(p1: &str, p2: &str) -> String {
     let mut res = p1.to_string();
+    res = if res.eq("/") {
+        "".to_string()
+    } else if res.ends_with("/") {
+        println!("[merge] end with /");
+        res[0..res.len() - 2].to_string()
+    } else {
+        res
+    };
     res += "/";
     res += p2;
     res

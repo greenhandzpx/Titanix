@@ -11,7 +11,7 @@ use crate::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
         open_interrupt,
     },
-    signal::{check_signal_for_current_process, check_signal_for_current_thread},
+    signal::{check_signal_for_current_process, check_signal_for_current_thread, SIGSEGV},
     stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
@@ -86,7 +86,7 @@ pub async fn trap_handler() {
                 local_hart().env().stack_tracker.print_stacks_err();
                 exit_and_terminate_all_threads(-2);
             }
-            match memory_space::handle_page_fault(VirtAddr::from(stval), scause.bits()).await {
+            match memory_space::handle_page_fault(VirtAddr::from(stval), scause).await {
                 Ok(()) => {
                     log::trace!(
                         "[kernel] handle legal page fault, addr {:#x}, instruction {:#x}",
@@ -103,6 +103,7 @@ pub async fn trap_handler() {
                         current_trap_cx().sepc,
                         current_process().pid()
                     );
+                    current_process().send_signal(SIGSEGV).unwrap();
                     // warn!("[kernel] user sp {:#x}", current_trap_cx().user_x[2]);
 
                     #[cfg(feature = "stack_trace")]
@@ -110,8 +111,7 @@ pub async fn trap_handler() {
                         warn!("backtrace:");
                         local_hart().env().stack_tracker.print_stacks();
                     }
-
-                    exit_and_terminate_all_threads(-2);
+                    // exit_and_terminate_all_threads(-2);
                 }
             }
             // There are serveral kinds of page faults:
@@ -186,26 +186,12 @@ pub fn trap_return() {
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
-        // error!(
-        //     "[trap_return] user sp {:#x}, sepc {:#x}, trap cx addr {:#x}",
-        //     current_trap_cx().user_x[2],
-        //     current_trap_cx().sepc,
-        //     current_trap_cx() as *mut _ as usize
-        // );
-        current_trap_cx().user_fx.load();
+        current_trap_cx().user_fx.restore();
 
         __return_to_user(current_trap_cx());
 
-        current_trap_cx().user_fx.store();
-
-        // Open interrupt in `trap_handler`
-
-        // error!(
-        //     "[trap_in] sepc {:#x}, x10 {:#x} x11 {:#x}",
-        //     current_trap_cx().sepc,
-        //     current_trap_cx().user_x[10],
-        //     current_trap_cx().user_x[11],
-        // );
+        // Next trap will arrive here
+        current_trap_cx().user_fx.save();
 
         (*current_task().inner.get()).time_info.when_trap_in();
     }

@@ -4,7 +4,9 @@ use alloc::{sync::Arc, vec, vec::Vec};
 use log::debug;
 
 use crate::{
+    config::fs::MAX_FD_NUM,
     fs::InodeState,
+    process::resource::{RLimit, RLIM_INFINITY},
     stack_trace,
     timer::ffi::current_time_spec,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
@@ -12,10 +14,12 @@ use crate::{
 
 use super::{file::File, resolve_path, Inode, OpenFlags, AT_FDCWD};
 
-pub static MAX_FD: AtomicUsize = AtomicUsize::new(1024);
+pub type Fd = usize;
 
 pub struct FdTable {
     fd_table: Vec<Option<Arc<dyn File>>>,
+    /// max fd
+    rlimit: RLimit,
 }
 
 impl FdTable {
@@ -42,6 +46,10 @@ impl FdTable {
                 // 2 -> stderr
                 Some(stderr),
             ],
+            rlimit: RLimit {
+                rlim_cur: MAX_FD_NUM,
+                rlim_max: RLIM_INFINITY,
+            },
         }
     }
 
@@ -68,13 +76,13 @@ impl FdTable {
 
         self.put(fd, file);
         debug!("[FdTable::open] find fd: {}", fd);
-        Ok(fd as isize)
+        Ok(fd)
     }
 
     pub fn from_another(fd_table: &FdTable) -> GeneralRet<Self> {
-        if fd_table.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
-            return Err(SyscallErr::EMFILE);
-        }
+        // if fd_table.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
+        //     return Err(SyscallErr::EMFILE);
+        // }
         let mut ret = Vec::new();
         for fd in fd_table.fd_table.iter() {
             if fd.is_none() {
@@ -83,11 +91,14 @@ impl FdTable {
                 ret.push(fd.as_ref().cloned());
             }
         }
-        Ok(Self { fd_table: ret })
+        Ok(Self {
+            fd_table: ret,
+            rlimit: fd_table.rlimit,
+        })
     }
 
     /// Get a ref of the given fd
-    pub fn get_ref(&self, fd: usize) -> Option<&Arc<dyn File>> {
+    pub fn get_ref(&self, fd: Fd) -> Option<&Arc<dyn File>> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -101,7 +112,7 @@ impl FdTable {
     }
 
     /// Get the ownership of the given fd by clone
-    pub fn get(&self, fd: usize) -> Option<Arc<dyn File>> {
+    pub fn get(&self, fd: Fd) -> Option<Arc<dyn File>> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -110,7 +121,7 @@ impl FdTable {
     }
 
     /// Take the ownership of the given fd
-    pub fn take(&mut self, fd: usize) -> Option<Arc<dyn File>> {
+    pub fn take(&mut self, fd: Fd) -> Option<Arc<dyn File>> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -118,7 +129,7 @@ impl FdTable {
         }
     }
 
-    pub fn put(&mut self, fd: usize, file: Arc<dyn File>) {
+    pub fn put(&mut self, fd: Fd, file: Arc<dyn File>) {
         assert!(fd < self.fd_table.len());
         assert!(self.fd_table[fd].is_none());
         self.fd_table[fd] = Some(file);
@@ -128,26 +139,27 @@ impl FdTable {
         if let Some(fd) = self.free_slot() {
             Ok(fd)
         } else {
-            if self.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
+            if self.fd_table.len() >= self.rlimit.rlim_cur {
                 return Err(SyscallErr::EMFILE);
             }
             self.fd_table.push(None);
+            // println!("[alloc_fd] alloc {}", self.fd_table.len() - 1);
             Ok(self.fd_table.len() - 1)
         }
     }
-    pub fn alloc_fd_lower_bound(&mut self, bound: usize) -> GeneralRet<usize> {
+    pub fn alloc_fd_lower_bound(&mut self, bound: Fd) -> GeneralRet<usize> {
         if let Some(fd) =
             (0..self.fd_table.len()).find(|fd| *fd >= bound && self.fd_table[*fd].is_none())
         {
             Ok(fd)
         } else {
-            if bound >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
+            if bound >= self.rlimit.rlim_cur {
                 return Err(SyscallErr::EMFILE);
             }
             if bound >= self.fd_table.len() {
                 self.fd_table.resize(bound + 1, None);
             } else {
-                if self.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
+                if self.fd_table.len() >= self.rlimit.rlim_cur {
                     return Err(SyscallErr::EMFILE);
                 }
                 self.fd_table.push(None)
@@ -156,14 +168,22 @@ impl FdTable {
         }
     }
 
-    pub fn alloc_spec_fd(&mut self, newfd: usize) -> GeneralRet<usize> {
-        if newfd >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
+    pub fn alloc_spec_fd(&mut self, newfd: Fd) -> GeneralRet<usize> {
+        if newfd >= self.rlimit.rlim_cur {
             return Err(SyscallErr::EMFILE);
         }
         if newfd >= self.fd_table.len() {
             self.fd_table.resize(newfd + 1, None);
         }
         Ok(newfd)
+    }
+
+    pub fn set_rlimit(&mut self, rlimit: RLimit) {
+        self.rlimit = rlimit;
+    }
+
+    pub fn rlimit(&self) -> RLimit {
+        self.rlimit
     }
 
     fn free_slot(&self) -> Option<usize> {

@@ -12,7 +12,6 @@ use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use super::PollFd;
-use crate::config::fs::RLIMIT_OFILE;
 use crate::config::mm::PAGE_SIZE;
 use crate::fs::ffi::{
     Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, SEEK_CUR, SEEK_END, SEEK_SET, STAT,
@@ -51,7 +50,7 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
     } else {
         let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, cwd.len()) };
         new_buf.copy_from_slice(cwd.as_bytes());
-        Ok(buf as isize)
+        Ok(buf)
     }
 }
 
@@ -68,7 +67,7 @@ pub fn sys_dup(oldfd: usize) -> SyscallRet {
             Err(SyscallErr::EBADF)
         }
     })?;
-    Ok(newfd as isize)
+    Ok(newfd)
 }
 
 pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallRet {
@@ -78,15 +77,11 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallRet {
     current_process().inner_handler(move |proc| {
         if let Some(file) = proc.fd_table.get(oldfd) {
             if proc.fd_table.take(newfd).is_none() {
-                if newfd >= RLIMIT_OFILE {
-                    return Err(SyscallErr::EINVAL);
-                } else {
-                    proc.fd_table.alloc_spec_fd(newfd)?;
-                }
+                proc.fd_table.alloc_spec_fd(newfd)?;
             }
             debug!("[sys_dup3]: dup oldfd:{} to newfd:{}", oldfd, newfd);
             proc.fd_table.put(newfd, file);
-            Ok(newfd as isize)
+            Ok(newfd)
         } else {
             warn!("[sys_dup3]: cannot find the oldfd's file");
             Err(SyscallErr::EBADF)
@@ -337,7 +332,7 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
                 num_bytes,
                 file.metadata().inner.lock().dirent_index
             );
-            Ok(num_bytes as isize)
+            Ok(num_bytes)
         }
         None => Err(SyscallErr::ENOENT),
     }
@@ -507,12 +502,12 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
         SEEK_CUR => {
             let off = file.seek(SeekFrom::Current(offset))?;
             trace!("[sys_lseek] return off: {}", off);
-            Ok(off as isize)
+            Ok(off)
         }
         SEEK_END => {
             let off = file.seek(SeekFrom::End(offset))?;
             trace!("[sys_lseek] return off: {}", off);
-            Ok(off as isize)
+            Ok(off)
         }
         _ => Err(SyscallErr::EINVAL),
     }
@@ -604,7 +599,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         let write_ret = file.write(buf).await?;
         ret += write_ret as usize;
     }
-    Ok(ret as isize)
+    Ok(ret)
 }
 
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
@@ -644,7 +639,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         let read_ret = file.read(buf).await?;
         ret += read_ret as usize;
     }
-    Ok(ret as isize)
+    Ok(ret)
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
@@ -722,7 +717,7 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
                 let newfd = proc.fd_table.alloc_fd_lower_bound(arg)?;
                 proc.fd_table.put(newfd, file);
                 debug!("[sys_fcntl]: dup file fd from {} to {}", fd, newfd);
-                Ok(newfd as isize)
+                Ok(newfd)
             })
         }
         F_SETFD => {
@@ -757,9 +752,9 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
             let flags = file.flags();
             debug!("[sys_fcntl]: get file flags {:?}", flags);
             if flags.contains(OpenFlags::CLOEXEC) && cmd == F_GETFD {
-                Ok(FcntlFlags::bits(&FcntlFlags::FD_CLOEXEC) as isize)
+                Ok(FcntlFlags::bits(&FcntlFlags::FD_CLOEXEC) as usize)
             } else {
-                Ok(OpenFlags::bits(&flags) as isize)
+                Ok(OpenFlags::bits(&flags) as usize)
             }
         }),
         _ => {

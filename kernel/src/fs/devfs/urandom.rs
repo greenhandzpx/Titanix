@@ -86,7 +86,7 @@ impl File for UrandomFile {
             unsafe {
                 RNG.fill_bytes(buf);
             }
-            Ok(buf.len() as isize)
+            Ok(buf.len())
         })
     }
     fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
@@ -99,7 +99,7 @@ impl File for UrandomFile {
         unsafe {
             RNG.fill_bytes(buf);
         }
-        Ok(buf.len() as isize)
+        Ok(buf.len())
     }
 
     fn sync_write(&self, _buf: &[u8]) -> SyscallRet {

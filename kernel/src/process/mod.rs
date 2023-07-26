@@ -21,6 +21,7 @@ use crate::{
     fs::FdTable,
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySpace},
+    net::SocketTable,
     process::{
         aux::{AuxHeader, AT_EXECFN, AT_NULL, AT_RANDOM},
         thread::{terminate_all_threads_except_main, tid::tid_alloc},
@@ -82,12 +83,12 @@ pub struct ProcessInner {
     pub children: Vec<Arc<Process>>,
     /// File descriptor table
     pub fd_table: FdTable,
+    /// Socket table
+    pub socket_table: SocketTable,
     /// TODO: use BTreeMap to query and delete more quickly
     pub threads: BTreeMap<usize, Weak<Thread>>,
     /// Pending sigs that wait for the prcoess to handle
     pub sig_queue: SigQueue,
-    // /// UStack base of all threads(the lowest bound)
-    // pub ustack_base: usize,
     /// Futex queue
     pub futex_queue: FutexQueue,
     /// Exit code of the current process
@@ -142,7 +143,7 @@ impl Process {
         f(&mut self.inner.lock())
     }
 
-    ///
+    /// True when all threads have exited
     pub fn is_zombie(&self) -> bool {
         self.inner.lock().is_zombie
     }
@@ -230,6 +231,7 @@ impl Process {
                 parent: None,
                 children: Vec::new(),
                 fd_table: FdTable::new(),
+                socket_table: SocketTable::new(),
                 threads: BTreeMap::new(),
                 sig_queue: SigQueue::new(),
                 // ustack_base: user_sp_base,
@@ -473,7 +475,7 @@ impl Process {
         );
 
         main_thread_inner.trap_context = trap_cx;
-        // Ok(args.len() as isize)
+        // Ok(args.len()  )
         Ok(0)
     }
 
@@ -588,7 +590,7 @@ impl Process {
             "[Process::clone_thread] clone a new thread, tid {}, sp {:#x}, sepc {:#x}",
             tid, stack, entry_point
         );
-        Ok(tid as isize)
+        Ok(tid)
     }
 
     fn clone_process(
@@ -628,6 +630,7 @@ impl Process {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     fd_table: child_fd_table,
+                    socket_table: SocketTable::new(),
                     threads: BTreeMap::new(),
                     sig_queue: child_sig_queue,
                     // ustack_base: parent_inner.ustack_base,

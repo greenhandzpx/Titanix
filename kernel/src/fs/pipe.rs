@@ -85,7 +85,7 @@ impl File for Pipe {
         //             return None;
         //         }) {
         //             // debug!("read {} bytes over", ret);
-        //             return Ok(ret as isize);
+        //             return Ok(ret  );
         //         } else {
         //             thread::yield_now().await;
         //         }
@@ -132,7 +132,7 @@ impl File for Pipe {
         //             return None;
         //         }) {
         //             debug!("pipe write {} bytes over", ret);
-        //             return Ok(ret as isize);
+        //             return Ok(ret  );
         //         } else {
         //             debug!("no available write slots");
         //             thread::yield_now().await;
@@ -401,7 +401,7 @@ impl Future for PipeFuture {
                     if ring_buffer.all_write_ends_closed() {
                         // all of the buffer's write ends have
                         // been closed, then just end reading
-                        return Poll::Ready(Ok(this.already_put as isize));
+                        return Poll::Ready(Ok(this.already_put));
                     } else {
                         ring_buffer.wait_for_reading(cx.waker().clone());
                         return Poll::Pending;
@@ -411,11 +411,11 @@ impl Future for PipeFuture {
                     buf[this.already_put] = ring_buffer.read_byte();
                     this.already_put += 1;
                     if this.already_put == this.user_buf_len {
-                        return Poll::Ready(Ok(this.already_put as isize));
+                        return Poll::Ready(Ok(this.already_put));
                     }
                 }
                 debug!("[PipeFuture::poll] read return {}", this.already_put);
-                return Poll::Ready(Ok(this.already_put as isize));
+                return Poll::Ready(Ok(this.already_put));
                 // ring_buffer.wait_for_reading(cx.waker().clone());
                 // return Poll::Pending;
             }
@@ -429,7 +429,7 @@ impl Future for PipeFuture {
                     if ring_buffer.all_read_ends_closed() {
                         // all of the buffer's read ends have
                         // been closed, then just end writing
-                        return Poll::Ready(Ok(this.already_put as isize));
+                        return Poll::Ready(Ok(this.already_put));
                     } else {
                         ring_buffer.wait_for_writing(cx.waker().clone());
                         return Poll::Pending;
@@ -440,14 +440,14 @@ impl Future for PipeFuture {
                     ring_buffer.write_byte(buf[this.already_put]);
                     this.already_put += 1;
                     // if this.already_put == this.user_buf_len {
-                    //     return Poll::Ready(Ok(this.already_put as isize));
+                    //     return Poll::Ready(Ok(this.already_put  ));
                     // }
                     if this.already_put == this.user_buf_len {
                         break;
                     }
                 }
                 debug!("[PipeFuture::poll] write return {}", this.already_put);
-                return Poll::Ready(Ok(this.already_put as isize));
+                return Poll::Ready(Ok(this.already_put));
                 // ring_buffer.wait_for_writing(cx.waker().clone());
                 // return Poll::Pending;
             }

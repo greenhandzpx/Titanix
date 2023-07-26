@@ -1,6 +1,6 @@
 use alloc::{boxed::Box, string::String, sync::Arc};
 use log::{debug, info, trace, warn};
-use riscv::register::scause::Scause;
+use riscv::register::scause::{Exception, Scause, Trap};
 
 use crate::{
     mm::{frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission, VirtAddr},
@@ -39,6 +39,7 @@ pub trait PageFaultHandler: Send + Sync {
         &self,
         _va: VirtAddr,
         _process: &'static Arc<Process>, // vma: &VmArea,
+        _scause: Scause,
     ) -> AgeneralRet<()> {
         todo!()
     }
@@ -153,11 +154,13 @@ impl PageFaultHandler for MmapPageFaultHandler {
         &self,
         va: VirtAddr,
         process: &'static Arc<Process>,
+        scause: Scause,
     ) -> AgeneralRet<()> {
         stack_trace!();
         Box::pin(async move {
             debug!("handle mmap page fault asynchronously");
-            let (inode, map_perm, mmap_flags, start_vpn) = process.inner_handler(|proc| {
+
+            let (backup_file, map_perm, mmap_flags, start_vpn) = process.inner_handler(|proc| {
                 let vma = proc
                     .memory_space
                     .find_vm_area_by_vpn(va.floor())
@@ -172,10 +175,22 @@ impl PageFaultHandler for MmapPageFaultHandler {
                     vma.start_vpn(),
                 ))
             })?;
+            match scause.cause() {
+                Trap::Exception(Exception::StorePageFault) => {
+                    if !map_perm.contains(MapPermission::W) {
+                        return Err(SyscallErr::EFAULT);
+                    }
+                }
+                _ => {}
+            };
+            let pte_flags: PTEFlags = PTEFlags::from(map_perm) | PTEFlags::U;
 
-            let offset = inode.offset + (va.0 - VirtAddr::from(start_vpn).0);
-            debug!("handle mmap page fault, offset {:#x}", offset);
-            let page = inode
+            let offset = backup_file.offset + (va.0 - VirtAddr::from(start_vpn).0);
+            debug!(
+                "handle mmap page fault, offset {:#x}, backup file offset {:#x}",
+                offset, backup_file.offset
+            );
+            let page = backup_file
                 .file
                 .metadata()
                 .inner
@@ -192,7 +207,6 @@ impl PageFaultHandler for MmapPageFaultHandler {
                 .get_page(offset, Some(map_perm))?;
             page.load_all_buffers().await?;
             // let mut pte_flags = vma.map_perm.into();
-            let pte_flags: PTEFlags = PTEFlags::from(map_perm) | PTEFlags::U;
             trace!(
                 "file page content {:?}",
                 String::from_utf8(page.bytes_array().to_vec())

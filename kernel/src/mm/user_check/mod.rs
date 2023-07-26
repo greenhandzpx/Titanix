@@ -1,12 +1,13 @@
 use core::arch::global_asm;
 
 use log::{debug, error, warn};
-use riscv::register::{stvec, utvec::TrapMode};
+use riscv::register::{scause::Scause, stvec, utvec::TrapMode};
 
 use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
     process::thread::exit_and_terminate_all_threads,
     processor::{current_process, local_hart, SumGuard},
+    signal::SIGSEGV,
     stack_trace,
     sync::mutex::SieGuard,
     trap::set_kernel_trap_entry,
@@ -29,7 +30,7 @@ pub struct UserCheck {
 #[repr(C)]
 struct TryOpRet {
     is_err: usize,
-    scause: usize,
+    scause: Scause,
 }
 
 const STORE_PAGE_FAULT: usize = 15;
@@ -142,7 +143,7 @@ impl UserCheck {
     }
 
     /// return `scause` if page fault
-    fn try_read_u8(&self, user_addr: usize) -> Option<usize> {
+    fn try_read_u8(&self, user_addr: usize) -> Option<Scause> {
         // debug!("satp(2) {:#x}", satp::read().bits());
         // debug!("try read u8, addr {:#x}", user_addr);
         let ret = unsafe { __try_read_user_u8(user_addr) };
@@ -152,16 +153,16 @@ impl UserCheck {
         }
     }
 
-    fn try_write_u8(&self, user_addr: usize) -> Option<usize> {
+    fn try_write_u8(&self, user_addr: usize) -> Option<Scause> {
         let ret = unsafe { __try_write_user_u8(user_addr) };
         match ret.is_err {
             0 => None,
             // TODO: optimize
-            _ => Some(STORE_PAGE_FAULT),
+            _ => Some(ret.scause),
         }
     }
 
-    async fn handle_page_fault(&self, va: VirtAddr, scause: usize) -> GeneralRet<()> {
+    async fn handle_page_fault(&self, va: VirtAddr, scause: Scause) -> GeneralRet<()> {
         stack_trace!();
         match memory_space::handle_page_fault(va, scause).await {
             Ok(_) => {
@@ -175,19 +176,18 @@ impl UserCheck {
             }
             Err(_) => {
                 warn!(
-                    "[kernel] [UserCheck](scause:{}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
-                    scause,
+                    "[kernel] [UserCheck](scause:{:?}) in application, bad addr = {:#x}, kernel killed it. pid: {}",
+                    scause.cause(),
                     va.0,
                     current_process().pid()
                 );
-                warn!("backtrace:");
-                local_hart().env().stack_tracker.print_stacks();
-                // exit_and_terminate_all_threads(-2);
-                exit_and_terminate_all_threads(0);
-                // current_process().inner_handler(|proc| {
-                //     proc.exit_code = -2;
-                //     proc.is_zombie = true;
-                // });
+                current_process().send_signal(SIGSEGV).unwrap();
+                #[cfg(feature = "stack_trace")]
+                {
+                    warn!("backtrace:");
+                    local_hart().env().stack_tracker.print_stacks();
+                }
+                // exit_and_terminate_all_threads(0);
                 return Err(SyscallErr::EFAULT);
             }
         }

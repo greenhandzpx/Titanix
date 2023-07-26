@@ -2,7 +2,7 @@ use core::{future::Future, pin::Pin};
 
 use alloc::boxed::Box;
 
-pub type SyscallRet = Result<isize, SyscallErr>;
+pub type SyscallRet = Result<usize, SyscallErr>;
 pub type GeneralRet<T> = Result<T, SyscallErr>;
 
 pub type SysFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

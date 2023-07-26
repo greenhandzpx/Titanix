@@ -108,7 +108,7 @@ impl From<KernelAddr> for PhysPageNum {
 
 // impl TryFrom<usize> for VirtAddr {
 //     fn try_from(v: usize) -> Result<Self, Self::Error> {
-//         let tmp = (v as isize >> VA_WIDTH_SV39) as isize;
+//         let tmp = (v   >> VA_WIDTH_SV39)  ;
 //         if tmp != 0 && tmp != -1 {
 //             log::error!("v {:#x}, tmp {:#x}", v, tmp);
 //             local_hart().env().stack_tracker.print_stacks_err();
@@ -134,7 +134,7 @@ impl From<usize> for VirtPageNum {
         // Self(v & ((1 << VPN_WIDTH_SV39) - 1))
         let tmp = v >> (VPN_WIDTH_SV39 - 1);
         assert!(tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1);
-        // let tmp = ((v as isize) >> VPN_WIDTH_SV39) as isize;
+        // let tmp = ((v  ) >> VPN_WIDTH_SV39)  ;
         // if tmp != 0 && tmp != -1 {
         //     error!("tmp {:#x}, v {:#x}", tmp, v);
         // }

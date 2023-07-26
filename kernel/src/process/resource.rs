@@ -3,14 +3,13 @@ use core::mem::size_of;
 use log::debug;
 
 use crate::{
-    config::{fs::RLIMIT_OFILE, mm::USER_STACK_SIZE},
-    fs::MAX_FD,
+    config::{fs::MAX_FD_NUM, mm::USER_STACK_SIZE},
     processor::current_process,
     utils::error::SyscallRet,
 };
 
 /// Infinity for RLimit
-pub static mut RLIM_INFINITY: usize = usize::MAX;
+pub const RLIM_INFINITY: usize = usize::MAX;
 
 #[allow(unused)]
 const RLIMIT_CPU: u32 = 0;
@@ -45,10 +44,8 @@ const RLIMIT_RTPRIO: u32 = 14;
 #[allow(unused)]
 const RLIMIT_RTTIME: u32 = 15;
 
-/// RLimit size
-pub const RLIMIT_SIZE: usize = size_of::<RLimit>();
 /// Resource Limit
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct RLimit {
     /// Soft limit
     pub rlim_cur: usize,
@@ -65,47 +62,21 @@ impl RLimit {
         }
     }
     /// Set RLimit
-    pub fn set_rlimit(&self, resource: u32) -> SyscallRet {
-        debug!("[set_rlimit] try to set limit: {:?}", self);
-        unsafe {
-            RLIM_INFINITY = self.rlim_max;
-        }
+    pub fn set_rlimit(resource: u32, rlimit: &RLimit) -> SyscallRet {
+        log::info!("[set_rlimit] try to set limit: {:?}", resource);
         match resource {
             RLIMIT_NOFILE => unsafe {
-                MAX_FD.store(RLIM_INFINITY, core::sync::atomic::Ordering::Relaxed)
+                current_process().inner_handler(|proc| proc.fd_table.set_rlimit(*rlimit))
             },
             _ => {}
         }
-        current_process().inner_handler(|proc| proc.rlimit = self.clone());
         Ok(0)
     }
     /// Get RLimit
     pub fn get_rlimit(resource: u32) -> Self {
         match resource {
-            RLIMIT_STACK => Self::new(
-                {
-                    unsafe {
-                        if USER_STACK_SIZE > RLIM_INFINITY {
-                            RLIM_INFINITY
-                        } else {
-                            USER_STACK_SIZE
-                        }
-                    }
-                },
-                unsafe { RLIM_INFINITY },
-            ),
-            RLIMIT_NOFILE => Self {
-                rlim_cur: {
-                    unsafe {
-                        if RLIMIT_OFILE > RLIM_INFINITY {
-                            RLIM_INFINITY
-                        } else {
-                            RLIMIT_OFILE
-                        }
-                    }
-                },
-                rlim_max: unsafe { RLIM_INFINITY },
-            },
+            RLIMIT_STACK => Self::new(USER_STACK_SIZE, RLIM_INFINITY),
+            RLIMIT_NOFILE => current_process().inner_handler(|proc| proc.fd_table.rlimit()),
             _ => Self {
                 rlim_cur: 0,
                 rlim_max: 0,

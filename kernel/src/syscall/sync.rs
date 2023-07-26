@@ -94,7 +94,7 @@ pub async fn sys_futex(
             return Ok(current_process().inner_handler(|proc| {
                 proc.futex_queue
                     .requeue_waiters(uaddr.into(), uaddr2.into(), val as usize, val2)
-            }) as isize);
+            }));
         }
         _ => {
             panic!("Unplemented futex op, {}", futex_op)
@@ -111,7 +111,7 @@ pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
         .check_writable_slice(tid_ptr as *mut u8, core::mem::size_of::<usize>())
         .is_err()
     {
-        return Ok(current_task().tid() as isize);
+        return Ok(current_task().tid());
     }
     let _sum_guard = SumGuard::new();
     unsafe {
@@ -119,7 +119,7 @@ pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
     }
     let inner = unsafe { &mut (*current_task().inner.get()) };
     inner.tid_addr.clear_tid_address = Some(tid_ptr);
-    Ok(current_task().tid() as isize)
+    Ok(current_task().tid())
 }
 
 pub fn sys_set_robust_list(_head: usize, _len: usize) -> SyscallRet {

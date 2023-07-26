@@ -160,7 +160,7 @@ impl Future for IOMultiplexFuture {
                     fd_set_rwe.update_by_fds_vec(&this.fds);
                 }
             }
-            Poll::Ready(Ok(cnt as isize))
+            Poll::Ready(Ok(cnt))
         } else {
             debug!("[IOMultiplexFuture]: no event happens");
             Poll::Pending

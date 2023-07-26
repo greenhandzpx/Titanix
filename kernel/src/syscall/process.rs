@@ -71,7 +71,7 @@ pub fn sys_getpid() -> SyscallRet {
     stack_trace!();
     let ret = current_process().pid();
     debug!("[sys_getpid] return {}", ret);
-    Ok(ret as isize)
+    Ok(ret)
 }
 
 pub fn sys_getppid() -> SyscallRet {
@@ -82,9 +82,9 @@ pub fn sys_getppid() -> SyscallRet {
         Some(parent_process) => {
             let ret = parent_process.upgrade().unwrap().pid();
             debug!("[sys_getppid] return {}", ret);
-            Ok(ret as isize)
+            Ok(ret)
         }
-        None => Ok(INITPROC_PID as isize),
+        None => Ok(INITPROC_PID),
     }
 }
 
@@ -200,7 +200,7 @@ pub fn sys_clone(
             clone_flags,
             new_process.inner.lock().sig_queue.blocked_sigs
         );
-        Ok(new_pid as isize)
+        Ok(new_pid)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
 
@@ -229,7 +229,6 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
 
-    UserCheck::new().check_c_str(path)?;
     let mut path = path::path_process(AT_FDCWD, path as *const u8)?.unwrap();
     info!("[sys_execve] path {}", path);
 
@@ -263,39 +262,36 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
 
     let mut envs_vec: Vec<String> = Vec::new();
-    UserCheck::new().check_c_str(envs as *const u8)?;
-    loop {
-        if unsafe { *envs == 0 } {
-            break;
-        }
-        //// TODO: add user check
-        UserCheck::new().check_c_str(unsafe { (*envs) as *const u8 })?;
-        envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
-        debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
-        unsafe {
-            envs = envs.add(1);
+    if !envs.is_null() {
+        UserCheck::new().check_c_str(envs as *const u8)?;
+        loop {
+            if unsafe { *envs == 0 } {
+                break;
+            }
+            //// TODO: add user check
+            UserCheck::new().check_c_str(unsafe { (*envs) as *const u8 })?;
+            envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
+            debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
+            unsafe {
+                envs = envs.add(1);
+            }
         }
     }
     envs_vec.push("PATH=/:".to_string());
 
-    // if path.ends_with("shell") || path.ends_with("busybox") || path.ends_with("runtestcases") {
-    //     if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
-    //         current_process().exec(elf_data, args_vec, envs_vec)
-    //     } else {
-    //         warn!("[sys_exec] Cannot find this elf file {}", path);
-    //         Err(SyscallErr::EACCES)
-    //     }
-    // } else if path.eq("/bin/true") {
-    //     if let Some(elf_data) = get_app_data_by_name(&path[5..]) {
-    //         current_process().exec(elf_data, args_vec, envs_vec)
-    //     } else {
-    //         warn!("[sys_exec] Cannot find this elf file {}", path);
-    //         Err(SyscallErr::EACCES)
-    //     }
-    // } else {
-    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY)?;
+    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY);
+    if app_inode.is_err() {
+        log::warn!("[sys_execve] cannot find file {}", path);
+        return Err(app_inode.err().unwrap());
+    }
+    let app_inode = app_inode.unwrap();
     let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
-    let elf_data = app_file.sync_read_all()?;
+    let elf_data_arc = app_inode.metadata().inner.lock().elf_data.clone();
+    let elf_data = elf_data_arc.get_unchecked_mut();
+    // let mut elf_data = Vec::new();
+    if elf_data.is_empty() {
+        app_file.read_all_from_start(elf_data)?;
+    }
     current_process().exec(&elf_data, args_vec, envs_vec)
     // }
 }
@@ -361,7 +357,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                     found_pid, exit_code
                 );
 
-                Ok(Some((false, found_pid as isize, exit_code as i32)))
+                Ok(Some((false, found_pid, exit_code as i32)))
             } else {
                 // the child still alive
                 debug!(
@@ -371,7 +367,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 if proc.children.len() > 0 {
                     debug!("[sys_wait4] first child pid {}", proc.children[0].pid());
                 }
-                // Ok((-1 as isize, 0))
+                // Ok((-1  , 0))
                 Ok(None)
             }
         })? {
@@ -428,7 +424,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
     if pid == 0 {
         let pgid = current_process().pgid();
         info!("get pgid, pid {}, pgid {}", pid, pgid);
-        Ok(pgid as isize)
+        Ok(pgid)
     } else {
         let proc = PROCESS_MANAGER.get(pid);
         if proc.is_none() {
@@ -437,7 +433,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
             let proc = proc.unwrap();
             let pgid = proc.pgid();
             info!("get pgid, pid {}, pgid {}", pid, pgid);
-            Ok(pgid as isize)
+            Ok(pgid)
         }
     }
 }
@@ -491,7 +487,7 @@ pub fn sys_getegid() -> SyscallRet {
 pub fn sys_gettid() -> SyscallRet {
     stack_trace!();
     let tid = current_task().tid();
-    Ok(tid as isize)
+    Ok(tid)
 }
 
 pub fn sys_setsid() -> SyscallRet {
@@ -506,7 +502,7 @@ pub fn sys_setsid() -> SyscallRet {
             proc.pgid = pid;
         }
     });
-    Ok(pid as isize)
+    Ok(pid)
 }
 
 #[repr(C)]

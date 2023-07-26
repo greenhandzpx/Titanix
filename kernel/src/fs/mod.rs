@@ -14,9 +14,10 @@ pub mod tmpfs;
 
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
+pub use fd_table::Fd;
 pub use fd_table::FdTable;
-pub use fd_table::MAX_FD;
 pub use file::File;
+pub use file::FileMeta;
 pub use file::SeekFrom;
 pub use file_system::FileSystem;
 pub use file_system::FileSystemType;
@@ -92,6 +93,8 @@ pub fn init() {
         StatFlags::ST_NOSUID,
     );
 
+    list_rootfs();
+
     let root_inode = FILE_SYSTEM_MANAGER.root_inode();
 
     root_inode.load_children();
@@ -128,6 +131,14 @@ pub fn init() {
         root_inode.mkdir_v(dir, InodeMode::FileDIR).unwrap();
     }
 
+    let var_dir = root_inode.mkdir_v("var", InodeMode::FileDIR).unwrap();
+    var_dir
+        .mkdir_v("tmp", InodeMode::FileDIR)
+        .expect("mkdir /var/tmp fail!");
+    root_inode
+        .mknod_v("lat_sig", InodeMode::FileREG, None)
+        .unwrap();
+
     let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
     let musl_dl_path = etc_dir
         .mknod_v("ld-musl-riscv64-sf.path", InodeMode::FileREG, None)
@@ -161,6 +172,16 @@ pub fn init() {
         .mount(
             "/tmp",
             "tmp",
+            FsDevice::None,
+            FileSystemType::TmpFS,
+            StatFlags::ST_NOSUID,
+        )
+        .expect("tmpfs init fail!");
+
+    FILE_SYSTEM_MANAGER
+        .mount(
+            "/var/tmp",
+            "var_tmp",
             FsDevice::None,
             FileSystemType::TmpFS,
             StatFlags::ST_NOSUID,

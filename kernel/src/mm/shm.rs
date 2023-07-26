@@ -43,7 +43,7 @@ impl SharedMemoryManager {
 
     /// Attach a vm area to the shm.
     /// Return start addr of that vm area.
-    pub fn attach(&mut self, shm_id: usize, addr: Option<VirtAddr>) -> GeneralRet<isize> {
+    pub fn attach(&mut self, shm_id: usize, addr: Option<VirtAddr>) -> GeneralRet<usize> {
         let shm = self.shm_map.get_mut(&shm_id).ok_or(SyscallErr::EINVAL)?;
         shm.attach(addr)
     }
@@ -71,7 +71,7 @@ impl SharedMemory {
     }
 
     /// Note that this method must be called by the current thread
-    pub fn attach(&mut self, addr: Option<VirtAddr>) -> GeneralRet<isize> {
+    pub fn attach(&mut self, addr: Option<VirtAddr>) -> GeneralRet<usize> {
         stack_trace!();
 
         current_process().inner_handler(|proc| {
@@ -126,7 +126,7 @@ impl SharedMemory {
             proc.memory_space.insert_area(vma);
             proc.memory_space.activate();
 
-            Ok(VirtAddr::from(start_vpn).0 as isize)
+            Ok(VirtAddr::from(start_vpn).0)
         })
     }
 }

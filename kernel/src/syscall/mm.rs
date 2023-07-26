@@ -63,7 +63,7 @@ pub fn sys_mmap(
                 "handle anonymous mmap, vma {:#x}-{:#x}, prot {:?}, flags {:?}, map perm {:?}",
                 start_va.0, end_va.0, prot, flags, map_permission
             );
-            Ok(start_va.0 as isize)
+            Ok(start_va.0)
         })
     } else {
         if offset % PAGE_SIZE != 0 {
@@ -89,6 +89,7 @@ pub fn sys_mmap(
             vma.mmap_flags = Some(flags);
             let handler = MmapPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
+
             vma.backup_file = Some(BackupFile {
                 offset,
                 file: file.clone(),
@@ -97,7 +98,7 @@ pub fn sys_mmap(
             proc.memory_space.insert_area(vma);
 
             debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
-            Ok(start_va.0 as isize)
+            Ok(start_va.0)
         })
     }
 }
@@ -171,9 +172,9 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
     debug!("handle sys brk");
     if addr == 0 {
         debug!("[sys_brk]: addr: 0");
-        return Ok(current_process()
-            .inner_handler(|proc| proc.memory_space.heap_range.unwrap().end().0)
-            as isize);
+        return Ok(
+            current_process().inner_handler(|proc| proc.memory_space.heap_range.unwrap().end().0)
+        );
     }
 
     current_process().inner_handler(|proc| {
@@ -209,7 +210,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     "new heap end {:#x}",
                     proc.memory_space.heap_range.unwrap().end().0
                 );
-                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
+                Ok(proc.memory_space.heap_range.unwrap().end().0)
             }
         } else {
             // deallocate memory
@@ -239,7 +240,7 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
                     .unwrap()
                     .modify_right_bound(new_heap_end);
                 // Ok(0)
-                Ok(proc.memory_space.heap_range.unwrap().end().0 as isize)
+                Ok(proc.memory_space.heap_range.unwrap().end().0)
             }
         }
     })
@@ -257,7 +258,7 @@ pub fn sys_shmget(key: usize, len: usize, _shmflag: u32) -> SyscallRet {
     if key != IPC_PRIVATE {
         panic!("[sys_shmget] unsupported operation, key {:#X}", key);
     }
-    Ok(SHARED_MEMORY_MANAGER.lock().alloc(key, len) as isize)
+    Ok(SHARED_MEMORY_MANAGER.lock().alloc(key, len))
 }
 
 pub fn sys_shmat(shmid: usize, shmaddr: usize, _shmflag: u32) -> SyscallRet {
