@@ -45,7 +45,6 @@ mod net;
 mod panic;
 pub mod process;
 mod processor;
-mod sbi;
 mod signal;
 ///
 pub mod sync;
