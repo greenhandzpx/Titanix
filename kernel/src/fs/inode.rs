@@ -69,17 +69,22 @@ impl FastPathCache {
     }
 
     pub fn init(&self) {
-        *self.0.lock() = Some(HashMap::new());
+        let mut map = HashMap::new();
+        for path in FAST_PATH {
+            let inode = <dyn Inode>::lookup_from_root(path).ok().unwrap().unwrap();
+            map.insert(path.to_string(), inode);
+        }
+        *self.0.lock() = Some(map);
+        debug!("[FastPathCache] init success");
     }
 
     /// return (target inode, is in fast path)
-    pub fn get(&self, path: String) -> (Option<Arc<dyn Inode>>, bool) {
-        if FAST_PATH.contains(&path.as_str()) {
-            let target = self.0.lock().as_ref().unwrap().get(&path).cloned();
-            return (target, true);
-        } else {
-            return (None, false);
+    pub fn get(&self, path: String) -> Option<Arc<dyn Inode>> {
+        let inner = self.0.lock();
+        if inner.is_none() {
+            return None;
         }
+        inner.as_ref().unwrap().get(&path).cloned()
     }
     pub fn insert(&self, path: String, inode: Arc<dyn Inode>) {
         self.0.lock().as_mut().unwrap().insert(path, inode);
@@ -256,7 +261,6 @@ impl dyn Inode {
 
     pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> GeneralRet<Arc<dyn Inode>> {
         let child = self.mkdir(self.clone(), name, mode)?;
-        let path = child.metadata().path.clone();
         log::info!("[mkdir_v] child inode name {}", name);
         self.metadata()
             .inner
@@ -265,13 +269,8 @@ impl dyn Inode {
             .insert(name.to_string(), child.clone());
         // insert to cache
         let key = HashKey::new(self.metadata().ino, name.to_string());
-        log::info!("[mkdir_v] insert {} into INODE_CACHE", path);
+        log::info!("[mkdir_v] insert {:?} into INODE_CACHE", key);
         INODE_CACHE.insert(key, child.clone());
-        // insert to FAST_PATH
-        if FAST_PATH.contains(&path.as_str()) {
-            log::info!("[mkdir_v] insert {} into FAST_PATH_CACHE", path);
-            FAST_PATH_CACHE.insert(path, child.clone());
-        }
         Ok(child)
     }
 
@@ -290,6 +289,7 @@ impl dyn Inode {
             .insert(name.to_string(), child.clone());
         // insert to cache
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        log::info!("[mknod_v] insert {:?} into INODE_CACHE", key);
         INODE_CACHE.insert(key, child.clone());
         child.create_page_cache_if_needed();
         Ok(child)
@@ -334,8 +334,8 @@ impl dyn Inode {
             Some(value) => Ok(Some(value.clone())),
             None => {
                 debug!(
-                    "[lookup] cannot find child dentry, name: {}, try to find in inode",
-                    name
+                    "[lookup] cannot find child in INODE_CACHE, name: {}, key: {:?}, try to find in inode",
+                    name, key
                 );
                 let target_inode = self.try_find_and_insert_inode(name);
                 match target_inode {
@@ -357,7 +357,7 @@ impl dyn Inode {
 
         let path = path::merge(&self.metadata().path, path);
         let path = path::format(&path);
-        let (target, fast_path) = FAST_PATH_CACHE.get(path.clone());
+        let target = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_current] find in fast path cache");
             return Ok(target);
@@ -381,13 +381,6 @@ impl dyn Inode {
             }
         }
 
-        if fast_path {
-            debug!(
-                "[lookup_from_current] insert into fast path cache: {}",
-                path
-            );
-            FAST_PATH_CACHE.insert(path, parent.clone());
-        }
         Ok(Some(parent))
     }
 
@@ -429,7 +422,7 @@ impl dyn Inode {
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         let path = path::format(path);
-        let (target, fast_path) = FAST_PATH_CACHE.get(path.clone());
+        let target = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_root] find in fast path cache");
             return Ok(target);
@@ -453,10 +446,6 @@ impl dyn Inode {
             }
         }
 
-        if fast_path {
-            debug!("[lookup_from_root] insert into fast path cache: {}", path);
-            FAST_PATH_CACHE.insert(path, parent.clone());
-        }
         Ok(Some(parent))
     }
 
