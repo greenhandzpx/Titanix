@@ -304,6 +304,14 @@ pub fn get_parent_dir(path_name: &str) -> Option<String> {
 }
 pub fn merge(p1: &str, p2: &str) -> String {
     let mut res = p1.to_string();
+    res = if res.eq("/") {
+        "".to_string()
+    } else if res.ends_with("/") {
+        println!("[merge] end with /");
+        res[0..res.len() - 2].to_string()
+    } else {
+        res
+    };
     res += "/";
     res += p2;
     res
