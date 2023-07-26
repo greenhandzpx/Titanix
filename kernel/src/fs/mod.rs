@@ -130,6 +130,10 @@ pub fn init() {
         root_inode.mkdir_v(dir, InodeMode::FileDIR).unwrap();
     }
 
+    root_inode
+        .mknod_v("lat_sig", InodeMode::FileREG, None)
+        .unwrap();
+
     let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
     let musl_dl_path = etc_dir
         .mknod_v("ld-musl-riscv64-sf.path", InodeMode::FileREG, None)

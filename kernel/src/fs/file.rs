@@ -371,6 +371,7 @@ impl File for DefaultFile {
             if len == 0 {
                 break;
             }
+            // log::info!("[read_all_from_start] len {}", len);
             idx += len;
             buffer.resize(idx + PAGE_SIZE, 0);
         }

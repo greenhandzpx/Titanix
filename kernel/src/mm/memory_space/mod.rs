@@ -1,5 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, trace, warn};
+use riscv::register::scause::Scause;
 use xmas_elf::ElfFile;
 
 use crate::{
@@ -239,7 +240,7 @@ impl MemorySpace {
     pub fn page_fault_handler(
         &self,
         va: VirtAddr,
-        _scause: usize,
+        _scause: Scause,
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&VmArea>)> {
         stack_trace!();
         // There are serveral kinds of page faults:
@@ -1122,7 +1123,7 @@ pub fn remap_test() {
 }
 
 /// Handle different kinds of page fault
-pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
+pub async fn handle_page_fault(va: VirtAddr, scause: Scause) -> GeneralRet<()> {
     stack_trace!();
     if let Some(handler) = current_process().inner_handler(|proc| {
         let (handler, vma) = proc.memory_space.page_fault_handler(va, scause)?;
@@ -1133,7 +1134,9 @@ pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
         }
     })? {
         debug!("handle pagefault asynchronously, va: {:#x}", va.0);
-        handler.handle_page_fault_async(va, current_process()).await
+        handler
+            .handle_page_fault_async(va, current_process(), scause)
+            .await
     } else {
         Ok(())
     }
