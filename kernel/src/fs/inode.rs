@@ -1,4 +1,3 @@
-use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::boxed::Box;

@@ -6,17 +6,15 @@
 //!
 //! Every task or process has a memory_space to control its virtual memory.
 mod address;
-mod frame_allocator;
-pub mod heap_allocator;
 
 mod buf;
 
+mod allocator;
 ///
 pub mod memory_space;
 mod page;
 // mod page_cache;
 mod page_table;
-mod recycle_allocator;
 mod shm;
 pub use shm::SHARED_MEMORY_MANAGER;
 ///
@@ -27,28 +25,29 @@ pub use address::VPNRange;
 pub use address::{
     KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, VA_WIDTH_SV39,
 };
-pub use frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
+pub use allocator::frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
 use log::info;
 pub use memory_space::remap_test;
 pub use memory_space::{MapPermission, MemorySpace, KERNEL_SPACE};
 pub use page::{Page, PageBuilder};
 // pub use page_cache::page_cache_test;
 // pub use page_cache::PageCache;
+pub use allocator::recycle_allocator::RecycleAllocator;
 pub use page_table::PageTable;
 pub use page_table::PageTableEntry;
-pub use recycle_allocator::RecycleAllocator;
 
 use crate::processor::hart::HARTS;
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
-    heap_allocator::init_heap();
+    allocator::heap_allocator::init_heap();
+    allocator::heap_allocator::heap_test();
     unsafe {
         for hart in HARTS.iter_mut() {
             hart.init_local_ctx();
         }
     }
-    frame_allocator::init_frame_allocator();
+    allocator::frame_allocator::init_frame_allocator();
     memory_space::init_kernel_space();
     info!("KERNEL SPACE init finish1");
     unsafe {

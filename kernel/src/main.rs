@@ -126,7 +126,6 @@ pub fn rust_main(hart_id: usize) {
         );
 
         mm::init();
-        mm::heap_allocator::heap_test();
         mm::remap_test();
         trap::init();
         executor::init();
