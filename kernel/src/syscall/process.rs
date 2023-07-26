@@ -280,7 +280,12 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
     envs_vec.push("PATH=/:".to_string());
 
-    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY)?;
+    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY);
+    if app_inode.is_err() {
+        log::warn!("[sys_execve] cannot find file {}", path);
+        return Err(app_inode.err().unwrap());
+    }
+    let app_inode = app_inode.unwrap();
     let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
     let elf_data_arc = app_inode.metadata().inner.lock().elf_data.clone();
     let elf_data = elf_data_arc.get_unchecked_mut();

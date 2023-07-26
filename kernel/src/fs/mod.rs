@@ -16,7 +16,6 @@ use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::Fd;
 pub use fd_table::FdTable;
-pub use fd_table::MAX_FD;
 pub use file::File;
 pub use file::FileMeta;
 pub use file::SeekFrom;
@@ -93,6 +92,8 @@ pub fn init() {
         FileSystemType::VFAT,
         StatFlags::ST_NOSUID,
     );
+
+    list_rootfs();
 
     let root_inode = FILE_SYSTEM_MANAGER.root_inode();
 
@@ -172,8 +173,6 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("tmpfs init fail!");
-
-    list_rootfs();
 }
 pub const AT_FDCWD: isize = -100;
 
