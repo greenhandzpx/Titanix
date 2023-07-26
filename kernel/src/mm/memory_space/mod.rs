@@ -1,5 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::{debug, error, info, trace, warn};
+use riscv::register::scause::Scause;
 use xmas_elf::ElfFile;
 
 use crate::{
@@ -239,7 +240,7 @@ impl MemorySpace {
     pub fn page_fault_handler(
         &self,
         va: VirtAddr,
-        _scause: usize,
+        _scause: Scause,
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&VmArea>)> {
         stack_trace!();
         // There are serveral kinds of page faults:
@@ -592,6 +593,11 @@ impl MemorySpace {
                     map_offset,
                     Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
                 );
+                // self.push(
+                //     vm_area,
+                //     map_offset,
+                //     None
+                // );
                 info!(
                     "[map_elf]: {:#x}, {:#x}, map_perm: {:?}",
                     start_va.0, end_va.0, map_perm
@@ -783,7 +789,11 @@ impl MemorySpace {
                 .open(interp_inode.clone(), OpenFlags::RDONLY)
                 .ok()
                 .unwrap();
-            let interp_elf_data = interp_file.sync_read_all().ok().unwrap();
+            let mut interp_elf_data = Vec::new();
+            interp_file
+                .read_all_from_start(&mut interp_elf_data)
+                .ok()
+                .unwrap();
             let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
             self.map_elf(&interp_elf, DL_INTERP_OFFSET.into());
 
@@ -1113,7 +1123,7 @@ pub fn remap_test() {
 }
 
 /// Handle different kinds of page fault
-pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
+pub async fn handle_page_fault(va: VirtAddr, scause: Scause) -> GeneralRet<()> {
     stack_trace!();
     if let Some(handler) = current_process().inner_handler(|proc| {
         let (handler, vma) = proc.memory_space.page_fault_handler(va, scause)?;
@@ -1124,7 +1134,9 @@ pub async fn handle_page_fault(va: VirtAddr, scause: usize) -> GeneralRet<()> {
         }
     })? {
         debug!("handle pagefault asynchronously, va: {:#x}", va.0);
-        handler.handle_page_fault_async(va, current_process()).await
+        handler
+            .handle_page_fault_async(va, current_process(), scause)
+            .await
     } else {
         Ok(())
     }

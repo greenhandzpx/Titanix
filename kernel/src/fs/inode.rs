@@ -1,3 +1,4 @@
+use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::boxed::Box;
@@ -11,6 +12,7 @@ use hashbrown::HashMap;
 use log::debug;
 
 use crate::sync::mutex::SleepLock;
+use crate::utils::cell::SyncUnsafeCell;
 use crate::utils::error::SyscallErr;
 use crate::{
     driver::block::BlockDevice,
@@ -559,6 +561,8 @@ pub struct InodeMetaInner {
     pub data_len: usize,
     /// inode state
     pub state: InodeState,
+    /// elf data
+    pub elf_data: Arc<SyncUnsafeCell<Vec<u8>>>,
 }
 
 impl InodeMeta {
@@ -591,6 +595,7 @@ impl InodeMeta {
                 page_cache: None,
                 data_len,
                 state: InodeState::Init,
+                elf_data: Arc::new(SyncUnsafeCell::new(Vec::new())),
             }),
         }
     }

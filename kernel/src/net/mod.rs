@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc};
 
-use crate::fs::Fd;
+use crate::fs::{Fd, File};
 
 use self::{tcp::TcpSocket, udp::UdpSocket};
 
@@ -19,6 +19,28 @@ pub enum Socket {
     UdpSocket(UdpSocket),
 }
 
+impl File for Socket {
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
+        todo!()
+        // match *self {
+        //     Socket::TcpSocket(socket) => todo!(),
+        //     Socket::UdpSocket(_) => todo!(),
+        // }
+    }
+
+    fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+        todo!()
+    }
+
+    fn metadata(&self) -> &crate::fs::FileMeta {
+        todo!()
+    }
+
+    fn flags(&self) -> crate::fs::OpenFlags {
+        todo!()
+    }
+}
+
 pub struct SocketTable(BTreeMap<Fd, Arc<Socket>>);
 
 impl SocketTable {
@@ -26,7 +48,6 @@ impl SocketTable {
         Self(BTreeMap::new())
     }
 }
-
 
 // pub trait SocketOp {
 //     fn bind() {}

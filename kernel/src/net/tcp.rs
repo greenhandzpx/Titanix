@@ -156,7 +156,7 @@ impl<'a> Future for TcpSendFuture<'a> {
             return Poll::Pending;
         }
         let this = self.get_mut();
-        // TODO: update err code
+        // TODO: modify err code
         Poll::Ready(
             inner
                 .socket

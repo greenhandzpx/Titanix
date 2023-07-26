@@ -164,7 +164,7 @@ pub trait File: Send + Sync {
 
     /// Read all data from this file synchronously
     /// TODO: add async version
-    fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {
+    fn read_all_from_start(&self, _buf: &mut Vec<u8>) -> GeneralRet<()> {
         todo!()
     }
 
@@ -359,17 +359,22 @@ impl File for DefaultFile {
         })
     }
 
-    fn sync_read_all(&self) -> GeneralRet<Vec<u8>> {
+    fn read_all_from_start(&self, buffer: &mut Vec<u8>) -> GeneralRet<()> {
         // let mut inner = self.inner.lock();
-        let mut buffer = [0u8; PAGE_SIZE];
-        let mut v: Vec<u8> = Vec::new();
+        // let mut buffer = [0u8; PAGE_SIZE];
+        // buffer.clear();
+        self.seek(SeekFrom::Start(0))?;
+        *buffer = vec![0u8; PAGE_SIZE];
+        let mut idx = 0;
         loop {
-            let len = self.sync_read(&mut buffer)?;
+            let len = self.sync_read(&mut buffer.as_mut_slice()[idx..idx + PAGE_SIZE])?;
             if len == 0 {
                 break;
             }
-            v.extend_from_slice(&buffer[..len as usize]);
+            // log::info!("[read_all_from_start] len {}", len);
+            idx += len;
+            buffer.resize(idx + PAGE_SIZE, 0);
         }
-        Ok(v)
+        Ok(())
     }
 }

@@ -262,39 +262,36 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     }
 
     let mut envs_vec: Vec<String> = Vec::new();
-    UserCheck::new().check_c_str(envs as *const u8)?;
-    loop {
-        if unsafe { *envs == 0 } {
-            break;
-        }
-        //// TODO: add user check
-        UserCheck::new().check_c_str(unsafe { (*envs) as *const u8 })?;
-        envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
-        debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
-        unsafe {
-            envs = envs.add(1);
+    if !envs.is_null() {
+        UserCheck::new().check_c_str(envs as *const u8)?;
+        loop {
+            if unsafe { *envs == 0 } {
+                break;
+            }
+            //// TODO: add user check
+            UserCheck::new().check_c_str(unsafe { (*envs) as *const u8 })?;
+            envs_vec.push(c_str_to_string(unsafe { (*envs) as *const u8 }));
+            debug!("exec get an env {}", envs_vec[envs_vec.len() - 1]);
+            unsafe {
+                envs = envs.add(1);
+            }
         }
     }
     envs_vec.push("PATH=/:".to_string());
 
-    // if path.ends_with("shell") || path.ends_with("busybox") || path.ends_with("runtestcases") {
-    //     if let Some(elf_data) = get_app_data_by_name(&path[1..]) {
-    //         current_process().exec(elf_data, args_vec, envs_vec)
-    //     } else {
-    //         warn!("[sys_exec] Cannot find this elf file {}", path);
-    //         Err(SyscallErr::EACCES)
-    //     }
-    // } else if path.eq("/bin/true") {
-    //     if let Some(elf_data) = get_app_data_by_name(&path[5..]) {
-    //         current_process().exec(elf_data, args_vec, envs_vec)
-    //     } else {
-    //         warn!("[sys_exec] Cannot find this elf file {}", path);
-    //         Err(SyscallErr::EACCES)
-    //     }
-    // } else {
-    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY)?;
+    let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY);
+    if app_inode.is_err() {
+        log::warn!("[sys_execve] cannot find file {}", path);
+        return Err(app_inode.err().unwrap());
+    }
+    let app_inode = app_inode.unwrap();
     let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
-    let elf_data = app_file.sync_read_all()?;
+    let elf_data_arc = app_inode.metadata().inner.lock().elf_data.clone();
+    let elf_data = elf_data_arc.get_unchecked_mut();
+    // let mut elf_data = Vec::new();
+    if elf_data.is_empty() {
+        app_file.read_all_from_start(elf_data)?;
+    }
     current_process().exec(&elf_data, args_vec, envs_vec)
     // }
 }

@@ -220,6 +220,7 @@ pub fn path_to_inode_ffi(
     })
 }
 
+/// Return absolute path
 pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>> {
     debug!("[path_process] dirfd: {}", dirfd);
     let _sum_guard = SumGuard::new();

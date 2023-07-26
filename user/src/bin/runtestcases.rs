@@ -9,28 +9,28 @@ use user_lib::{execve, fork, wait, waitpid};
 #[macro_use]
 extern crate user_lib;
 
-// const TESTCASES: [&str; 9] = [
-//     "busybox_testcode.sh",
-//     "time-test",
-//     "libctest_testcode.sh",
-//     "lua_testcode.sh",
-//     "iozone_testcode.sh",
-//     "lmbench_testcode.sh",
-//     "libc-bench",
-//     "unixbench_testcode.sh",
-//     "cyclictest_testcode.sh",
-// ];
-const TESTCASES: [&str; 4] = [
+const TESTCASES: [&str; 9] = [
     "busybox_testcode.sh",
     "time-test",
-    "run-static.sh",
-    // "lua_testcode.sh",
-    // "iozone_testcode.sh",
+    "libctest_testcode.sh",
     "lmbench_testcode.sh",
-    // "libc-bench",
-    // "unixbench_testcode.sh",
-    // "cyclictest_testcode.sh",
+    "lua_testcode.sh",
+    "iozone_testcode.sh",
+    "libc-bench",
+    "unixbench_testcode.sh",
+    "cyclictest_testcode.sh",
 ];
+// const TESTCASES: [&str; 4] = [
+//     "busybox_testcode.sh",
+//     "time-test",
+//     "run-static.sh",
+//     // "lua_testcode.sh",
+//     // "iozone_testcode.sh",
+//     "lmbench_testcode.sh",
+//     // "libc-bench",
+//     // "unixbench_testcode.sh",
+//     // "cyclictest_testcode.sh",
+// ];
 
 #[no_mangle]
 fn main() -> i32 {

@@ -6,7 +6,10 @@ use crate::{
     utils::error::{GeneralRet, SyscallErr},
 };
 
-pub struct IoBuffer {}
+// pub enum IoBuffer<'a> {
+//     UserBuffer(UserBuffer),
+//     Borrowed(&'a mut )
+// }
 
 pub struct UserBuffer {
     start_ptr: usize,

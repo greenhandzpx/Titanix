@@ -11,6 +11,7 @@ use crate::{
         page_table::PTEFlags,
         Page, PageTable, PhysPageNum, VirtAddr, VirtPageNum,
     },
+    processor::SumGuard,
     stack_trace,
     syscall::MmapFlags,
     utils::{
@@ -260,7 +261,7 @@ impl VmArea {
         }
     }
 
-    /// Data: at the offset of the start va.
+    /// Data: at the `offset` of the start va.
     /// Assume that all frames were cleared before.
     pub fn copy_data_with_offset(
         &mut self,
@@ -270,6 +271,8 @@ impl VmArea {
     ) {
         stack_trace!();
         assert_eq!(self.map_type, MapType::Framed);
+        let _sum_guard = SumGuard::new();
+
         let page_table = self.page_table.get_unchecked_mut();
         let mut start: usize = 0;
         let mut current_vpn = self.vpn_range.start();
