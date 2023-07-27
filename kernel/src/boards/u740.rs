@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::{
     config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     mm::MapPermission,

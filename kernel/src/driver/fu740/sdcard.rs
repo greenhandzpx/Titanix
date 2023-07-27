@@ -2,9 +2,9 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{println, sync::mutex::SpinNoIrqLock};
 
-use super::BlockDevice;
+use crate::driver::BlockDevice;
 
 use super::spi::{SPIImpl, SPI}; //, SPIExt
 use alloc::sync::Arc;
@@ -856,37 +856,6 @@ impl SDCardWrapper {
     pub fn init(&self) {}
 }
 
-#[cfg(feature = "local_fu740")]
-impl BlockDevice for SDCardWrapper {
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        // println!("read block {}", block_id+10274);
-        self.0
-            .lock()
-            .read_sector(buf, block_id as u32 + 10274)
-            .unwrap();
-    }
-    fn write_block(&self, block_id: usize, buf: &[u8]) {
-        // println!("write block {}", block_id+10274);
-        // self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
-        let ret = self.0.lock().write_sector(buf, block_id as u32 + 10274);
-        let ret = match ret {
-            Ok(()) => {} //println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
-            Err(()) => {
-                println!(
-                    "[BlockDevice-write_sector] retry write block {} | {} ......",
-                    block_id + 10274,
-                    block_id
-                );
-                self.0
-                    .lock()
-                    .write_sector(buf, block_id as u32 + 10274)
-                    .unwrap();
-            }
-        };
-    }
-}
-
-#[cfg(not(any(feature = "local_fu740")))]
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
         println!("read block {} ...", block_id);

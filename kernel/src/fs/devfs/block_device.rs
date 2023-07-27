@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 
 use crate::{
-    driver::block::BlockDevice,
+    driver::BlockDevice,
     fs::{
         fat32::SECTOR_SIZE,
         inode::{DevWrapper, InodeDevice, InodeMeta},

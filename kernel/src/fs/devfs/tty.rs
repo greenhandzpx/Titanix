@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 
 use crate::{
+    driver::getchar,
     fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
     utils::error::GeneralRet,
 };
@@ -10,10 +11,7 @@ use core::{
     task::Waker,
 };
 
-use crate::{
-    driver::uart::getchar, process, processor::SumGuard, sync::mutex::SleepLock,
-    utils::error::AsyscallRet,
-};
+use crate::{process, processor::SumGuard, sync::mutex::SleepLock, utils::error::AsyscallRet};
 
 use crate::fs::file::{File, FileMeta};
 pub struct TtyInode {

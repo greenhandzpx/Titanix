@@ -1,6 +1,6 @@
 use alloc::{collections::LinkedList, sync::Arc};
 
-use crate::{driver::block::BlockDevice, fs::Mutex};
+use crate::{driver::BlockDevice, fs::Mutex};
 
 use log::info;
 

@@ -1,5 +1,5 @@
 //! The panic handler
-use crate::{driver::sbi::shutdown, processor::local_hart};
+use crate::{driver::shutdown, processor::local_hart};
 use core::panic::PanicInfo;
 use log::{error, warn};
 

@@ -33,7 +33,7 @@ pub fn print_in_color(args: fmt::Arguments, color_code: u8) {
     // use crate::arch::io;
     // let _guard = LOG_LOCK.lock();
     // io::putfmt(with_color!(args, color_code));
-    crate::driver::uart::print(with_color!(args, color_code));
+    crate::driver::print(with_color!(args, color_code));
 }
 
 struct SimpleLogger;
