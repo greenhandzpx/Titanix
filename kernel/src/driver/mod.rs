@@ -1,11 +1,14 @@
+#![allow(unused_imports)]
 use crate::sync::mutex::SpinNoIrqLock;
 use alloc::sync::Arc;
 use core::{
     any::Any,
     fmt::{self, Write},
 };
+use fu740_pac::Peripherals;
 
 use self::{
+    fu740::{sdcard::SDCardWrapper, uart::UartSerial},
     qemu::virtio_blk::VirtIOBlock,
     sbi::{console_putchar, SbiChar},
 };

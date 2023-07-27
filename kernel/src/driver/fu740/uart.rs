@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use alloc::sync::Arc;
 use fu740_pac::UART0;
 
