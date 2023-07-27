@@ -30,3 +30,16 @@ impl RngCore for Rng {
         todo!()
     }
 }
+
+impl Rng {
+    pub fn positive_u32(&mut self) -> u32 {
+        let mut next = (self.seed.rotate_left(7) + 114514) * 13;
+        while (next & 0xff) as u32 == 0 {
+            self.seed = next;
+            next = (self.seed.rotate_left(7) + 114514) * 13;
+        }
+        (next & 0xff) as u32
+    }
+}
+
+pub static mut RNG: Rng = Rng { seed: BIGPRIME };

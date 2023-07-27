@@ -1,7 +1,7 @@
 use core::task::Waker;
 
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
-use log::trace;
+use log::{debug, trace};
 
 use crate::{
     config::mm::PAGE_SIZE,
@@ -108,11 +108,13 @@ pub trait File: Send + Sync {
 
     fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
         // TODO: optimize
+        debug!("[File::pollin] enter default");
         Ok(true)
         // todo!()
     }
 
     fn pollout(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
+        debug!("[File::pollout] enter default");
         Ok(true)
         // todo!()
     }

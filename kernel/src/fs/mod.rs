@@ -9,7 +9,6 @@ pub mod inode;
 mod page_cache;
 pub mod pipe;
 mod procfs;
-pub mod socket;
 pub mod tmpfs;
 
 use alloc::sync::Arc;
