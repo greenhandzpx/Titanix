@@ -5,15 +5,14 @@ use core::{
     any::Any,
     fmt::{self, Write},
 };
-use fu740_pac::Peripherals;
 
 use self::{
-    fu740::{sdcard::SDCardWrapper, uart::UartSerial},
+    fu740::{prci::init_prci, sdcard::SDCardWrapper, uart::UartSerial},
     qemu::virtio_blk::VirtIOBlock,
     sbi::{console_putchar, SbiChar},
 };
 
-mod fu740;
+pub mod fu740;
 mod qemu;
 mod sbi;
 
@@ -54,15 +53,17 @@ fn init_char_device() {
     }
     #[cfg(feature = "board_u740")]
     {
-        *CHAR_DEVICE.lock() = Some(Arc::new(UartSerial::new(unsafe {
-            Peripherals::steal().UART0
-        })));
+        *CHAR_DEVICE.lock() = Some(Arc::new(SbiChar::new()));
     }
 }
 
 pub fn init() {
     init_char_device();
     init_block_device();
+    #[cfg(feature = "board_u740")]
+    {
+        init_prci();
+    }
 }
 
 struct Stdout;

@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 
 use alloc::sync::Arc;
-use fu740_pac::UART0;
+use fu740_pac::{Peripherals, UART0};
 
 use crate::driver::{CharDevice, Mutex};
 
 pub struct UartSerial(Arc<Mutex<UART0>>);
 
 impl UartSerial {
-    pub fn new(uart: UART0) -> Self {
-        Self(Arc::new(Mutex::new(uart)))
+    pub fn new() -> Self {
+        Self(Arc::new(Mutex::new(unsafe { Peripherals::steal().UART0 })))
     }
     fn putc(uart: &UART0, c: u8) {
         while uart.txdata.read().full().bit_is_set() {}
