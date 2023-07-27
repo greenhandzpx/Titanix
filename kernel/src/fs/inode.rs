@@ -268,11 +268,11 @@ impl dyn Inode {
         let key = HashKey::new(self.metadata().ino, name.to_string());
         log::info!("[mkdir_v] insert {} into INODE_CACHE", path);
         INODE_CACHE.insert(key, child.clone());
-        // insert to FAST_PATH
-        if FAST_PATH.contains(&path.as_str()) {
-            log::info!("[mkdir_v] insert {} into FAST_PATH_CACHE", path);
-            FAST_PATH_CACHE.insert(path, child.clone());
-        }
+        // // insert to FAST_PATH
+        // if FAST_PATH.contains(&path.as_str()) {
+        //     log::info!("[mkdir_v] insert {} into FAST_PATH_CACHE", path);
+        //     FAST_PATH_CACHE.insert(path, child.clone());
+        // }
         Ok(child)
     }
 
@@ -283,7 +283,6 @@ impl dyn Inode {
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         let child = self.mknod(self.clone(), name, mode, None)?;
-        log::info!("[mknod_v] child inode name {}", name);
         self.metadata()
             .inner
             .lock()
@@ -291,7 +290,14 @@ impl dyn Inode {
             .insert(name.to_string(), child.clone());
         // insert to cache
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        log::info!(
+            "[mknod_v] child inode name {}, parent ino {}, key {:?}",
+            name,
+            self.metadata().ino,
+            key
+        );
         INODE_CACHE.insert(key, child.clone());
+
         child.create_page_cache_if_needed();
         Ok(child)
     }
@@ -335,9 +341,7 @@ impl dyn Inode {
             Some(value) => Ok(Some(value.clone())),
             None => {
                 debug!(
-                    "[lookup] cannot find child dentry, name: {}, try to find in inode",
-                    name
-                );
+                    "[lookup] cannot find child dentry in inode cache, key: {:?}, try to find in inode", key);
                 let target_inode = self.try_find_and_insert_inode(name);
                 match target_inode {
                     Some(target_inode) => Ok(Some(target_inode.clone())),

@@ -9,3 +9,4 @@
 - 适配libc-test的时候发现创建一个新线程时需要向tp寄存器写入tls，向gp寄存器写入全局指针
 - 适配libc-test的pthread相关的测试时，需要注意set_tid_address和clear_tid_address的含义以及SignalContext一定要写对！注意SigSet需要补齐到libc规定的大小
 - 信号被阻塞时不应从队列中清除，而是一直留着直到不阻塞并处理
+- 需要将buddy_system_allocator中的LcokHeap的锁改为SpinNoIrqLock，否则内核中断可能会死锁并且不报错！！

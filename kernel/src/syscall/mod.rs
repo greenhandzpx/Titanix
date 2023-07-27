@@ -442,11 +442,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_clone,
             (
                 args[0],
-                args[1] as *const u8,
+                args[1],
                 args[2],
-                args[3] as *const u8,
+                args[3],
                 args[4],
-            )
+            ),
+            await
         ),
         SYSCALL_EXECVE => sys_handler!(
             sys_execve,

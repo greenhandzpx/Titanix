@@ -244,6 +244,10 @@ fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet)
     if sig_action.is_user_defined {
         save_context_for_sig_handler(old_blocked_sigs);
 
+        if signo == SIGSEGV {
+            log::warn!("[handle_signal] user set handler for SIGSEGV");
+        }
+
         current_trap_cx().sepc = sig_action.sig_action.sa_handler as *const usize as usize;
         // a0
         current_trap_cx().user_x[10] = signo;

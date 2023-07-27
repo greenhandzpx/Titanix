@@ -1,5 +1,7 @@
 use alloc::collections::VecDeque;
 
+use crate::signal::SIGSEGV;
+
 use super::{KSigAction, SigHandlerManager, SigSet};
 
 pub struct PendingSigs {
@@ -82,9 +84,14 @@ impl SigQueue {
             let signo = self.pending_sigs.pop().unwrap();
             cnt += 1;
             if self.blocked_sigs.contain_sig(signo) {
-                log::info!("sig {} has been blocked", signo);
-                self.pending_sigs.add(signo);
-                continue;
+                if signo == SIGSEGV {
+                    // TODO: just work around for libc-bench
+                    log::warn!("SIGSEGV has been blocked");
+                } else {
+                    log::info!("sig {} has been blocked", signo);
+                    self.pending_sigs.add(signo);
+                    continue;
+                }
             }
 
             let old_blocked_sigs = self.blocked_sigs;

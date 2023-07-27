@@ -135,6 +135,7 @@ pub fn init() {
     var_dir
         .mkdir_v("tmp", InodeMode::FileDIR)
         .expect("mkdir /var/tmp fail!");
+
     root_inode
         .mknod_v("lat_sig", InodeMode::FileREG, None)
         .unwrap();
