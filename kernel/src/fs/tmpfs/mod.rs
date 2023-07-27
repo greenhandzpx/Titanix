@@ -1,6 +1,6 @@
 use alloc::{string::ToString, sync::Arc, vec::Vec};
 
-use crate::utils::error::GeneralRet;
+use crate::utils::{error::GeneralRet, path};
 
 use self::inode::TmpInode;
 
@@ -23,7 +23,11 @@ impl TmpFs {
         fa_inode: Option<Arc<dyn Inode>>,
         covered_inode: Option<Arc<dyn Inode>>,
     ) -> GeneralRet<Self> {
-        let mut root_inode = TmpInode::new(fa_inode.clone(), mount_point, InodeMode::FileDIR);
+        let mut root_inode = TmpInode::new(
+            fa_inode.clone(),
+            path::get_name(mount_point),
+            InodeMode::FileDIR,
+        );
         root_inode.root_init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
         let root_inode = Arc::new(root_inode);
         Ok(Self {

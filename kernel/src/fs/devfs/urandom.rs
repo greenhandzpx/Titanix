@@ -9,14 +9,12 @@ use crate::{
     sync::mutex::SleepLock,
     utils::{
         error::{AsyscallRet, GeneralRet, SyscallRet},
-        random::{Rng, BIGPRIME},
+        random::RNG,
     },
 };
 use alloc::{boxed::Box, sync::Arc};
 use log::debug;
 use rand_core::RngCore;
-
-pub static mut RNG: Rng = Rng { seed: BIGPRIME };
 
 pub struct UrandomInode {
     metadata: InodeMeta,
