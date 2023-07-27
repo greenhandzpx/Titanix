@@ -233,4 +233,9 @@ impl TrapContext {
         cx.set_sp(sp);
         cx
     }
+
+    /// Set entry point
+    pub fn set_entry_point(&mut self, entry: usize) {
+        self.sepc = entry;
+    }
 }

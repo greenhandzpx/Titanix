@@ -263,11 +263,11 @@ impl PipeRingBuffer {
         if self.head == self.tail {
             self.status = RingBufferStatus::EMPTY;
         }
-        // TODO: optimize: read all bytes and then notify
-        while !self.write_waiters.is_empty() {
-            let waker = self.write_waiters.pop().unwrap();
-            waker.wake();
-        }
+        // // TODO: optimize: read all bytes and then notify
+        // while !self.write_waiters.is_empty() {
+        //     let waker = self.write_waiters.pop().unwrap();
+        //     waker.wake();
+        // }
         c
     }
 
@@ -278,12 +278,12 @@ impl PipeRingBuffer {
         if self.tail == self.head {
             self.status = RingBufferStatus::FULL;
         }
-        debug!("[PipeRingBuffer::write_byte] wake up");
-        // TODO: optimize: write all bytes and then notify
-        while !self.read_waiters.is_empty() {
-            let waker = self.read_waiters.pop().unwrap();
-            waker.wake();
-        }
+        // debug!("[PipeRingBuffer::write_byte] wake up");
+        // // TODO: optimize: write all bytes and then notify
+        // while !self.read_waiters.is_empty() {
+        //     let waker = self.read_waiters.pop().unwrap();
+        //     waker.wake();
+        // }
     }
 
     pub fn available_read(&self) -> usize {
@@ -324,6 +324,17 @@ impl PipeRingBuffer {
 
     pub fn wait_for_reading(&mut self, waker: Waker) {
         self.read_waiters.push(waker);
+    }
+
+    pub fn wake(&mut self, for_reader: bool) {
+        let queue = match for_reader {
+            true => &mut self.read_waiters,
+            false => &mut self.write_waiters,
+        };
+        while !queue.is_empty() {
+            let waker = queue.pop().unwrap();
+            waker.wake();
+        }
     }
 
     pub fn wait_for_writing(&mut self, waker: Waker) {
@@ -411,9 +422,10 @@ impl Future for PipeFuture {
                     buf[this.already_put] = ring_buffer.read_byte();
                     this.already_put += 1;
                     if this.already_put == this.user_buf_len {
-                        return Poll::Ready(Ok(this.already_put));
+                        break;
                     }
                 }
+                ring_buffer.wake(false);
                 debug!("[PipeFuture::poll] read return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put));
                 // ring_buffer.wait_for_reading(cx.waker().clone());
@@ -446,6 +458,7 @@ impl Future for PipeFuture {
                         break;
                     }
                 }
+                ring_buffer.wake(true);
                 debug!("[PipeFuture::poll] write return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put));
                 // ring_buffer.wait_for_writing(cx.waker().clone());

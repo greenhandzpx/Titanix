@@ -32,7 +32,6 @@ impl FsDevice {
         match dev {
             InodeDevice::Pipe(_) => Self::None,
             InodeDevice::Device(d) => Self::BlockDevice(d.block_device),
-            InodeDevice::Socket(_) => Self::None,
         }
     }
 
@@ -192,6 +191,7 @@ impl FileSystemManager {
             fa_ino = 0;
         }
         let key = HashKey::new(fa_ino, mount_point_name.to_string());
+        log::debug!("[mount] mount point {}, hash key {:?}", mount_point, key);
         // remove covered inode, but hashmap store only newest one, so maybe it's useless.
         /*
         if covered_inode.is_some() {
@@ -251,6 +251,11 @@ impl FileSystemManager {
         // insert root inode into inode cache
         let meta = fs.metadata();
         INODE_CACHE.insert(key.clone(), Arc::clone(&meta.root_inode));
+        log::info!(
+            "[mount] mount point {} inode ino {}",
+            mount_point,
+            meta.root_inode.metadata().ino
+        );
         // insert file system into file system manager
         let mut fs_locked = self.fs_mgr.lock();
         fs_locked.insert(mount_point.to_string(), Arc::clone(&fs));

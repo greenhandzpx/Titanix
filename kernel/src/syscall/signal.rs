@@ -144,7 +144,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             _ if how == SigProcmaskHow::SigBlock as i32 => {
                 stack_trace!();
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
-                    debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
+                    log::info!("[sys_rt_sigprocmask] add new sig mask: {:?}", new_sig_mask);
                     proc.sig_queue.blocked_sigs |= new_sig_mask;
                     unsafe {
                         current_task().inner_handler(|th| {
@@ -159,7 +159,10 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             }
             _ if how == SigProcmaskHow::SigUnblock as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
-                    info!("[sys_rt_sigprocmask]: new sig mask {:?}", new_sig_mask);
+                    info!(
+                        "[sys_rt_sigprocmask]: unblock new sig mask {:?}",
+                        new_sig_mask
+                    );
                     proc.sig_queue.blocked_sigs.remove(new_sig_mask);
                     unsafe {
                         current_task().inner_handler(|th| {
@@ -177,7 +180,7 @@ pub fn sys_rt_sigprocmask(how: i32, set: *const u32, old_set: *mut SigSet) -> Sy
             }
             _ if how == SigProcmaskHow::SigSetmask as i32 => {
                 if let Some(new_sig_mask) = unsafe { SigSet::from_bits(*set as usize) } {
-                    debug!("[sys_rt_sigprocmask] new sig mask: {:?}", new_sig_mask);
+                    log::info!("[sys_rt_sigprocmask] set new sig mask: {:?}", new_sig_mask);
                     proc.sig_queue.blocked_sigs = new_sig_mask;
                     unsafe {
                         current_task().inner_handler(|th| {

@@ -10,4 +10,5 @@ pub const RADIX_TREE_MAP_SHIFT: usize = 4;
 /// max num file descriptors
 pub const MAX_FD_NUM: usize = 1024;
 
+// pub const PIPE_BUF_CAPACITY: usize = PAGE_SIZE;
 pub const PIPE_BUF_CAPACITY: usize = PAGE_SIZE;

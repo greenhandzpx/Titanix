@@ -149,9 +149,6 @@ pub fn rust_main(hart_id: usize) {
     } else {
         // The other harts
 
-        // #[cfg(not(feature = "multi_hart"))]
-        // return;
-
         // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 

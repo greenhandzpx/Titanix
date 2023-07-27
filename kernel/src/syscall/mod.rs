@@ -135,7 +135,7 @@ use sync::*;
 use time::*;
 
 use crate::{
-    fs::{ffi::Statfs, socket::SocketAddr},
+    fs::ffi::Statfs,
     mm::MapPermission,
     process::resource::RLimit,
     signal::{SigAction, SigSet},
@@ -371,23 +371,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_socketpair,
             (args[0] as u32, args[1] as u32, args[2] as u32, args[3])
         ),
-        SYSCALL_BIND => sys_handler!(
-            sys_bind,
-            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
-        ),
+        SYSCALL_BIND => sys_handler!(sys_bind, (args[0] as u32, args[1], args[2] as u32)),
         SYSCALL_LISTEN => sys_handler!(sys_listen, (args[0] as u32, args[1] as u32)),
-        SYSCALL_ACCEPT => sys_handler!(
-            sys_accept,
-            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
-        ),
-        SYSCALL_CONNECT => sys_handler!(
-            sys_connect,
-            (args[0] as u32, args[1] as *const SocketAddr, args[2] as u32)
-        ),
-        SYSCALL_GETSOCKNAME => sys_handler!(
-            sys_getsockname,
-            (args[0] as u32, args[1] as *mut SocketAddr, args[2])
-        ),
+        SYSCALL_ACCEPT => sys_handler!(sys_accept, (args[0] as u32, args[1], args[2]), await),
+        SYSCALL_CONNECT => {
+            sys_handler!(sys_connect, (args[0] as u32, args[1], args[2] as u32), await)
+        }
+        SYSCALL_GETSOCKNAME => sys_handler!(sys_getsockname, (args[0] as u32, args[1], args[2])),
         SYSCALL_SENDTO => sys_handler!(
             sys_sendto,
             (
@@ -404,10 +394,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             (
                 args[0] as u32,
                 args[1],
-                args[2],
+                args[2] as u32,
                 args[3] as u32,
                 args[4],
-                args[5] as u32
+                args[5]
             ), await
         ),
         SYSCALL_SETSOCKOPT => sys_handler!(
@@ -442,11 +432,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_clone,
             (
                 args[0],
-                args[1] as *const u8,
+                args[1],
                 args[2],
-                args[3] as *const u8,
+                args[3],
                 args[4],
-            )
+            ),
+            await
         ),
         SYSCALL_EXECVE => sys_handler!(
             sys_execve,

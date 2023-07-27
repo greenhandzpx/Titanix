@@ -5,8 +5,7 @@ use riscv::register::{scause::Scause, stvec, utvec::TrapMode};
 
 use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
-    process::thread::exit_and_terminate_all_threads,
-    processor::{current_process, local_hart, SumGuard},
+    processor::{current_process, current_task, local_hart, SumGuard},
     signal::SIGSEGV,
     stack_trace,
     sync::mutex::SieGuard,
@@ -33,7 +32,7 @@ struct TryOpRet {
     scause: Scause,
 }
 
-const STORE_PAGE_FAULT: usize = 15;
+// const STORE_PAGE_FAULT: usize = 15;
 
 extern "C" {
     fn __try_access_user_error_trap();
@@ -181,7 +180,7 @@ impl UserCheck {
                     va.0,
                     current_process().pid()
                 );
-                current_process().send_signal(SIGSEGV).unwrap();
+                current_task().send_signal(SIGSEGV);
                 #[cfg(feature = "stack_trace")]
                 {
                     warn!("backtrace:");

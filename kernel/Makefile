@@ -18,6 +18,8 @@ SUBMIT :=
 
 TMPFS :=
 
+MULTI_HART :=
+
 BOARD := qemu
 
 KERNEL_FEATURES := 
@@ -30,6 +32,9 @@ ifneq ($(SUBMIT), )
 endif
 ifneq ($(TMPFS), )
 	KERNEL_FEATURES += tmpfs
+endif
+ifneq ($(MULTI_HART), )
+	KERNEL_FEATURES += multi_hart
 endif
 ifeq ($(BOARD), u740)
 	KERNEL_FEATURES += board_u740

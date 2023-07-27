@@ -513,12 +513,16 @@ impl Process {
             *(arg_addr as *const usize)
         };
 
-        let mut trap_context = TrapContext::app_init_context(entry_point, stack);
+        // let mut trap_context = TrapContext::app_init_context(entry_point, stack);
+        let mut trap_context = *current_trap_cx();
+        trap_context.set_entry_point(entry_point);
+        trap_context.set_sp(stack);
         trap_context.user_x[10] = arg as usize;
         // Thread local storage
         trap_context.user_x[4] = tls_ptr;
         // Global pointer
         trap_context.user_x[3] = current_trap_cx().user_x[3];
+        log::info!("[clone_thread] gp {:#x}", trap_context.user_x[3]);
 
         // let ustack_base = self.inner_handler(|proc| proc.ustack_base);
         let new_thread = Arc::new(Thread::new(self.clone(), trap_context, stack, None));

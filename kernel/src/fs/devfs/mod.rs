@@ -11,10 +11,10 @@ use self::urandom::UrandomInode;
 use self::{tty::TtyInode, zero::ZeroInode};
 use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
-use crate::fs::inode::{FAST_PATH, INODE_CACHE};
+use crate::fs::inode::INODE_CACHE;
 use crate::utils::error::GeneralRet;
+use crate::utils::path;
 
-use super::inode::FAST_PATH_CACHE;
 use super::tmpfs::inode::TmpInode;
 use super::FileSystemType;
 use super::{
@@ -88,7 +88,11 @@ const DEV_NAMES: [(
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
 ); 7] = [
     ("/dev/vda2", InodeMode::FileBLK, |parent, path| {
-        Arc::new(TmpInode::new(Some(parent), path, InodeMode::FileDIR))
+        Arc::new(TmpInode::new(
+            Some(parent),
+            path::get_name(path),
+            InodeMode::FileDIR,
+        ))
     }),
     ("/dev/zero", InodeMode::FileCHR, |parent, path| {
         Arc::new(ZeroInode::new(parent, path))
@@ -144,10 +148,6 @@ impl DevFs {
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);
             INODE_CACHE.insert(key, child.clone());
-            if FAST_PATH.contains(&dev_name2) {
-                debug!("inster {} into fast path cache", dev_name2);
-                FAST_PATH_CACHE.insert(dev_name2.to_string(), child);
-            }
             debug!("insert {} finished", dev_name2);
         }
 

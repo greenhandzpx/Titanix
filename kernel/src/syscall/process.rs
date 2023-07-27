@@ -4,7 +4,7 @@ use crate::config::process::INITPROC_PID;
 use crate::driver::shutdown;
 use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::mm::user_check::UserCheck;
-use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
+use crate::process::thread::{self, exit_and_terminate_all_threads, terminate_given_thread};
 use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sync::Event;
@@ -145,11 +145,11 @@ bitflags! {
 }
 
 /// TODO: consider more args
-pub fn sys_clone(
+pub async fn sys_clone(
     flags: usize,
-    stack: *const u8,
+    stack_ptr: usize,
     parent_tid_ptr: usize,
-    tls: *const u8,
+    tls_ptr: usize,
     chilren_tid_ptr: usize,
 ) -> SyscallRet {
     stack_trace!();
@@ -177,7 +177,7 @@ pub fn sys_clone(
         }
 
         let current_process = current_process();
-        let stack = match stack as usize {
+        let stack = match stack_ptr {
             0 => None,
             stack => {
                 info!("[sys_clone] assign the user stack {:#x}", stack);
@@ -200,6 +200,7 @@ pub fn sys_clone(
             clone_flags,
             new_process.inner.lock().sig_queue.blocked_sigs
         );
+        // thread::yield_now().await;
         Ok(new_pid)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
@@ -207,13 +208,15 @@ pub fn sys_clone(
         info!("clone a new thread");
 
         let current_process = current_process();
-        current_process.create_thread(
-            stack as usize,
-            tls as usize,
+        let new_tid = current_process.create_thread(
+            stack_ptr,
+            tls_ptr,
             parent_tid_ptr,
             chilren_tid_ptr,
             clone_flags,
-        )
+        );
+        // thread::yield_now().await;
+        new_tid
     } else {
         panic!()
     }

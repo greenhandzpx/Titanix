@@ -82,20 +82,21 @@ pub async fn trap_handler() {
 
             let tmp = (stval as isize >> VA_WIDTH_SV39) as isize;
             if tmp != 0 && tmp != -1 {
+                // TODO: just work around
                 log::error!("v {:#x}, tmp {:#x}", stval, tmp);
                 local_hart().env().stack_tracker.print_stacks_err();
                 exit_and_terminate_all_threads(-2);
-            }
-            match memory_space::handle_page_fault(VirtAddr::from(stval), scause).await {
-                Ok(()) => {
-                    log::trace!(
-                        "[kernel] handle legal page fault, addr {:#x}, instruction {:#x}",
-                        stval,
-                        current_trap_cx().sepc
-                    );
-                }
-                Err(_) => {
-                    warn!(
+            } else {
+                match memory_space::handle_page_fault(VirtAddr::from(stval), scause).await {
+                    Ok(()) => {
+                        log::trace!(
+                            "[kernel] handle legal page fault, addr {:#x}, instruction {:#x}",
+                            stval,
+                            current_trap_cx().sepc
+                        );
+                    }
+                    Err(_) => {
+                        warn!(
                         "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it. pid: {}",
                         scause.cause(),
                         scause.bits(),
@@ -103,25 +104,26 @@ pub async fn trap_handler() {
                         current_trap_cx().sepc,
                         current_process().pid()
                     );
-                    current_process().send_signal(SIGSEGV).unwrap();
-                    // warn!("[kernel] user sp {:#x}", current_trap_cx().user_x[2]);
+                        current_task().send_signal(SIGSEGV);
+                        // warn!("[kernel] user sp {:#x}", current_trap_cx().user_x[2]);
 
-                    #[cfg(feature = "stack_trace")]
-                    {
-                        warn!("backtrace:");
-                        local_hart().env().stack_tracker.print_stacks();
+                        #[cfg(feature = "stack_trace")]
+                        {
+                            warn!("backtrace:");
+                            local_hart().env().stack_tracker.print_stacks();
+                        }
+                        // exit_and_terminate_all_threads(-2);
                     }
-                    // exit_and_terminate_all_threads(-2);
                 }
+                // There are serveral kinds of page faults:
+                // 1. mmap area
+                // 2. sbrk area
+                // 3. fork cow area
+                // 4. user stack
+                // 5. execve elf file
+                // 6. dynamic link
+                // 7. illegal page fault
             }
-            // There are serveral kinds of page faults:
-            // 1. mmap area
-            // 2. sbrk area
-            // 3. fork cow area
-            // 4. user stack
-            // 5. execve elf file
-            // 6. dynamic link
-            // 7. illegal page fault
         }
         Trap::Exception(Exception::IllegalInstruction) => {
             warn!(

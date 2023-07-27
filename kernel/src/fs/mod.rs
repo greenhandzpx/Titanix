@@ -9,7 +9,6 @@ pub mod inode;
 mod page_cache;
 pub mod pipe;
 mod procfs;
-pub mod socket;
 pub mod tmpfs;
 
 use alloc::sync::Arc;
@@ -58,7 +57,6 @@ fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
 
 pub fn init() {
     INODE_CACHE.init();
-    FAST_PATH_CACHE.init();
 
     // First we mount root fs
     #[cfg(feature = "tmpfs")]
@@ -135,6 +133,7 @@ pub fn init() {
     var_dir
         .mkdir_v("tmp", InodeMode::FileDIR)
         .expect("mkdir /var/tmp fail!");
+
     root_inode
         .mknod_v("lat_sig", InodeMode::FileREG, None)
         .unwrap();
@@ -187,6 +186,8 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("tmpfs init fail!");
+
+    FAST_PATH_CACHE.init();
 
     list_rootfs();
 }

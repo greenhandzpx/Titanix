@@ -5,7 +5,7 @@ use core::{
 };
 
 use crate::{config::mm::KERNEL_HEAP_SIZE, sync::mutex::SpinNoIrqLock};
-use buddy_system_allocator::{Heap, LockedHeap};
+use buddy_system_allocator::Heap;
 use log::{debug, error, info};
 
 #[global_allocator]
