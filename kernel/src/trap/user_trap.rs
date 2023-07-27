@@ -132,8 +132,10 @@ pub async fn trap_handler() {
                 sepc::read(),
             );
             #[cfg(feature = "stack_trace")]
-            warn!("backtrace:");
-            local_hart().env().stack_tracker.print_stacks();
+            {
+                warn!("backtrace:");
+                local_hart().env().stack_tracker.print_stacks();
+            }
             exit_and_terminate_all_threads(-2);
         }
         Trap::Exception(Exception::Breakpoint) => {
@@ -149,6 +151,10 @@ pub async fn trap_handler() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             handle_timeout_events();
             set_next_trigger();
+            // log::debug!(
+            //     "[trap_handler] timer interrupt, sepc {:#x}",
+            //     current_trap_cx().sepc
+            // );
             thread::yield_now().await;
         }
         _ => {
@@ -160,9 +166,6 @@ pub async fn trap_handler() {
             );
         }
     }
-
-    // TODO: modify trap ret
-    // trap_return();
 }
 
 #[no_mangle]
@@ -174,6 +177,7 @@ pub fn trap_return() {
     close_interrupt();
 
     set_user_trap_entry();
+
     extern "C" {
         // fn __alltraps();
         fn __return_to_user(cx: *mut TrapContext);
@@ -189,6 +193,9 @@ pub fn trap_return() {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
         current_trap_cx().user_fx.restore();
+        // if (current_trap_cx().user_x[2] as isize) < 0 {
+        //     log::warn!("[trap_return] sp {:#x}", current_trap_cx().user_x[2]);
+        // }
 
         __return_to_user(current_trap_cx());
 

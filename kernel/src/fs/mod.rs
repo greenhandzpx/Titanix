@@ -189,7 +189,7 @@ pub fn init() {
         )
         .expect("tmpfs init fail!");
 
-    list_rootfs();
+    // list_rootfs();
 }
 pub const AT_FDCWD: isize = -100;
 

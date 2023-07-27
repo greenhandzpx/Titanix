@@ -91,7 +91,7 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             //     sec: (dev_spec.sec   + clock.sec) as usize,
             //     nsec: (dev_spec.nsec   + clock.nsec) as usize,
             // };
-            debug!("[sys_clock_gettime] get time {:?}", clock_time);
+            log::info!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {
                 time_spec_ptr.write_volatile(clock_time.into());
             }

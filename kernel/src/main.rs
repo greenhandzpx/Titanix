@@ -66,6 +66,7 @@ use crate::{
     mm::KERNEL_SPACE,
     process::thread,
     processor::hart,
+    timer::current_time_duration,
 };
 
 global_asm!(include_str!("entry.S"));
@@ -104,7 +105,7 @@ pub fn fake_main(hart_id: usize) {
 // pub fn rust_main(hart_id: usize) -> ! {
 pub fn rust_main(hart_id: usize) {
     if FIRST_HART
-        .compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
+        .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok()
     {
         // The first hart
@@ -146,26 +147,41 @@ pub fn rust_main(hart_id: usize) {
             use crate::config::mm::HART_START_ADDR;
             use crate::processor::HARTS;
             use crate::sbi::hart_start;
+            // only start two harts
+            let mut has_another = false;
             let hart_num = unsafe { HARTS.len() };
             for i in 0..hart_num {
+                if i == 0 {
+                    continue;
+                }
+                if has_another {
+                    break;
+                }
                 if i == hart_id {
                     continue;
                 }
+                println!("[kernel] start to wake up hart {}...", i);
                 hart_start(i, HART_START_ADDR);
+                has_another = true;
             }
         }
+        // println!("[main hart] current time {:?}", current_time_duration());
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
     } else {
         // The other harts
+        hart::init(hart_id);
 
         // barrier
         while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
-        trap::init();
+        println!(
+            "[kernel] ---------- hart {} is starting... ----------",
+            hart_id
+        );
 
-        hart::init(hart_id);
+        trap::init();
         unsafe {
             KERNEL_SPACE
                 .as_ref()
@@ -173,6 +189,7 @@ pub fn rust_main(hart_id: usize) {
                 .activate();
         }
         println!("[kernel] ---------- hart {} started ---------- ", hart_id);
+        // println!("[other hart] current time {:?}", current_time_duration());
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
