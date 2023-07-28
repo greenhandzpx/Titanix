@@ -18,7 +18,7 @@ impl SocketAddrv4 {
             sin_port: buf[2..4].try_into().expect("ipv4 port len err"),
             sin_addr: buf[4..8].try_into().expect("ipv4 addr len err"),
         };
-        log::debug!("[SocketAddrv4::new] new addr: {:?}", addr);
+        log::info!("[SocketAddrv4::new] new addr: {:?}", addr);
         addr
     }
     pub fn fill(&self, addr_buf: &mut [u8], addrlen: usize) {
@@ -36,7 +36,7 @@ impl SocketAddrv4 {
 impl From<IpEndpoint> for SocketAddrv4 {
     fn from(value: IpEndpoint) -> Self {
         Self {
-            sin_port: value.port.to_ne_bytes(),
+            sin_port: value.port.to_be_bytes(),
             sin_addr: value
                 .addr
                 .as_bytes()
@@ -113,7 +113,7 @@ impl SocketAddrv6 {
 impl From<IpEndpoint> for SocketAddrv6 {
     fn from(value: IpEndpoint) -> Self {
         Self {
-            sin6_port: value.port.to_ne_bytes(),
+            sin6_port: value.port.to_be_bytes(),
             sin6_flowinfo: [0 as u8; 4],
             sin6_addr: value
                 .addr

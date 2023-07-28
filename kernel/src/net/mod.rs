@@ -127,7 +127,7 @@ impl Socket {
         stack_trace!();
         let _sum_guard = SumGuard::new();
         let family = u16::from_ne_bytes(addr_buf[0..2].try_into().expect("family size wrong"));
-        log::info!("[sys_bind] addr family {}", family);
+        log::info!("[Socket::bind] addr family {}", family);
         let endpoint = match family {
             AF_INET => {
                 let ipv4 = SocketAddrv4::new(addr_buf);
@@ -139,7 +139,6 @@ impl Socket {
             }
             _ => return Err(SyscallErr::EINVAL),
         };
-        log::info!("[sys_bind] bind endpoint: {:?}", endpoint);
         match *self {
             Self::TcpSocket(ref socket) => socket.bind(endpoint),
             Self::UdpSocket(ref socket) => socket.bind(endpoint),
@@ -158,7 +157,7 @@ impl Socket {
         let (new_socket, peer_addr) = match *self {
             Socket::TcpSocket(ref socket) => {
                 let peer_addr = socket.accept().await?;
-                log::debug!("[Socket::accept] get peer_addr: {:?}", peer_addr);
+                log::info!("[Socket::accept] get peer_addr: {:?}", peer_addr);
                 let new_socket = TcpSocket::new();
                 new_socket.bind(
                     peer_addr
@@ -213,7 +212,7 @@ impl Socket {
         stack_trace!();
         let _sum_guard = SumGuard::new();
         let family = u16::from_ne_bytes(addr_buf[0..2].try_into().expect("family size wrong"));
-        log::info!("[sys_connect] addr family {}", family);
+        log::info!("[Socket::connect] addr family {}", family);
         let endpoint = match family {
             AF_INET => {
                 let ipv4 = SocketAddrv4::new(addr_buf);
@@ -225,6 +224,7 @@ impl Socket {
             }
             _ => return Err(SyscallErr::EINVAL),
         };
+        log::info!("[Socket::connect] remote: {:?}", endpoint);
         match *self {
             Socket::TcpSocket(ref socket) => socket.connect(endpoint).await,
             Socket::UdpSocket(ref socket) => socket.connect(endpoint).await,

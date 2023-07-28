@@ -98,6 +98,7 @@ impl TcpSocket {
     }
 
     pub fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
+        info!("[Tcp::bind] bind to: {:?}", addr);
         self.inner.lock().local_endpoint = addr;
         Ok(0)
     }

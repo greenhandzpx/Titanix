@@ -94,6 +94,7 @@ impl UdpSocket {
     }
 
     pub fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
+        log::info!("[Udp::bind] bind to {:?}", addr);
         NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
             socket.bind(addr).ok().ok_or(SyscallErr::EINVAL)
@@ -103,6 +104,7 @@ impl UdpSocket {
     }
 
     pub async fn connect(&self, remote_endpoint: IpEndpoint) -> SyscallRet {
+        log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
         let mut inner = self.inner.lock();
         inner.remote_endpoint = Some(remote_endpoint);
         Ok(0)
@@ -184,13 +186,15 @@ impl<'a> Future for UdpRecvFuture<'a> {
         NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
             if !socket.can_recv() {
                 socket.register_recv_waker(cx.waker());
+                return Poll::Pending;
             }
             let this = self.get_mut();
             Poll::Ready({
-                let (ret, _) = socket
+                let (ret, meta) = socket
                     .recv_slice(&mut this.buf)
                     .ok()
                     .ok_or(SyscallErr::ENOTCONN)?;
+                this.socket.inner.lock().remote_endpoint = Some(meta.endpoint);
                 Ok(ret)
             })
         })
