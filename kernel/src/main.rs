@@ -134,6 +134,7 @@ pub fn rust_main(hart_id: usize) {
         driver::init();
         fs::init();
         timer::init();
+        net::config::init();
 
         thread::spawn_kernel_thread(async move {
             process::add_initproc();
