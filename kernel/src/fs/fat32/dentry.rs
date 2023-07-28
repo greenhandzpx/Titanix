@@ -22,13 +22,13 @@ pub trait DentryWriter: Send + Sync {
     fn write_dentry(&mut self, data: &[u8]);
 }
 
-pub struct FAT32DentryContent<'fuck> {
-    file: &'fuck mut FAT32File,
+pub struct FAT32DentryContent<'a> {
+    file: &'a mut FAT32File,
     offset: usize,
 }
 
-impl<'fuck> FAT32DentryContent<'fuck> {
-    pub fn new(file: &'fuck mut FAT32File) -> Self {
+impl<'a> FAT32DentryContent<'a> {
+    pub fn new(file: &'a mut FAT32File) -> Self {
         Self { file, offset: 0 }
     }
 
