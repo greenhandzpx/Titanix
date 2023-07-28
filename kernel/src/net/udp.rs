@@ -16,13 +16,10 @@ use smoltcp::{
 use crate::{
     fs::{File, FileMeta, OpenFlags},
     processor::SumGuard,
-    sync::mutex::SpinNoIrqLock,
     utils::error::{SyscallErr, SyscallRet},
 };
 
-use super::{config::NET_INTERFACE, MAX_BUFFER_SIZE};
-
-type Mutex<T> = SpinNoIrqLock<T>;
+use super::{config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
 
 const UDP_PACKET_SIZE: usize = 1472;
 const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;

@@ -3,7 +3,7 @@ use core::{
     slice::{self},
 };
 
-use alloc::{collections::BTreeMap, string::ToString, sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, string::ToString, sync::Arc};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::{
@@ -11,6 +11,7 @@ use crate::{
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
+    sync::mutex::SpinNoIrqLock,
     utils::{
         error::{GeneralRet, SyscallErr, SyscallRet},
         random::RNG,
@@ -21,14 +22,19 @@ use self::{
     address::{SocketAddrv4, SocketAddrv6},
     tcp::TcpSocket,
     udp::UdpSocket,
+    unix::UnixSocket,
 };
+
+type Mutex<T> = SpinNoIrqLock<T>;
 
 pub mod address;
 pub mod config;
 mod tcp;
 mod udp;
+mod unix;
 
 pub use tcp::TCP_MSS;
+pub use unix::UNIX_SOCKET_BUF_MANAGER;
 
 /// domain
 pub const AF_UNIX: u16 = 1;
@@ -52,10 +58,12 @@ pub const MAX_BUFFER_SIZE: usize = (1 << 16) - 1;
 pub enum Socket {
     TcpSocket(TcpSocket),
     UdpSocket(UdpSocket),
+    UnixSocket(UnixSocket),
 }
 
 impl Socket {
     pub fn new(domain: u32, socket_type: u32) -> GeneralRet<usize> {
+        log::info!("[Socket::new] domain: {}", domain);
         match domain as u16 {
             AF_INET | AF_INET6 => {
                 let socket_type = SocketType::from_bits(socket_type).ok_or(SyscallErr::EINVAL)?;
@@ -82,16 +90,12 @@ impl Socket {
                 }
             }
             AF_UNIX => {
-                let tmp_inde = Arc::new(TmpInode::new(
-                    None,
-                    &unsafe { RNG.positive_u32().to_string() },
-                    InodeMode::FileREG,
-                ));
-                let tmp_file = tmp_inde.open(tmp_inde.clone(), OpenFlags::RDWR)?;
+                let socket = UnixSocket::new();
+                let socket = Arc::new(Socket::UnixSocket(socket));
                 current_process().inner_handler(|proc| {
                     let fd = proc.fd_table.alloc_fd()?;
-                    proc.fd_table.put(fd, tmp_file.clone());
-                    // proc.socket_table.insert(fd, socket);
+                    proc.fd_table.put(fd, socket.clone());
+                    proc.socket_table.insert(fd, socket);
                     Ok(fd)
                 })
             }
@@ -126,6 +130,7 @@ impl Socket {
         let local_endpoint = match *self {
             Socket::TcpSocket(ref socket) => socket.addr(),
             Socket::UdpSocket(ref socket) => socket.addr(),
+            Socket::UnixSocket(_) => todo!(),
         };
         Self::fill_with_endpoint(local_endpoint, addr, addrlen)
     }
@@ -135,6 +140,7 @@ impl Socket {
         let remote_endpoint = match *self {
             Socket::TcpSocket(ref socket) => socket.peer_addr(),
             Socket::UdpSocket(ref socket) => socket.peer_addr(),
+            Socket::UnixSocket(_) => todo!(),
         };
         if remote_endpoint.is_none() {
             return Err(SyscallErr::ENOTCONN);
@@ -155,11 +161,13 @@ impl Socket {
                 let ipv6 = SocketAddrv6::new(addr_buf);
                 IpListenEndpoint::from(ipv6)
             }
+            AF_UNIX => todo!(),
             _ => return Err(SyscallErr::EINVAL),
         };
         match *self {
             Self::TcpSocket(ref socket) => socket.bind(endpoint),
             Self::UdpSocket(ref socket) => socket.bind(endpoint),
+            Socket::UnixSocket(_) => todo!(),
         }
     }
     pub fn listen(&self) -> SyscallRet {
@@ -167,6 +175,7 @@ impl Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.listen(),
             Socket::UdpSocket(_) => Err(SyscallErr::EOPNOTSUPP),
+            Socket::UnixSocket(_) => Err(SyscallErr::EOPNOTSUPP),
         }
     }
 
@@ -186,6 +195,9 @@ impl Socket {
                 (new_socket, peer_addr)
             }
             Socket::UdpSocket(_) => {
+                return Err(SyscallErr::EOPNOTSUPP);
+            }
+            Socket::UnixSocket(_) => {
                 return Err(SyscallErr::EOPNOTSUPP);
             }
         };
@@ -250,12 +262,14 @@ impl Socket {
                 let ipv6 = SocketAddrv6::new(addr_buf);
                 IpEndpoint::from(ipv6)
             }
+            AF_UNIX => todo!(),
             _ => return Err(SyscallErr::EINVAL),
         };
         log::info!("[Socket::connect] remote: {:?}", endpoint);
         match *self {
             Socket::TcpSocket(ref socket) => socket.connect(endpoint).await,
             Socket::UdpSocket(ref socket) => socket.connect(endpoint).await,
+            Socket::UnixSocket(_) => todo!(),
         }
     }
 
@@ -263,24 +277,28 @@ impl Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.recv_buf_size(),
             Socket::UdpSocket(ref socket) => socket.recv_buf_size(),
+            Socket::UnixSocket(_) => todo!(),
         }
     }
     pub fn send_buf_size(&self) -> usize {
         match *self {
             Socket::TcpSocket(ref socket) => socket.send_buf_size(),
             Socket::UdpSocket(ref socket) => socket.send_buf_size(),
+            Socket::UnixSocket(_) => todo!(),
         }
     }
     pub fn set_recv_buf_size(&self, size: usize) {
         match *self {
             Socket::TcpSocket(ref socket) => socket.set_recv_buf_size(size),
             Socket::UdpSocket(ref socket) => socket.set_recv_buf_size(size),
+            Socket::UnixSocket(_) => todo!(),
         }
     }
     pub fn set_send_buf_size(&self, size: usize) {
         match *self {
             Socket::TcpSocket(ref socket) => socket.set_send_buf_size(size),
             Socket::UdpSocket(ref socket) => socket.set_send_buf_size(size),
+            Socket::UnixSocket(_) => todo!(),
         }
     }
 }
@@ -290,6 +308,7 @@ impl File for Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.read(buf),
             Socket::UdpSocket(ref socket) => socket.read(buf),
+            Socket::UnixSocket(ref socket) => socket.read(buf),
         }
     }
 
@@ -297,6 +316,7 @@ impl File for Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.write(buf),
             Socket::UdpSocket(ref socket) => socket.write(buf),
+            Socket::UnixSocket(ref socket) => socket.write(buf),
         }
     }
 
@@ -304,6 +324,7 @@ impl File for Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.metadata(),
             Socket::UdpSocket(ref socket) => socket.metadata(),
+            Socket::UnixSocket(ref socket) => socket.metadata(),
         }
     }
 
@@ -311,6 +332,7 @@ impl File for Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.flags(),
             Socket::UdpSocket(ref socket) => socket.flags(),
+            Socket::UnixSocket(ref socket) => socket.flags(),
         }
     }
 
@@ -318,6 +340,7 @@ impl File for Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.pollin(waker),
             Socket::UdpSocket(ref socket) => socket.pollin(waker),
+            Socket::UnixSocket(ref socket) => socket.pollin(waker),
         }
     }
 
@@ -325,6 +348,7 @@ impl File for Socket {
         match *self {
             Socket::TcpSocket(ref socket) => socket.pollout(waker),
             Socket::UdpSocket(ref socket) => socket.pollout(waker),
+            Socket::UnixSocket(ref socket) => socket.pollout(waker),
         }
     }
 }

@@ -3,7 +3,7 @@ use smoltcp::wire::IpListenEndpoint;
 
 use crate::{
     mm::user_check::UserCheck,
-    net::{address::SocketAddrv4, Socket, TCP_MSS},
+    net::{address::SocketAddrv4, Socket, TCP_MSS, UNIX_SOCKET_BUF_MANAGER},
     processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
@@ -20,14 +20,12 @@ const SO_RCVBUF: u32 = 8;
 
 pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
     stack_trace!();
-    log::info!(
+    info!(
         "[sys_socket] domain: {}, type: {}, protocol: {}",
-        domain,
-        socket_type,
-        protocol
+        domain, socket_type, protocol
     );
     let sockfd = Socket::new(domain, socket_type)?;
-    log::info!("[sys_socket] new sockfd: {}", sockfd);
+    info!("[sys_socket] new sockfd: {}", sockfd);
     Ok(sockfd)
 }
 
@@ -115,6 +113,19 @@ pub async fn sys_sendto(
             socket.connect(dest_addr).await?;
             socket_file.write(buf).await?
         }
+        Socket::UnixSocket(ref unix) => {
+            info!("[sys_sendto] socket is unix");
+            UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
+            let dest_addr =
+                unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
+            let endpoint = unix.addr(dest_addr);
+            let ret = socket_file.write(buf).await?;
+            UNIX_SOCKET_BUF_MANAGER
+                .buf_mgr
+                .lock()
+                .insert(endpoint, socket_file);
+            ret
+        }
     };
     Ok(len)
 }
@@ -134,14 +145,41 @@ pub async fn sys_recvfrom(
         .ok_or(SyscallErr::EBADF)?;
     UserCheck::new().check_writable_slice(buf as *mut u8, len as usize)?;
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len as usize) };
-    let len = socket_file.read(buf).await?;
-    if src_addr != 0 {
-        let socket = current_process()
-            .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
-            .ok_or(SyscallErr::ENOTSOCK)?;
-        socket.peer_addr(src_addr, addrlen)?;
+    let socket = current_process()
+        .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
+        .ok_or(SyscallErr::ENOTSOCK)?;
+    info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
+    match *socket {
+        Socket::UnixSocket(ref unix) => {
+            info!("[sys_sendto] socket is unix");
+            UserCheck::new().check_readable_slice(src_addr as *const u8, addrlen)?;
+            let src_addr =
+                unsafe { core::slice::from_raw_parts(src_addr as *const u8, addrlen as usize) };
+            let endpoint = unix.addr(src_addr);
+            let dest_file = UNIX_SOCKET_BUF_MANAGER
+                .buf_mgr
+                .lock()
+                .get(&endpoint)
+                .unwrap()
+                .clone();
+            let len = dest_file.read(buf).await?;
+            Ok(len)
+        }
+        Socket::TcpSocket(_) => {
+            let len = socket_file.read(buf).await?;
+            if src_addr != 0 {
+                socket.peer_addr(src_addr, addrlen)?;
+            }
+            Ok(len)
+        }
+        Socket::UdpSocket(_) => {
+            let len = socket_file.read(buf).await?;
+            if src_addr != 0 {
+                socket.peer_addr(src_addr, addrlen)?;
+            }
+            Ok(len)
+        }
     }
-    Ok(len)
 }
 
 pub fn sys_getsockopt(
@@ -231,12 +269,9 @@ pub fn sys_setsockopt(
 
 pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {
     stack_trace!();
-    log::info!(
+    info!(
         "[sys_socketpair] domain {}, type {}, protocol {}, sv {}",
-        domain,
-        socket_type,
-        protocol,
-        sv
+        domain, socket_type, protocol, sv
     );
     let len = 2 * core::mem::size_of::<u32>();
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;
@@ -244,5 +279,6 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
     sv[0] = Socket::new(domain, socket_type)? as u32;
     sv[1] = Socket::new(domain, socket_type)? as u32;
+    info!("[sys_socketpair] new sv: {:?}", sv);
     Ok(0)
 }

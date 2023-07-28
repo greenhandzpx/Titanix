@@ -14,14 +14,13 @@ use crate::{
     net::{config::NET_INTERFACE, MAX_BUFFER_SIZE},
     process::thread,
     processor::SumGuard,
-    sync::mutex::SpinNoIrqLock,
     utils::{
         error::{GeneralRet, SyscallErr, SyscallRet},
         random::RNG,
     },
 };
 
-type Mutex<T> = SpinNoIrqLock<T>;
+use super::Mutex;
 
 pub const TCP_MSS: u32 = 32768;
 pub struct TcpSocket {
