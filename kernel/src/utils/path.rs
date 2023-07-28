@@ -15,11 +15,19 @@ use super::error::{GeneralRet, SyscallErr};
 use super::string::c_str_to_string;
 use log::{debug, trace};
 
-pub fn path2vec(path_name: &str) -> Vec<&str> {
+pub fn split_path(path_name: &str) -> Vec<&str> {
     path_name.split('/').filter(|name| *name != "").collect()
 }
+pub fn split_path_string(path_name: String) -> Vec<String> {
+    let path_name = path_name.as_str();
+    path_name
+        .split('/')
+        .filter(|name| *name != "")
+        .map(|s| s.to_string())
+        .collect()
+}
 pub fn get_name(path_name: &str) -> &str {
-    let dentry_vec = path2vec(path_name);
+    let dentry_vec = split_path(path_name);
     let len = dentry_vec.len();
     trace!("[get_name] dentry_vec: {:?}, len: {}", dentry_vec, len);
     if len == 0 {
@@ -37,7 +45,7 @@ pub fn is_relative_path(path: &str) -> bool {
 }
 /// if path has .. return true
 pub fn check_double_dot(path: &str) -> bool {
-    let path_vec = path2vec(path);
+    let path_vec = split_path(path);
     for name in path_vec {
         if name.eq("..") {
             return true;
@@ -55,15 +63,15 @@ pub fn remove_dot(path: &str) -> String {
 }
 /// format path: remove extra "/"
 pub fn format(src: &str) -> String {
-    let mut vec = path2vec(src);
+    let mut vec = split_path(src);
     if !is_relative_path(src) {
         vec.insert(0, "");
     }
     vec.join("/")
 }
 pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<String> {
-    let absolute_path_vec = path2vec(cwd);
-    let relative_path_vec = path2vec(relative_path);
+    let absolute_path_vec = split_path(cwd);
+    let relative_path_vec = split_path(relative_path);
     debug!("absolute path: {:?}", absolute_path_vec);
     debug!("relative path: {:?}", relative_path_vec);
     let mut res: Vec<&str> = Vec::new();
@@ -286,8 +294,12 @@ pub fn path_with_dirfd(dirfd: isize, path: String) -> Option<String> {
     absolute_path
 }
 
+pub fn child_path(absolute: &str, parent: &str) -> String {
+    absolute[(parent.len() + 1)..].to_string()
+}
+
 pub fn get_parent_dir(path_name: &str) -> Option<String> {
-    let dentry_vec: Vec<&str> = path2vec(path_name);
+    let dentry_vec: Vec<&str> = split_path(path_name);
     debug!("[get_parent_dir] dentry vec {:?}", dentry_vec);
     if dentry_vec.is_empty() {
         return None;
