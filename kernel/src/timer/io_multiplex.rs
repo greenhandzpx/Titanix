@@ -146,7 +146,7 @@ impl Future for IOMultiplexFuture {
             }
         }
         if cnt > 0 {
-            trace!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
+            log::debug!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
             // TODO: can we use user addr directly without copy overhead
             let _sum_guard = SumGuard::new();
             match &mut this.user_format {

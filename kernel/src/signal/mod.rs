@@ -19,6 +19,8 @@ pub use self::signal_handler::{
     core_sig_handler, ign_sig_handler, stop_sig_handler, term_sig_handler,
 };
 
+pub type Signal = usize;
+
 pub const SIGHUP: usize = 1;
 pub const SIGINT: usize = 2;
 pub const SIGQUIT: usize = 3;
@@ -118,7 +120,7 @@ impl SigHandlerManager {
         Self { sigactions }
     }
 
-    pub fn get(&self, signo: usize) -> Option<&KSigAction> {
+    pub fn get(&self, signo: Signal) -> Option<&KSigAction> {
         if signo <= SIG_NUM {
             Some(&self.sigactions[signo])
         } else {
@@ -126,31 +128,18 @@ impl SigHandlerManager {
         }
     }
 
-    pub fn set_sigaction(&mut self, signo: usize, sigaction: KSigAction) {
+    pub fn set_sigaction(&mut self, signo: Signal, sigaction: KSigAction) {
         if signo <= SIG_NUM {
             self.sigactions[signo] = sigaction;
         }
     }
 }
 
-// #[derive(Clone, Copy)]
-// #[repr(C)]
-// pub struct SigAction {
-//     pub sa_handler: fn(usize),
-//     pub sa_mask: [SigSet; 1],
-//     // pub sa_flags: usize,
-//     pub sa_restorer: usize,
-//     pub sa_flags: u32,
-//     // pub sa_sigaction: fn(i32, *const u8, *const u8),
-//     // pub sa_sigaction: usize,
-//     // pub sa_mask: [SigSet; 2],
-//     // pub sa_restorer: fn(),
-// }
-
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SigAction {
-    pub sa_handler: fn(usize),
+    pub sa_handler: usize,
+    // pub sa_handler: usize,
     pub sa_flags: u32,
     pub sa_restorer: usize,
     pub sa_mask: [SigSet; 1],
@@ -171,7 +160,7 @@ impl SigAction {
             SIGCHLD => ign_sig_handler,
             SIGSTOP => stop_sig_handler,
             _ => ign_sig_handler,
-        };
+        } as *const () as usize;
         Self {
             sa_handler,
             // sa_sigaction: 0,
@@ -190,7 +179,7 @@ pub struct KSigAction {
 
 impl KSigAction {
     /// Construct a default handler
-    pub fn new(signo: usize, is_user_defined: bool) -> Self {
+    pub fn new(signo: Signal, is_user_defined: bool) -> Self {
         Self {
             is_user_defined,
             sig_action: SigAction::new(signo),
@@ -198,29 +187,29 @@ impl KSigAction {
     }
 }
 
-/// Note that we handle only one pending signal every time.
-/// Return true if there is a user-defined pending sig to handle.
-pub fn check_signal_for_current_process() -> bool {
-    // TODO: handle nesting sig handle:
-    // Do we need to save trap contexts like a stack?
-    if let Some((signo, sig_action, old_blocked_sigs)) =
-        current_process().inner_handler(|proc| proc.sig_queue.check_signal())
-    {
-        // Note that serveral sig handlers may be executed at the same time by different threads
-        // since we don't hold the process inner lock
-        handle_signal(signo, sig_action, old_blocked_sigs)
-    } else {
-        false
-    }
-}
+// /// Note that we handle only one pending signal every time.
+// /// Return true if there is a user-defined pending sig to handle.
+// pub fn check_signal_for_current_process() -> bool {
+//     // TODO: handle nesting sig handle:
+//     // Do we need to save trap contexts like a stack?
+//     if let Some((signo, sig_action, old_blocked_sigs)) =
+//         current_process().inner_handler(|proc| proc.sig_queue.check_signal())
+//     {
+//         // Note that serveral sig handlers may be executed at the same time by different threads
+//         // since we don't hold the process inner lock
+//         handle_signal(signo, sig_action, old_blocked_sigs)
+//     } else {
+//         false
+//     }
+// }
 
 /// Note that we handle only one pending signal every time.
 /// Return true if there is a user-defined pending sig to handle.
-pub fn check_signal_for_current_thread() -> bool {
+pub fn check_signal_for_current_task() -> bool {
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
     if let Some((signo, sig_action, old_blocked_sigs)) =
-        unsafe { current_task().inner_handler(|thread| thread.sig_queue.lock().check_signal()) }
+        current_task().sig_queue.lock().check_signal()
     {
         log::info!("[check_signal_for_current_thread] handle signal {}", signo);
         // Note that serveral sig handlers may be executed at the same time by different threads
@@ -236,7 +225,7 @@ extern "C" {
 }
 
 /// Return true if there is a user-defined pending sig to handle
-fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet) -> bool {
+fn handle_signal(signo: Signal, sig_action: KSigAction, old_blocked_sigs: SigSet) -> bool {
     info!(
         "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
@@ -264,7 +253,12 @@ fn handle_signal(signo: usize, sig_action: KSigAction, old_blocked_sigs: SigSet)
     } else {
         // Just in kernel mode
         // TODO: change to async
-        (sig_action.sig_action.sa_handler)(signo);
+        let handler = unsafe {
+            core::mem::transmute::<*const (), fn(usize)>(
+                sig_action.sig_action.sa_handler as *const (),
+            )
+        };
+        handler(signo);
         false
     }
 }

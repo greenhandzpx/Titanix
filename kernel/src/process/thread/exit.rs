@@ -4,7 +4,6 @@ use crate::{
     processor::{current_process, current_trap_cx},
     signal::SIGCHLD,
     stack_trace,
-    sync::Event,
 };
 use alloc::{sync::Arc, vec::Vec};
 use log::{debug, info};
@@ -33,18 +32,6 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // same time
     let mut process_inner = thread.process.inner.lock();
 
-    // let mut idx: Option<usize> = None;
-    // for (i, (_, t)) in process_inner.threads.iter().enumerate() {
-    //     // TODO: not sure whether it is safe to unwrap here
-    //     if t.upgrade().unwrap().tid.0 == thread.tid.0 {
-    //         idx = Some(i);
-    //         break;
-    //     }
-    // }
-    // if let Some(idx) = idx {
-    // } else {
-    //     panic!("Cannot find the thread in its process")
-    // }
     process_inner.threads.remove(&thread.tid());
 
     if process_inner.thread_count() > 0 {
@@ -84,9 +71,10 @@ pub fn handle_exit(thread: &Arc<Thread>) {
     // In order to avoid dead lock
     drop(process_inner);
 
+    stack_trace!();
     debug!("Send SIGCHILD to parent {}", parent_prcess.pid());
-    parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
-    parent_prcess.inner_handler(|proc| proc.sig_queue.send_signal(SIGCHLD))
+    // parent_prcess.mailbox.send_event(Event::CHILD_EXIT);
+    parent_prcess.recv_signal(SIGCHLD).unwrap();
 }
 
 /// Exit and terminate all threads of the current process.

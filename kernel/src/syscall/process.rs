@@ -188,17 +188,9 @@ pub async fn sys_clone(
         let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
-        // // modify trap context of new_task, because it returns immediately after switching
-        // let trap_cx = new_process.trap_context_main();
-        // // we do not have to move to next instruction since we have done it before
-        // // for child process, fork returns 0
-        // trap_cx.user_x[10] = 0;
-
         info!(
-            "[sys_clone] return new pid: {}, clone flags {:?}, child flags {:?}",
-            new_pid,
-            clone_flags,
-            new_process.inner.lock().sig_queue.blocked_sigs
+            "[sys_clone] return new pid: {}, clone flags {:?}",
+            new_pid, clone_flags,
         );
         // thread::yield_now().await;
         Ok(new_pid)
@@ -311,10 +303,6 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     stack_trace!();
     let process = current_process();
 
-    // if exit_status_addr != 0 {
-    //     UserCheck::new()
-    //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
-    // }
     info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
 
     let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
@@ -409,7 +397,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
             if options.contains(WaitOption::WNOHANG) {
                 return Ok(0);
             }
-            process.mailbox.wait_for_event(Event::CHILD_EXIT).await;
+            current_task().wait_for_events(Event::CHILD_EXIT).await;
         }
     }
 }

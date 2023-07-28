@@ -27,7 +27,7 @@ use crate::fs::{
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::fs::{resolve_path, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
-use crate::processor::{current_process, SumGuard};
+use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
 use crate::stack_trace;
 use crate::syscall::PollEvents;
@@ -1188,13 +1188,11 @@ pub async fn sys_ppoll(
         UserCheck::new()
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
-        current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
-                proc.sig_queue.blocked_sigs |= new_sig_mask;
-            } else {
-                warn!("[sys_ppoll]: invalid set arg");
-            }
-        });
+        if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
+            current_task().sig_queue.lock().blocked_sigs |= new_sig_mask;
+        } else {
+            warn!("[sys_ppoll]: invalid set arg");
+        }
     }
 
     let poll_future = IOMultiplexFuture::new(fds, IOMultiplexFormat::PollFds(fds_ptr));
@@ -1335,13 +1333,11 @@ pub async fn sys_pselect6(
         UserCheck::new()
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
-        current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
-                proc.sig_queue.blocked_sigs |= new_sig_mask;
-            } else {
-                warn!("[sys_pselect]: invalid set arg");
-            }
-        });
+        if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
+            current_task().sig_queue.lock().blocked_sigs |= new_sig_mask;
+        } else {
+            warn!("[sys_pselect]: invalid set arg");
+        }
     }
 
     let poll_future = IOMultiplexFuture::new(
