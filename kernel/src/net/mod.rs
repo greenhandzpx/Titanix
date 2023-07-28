@@ -21,7 +21,7 @@ use self::{
 };
 
 pub mod address;
-mod config;
+pub mod config;
 mod tcp;
 mod udp;
 
@@ -144,7 +144,6 @@ impl Socket {
             Self::UdpSocket(ref socket) => socket.bind(endpoint),
         }
     }
-
     pub fn listen(&self) -> SyscallRet {
         stack_trace!();
         match *self {
