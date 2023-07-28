@@ -237,12 +237,15 @@ impl<'a> Future for TcpRecvFuture<'a> {
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_recv() {
+                log::info!("[TcpRcevFuture::poll] err when recv");
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
             if !socket.can_recv() {
                 socket.register_recv_waker(cx.waker());
+                log::info!("[TcpRcevFuture::poll] cannot recv yet");
                 return Poll::Pending;
             }
+            log::info!("[TcpSendFuture::poll] start to recv...");
             let this = self.get_mut();
             Poll::Ready(
                 socket
@@ -276,12 +279,15 @@ impl<'a> Future for TcpSendFuture<'a> {
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_send() {
+                log::info!("[TcpSendFuture::poll] err when send");
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
             if !socket.can_send() {
                 socket.register_send_waker(cx.waker());
+                log::info!("[TcpSendFuture::poll] cannot send yet");
                 return Poll::Pending;
             }
+            log::info!("[TcpSendFuture::poll] start to send...");
             let this = self.get_mut();
             Poll::Ready(
                 socket
