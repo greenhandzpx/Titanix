@@ -27,14 +27,16 @@ use crate::fs::{
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::fs::{resolve_path, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
-use crate::processor::{current_process, SumGuard};
+use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
 use crate::stack_trace;
+use crate::sync::Event;
 use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
 use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{ffi::current_time_spec, UTIME_NOW};
 use crate::timer::{ffi::TimeSpec, UTIME_OMIT};
+use crate::utils::async_tools::{Select2Futures, SelectOutput};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
@@ -1188,13 +1190,11 @@ pub async fn sys_ppoll(
         UserCheck::new()
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
-        current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
-                proc.sig_queue.blocked_sigs |= new_sig_mask;
-            } else {
-                warn!("[sys_ppoll]: invalid set arg");
-            }
-        });
+        if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
+            current_task().sig_queue.lock().blocked_sigs |= new_sig_mask;
+        } else {
+            warn!("[sys_ppoll]: invalid set arg");
+        }
     }
 
     let poll_future = IOMultiplexFuture::new(fds, IOMultiplexFormat::PollFds(fds_ptr));
@@ -1209,9 +1209,24 @@ pub async fn sys_ppoll(
             }
         }
     } else {
-        let ret = poll_future.await;
-        trace!("[sys_ppoll]: ready");
-        ret
+        match Select2Futures::new(
+            poll_future,
+            current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+        )
+        .await
+        {
+            SelectOutput::Output1(ret) => {
+                debug!("[sys_ppoll]: ready");
+                ret
+            }
+            SelectOutput::Output2(e) => {
+                info!("[sys_ppoll] interrupt by event {:?}", e);
+                Err(SyscallErr::EINTR)
+            }
+        }
+        // let ret = poll_future.await;
+        // trace!("[sys_ppoll]: ready");
+        // ret
     }
 }
 
@@ -1335,13 +1350,11 @@ pub async fn sys_pselect6(
         UserCheck::new()
             .check_readable_slice(sigmask_ptr as *const u8, core::mem::size_of::<SigSet>())?;
         let sigmask = unsafe { *(sigmask_ptr as *const u32) };
-        current_process().inner_handler(|proc| {
-            if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
-                proc.sig_queue.blocked_sigs |= new_sig_mask;
-            } else {
-                warn!("[sys_pselect]: invalid set arg");
-            }
-        });
+        if let Some(new_sig_mask) = SigSet::from_bits(sigmask as usize) {
+            current_task().sig_queue.lock().blocked_sigs |= new_sig_mask;
+        } else {
+            warn!("[sys_pselect]: invalid set arg");
+        }
     }
 
     let poll_future = IOMultiplexFuture::new(
@@ -1371,9 +1384,23 @@ pub async fn sys_pselect6(
             }
         }
     } else {
-        let ret = poll_future.await;
-        debug!("[sys_pselect]: ready");
-        ret
+        match Select2Futures::new(
+            poll_future,
+            current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+        )
+        .await
+        {
+            SelectOutput::Output1(ret) => {
+                debug!("[sys_pselect]: ready");
+                ret
+            }
+            SelectOutput::Output2(e) => {
+                info!("[sys_pselect] interrupt by event {:?}", e);
+                Err(SyscallErr::EINTR)
+            }
+        }
+        // let ret = poll_future.await;
+        // ret
     }
 }
 

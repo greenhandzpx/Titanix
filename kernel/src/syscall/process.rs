@@ -4,7 +4,7 @@ use crate::config::process::INITPROC_PID;
 use crate::driver::shutdown;
 use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::mm::user_check::UserCheck;
-use crate::process::thread::{self, exit_and_terminate_all_threads, terminate_given_thread};
+use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sync::Event;
@@ -188,17 +188,9 @@ pub async fn sys_clone(
         let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
-        // // modify trap context of new_task, because it returns immediately after switching
-        // let trap_cx = new_process.trap_context_main();
-        // // we do not have to move to next instruction since we have done it before
-        // // for child process, fork returns 0
-        // trap_cx.user_x[10] = 0;
-
         info!(
-            "[sys_clone] return new pid: {}, clone flags {:?}, child flags {:?}",
-            new_pid,
-            clone_flags,
-            new_process.inner.lock().sig_queue.blocked_sigs
+            "[sys_clone] return new pid: {}, clone flags {:?}",
+            new_pid, clone_flags,
         );
         // thread::yield_now().await;
         Ok(new_pid)
@@ -291,12 +283,10 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
     let elf_data_arc = app_inode.metadata().inner.lock().elf_data.clone();
     let elf_data = elf_data_arc.get_unchecked_mut();
-    // let mut elf_data = Vec::new();
     if elf_data.is_empty() {
         app_file.read_all_from_start(elf_data)?;
     }
     current_process().exec(&elf_data, args_vec, envs_vec)
-    // }
 }
 
 bitflags! {
@@ -311,10 +301,6 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
     stack_trace!();
     let process = current_process();
 
-    // if exit_status_addr != 0 {
-    //     UserCheck::new()
-    //         .check_writable_slice(exit_status_addr as *mut u8, core::mem::size_of::<i32>())?;
-    // }
     info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
 
     let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
@@ -409,7 +395,7 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
             if options.contains(WaitOption::WNOHANG) {
                 return Ok(0);
             }
-            process.mailbox.wait_for_event(Event::CHILD_EXIT).await;
+            current_task().wait_for_events(Event::CHILD_EXIT).await;
         }
     }
 }

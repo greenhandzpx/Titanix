@@ -1,11 +1,11 @@
 use core::{future::Future, task::Poll};
 
 use alloc::vec::Vec;
-use log::{debug, trace, warn};
+use log::{debug, warn};
 
 use crate::{
     fs::ffi::FdSet,
-    processor::{current_process, current_task, SumGuard},
+    processor::{current_process, SumGuard},
     syscall::{PollEvents, PollFd},
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -101,9 +101,9 @@ impl Future for IOMultiplexFuture {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
-        if current_task().is_zombie() {
-            return Poll::Ready(Ok(0));
-        }
+        // if current_task().is_zombie() {
+        //     return Poll::Ready(Ok(0));
+        // }
         let waker = cx.waker().clone();
         let mut cnt = 0;
         let this = unsafe { self.get_unchecked_mut() };
@@ -146,7 +146,7 @@ impl Future for IOMultiplexFuture {
             }
         }
         if cnt > 0 {
-            trace!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
+            log::debug!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
             // TODO: can we use user addr directly without copy overhead
             let _sum_guard = SumGuard::new();
             match &mut this.user_format {

@@ -1,12 +1,4 @@
-use core::mem::size_of;
-
-use log::debug;
-
-use crate::{
-    config::{fs::MAX_FD_NUM, mm::USER_STACK_SIZE},
-    processor::current_process,
-    utils::error::SyscallRet,
-};
+use crate::{config::mm::USER_STACK_SIZE, processor::current_process, utils::error::SyscallRet};
 
 /// Infinity for RLimit
 pub const RLIM_INFINITY: usize = usize::MAX;
@@ -65,9 +57,9 @@ impl RLimit {
     pub fn set_rlimit(resource: u32, rlimit: &RLimit) -> SyscallRet {
         log::info!("[set_rlimit] try to set limit: {:?}", resource);
         match resource {
-            RLIMIT_NOFILE => unsafe {
+            RLIMIT_NOFILE => {
                 current_process().inner_handler(|proc| proc.fd_table.set_rlimit(*rlimit))
-            },
+            }
             _ => {}
         }
         Ok(0)

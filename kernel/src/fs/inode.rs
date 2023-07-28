@@ -78,16 +78,42 @@ impl FastPathCache {
         debug!("[FastPathCache] init success");
     }
 
-    /// return (target inode, is in fast path)
-    pub fn get(&self, path: String) -> Option<Arc<dyn Inode>> {
+    /// return (Option<target_inode>, Option<parent>, Option<child_path>)
+    pub fn get(
+        &self,
+        path: String,
+    ) -> (
+        Option<Arc<dyn Inode>>,
+        Option<Arc<dyn Inode>>,
+        Option<String>,
+    ) {
         let inner = self.0.lock();
         if inner.is_none() {
-            return None;
+            return (None, None, None);
         }
-        inner.as_ref().unwrap().get(&path).cloned()
-    }
-    pub fn insert(&self, path: String, inode: Arc<dyn Inode>) {
-        self.0.lock().as_mut().unwrap().insert(path, inode);
+        let target = inner.as_ref().unwrap().get(&path).cloned();
+        if target.is_some() {
+            // the path found in FAST_PATH
+            return (target, None, None);
+        } else {
+            // match prefix
+            let mut find = false;
+            let mut parent_path = "";
+            for p in FAST_PATH {
+                if path.starts_with(p) {
+                    find = true;
+                    parent_path = p;
+                    break;
+                }
+            }
+            if find {
+                let parent = inner.as_ref().unwrap().get(parent_path).cloned();
+                let child_path = path::child_path(&path, parent_path);
+                return (None, parent, Some(child_path));
+            } else {
+                return (None, None, None);
+            }
+        }
     }
 }
 
@@ -354,23 +380,28 @@ impl dyn Inode {
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
-        let path_names = path::path2vec(path);
+        let mut path_names = path::split_path_string(path.to_string());
 
         let mut parent = self.clone();
 
         let path = path::merge(&self.metadata().path, path);
         let path = path::format(&path);
-        let target = FAST_PATH_CACHE.get(path.clone());
+        let (target, fa, child_path) = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_current] find in fast path cache");
             return Ok(target);
+        } else {
+            debug!("[lookup_from_current] mismatch in fast path cache");
+            if fa.is_some() {
+                debug!("[lookup_from_current] prefix matched");
+                parent = fa.unwrap();
+                path_names = path::split_path_string(child_path.unwrap());
+            }
         }
-
-        debug!("[lookup_from_current] mismatch in fast path cache");
 
         for (i, name) in path_names.clone().into_iter().enumerate() {
             debug!("[lookup_from_current] round: {}, name: {}", i, name);
-            match parent.lookup(name)? {
+            match parent.lookup(&name)? {
                 Some(p) => {
                     debug!("[lookup_from_current] inode name: {}", p.metadata().name);
                     parent = p;
@@ -420,22 +451,27 @@ impl dyn Inode {
 
     /// Look up from root(e.g. "/home/oscomp/workspace")
     pub fn lookup_from_root(path: &str) -> GeneralRet<Option<Arc<Self>>> {
-        let path_names = path::path2vec(path);
+        let mut path_names = path::split_path_string(path.to_string());
 
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         let path = path::format(path);
-        let target = FAST_PATH_CACHE.get(path.clone());
+        let (target, fa, child_path) = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_root] find in fast path cache");
             return Ok(target);
+        } else {
+            debug!("[lookup_from_root] mismatch in fast path cache");
+            if fa.is_some() {
+                debug!("[lookup_from_root] prefix matched");
+                parent = fa.unwrap();
+                path_names = path::split_path_string(child_path.unwrap());
+            }
         }
-
-        debug!("[lookup_from_root] mismatch in fast path cache");
 
         for (i, name) in path_names.clone().into_iter().enumerate() {
             debug!("[lookup_from_root] round: {}, name: {}", i, name);
-            match parent.lookup(name)? {
+            match parent.lookup(&name)? {
                 Some(p) => {
                     debug!("[lookup_from_root] inode name: {}", p.metadata().name);
                     parent = p

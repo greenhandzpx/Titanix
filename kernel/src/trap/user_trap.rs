@@ -11,7 +11,7 @@ use crate::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
         open_interrupt,
     },
-    signal::{check_signal_for_current_process, check_signal_for_current_thread, SIGSEGV},
+    signal::{check_signal_for_current_task, SIGSEGV},
     stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
@@ -38,6 +38,7 @@ pub async fn trap_handler() {
 
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
+            stack_trace!();
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
@@ -104,7 +105,7 @@ pub async fn trap_handler() {
                         current_trap_cx().sepc,
                         current_process().pid()
                     );
-                        current_task().send_signal(SIGSEGV);
+                        current_task().recv_signal(SIGSEGV);
                         // warn!("[kernel] user sp {:#x}", current_trap_cx().user_x[2]);
 
                         #[cfg(feature = "stack_trace")]
@@ -132,8 +133,10 @@ pub async fn trap_handler() {
                 sepc::read(),
             );
             #[cfg(feature = "stack_trace")]
-            warn!("backtrace:");
-            local_hart().env().stack_tracker.print_stacks();
+            {
+                warn!("backtrace:");
+                local_hart().env().stack_tracker.print_stacks();
+            }
             exit_and_terminate_all_threads(-2);
         }
         Trap::Exception(Exception::Breakpoint) => {
@@ -149,6 +152,10 @@ pub async fn trap_handler() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             handle_timeout_events();
             set_next_trigger();
+            // log::debug!(
+            //     "[trap_handler] timer interrupt, sepc {:#x}",
+            //     current_trap_cx().sepc
+            // );
             thread::yield_now().await;
         }
         _ => {
@@ -160,9 +167,6 @@ pub async fn trap_handler() {
             );
         }
     }
-
-    // TODO: modify trap ret
-    // trap_return();
 }
 
 #[no_mangle]
@@ -174,6 +178,7 @@ pub fn trap_return() {
     close_interrupt();
 
     set_user_trap_entry();
+
     extern "C" {
         // fn __alltraps();
         fn __return_to_user(cx: *mut TrapContext);
@@ -181,14 +186,18 @@ pub fn trap_return() {
 
     // If no pending sig for process, then check for thread.
     // TODO: not sure whether this is the right way
-    if !check_signal_for_current_process() {
-        check_signal_for_current_thread();
-    }
+    // if !check_signal_for_current_process() {
+    //     check_signal_for_current_thread();
+    // }
+    check_signal_for_current_task();
 
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
         current_trap_cx().user_fx.restore();
+        // if (current_trap_cx().user_x[2] as isize) < 0 {
+        //     log::warn!("[trap_return] sp {:#x}", current_trap_cx().user_x[2]);
+        // }
 
         __return_to_user(current_trap_cx());
 

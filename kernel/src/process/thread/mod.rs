@@ -11,15 +11,21 @@ use self::{
 };
 
 use super::{resource::CpuSet, Process, PROCESS_MANAGER};
-use crate::signal::SignalContext;
-use crate::trap::TrapContext;
 use crate::{
     signal::{signal_queue::SigQueue, SignalTrampoline},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
+    syscall::CloneFlags,
+};
+use crate::{
+    signal::{Signal, SignalContext},
+    sync::{Event, Mailbox},
+};
+use crate::{
+    signal::{SIGCHLD, SIGKILL},
+    trap::TrapContext,
 };
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicBool;
 use core::{cell::UnsafeCell, task::Waker};
 pub use schedule::{spawn_kernel_thread, spawn_thread, yield_now};
 
@@ -32,13 +38,18 @@ pub use exit::{
 
 /// Thread control block
 pub struct Thread {
-    /// immutable
+    /// Immutable
     tid: Arc<TidHandle>,
-    /// signal trampoline(store ucontext)
+    /// Mailbox for each thread
+    mailbox: Mailbox,
+    /// Signal trampoline(store ucontext)
     pub sig_trampoline: SignalTrampoline,
-    /// the process this thread belongs to
+    /// The process this thread belongs to
     pub process: Arc<Process>,
-    /// mutable
+    /// Thread local signals.
+    /// TODO: should we lock?
+    pub sig_queue: SpinNoIrqLock<SigQueue>,
+    /// Mutable
     pub inner: UnsafeCell<ThreadInner>,
 }
 
@@ -62,20 +73,18 @@ pub struct ThreadInner {
     pub waker: Option<Waker>,
     /// Ustack top
     pub ustack_top: usize,
-    /// Thread local signals.
-    /// TODO: should we lock?
-    pub sig_queue: SpinNoIrqLock<SigQueue>,
     /// Thread cpu affinity
     pub cpu_set: CpuSet,
     /// Note that the process may modify this value in the another thread
     /// (e.g. `exec`)
-    pub terminated: AtomicBool,
+    pub terminated: bool,
 }
 
 impl Thread {
     /// Construct a thread control block
     pub fn new(
         process: Arc<Process>,
+        main_thread: Option<&Arc<Thread>>,
         trap_context: TrapContext,
         ustack_top: usize,
         // user_specified_stack: bool,
@@ -86,10 +95,16 @@ impl Thread {
             Some(tid) => tid,
             None => Arc::new(tid_alloc()),
         };
+        let sig_queue = match main_thread {
+            Some(main_thread) => SigQueue::from_another(&main_thread.sig_queue.lock()),
+            None => SigQueue::new(),
+        };
         let thread = Self {
             tid: tid.clone(),
             sig_trampoline,
             process: process.clone(),
+            mailbox: Mailbox::new(),
+            sig_queue: SpinNoIrqLock::new(sig_queue),
             // user_specified_stack,
             inner: UnsafeCell::new(ThreadInner {
                 trap_context,
@@ -98,12 +113,9 @@ impl Thread {
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
-                sig_queue: SpinNoIrqLock::new(SigQueue::from_another(
-                    &process.inner.lock().sig_queue,
-                )),
                 // TODO: need to change if multi_hart
                 cpu_set: CpuSet::new(1),
-                terminated: AtomicBool::new(false),
+                terminated: false,
             }),
         };
         PROCESS_MANAGER.add(tid.0, &process);
@@ -116,6 +128,7 @@ impl Thread {
         new_process: Arc<Process>,
         stack: Option<usize>,
         tid: Option<Arc<TidHandle>>,
+        flags: CloneFlags,
     ) -> Self {
         stack_trace!();
         let sig_trampoline = SignalTrampoline::new(new_process.clone());
@@ -124,10 +137,17 @@ impl Thread {
             None => Arc::new(tid_alloc()),
         };
         PROCESS_MANAGER.add(tid.0, &new_process);
+
+        let sig_queue = match flags.contains(CloneFlags::CLONE_SIGHAND) {
+            true => SigQueue::from_another(&another.sig_queue.lock()),
+            false => SigQueue::new(),
+        };
         Self {
             tid: tid.clone(),
             sig_trampoline,
             process: new_process.clone(),
+            mailbox: Mailbox::new(),
+            sig_queue: SpinNoIrqLock::new(sig_queue),
             inner: UnsafeCell::new(ThreadInner {
                 trap_context: {
                     let mut trap_context = another.trap_context();
@@ -141,12 +161,9 @@ impl Thread {
                 tid_addr: TidAddress::new(),
                 time_info: ThreadTimeInfo::new(),
                 waker: None,
-                sig_queue: SpinNoIrqLock::new(SigQueue::from_another(unsafe {
-                    &(*another.inner.get()).sig_queue.lock()
-                })),
                 // TODO: need to change if multi_hart
                 cpu_set: CpuSet::new(1),
-                terminated: AtomicBool::new(false),
+                terminated: false,
             }),
         }
     }
@@ -156,11 +173,29 @@ impl Thread {
         f(&mut *self.inner.get())
     }
 
-    /// Send signal to this process
-    pub fn send_signal(&self, signo: usize) {
-        log::info!("[Thread::send_signal] signo {}", signo);
-        let inner = unsafe { &mut *self.inner.get() };
-        inner.sig_queue.lock().pending_sigs.add(signo);
+    /// Wait for some events
+    pub async fn wait_for_events(&self, events: Event) -> Event {
+        self.mailbox.wait_for_events(events).await
+    }
+
+    /// Send signal to this thread
+    pub fn recv_signal(&self, signo: Signal) {
+        stack_trace!();
+        log::info!("[Thread::recv_signal] signo {}", signo);
+        match signo {
+            SIGKILL => {
+                log::info!("[Thread::recv_signal] thread {} recv SIGKILL", self.tid(),);
+                self.mailbox.send_event(Event::THREAD_EXIT);
+            }
+            SIGCHLD => {
+                log::info!("[Thread::recv_signal] thread {} recv SIGCHLD", self.tid(),);
+                self.mailbox.send_event(Event::CHILD_EXIT);
+            }
+            _ => {
+                self.mailbox.send_event(Event::OTHER_SIGNAL);
+            }
+        };
+        self.sig_queue.lock().recv_signal(signo)
     }
 
     /// Get the ref of signal context
@@ -191,17 +226,15 @@ impl Thread {
     /// Terminate this thread
     pub fn terminate(&self) {
         let inner = unsafe { &mut (*self.inner.get()) };
-        inner
-            .terminated
-            .store(true, core::sync::atomic::Ordering::Release)
+        inner.terminated = true;
+        // .store(true, core::sync::atomic::Ordering::Release)
     }
 
     /// Whether this thread has been terminated or not
     pub fn is_zombie(&self) -> bool {
         unsafe {
-            (*self.inner.get())
-                .terminated
-                .load(core::sync::atomic::Ordering::Acquire)
+            (*self.inner.get()).terminated
+            // .load(core::sync::atomic::Ordering::Acquire)
         }
     }
 

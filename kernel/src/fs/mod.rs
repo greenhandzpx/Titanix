@@ -189,7 +189,7 @@ pub fn init() {
 
     FAST_PATH_CACHE.init();
 
-    list_rootfs();
+    // list_rootfs();
 }
 pub const AT_FDCWD: isize = -100;
 

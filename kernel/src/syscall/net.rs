@@ -1,8 +1,9 @@
-use log::debug;
+use log::info;
+use smoltcp::wire::IpListenEndpoint;
 
 use crate::{
     mm::user_check::UserCheck,
-    net::{Socket, TCP_MSS},
+    net::{address::SocketAddrv4, Socket, TCP_MSS},
     processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
@@ -56,7 +57,7 @@ pub async fn sys_accept(sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet 
     let socket = current_process()
         .inner_handler(|proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
-    socket.accept(addr, addrlen).await
+    socket.accept(sockfd, addr, addrlen).await
 }
 
 pub async fn sys_connect(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
@@ -84,17 +85,37 @@ pub async fn sys_sendto(
     buf: usize,
     len: usize,
     _flags: u32,
-    _dest_addr: usize,
-    _addrlen: u32,
+    dest_addr: usize,
+    addrlen: u32,
 ) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let socket = current_process()
+    let socket_file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::EBADF)?;
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
-    let len = socket.write(buf).await?;
+
+    let socket = current_process()
+        .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
+        .ok_or(SyscallErr::ENOTSOCK)?;
+    info!("[sys_sendto] get socket sockfd: {}", sockfd);
+    let len = match *socket {
+        Socket::TcpSocket(_) => socket_file.write(buf).await?,
+        Socket::UdpSocket(ref udp) => {
+            info!("[sys_sendto] socket is udp");
+            UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
+            if udp.addr().addr.is_unspecified() || udp.addr().port == 0 {
+                let addr = SocketAddrv4::new([0; 16].as_slice());
+                let endpoint = IpListenEndpoint::from(addr);
+                udp.bind(endpoint)?;
+            }
+            let dest_addr =
+                unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
+            socket.connect(dest_addr).await?;
+            socket_file.write(buf).await?
+        }
+    };
     Ok(len)
 }
 
@@ -169,7 +190,7 @@ pub fn sys_getsockopt(
             }
         }
         _ => {
-            debug!("[sys_getsockopt] level: {}, optname: {}", level, optname);
+            log::warn!("[sys_getsockopt] level: {}, optname: {}", level, optname);
         }
     }
     Ok(0)
@@ -202,7 +223,7 @@ pub fn sys_setsockopt(
             }
         }
         _ => {
-            debug!("[sys_setsockopt] level: {}, optname: {}", level, optname);
+            log::warn!("[sys_setsockopt] level: {}, optname: {}", level, optname);
         }
     }
     Ok(0)
@@ -210,9 +231,12 @@ pub fn sys_setsockopt(
 
 pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {
     stack_trace!();
-    debug!(
+    log::info!(
         "[sys_socketpair] domain {}, type {}, protocol {}, sv {}",
-        domain, socket_type, protocol, sv
+        domain,
+        socket_type,
+        protocol,
+        sv
     );
     let len = 2 * core::mem::size_of::<u32>();
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;

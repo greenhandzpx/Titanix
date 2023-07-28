@@ -18,10 +18,9 @@ __trap_from_user:
     # save other general purpose registers
     sd x1, 1*8(sp)
     # skip sp(x2), we will save it later
-    sd x3, 3*8(sp)
-    # save x4~x31 (x4 is tp)
-    .set n, 4
-    .rept 27
+    # save x3~x31 (x4 is tp)
+    .set n, 3
+    .rept 29
         SAVE_GP %n
         .set n, n+1
     .endr
@@ -92,11 +91,11 @@ __return_to_user:
     ld t1, 33*8(sp)
     csrw sstatus, t0
     csrw sepc, t1
-    # restore general purpose registers except x0/sp/  tp
+    # restore general purpose registers except x0/sp/
     ld x1, 1*8(sp)
-    ld x3, 3*8(sp)
-    .set n, 4
-    .rept 27
+    # (x4 is tp)
+    .set n, 3
+    .rept 29
         LOAD_GP %n
         .set n, n+1
     .endr

@@ -1,6 +1,12 @@
-use core::{future::Future, pin::Pin, task::Poll};
+use core::{
+    future::Future,
+    pin::Pin,
+    task::{Poll, Waker},
+};
 
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::vec::Vec;
+
+use crate::stack_trace;
 
 use super::mutex::SpinNoIrqLock;
 
@@ -9,12 +15,16 @@ bitflags! {
     pub struct Event: u16 {
         /// Children exit
         const CHILD_EXIT = 1 << 0;
-        /// Parent exit
-        const PARENT_EXIT = 1 << 1;
+        /// Self exit (thread)
+        const THREAD_EXIT = 1 << 1;
+        /// Self exit (process)
+        const PROCESS_EXIT = 1 << 2;
+        /// Other kinds of signal
+        const OTHER_SIGNAL = 1 << 3;
     }
 }
 
-type EventCallback = Box<dyn Fn(Event) -> (bool, Event) + Send>;
+// type EventCallback = Box<dyn Fn(Event) -> (bool, Event) + Send>;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -25,7 +35,8 @@ pub struct Mailbox {
 
 pub struct MailboxInner {
     events: Event,
-    callbacks: Vec<EventCallback>,
+    // callbacks: Vec<EventCallback>,
+    callbacks: Vec<(Event, Waker)>,
 }
 
 impl Mailbox {
@@ -39,59 +50,79 @@ impl Mailbox {
         }
     }
 
-    ///
+    /// Send event to this mailbox
     pub fn send_event(&self, event: Event) {
+        stack_trace!();
+        log::info!("[send_event] send event {:?}...", event);
         let mut inner = self.inner.lock();
         if inner.events | event != inner.events {
             inner.events |= event;
             let new_event = inner.events;
-            // let mut consumed_events = Event::empty();
-            inner.callbacks.retain(|e| {
-                let (care, _event) = e(new_event);
-                // consumed_events |= event;
-                !care
+            inner.callbacks.retain(|(e, waker)| {
+                let cared_events = e.intersection(new_event);
+                if !cared_events.is_empty() {
+                    log::info!(
+                        "[send_event] recv event {:?}, which is what we want",
+                        cared_events
+                    );
+                    waker.wake_by_ref();
+                    false
+                } else {
+                    true
+                }
             });
-            // inner.events.remove(consumed_events);
+        }
+        log::info!("[send_event] send event {:?} finished", event);
+    }
+
+    /// Wait for some event
+    pub async fn wait_for_events(&self, events: Event) -> Event {
+        WaitForEventFuture::new(events, self).await
+    }
+}
+
+struct WaitForEventFuture<'a> {
+    mailbox: &'a Mailbox,
+    events: Event,
+    has_added_cb: bool,
+}
+
+impl<'a> WaitForEventFuture<'a> {
+    pub fn new(events: Event, mailbox: &'a Mailbox) -> Self {
+        Self {
+            mailbox,
+            events,
+            has_added_cb: false,
         }
     }
-
-    ///
-    pub async fn wait_for_event(self: &Arc<Self>, event: Event) {
-        WaitForEventFuture::new(event, self.clone()).await
-    }
 }
 
-struct WaitForEventFuture {
-    mailbox: Arc<Mailbox>,
-    event: Event,
-}
-
-impl WaitForEventFuture {
-    pub fn new(event: Event, mailbox: Arc<Mailbox>) -> Self {
-        Self { mailbox, event }
-    }
-}
-
-impl Future for WaitForEventFuture {
-    type Output = ();
+impl<'a> Future for WaitForEventFuture<'a> {
+    type Output = Event;
 
     fn poll(self: Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+        stack_trace!();
         let mut inner = self.mailbox.inner.lock();
-        if inner.events & self.event != Event::empty() {
-            inner.events.remove(self.event);
-            return Poll::Ready(());
+        let happend_events = inner.events.intersection(self.events);
+        if !happend_events.is_empty() {
+            inner.events.remove(happend_events);
+            log::info!(
+                "[WaitForEventFuture::poll] find events {:?}",
+                happend_events
+            );
+            return Poll::Ready(happend_events);
         }
-        let self_event = self.event;
-        let waker = cx.waker().clone();
-        inner.callbacks.push(Box::new(move |events| {
-            if events & self_event != Event::empty() {
-                // the events contain what we want
-                waker.wake_by_ref();
-                (true, self_event)
-            } else {
-                (false, Event::empty())
-            }
-        }));
+        let this = unsafe { Pin::get_unchecked_mut(self) };
+        if !this.has_added_cb {
+            this.has_added_cb = true;
+            let self_events = this.events;
+            let waker = cx.waker().clone();
+            // Remove those that will wake the same task as us.
+            inner
+                .callbacks
+                .retain(|(_, w)| if w.will_wake(&waker) { false } else { true });
+            inner.callbacks.push((self_events, waker));
+        }
         Poll::Pending
     }
 }

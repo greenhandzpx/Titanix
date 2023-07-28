@@ -27,9 +27,9 @@ use crate::{
         thread::{terminate_all_threads_except_main, tid::tid_alloc},
     },
     processor::{current_process, current_task, current_trap_cx, hart::local_hart, SumGuard},
-    signal::{signal_queue::SigQueue, SIGKILL},
+    signal::{KSigAction, Signal},
     stack_trace,
-    sync::{mutex::SpinNoIrqLock, FutexQueue, Mailbox},
+    sync::{mutex::SpinNoIrqLock, FutexQueue},
     syscall::CloneFlags,
     timer::ffi::ITimerval,
     trap::TrapContext,
@@ -87,8 +87,9 @@ pub struct ProcessInner {
     pub socket_table: SocketTable,
     /// TODO: use BTreeMap to query and delete more quickly
     pub threads: BTreeMap<usize, Weak<Thread>>,
-    /// Pending sigs that wait for the prcoess to handle
-    pub sig_queue: SigQueue,
+
+    // /// Pending sigs that wait for the prcoess to handle
+    // pub sig_queue: SigQueue,
     /// Futex queue
     pub futex_queue: FutexQueue,
     /// Exit code of the current process
@@ -114,8 +115,8 @@ impl ProcessInner {
 pub struct Process {
     /// pid, i.e. the leader thread's tid
     pid: Arc<TidHandle>,
-    /// mailbox,
-    pub mailbox: Arc<Mailbox>,
+    // /// mailbox,
+    // pub mailbox: Mailbox,
     /// mutable
     pub inner: SpinNoIrqLock<ProcessInner>,
 }
@@ -169,35 +170,43 @@ impl Process {
     }
 
     /// Send signal to this process
-    pub fn send_signal(&self, signo: usize) -> GeneralRet<()> {
-        log::info!(
-            "[Process:send_signal] proc {} recv signo {}",
-            self.pid(),
-            signo
-        );
+    pub fn recv_signal(&self, signo: Signal) -> GeneralRet<()> {
+        stack_trace!();
         if signo == 0 {
             return Err(SyscallErr::EINVAL);
         }
-        if signo == SIGKILL {
-            log::info!(
-                "[Process:send_signal] proc {} recv sigkill signo {}",
-                self.pid(),
-                signo
-            );
-            self.inner_handler(|proc| {
-                for (_, thread) in proc.threads.iter() {
-                    if let Some(thread) = thread.upgrade() {
-                        thread.terminate();
-                        thread.wake_up();
-                    }
+        log::info!(
+            "[Process:recv_signal] proc {} recv signo {}",
+            self.pid(),
+            signo
+        );
+        self.inner_handler(|proc| {
+            for (_, thread) in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    thread.recv_signal(signo)
                 }
-            })
-        }
-        self.inner.lock().sig_queue.pending_sigs.add(signo);
+            }
+        });
         Ok(())
     }
 
-    ///
+    /// Set sigaction for all threads in this process
+    pub fn set_sigaction(&self, signo: Signal, sigaction: KSigAction) -> GeneralRet<()> {
+        self.inner_handler(|proc| {
+            for (_, thread) in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    thread
+                        .sig_queue
+                        .lock()
+                        .sig_handlers
+                        .set_sigaction(signo, sigaction)
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Close file
     pub fn close_file(&self, fd: usize) -> SyscallRet {
         let mut inner = self.inner.lock();
         if inner.fd_table.take(fd).is_none() {
@@ -224,7 +233,6 @@ impl Process {
         let pid = Arc::new(tid_alloc());
         let process = Arc::new(Self {
             pid: pid.clone(),
-            mailbox: Arc::new(Mailbox::new()),
             inner: SpinNoIrqLock::new(ProcessInner {
                 is_zombie: false,
                 memory_space,
@@ -233,8 +241,7 @@ impl Process {
                 fd_table: FdTable::new(),
                 socket_table: SocketTable::new(),
                 threads: BTreeMap::new(),
-                sig_queue: SigQueue::new(),
-                // ustack_base: user_sp_base,
+                // sig_queue: SigQueue::new(),
                 futex_queue: FutexQueue::new(),
                 exit_code: 0,
                 cwd: String::from("/"),
@@ -247,6 +254,7 @@ impl Process {
         // create a main thread
         let thread = Arc::new(Thread::new(
             process.clone(),
+            None,
             trap_context,
             user_sp_top,
             Some(pid),
@@ -524,8 +532,13 @@ impl Process {
         trap_context.user_x[3] = current_trap_cx().user_x[3];
         log::info!("[clone_thread] gp {:#x}", trap_context.user_x[3]);
 
-        // let ustack_base = self.inner_handler(|proc| proc.ustack_base);
-        let new_thread = Arc::new(Thread::new(self.clone(), trap_context, stack, None));
+        let new_thread = Arc::new(Thread::new(
+            self.clone(),
+            Some(current_task()),
+            trap_context,
+            stack,
+            None,
+        ));
         // attach the new thread to process
         current_process()
             .inner
@@ -620,24 +633,19 @@ impl Process {
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
             // create child process pcb
             let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
-            let child_sig_queue = match flags.contains(CloneFlags::CLONE_SIGHAND) {
-                true => SigQueue::from_another(&parent_inner.sig_queue),
-                false => SigQueue::new(),
-            };
+            let child_socket_table = SocketTable::from_another(&parent_inner.socket_table)?;
 
             let child = Arc::new(Self {
                 pid,
-                mailbox: Arc::new(Mailbox::new()),
                 inner: SpinNoIrqLock::new(ProcessInner {
                     is_zombie: false,
                     memory_space,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     fd_table: child_fd_table,
-                    socket_table: SocketTable::new(),
+                    socket_table: child_socket_table,
                     threads: BTreeMap::new(),
-                    sig_queue: child_sig_queue,
-                    // ustack_base: parent_inner.ustack_base,
+                    // sig_queue: child_sig_queue,
                     futex_queue: FutexQueue::new(),
                     exit_code: 0,
                     cwd: parent_inner.cwd.clone(),
@@ -661,6 +669,7 @@ impl Process {
             child.clone(),
             stack,
             Some(child.pid.clone()),
+            flags,
         ));
         // attach task to child process
         child

@@ -55,17 +55,6 @@ impl FutexQueue {
 
     /// Wake up `nval` waiters.
     pub fn wake(&mut self, addr: VirtAddr, nval: usize) -> usize {
-        // if let Some(waiters) = self.0.get_mut(&addr) {
-        //     for (i, waiter) in waiters.iter().enumerate() {
-        //         if i == nval {
-        //             return nval;
-        //         }
-        //         waiter.1.wake_by_ref();
-        //     }
-        //     waiters.len()
-        // } else {
-        //     0
-        // }
         if let Some(waiters) = self.0.get_mut(&addr) {
             for i in 0..nval {
                 if waiters.is_empty() {

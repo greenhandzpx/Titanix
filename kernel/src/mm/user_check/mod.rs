@@ -180,7 +180,7 @@ impl UserCheck {
                     va.0,
                     current_process().pid()
                 );
-                current_task().send_signal(SIGSEGV);
+                current_task().recv_signal(SIGSEGV);
                 #[cfg(feature = "stack_trace")]
                 {
                     warn!("backtrace:");
