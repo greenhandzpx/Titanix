@@ -105,6 +105,7 @@ impl UdpSocket {
     pub async fn connect(&self, remote_endpoint: IpEndpoint) -> SyscallRet {
         let mut inner = self.inner.lock();
         inner.remote_endpoint = Some(remote_endpoint);
+        NET_INTERFACE.poll();
         Ok(0)
     }
 }
@@ -181,19 +182,25 @@ impl<'a> Future for UdpRecvFuture<'a> {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         NET_INTERFACE.poll();
-        NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
+        let ret = NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
             if !socket.can_recv() {
+                log::info!("[UdpRecvFuture::poll] cannot recv yet");
                 socket.register_recv_waker(cx.waker());
+                return Poll::Pending;
             }
+            log::info!("[UdpRecvFuture::poll] start to recv...");
             let this = self.get_mut();
             Poll::Ready({
-                let (ret, _) = socket
+                let (ret, meta) = socket
                     .recv_slice(&mut this.buf)
                     .ok()
                     .ok_or(SyscallErr::ENOTCONN)?;
+                this.socket.inner.lock().remote_endpoint = Some(meta.endpoint);
                 Ok(ret)
             })
-        })
+        });
+        NET_INTERFACE.poll();
+        ret
     }
 }
 
@@ -216,11 +223,13 @@ impl<'a> Future for UdpSendFuture<'a> {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         NET_INTERFACE.poll();
-        NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
+        let ret = NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
             if !socket.can_send() {
                 socket.register_send_waker(cx.waker());
+                log::info!("[UdpSendFuture::poll] cannot send yet");
                 return Poll::Pending;
             }
+            log::info!("[UdpSendFuture::poll] start to send...");
             let remote = self.socket.inner.lock().remote_endpoint;
             let this = self.get_mut();
             let meta = UdpMetadata {
@@ -236,6 +245,8 @@ impl<'a> Future for UdpSendFuture<'a> {
                     .ok_or(SyscallErr::ENOBUFS)?;
                 Ok(len)
             })
-        })
+        });
+        NET_INTERFACE.poll();
+        ret
     }
 }

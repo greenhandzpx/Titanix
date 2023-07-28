@@ -36,7 +36,7 @@ impl SocketAddrv4 {
 impl From<IpEndpoint> for SocketAddrv4 {
     fn from(value: IpEndpoint) -> Self {
         Self {
-            sin_port: value.port.to_ne_bytes(),
+            sin_port: value.port.to_be_bytes(),
             sin_addr: value
                 .addr
                 .as_bytes()
@@ -113,7 +113,7 @@ impl SocketAddrv6 {
 impl From<IpEndpoint> for SocketAddrv6 {
     fn from(value: IpEndpoint) -> Self {
         Self {
-            sin6_port: value.port.to_ne_bytes(),
+            sin6_port: value.port.to_be_bytes(),
             sin6_flowinfo: [0 as u8; 4],
             sin6_addr: value
                 .addr

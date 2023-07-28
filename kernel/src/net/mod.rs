@@ -243,6 +243,7 @@ impl Socket {
             }
             _ => return Err(SyscallErr::EINVAL),
         };
+        log::info!("[Socket::connect] get udp remote endpoint: {:?}", endpoint);
         match *self {
             Socket::TcpSocket(ref socket) => socket.connect(endpoint).await,
             Socket::UdpSocket(ref socket) => socket.connect(endpoint).await,

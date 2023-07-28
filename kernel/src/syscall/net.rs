@@ -107,7 +107,7 @@ pub async fn sys_sendto(
             if udp.addr().addr.is_unspecified() || udp.addr().port == 0 {
                 let addr = SocketAddrv4::new([0; 16].as_slice());
                 let endpoint = IpListenEndpoint::from(addr);
-                info!("[sys_sendto] set udp endpoint: {:?}", endpoint);
+                info!("[sys_sendto] set udp local endpoint: {:?}", endpoint);
                 udp.bind(endpoint)?;
             }
             let dest_addr =
