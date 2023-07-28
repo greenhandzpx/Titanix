@@ -3,19 +3,16 @@ use core::{
     slice::{self},
 };
 
-use alloc::{collections::BTreeMap, string::ToString, sync::Arc};
+use alloc::{collections::BTreeMap, sync::Arc};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::{
-    fs::{tmpfs::inode::TmpInode, Fd, File, Inode, InodeMode, OpenFlags},
+    fs::{Fd, File},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
     sync::mutex::SpinNoIrqLock,
-    utils::{
-        error::{GeneralRet, SyscallErr, SyscallRet},
-        random::RNG,
-    },
+    utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 
 use self::{
