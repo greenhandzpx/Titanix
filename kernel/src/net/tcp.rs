@@ -124,7 +124,7 @@ impl TcpSocket {
                     return Err(SyscallErr::EINVAL);
                 }
                 if socket.remote_endpoint().is_none() {
-                    log::info!("[Tcp::accept] remote is none");
+                    log::debug!("[Tcp::accept] remote is none");
                     return Ok(None);
                 } else {
                     return Ok(Some(socket.remote_endpoint().unwrap()));
@@ -235,7 +235,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         NET_INTERFACE.poll();
-        NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
+        let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_recv() {
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
@@ -250,7 +250,9 @@ impl<'a> Future for TcpRecvFuture<'a> {
                     .ok()
                     .ok_or(SyscallErr::ENOTCONN),
             )
-        })
+        });
+        NET_INTERFACE.poll();
+        ret
     }
 }
 
@@ -272,7 +274,7 @@ impl<'a> Future for TcpSendFuture<'a> {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         NET_INTERFACE.poll();
-        NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
+        let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_send() {
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
@@ -287,6 +289,8 @@ impl<'a> Future for TcpSendFuture<'a> {
                     .ok()
                     .ok_or(SyscallErr::ENOTCONN),
             )
-        })
+        });
+        NET_INTERFACE.poll();
+        ret
     }
 }

@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::info;
 use smoltcp::wire::IpListenEndpoint;
 
 use crate::{
@@ -189,7 +189,7 @@ pub fn sys_getsockopt(
             }
         }
         _ => {
-            debug!("[sys_getsockopt] level: {}, optname: {}", level, optname);
+            log::warn!("[sys_getsockopt] level: {}, optname: {}", level, optname);
         }
     }
     Ok(0)
@@ -222,7 +222,7 @@ pub fn sys_setsockopt(
             }
         }
         _ => {
-            debug!("[sys_setsockopt] level: {}, optname: {}", level, optname);
+            log::warn!("[sys_setsockopt] level: {}, optname: {}", level, optname);
         }
     }
     Ok(0)
@@ -230,9 +230,12 @@ pub fn sys_setsockopt(
 
 pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {
     stack_trace!();
-    debug!(
+    log::info!(
         "[sys_socketpair] domain {}, type {}, protocol {}, sv {}",
-        domain, socket_type, protocol, sv
+        domain,
+        socket_type,
+        protocol,
+        sv
     );
     let len = 2 * core::mem::size_of::<u32>();
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;
