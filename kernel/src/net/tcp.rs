@@ -182,7 +182,7 @@ impl File for TcpSocket {
     }
 
     fn flags(&self) -> crate::fs::OpenFlags {
-        todo!()
+        self.file_meta.inner.lock().flags
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
