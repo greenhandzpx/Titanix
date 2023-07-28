@@ -2,7 +2,7 @@ use log::{debug, info};
 
 use crate::{
     config::signal::SIG_NUM,
-    processor::{current_process, current_task, current_trap_cx},
+    processor::{current_task, current_trap_cx},
     trap::UserContext,
 };
 

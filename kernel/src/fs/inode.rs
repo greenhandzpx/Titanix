@@ -86,6 +86,7 @@ impl FastPathCache {
         }
         inner.as_ref().unwrap().get(&path).cloned()
     }
+    #[allow(unused)]
     pub fn insert(&self, path: String, inode: Arc<dyn Inode>) {
         self.0.lock().as_mut().unwrap().insert(path, inode);
     }

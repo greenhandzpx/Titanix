@@ -2,7 +2,7 @@ use crate::{
     config::process::INITPROC_PID,
     process::PROCESS_MANAGER,
     processor::{current_process, current_trap_cx},
-    signal::{SIGCHLD, SIGKILL},
+    signal::SIGCHLD,
     stack_trace,
 };
 use alloc::{sync::Arc, vec::Vec};

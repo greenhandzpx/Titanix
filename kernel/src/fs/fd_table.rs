@@ -1,5 +1,3 @@
-use core::sync::atomic::AtomicUsize;
-
 use alloc::{sync::Arc, vec, vec::Vec};
 use log::debug;
 

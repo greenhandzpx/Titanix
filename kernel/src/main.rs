@@ -66,7 +66,6 @@ use crate::{
     mm::KERNEL_SPACE,
     process::thread,
     processor::hart,
-    timer::current_time_duration,
 };
 
 global_asm!(include_str!("entry.S"));
