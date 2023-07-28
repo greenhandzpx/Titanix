@@ -63,7 +63,7 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     //     sec: time_spec.sec   - dev_spec.sec  ,
     //     nsec: time_spec.nsec   - dev_spec.nsec  ,
     // };
-    info!(
+    log::info!(
         "[sys_clock_settime] arg time spec {:?}, dev curr time spec {:?}",
         Duration::from(*time_spec),
         Duration::from(dev_spec)
@@ -87,11 +87,7 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
             trace!("[sys_clock_gettime] find the clock, clock id {}", clock_id);
             let dev_time = current_time_duration();
             let clock_time = dev_time + *clock;
-            // let time_spec = TimeSpec {
-            //     sec: (dev_spec.sec   + clock.sec) as usize,
-            //     nsec: (dev_spec.nsec   + clock.nsec) as usize,
-            // };
-            log::info!("[sys_clock_gettime] get time {:?}", clock_time);
+            log::debug!("[sys_clock_gettime] get time {:?}", clock_time);
             unsafe {
                 time_spec_ptr.write_volatile(clock_time.into());
             }
@@ -222,16 +218,22 @@ pub fn sys_setitimer(
     let idx = match which {
         ITIMER_REAL => {
             let callback = move || {
+                stack_trace!();
                 if let Some(process) = PROCESS_MANAGER.get(current_pid) {
-                    let mut proc = process.inner.lock();
-                    let timer = &mut proc.timers[ITIMER_REAL as usize];
-                    if Duration::from(timer.it_value).is_zero() {
-                        timer.it_value = Duration::ZERO.into();
-                        return false;
+                    if process.inner_handler(|proc| {
+                        let mut timer = proc.timers[ITIMER_REAL as usize];
+                        if Duration::from(timer.it_value).is_zero() {
+                            timer.it_value = Duration::ZERO.into();
+                            false
+                        } else {
+                            let expired_time = current_time_duration() + interval;
+                            timer.it_value = expired_time.into();
+                            true
+                        }
+                    }) {
+                        process.recv_signal(SIGALRM).unwrap()
                     } else {
-                        let expired_time = current_time_duration() + interval;
-                        timer.it_value = expired_time.into();
-                        proc.sig_queue.send_signal(SIGALRM)
+                        return false;
                     }
                     if interval.is_zero() {
                         false

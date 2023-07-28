@@ -11,7 +11,7 @@ use crate::{
         close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
         open_interrupt,
     },
-    signal::{check_signal_for_current_process, check_signal_for_current_thread, SIGSEGV},
+    signal::{check_signal_for_current_task, SIGSEGV},
     stack_trace,
     syscall::syscall,
     timer::{handle_timeout_events, set_next_trigger},
@@ -38,6 +38,7 @@ pub async fn trap_handler() {
 
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
+            stack_trace!();
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
@@ -104,7 +105,7 @@ pub async fn trap_handler() {
                         current_trap_cx().sepc,
                         current_process().pid()
                     );
-                        current_task().send_signal(SIGSEGV);
+                        current_task().recv_signal(SIGSEGV);
                         // warn!("[kernel] user sp {:#x}", current_trap_cx().user_x[2]);
 
                         #[cfg(feature = "stack_trace")]
@@ -185,9 +186,10 @@ pub fn trap_return() {
 
     // If no pending sig for process, then check for thread.
     // TODO: not sure whether this is the right way
-    if !check_signal_for_current_process() {
-        check_signal_for_current_thread();
-    }
+    // if !check_signal_for_current_process() {
+    //     check_signal_for_current_thread();
+    // }
+    check_signal_for_current_task();
 
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();

@@ -1,8 +1,8 @@
 use alloc::collections::VecDeque;
 
-use crate::signal::SIGSEGV;
+use crate::{signal::SIGSEGV, stack_trace};
 
-use super::{KSigAction, SigHandlerManager, SigSet};
+use super::{KSigAction, SigHandlerManager, SigSet, SIGKILL, SIGSTOP};
 
 pub struct PendingSigs {
     sigs: VecDeque<usize>,
@@ -60,19 +60,20 @@ impl SigQueue {
             sig_handlers: SigHandlerManager::new(),
         }
     }
-    pub fn from_another(pending_sigs: &SigQueue) -> Self {
+    pub fn from_another(sig_queue: &SigQueue) -> Self {
         Self {
             pending_sigs: PendingSigs::new(),
             blocked_sigs: SigSet::empty(),
-            sig_handlers: pending_sigs.sig_handlers,
+            sig_handlers: sig_queue.sig_handlers,
         }
     }
-    pub fn send_signal(&mut self, signo: usize) {
+    pub fn recv_signal(&mut self, signo: usize) {
         self.pending_sigs.add(signo);
     }
 
     /// Return (signo, sig action, old blocked sigs)
     pub fn check_signal(&mut self) -> Option<(usize, KSigAction, SigSet)> {
+        stack_trace!();
         if self.pending_sigs.sigs.is_empty() {
             return None;
         }
@@ -83,7 +84,7 @@ impl SigQueue {
         while cnt < total_len {
             let signo = self.pending_sigs.pop().unwrap();
             cnt += 1;
-            if self.blocked_sigs.contain_sig(signo) {
+            if signo != SIGKILL && signo != SIGSTOP && self.blocked_sigs.contain_sig(signo) {
                 if signo == SIGSEGV {
                     // TODO: just work around for libc-bench
                     log::warn!("SIGSEGV has been blocked");

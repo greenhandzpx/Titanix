@@ -96,6 +96,16 @@ where
     future2: F2,
 }
 
+impl<T1, T2, F1, F2> Select2Futures<T1, T2, F1, F2>
+where
+    F1: Future<Output = T1>,
+    F2: Future<Output = T2>,
+{
+    pub fn new(future1: F1, future2: F2) -> Self {
+        Self { future1, future2 }
+    }
+}
+
 impl<T1, T2, F1, F2> Future for Select2Futures<T1, T2, F1, F2>
 where
     F1: Future<Output = T1>,
@@ -104,19 +114,14 @@ where
     type Output = SelectOutput<T1, T2>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        let ret = unsafe {
-            Pin::new_unchecked(&mut this.future1).poll(cx)
-        };
+        let ret = unsafe { Pin::new_unchecked(&mut this.future1).poll(cx) };
         if ret.is_ready() {
             return Poll::Ready(SelectOutput::Output1(ret.ready()?));
         }
-        let ret = unsafe {
-            Pin::new_unchecked(&mut this.future2).poll(cx)
-        };
+        let ret = unsafe { Pin::new_unchecked(&mut this.future2).poll(cx) };
         if ret.is_ready() {
             return Poll::Ready(SelectOutput::Output2(ret.ready()?));
         }
         Poll::Pending
     }
-
 }
