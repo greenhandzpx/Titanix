@@ -2,7 +2,7 @@ use alloc::vec;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
     phy::{Device, Loopback, Medium},
-    socket::{tcp, udp, Socket},
+    socket::{tcp, udp, AnySocket},
     time::Instant,
     wire::{EthernetAddress, IpAddress, IpCidr},
 };
@@ -21,12 +21,12 @@ pub struct TitanixNetInterface<'a> {
     inner: Mutex<Option<TitanixNetInterfaceInner<'a>>>,
 }
 
-struct TitanixNetInterfaceInner<'a> {
+pub struct TitanixNetInterfaceInner<'a> {
     pub iface: Interface,
     pub sockets: SocketSet<'a>,
 }
 
-impl TitanixNetInterfaceInner<'static> {
+impl<'a> TitanixNetInterfaceInner<'a> {
     fn iface() -> Interface {
         let mut device = Loopback::new(Medium::Ethernet);
         let config = match device.capabilities().medium {
@@ -59,7 +59,7 @@ impl TitanixNetInterfaceInner<'static> {
     }
 }
 
-impl TitanixNetInterface<'static> {
+impl<'a> TitanixNetInterface<'a> {
     pub fn init(&self) {
         *self.inner.lock() = Some(TitanixNetInterfaceInner::new());
     }
@@ -68,33 +68,34 @@ impl TitanixNetInterface<'static> {
             inner: Mutex::new(None),
         }
     }
-    // pub fn add_socket(&self, socket: Socket) -> SocketHandle {
-    //     match socket {
-    //         Socket::Tcp(socket) => self.inner.lock().as_mut().unwrap().sockets.add(socket),
-    //         Socket::Udp(socket) => self.inner.lock().as_mut().unwrap().sockets.add(socket),
-    //     }
-    // }
-    // pub fn get_tcp(&self, handler: SocketHandle) -> &mut tcp::Socket {
-    //     self.inner
-    //         .lock()
-    //         .as_ref()
-    //         .unwrap()
-    //         .sockets
-    //         .get_mut::<tcp::Socket>(handler)
-    // }
-    // pub fn get_udp(&self, handler: SocketHandle) -> &mut udp::Socket {
-    //     self.inner
-    //         .lock()
-    //         .as_ref()
-    //         .unwrap()
-    //         .sockets
-    //         .get_mut::<udp::Socket>(handler)
-    // }
+    pub fn add_socket<T>(&self, socket: T) -> SocketHandle
+    where
+        T: AnySocket<'a>,
+    {
+        self.inner.lock().as_mut().unwrap().sockets.add(socket)
+    }
 
-    pub fn inner_handler<T>(
-        &self,
-        f: impl FnOnce(&mut TitanixNetInterfaceInner<'static>) -> T,
-    ) -> T {
+    pub fn tcp_socket<T>(&self, handler: SocketHandle, f: impl FnOnce(&mut tcp::Socket) -> T) -> T {
+        f(self
+            .inner
+            .lock()
+            .as_mut()
+            .unwrap()
+            .sockets
+            .get_mut::<tcp::Socket>(handler))
+    }
+
+    pub fn udp_socket<T>(&self, handler: SocketHandle, f: impl FnOnce(&mut udp::Socket) -> T) -> T {
+        f(self
+            .inner
+            .lock()
+            .as_mut()
+            .unwrap()
+            .sockets
+            .get_mut::<udp::Socket>(handler))
+    }
+
+    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TitanixNetInterfaceInner<'a>) -> T) -> T {
         f(&mut self.inner.lock().as_mut().unwrap())
     }
 }
