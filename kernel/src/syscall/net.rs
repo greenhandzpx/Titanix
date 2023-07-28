@@ -1,8 +1,9 @@
-use log::debug;
+use log::{debug, info};
+use smoltcp::wire::IpListenEndpoint;
 
 use crate::{
     mm::user_check::UserCheck,
-    net::{Socket, TCP_MSS},
+    net::{address::SocketAddrv4, Socket, TCP_MSS},
     processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
@@ -100,8 +101,15 @@ pub async fn sys_sendto(
         .ok_or(SyscallErr::ENOTSOCK)?;
     let len = match *socket {
         Socket::TcpSocket(_) => socket_file.write(buf).await?,
-        Socket::UdpSocket(_) => {
+        Socket::UdpSocket(ref udp) => {
+            info!("[sys_sendto] socket is udp");
             UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
+            if udp.addr().addr.is_unspecified() || udp.addr().port == 0 {
+                let addr = SocketAddrv4::new([0; 16].as_slice());
+                let endpoint = IpListenEndpoint::from(addr);
+                info!("[sys_sendto] set udp endpoint: {:?}", endpoint);
+                udp.bind(endpoint)?;
+            }
             let dest_addr =
                 unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
             socket.connect(dest_addr).await?;

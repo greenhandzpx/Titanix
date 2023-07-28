@@ -1,8 +1,10 @@
 use core::{future::Future, task::Poll};
 
 use alloc::{boxed::Box, vec};
+use log::debug;
 use managed::ManagedSlice;
 use smoltcp::{
+    iface::SocketHandle,
     phy::PacketMeta,
     socket::{
         self,
@@ -17,7 +19,7 @@ use crate::{
     utils::error::{SyscallErr, SyscallRet},
 };
 
-use super::MAX_BUFFER_SIZE;
+use super::{config::NET_INTERFACE, MAX_BUFFER_SIZE};
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -25,12 +27,12 @@ const UDP_PACKET_SIZE: usize = 1472;
 const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;
 pub struct UdpSocket {
     inner: Mutex<UdpSocketInner>,
+    socket_handler: SocketHandle,
     file_meta: FileMeta,
 }
 
 #[allow(unused)]
 struct UdpSocketInner {
-    socket: socket::udp::Socket<'static>,
     max_packet: usize,
     remote_endpoint: Option<IpEndpoint>,
     recvbuf_size: usize,
@@ -47,14 +49,17 @@ impl UdpSocket {
             vec![PacketMetadata::EMPTY, PacketMetadata::EMPTY],
             vec![0 as u8; MAX_BUFFER_SIZE],
         );
+        let socket = socket::udp::Socket::new(rx_buf, tx_buf);
+        let socket_handler = NET_INTERFACE.add_socket(socket);
+        NET_INTERFACE.poll();
         Self {
             inner: Mutex::new(UdpSocketInner {
                 max_packet: MAX_PACKET,
-                socket: socket::udp::Socket::new(rx_buf, tx_buf),
                 remote_endpoint: None,
                 recvbuf_size: MAX_BUFFER_SIZE,
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
+            socket_handler,
             file_meta: FileMeta::new(OpenFlags::CLOEXEC | OpenFlags::RDWR),
         }
     }
@@ -73,7 +78,9 @@ impl UdpSocket {
     }
 
     pub fn addr(&self) -> IpEndpoint {
-        let local = self.inner.lock().socket.endpoint();
+        NET_INTERFACE.poll();
+        let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
+        NET_INTERFACE.poll();
         let addr = if local.addr.is_none() {
             IpAddress::v4(127, 0, 0, 1)
         } else {
@@ -87,12 +94,11 @@ impl UdpSocket {
     }
 
     pub fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
-        self.inner
-            .lock()
-            .socket
-            .bind(addr)
-            .ok()
-            .ok_or(SyscallErr::EINVAL)?;
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            socket.bind(addr).ok().ok_or(SyscallErr::EINVAL)
+        })?;
+        NET_INTERFACE.poll();
         Ok(0)
     }
 
@@ -121,27 +127,33 @@ impl File for UdpSocket {
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        let mut inner = self.inner.lock();
-        if inner.socket.can_recv() {
-            Ok(true)
-        } else {
-            if let Some(waker) = waker {
-                inner.socket.register_recv_waker(&waker);
+        debug!("[Udp::pollin] enter");
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            if socket.can_recv() {
+                Ok(true)
+            } else {
+                if let Some(waker) = waker {
+                    socket.register_recv_waker(&waker);
+                }
+                Ok(false)
             }
-            Ok(false)
-        }
+        })
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        let mut inner = self.inner.lock();
-        if inner.socket.can_send() {
-            Ok(true)
-        } else {
-            if let Some(waker) = waker {
-                inner.socket.register_send_waker(&waker);
+        debug!("[Udp::pollout] enter");
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            if socket.can_send() {
+                Ok(true)
+            } else {
+                if let Some(waker) = waker {
+                    socket.register_send_waker(&waker);
+                }
+                Ok(false)
             }
-            Ok(false)
-        }
+        })
     }
 }
 
@@ -168,18 +180,19 @@ impl<'a> Future for UdpRecvFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
-        let mut inner = self.socket.inner.lock();
-        if !inner.socket.can_recv() {
-            inner.socket.register_recv_waker(cx.waker());
-        }
-        let this = self.get_mut();
-        Poll::Ready({
-            let (ret, _) = inner
-                .socket
-                .recv_slice(&mut this.buf)
-                .ok()
-                .ok_or(SyscallErr::ENOTCONN)?;
-            Ok(ret)
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
+            if !socket.can_recv() {
+                socket.register_recv_waker(cx.waker());
+            }
+            let this = self.get_mut();
+            Poll::Ready({
+                let (ret, _) = socket
+                    .recv_slice(&mut this.buf)
+                    .ok()
+                    .ok_or(SyscallErr::ENOTCONN)?;
+                Ok(ret)
+            })
         })
     }
 }
@@ -202,25 +215,27 @@ impl<'a> Future for UdpSendFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
-        let mut inner = self.socket.inner.lock();
-        if !inner.socket.can_send() {
-            inner.socket.register_send_waker(cx.waker());
-            return Poll::Pending;
-        }
-        let this = self.get_mut();
-        let meta = UdpMetadata {
-            endpoint: inner.remote_endpoint.unwrap(),
-            meta: PacketMeta::default(),
-        };
-        let len = this.buf.len();
-        // TODO: update err code
-        Poll::Ready({
-            inner
-                .socket
-                .send_slice(&this.buf, meta)
-                .ok()
-                .ok_or(SyscallErr::ENOBUFS)?;
-            Ok(len)
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
+            if !socket.can_send() {
+                socket.register_send_waker(cx.waker());
+                return Poll::Pending;
+            }
+            let remote = self.socket.inner.lock().remote_endpoint;
+            let this = self.get_mut();
+            let meta = UdpMetadata {
+                endpoint: remote.unwrap(),
+                meta: PacketMeta::default(),
+            };
+            let len = this.buf.len();
+            // TODO: update err code
+            Poll::Ready({
+                socket
+                    .send_slice(&this.buf, meta)
+                    .ok()
+                    .ok_or(SyscallErr::ENOBUFS)?;
+                Ok(len)
+            })
         })
     }
 }
