@@ -30,11 +30,13 @@ use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
 use crate::stack_trace;
+use crate::sync::Event;
 use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
 use crate::timer::timeout_task::{TimeoutTaskFuture, TimeoutTaskOutput};
 use crate::timer::{ffi::current_time_spec, UTIME_NOW};
 use crate::timer::{ffi::TimeSpec, UTIME_OMIT};
+use crate::utils::async_tools::{Select2Futures, SelectOutput};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
@@ -1207,9 +1209,24 @@ pub async fn sys_ppoll(
             }
         }
     } else {
-        let ret = poll_future.await;
-        trace!("[sys_ppoll]: ready");
-        ret
+        match Select2Futures::new(
+            poll_future,
+            current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+        )
+        .await
+        {
+            SelectOutput::Output1(ret) => {
+                debug!("[sys_ppoll]: ready");
+                ret
+            }
+            SelectOutput::Output2(e) => {
+                info!("[sys_ppoll] interrupt by event {:?}", e);
+                Err(SyscallErr::EINTR)
+            }
+        }
+        // let ret = poll_future.await;
+        // trace!("[sys_ppoll]: ready");
+        // ret
     }
 }
 
@@ -1367,9 +1384,23 @@ pub async fn sys_pselect6(
             }
         }
     } else {
-        let ret = poll_future.await;
-        debug!("[sys_pselect]: ready");
-        ret
+        match Select2Futures::new(
+            poll_future,
+            current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+        )
+        .await
+        {
+            SelectOutput::Output1(ret) => {
+                debug!("[sys_pselect]: ready");
+                ret
+            }
+            SelectOutput::Output2(e) => {
+                info!("[sys_pselect] interrupt by event {:?}", e);
+                Err(SyscallErr::EINTR)
+            }
+        }
+        // let ret = poll_future.await;
+        // ret
     }
 }
 

@@ -2,7 +2,7 @@ use crate::{
     config::process::INITPROC_PID,
     process::PROCESS_MANAGER,
     processor::{current_process, current_trap_cx},
-    signal::SIGCHLD,
+    signal::{SIGCHLD, SIGKILL},
     stack_trace,
 };
 use alloc::{sync::Arc, vec::Vec};
@@ -88,12 +88,12 @@ pub fn exit_and_terminate_all_threads(exit_code: i8) {
         // current_process().set_zombie();
         for (_, thread) in proc.threads.iter_mut() {
             threads.push(thread.upgrade().unwrap());
-            // unsafe { (*thread.as_ptr()).terminate() }
         }
         threads
         // proc.threads.clear();
     });
     for thread in threads {
+        // thread.recv_signal(SIGKILL);
         thread.terminate();
     }
 }
@@ -108,11 +108,11 @@ pub fn terminate_all_threads_except_main() {
                 continue;
             }
             threads.push(thread.upgrade().unwrap());
-            // unsafe { (*thread.as_ptr()).terminate() }
         }
         threads
     });
     for thread in threads {
+        // thread.recv_signal(SIGKILL);
         thread.terminate();
     }
 }
@@ -140,11 +140,9 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
             }
         }
         return None;
-        // if let Some(idx) = idx {
-        //     proc.threads.remove(idx);
-        // }
     }) {
         debug!("terminate given tid {}", tid);
+        // thread.recv_signal(SIGKILL);
         thread.terminate();
     }
 }

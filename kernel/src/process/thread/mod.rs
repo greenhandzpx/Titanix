@@ -78,7 +78,7 @@ pub struct ThreadInner {
     pub cpu_set: CpuSet,
     /// Note that the process may modify this value in the another thread
     /// (e.g. `exec`)
-    pub terminated: AtomicBool,
+    pub terminated: bool,
 }
 
 impl Thread {
@@ -116,7 +116,7 @@ impl Thread {
                 waker: None,
                 // TODO: need to change if multi_hart
                 cpu_set: CpuSet::new(1),
-                terminated: AtomicBool::new(false),
+                terminated: false,
             }),
         };
         PROCESS_MANAGER.add(tid.0, &process);
@@ -164,7 +164,7 @@ impl Thread {
                 waker: None,
                 // TODO: need to change if multi_hart
                 cpu_set: CpuSet::new(1),
-                terminated: AtomicBool::new(false),
+                terminated: false,
             }),
         }
     }
@@ -227,17 +227,15 @@ impl Thread {
     /// Terminate this thread
     pub fn terminate(&self) {
         let inner = unsafe { &mut (*self.inner.get()) };
-        inner
-            .terminated
-            .store(true, core::sync::atomic::Ordering::Release)
+        inner.terminated = true;
+        // .store(true, core::sync::atomic::Ordering::Release)
     }
 
     /// Whether this thread has been terminated or not
     pub fn is_zombie(&self) -> bool {
         unsafe {
-            (*self.inner.get())
-                .terminated
-                .load(core::sync::atomic::Ordering::Acquire)
+            (*self.inner.get()).terminated
+            // .load(core::sync::atomic::Ordering::Acquire)
         }
     }
 

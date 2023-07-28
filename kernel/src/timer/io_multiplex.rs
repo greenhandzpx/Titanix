@@ -101,9 +101,9 @@ impl Future for IOMultiplexFuture {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
-        if current_task().is_zombie() {
-            return Poll::Ready(Ok(0));
-        }
+        // if current_task().is_zombie() {
+        //     return Poll::Ready(Ok(0));
+        // }
         let waker = cx.waker().clone();
         let mut cnt = 0;
         let this = unsafe { self.get_unchecked_mut() };

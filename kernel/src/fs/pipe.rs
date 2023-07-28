@@ -44,7 +44,7 @@ impl File for Pipe {
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         assert!(self.readable());
-        debug!("start to pipe read {} bytes", buf.len());
+        debug!("[Pipe::read] start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
             // debug!("start to pipe read {} bytes", buf.len());
@@ -73,7 +73,7 @@ impl File for Pipe {
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         assert!(self.writable());
-        debug!("start to pipe write {} bytes", buf.len());
+        debug!("[Pipe::write] start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(async move {
             // TODO: not sure event
@@ -90,7 +90,7 @@ impl File for Pipe {
             {
                 SelectOutput::Output1(want) => want,
                 SelectOutput::Output2(event) => {
-                    log::info!("[Pipe::read] interrupt by event {:?}", event);
+                    log::info!("[Pipe::write] interrupt by event {:?}", event);
                     Err(SyscallErr::EINTR)
                 }
             }
@@ -219,11 +219,6 @@ impl PipeRingBuffer {
         if self.head == self.tail {
             self.status = RingBufferStatus::EMPTY;
         }
-        // // TODO: optimize: read all bytes and then notify
-        // while !self.write_waiters.is_empty() {
-        //     let waker = self.write_waiters.pop().unwrap();
-        //     waker.wake();
-        // }
         c
     }
 
@@ -234,12 +229,6 @@ impl PipeRingBuffer {
         if self.tail == self.head {
             self.status = RingBufferStatus::FULL;
         }
-        // debug!("[PipeRingBuffer::write_byte] wake up");
-        // // TODO: optimize: write all bytes and then notify
-        // while !self.read_waiters.is_empty() {
-        //     let waker = self.read_waiters.pop().unwrap();
-        //     waker.wake();
-        // }
     }
 
     pub fn available_read(&self) -> usize {
@@ -407,9 +396,6 @@ impl Future for PipeFuture {
                 for _ in 0..loop_write {
                     ring_buffer.write_byte(buf[this.already_put]);
                     this.already_put += 1;
-                    // if this.already_put == this.user_buf_len {
-                    //     return Poll::Ready(Ok(this.already_put  ));
-                    // }
                     if this.already_put == this.user_buf_len {
                         break;
                     }
