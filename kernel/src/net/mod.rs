@@ -157,6 +157,7 @@ impl Socket {
             }
             _ => return Err(SyscallErr::EINVAL),
         };
+        log::info!("[sys_bind] bind endpoint: {:?}", endpoint);
         match *self {
             Self::TcpSocket(ref socket) => socket.bind(endpoint),
             Self::UdpSocket(ref socket) => socket.bind(endpoint),
@@ -278,14 +279,14 @@ impl File for Socket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
         match *self {
             Socket::TcpSocket(ref socket) => socket.read(buf),
-            Socket::UdpSocket(ref _socket) => todo!(),
+            Socket::UdpSocket(ref socket) => socket.read(buf),
         }
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
         match *self {
             Socket::TcpSocket(ref socket) => socket.write(buf),
-            Socket::UdpSocket(ref _socket) => todo!(),
+            Socket::UdpSocket(ref socket) => socket.write(buf),
         }
     }
 
@@ -299,7 +300,7 @@ impl File for Socket {
     fn flags(&self) -> crate::fs::OpenFlags {
         match *self {
             Socket::TcpSocket(ref socket) => socket.flags(),
-            Socket::UdpSocket(ref _socket) => todo!(),
+            Socket::UdpSocket(ref socket) => socket.flags(),
         }
     }
 
