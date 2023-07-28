@@ -22,21 +22,11 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-#[cfg(feature = "board_qemu")]
-#[path = "boards/qemu.rs"]
+#[path = "boards/mod.rs"]
 mod board;
 
-#[cfg(feature = "board_u740")]
-#[path = "boards/u740.rs"]
-mod board;
-
-#[cfg(not(any(feature = "board_qemu", feature = "board_u740")))]
-#[path = "boards/qemu.rs"]
-mod board;
-
-#[macro_use]
-mod console;
 mod config;
+#[macro_use]
 mod driver;
 mod executor;
 mod fs;
@@ -46,7 +36,6 @@ mod net;
 mod panic;
 pub mod process;
 mod processor;
-mod sbi;
 mod signal;
 ///
 pub mod sync;
@@ -128,9 +117,9 @@ pub fn rust_main(hart_id: usize) {
         mm::init();
         mm::remap_test();
         trap::init();
+        driver::init();
         executor::init();
         loader::init();
-        driver::init();
         fs::init();
         timer::init();
         net::config::init();

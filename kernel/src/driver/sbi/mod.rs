@@ -3,6 +3,8 @@
 
 use core::arch::asm;
 
+use super::CharDevice;
+
 // EID, FID
 const SBI_HART_START: (usize, usize) = (0x48534d, 0);
 const SBI_HART_STOP: (usize, usize) = (0x48534d, 1);
@@ -57,4 +59,26 @@ pub fn shutdown() -> ! {
 /// use sbi call to start the specific core
 pub fn hart_start(hart_id: usize, start_addr: usize) {
     sbi_call(SBI_HART_START, hart_id, start_addr, 0);
+}
+
+pub struct SbiChar;
+
+impl SbiChar {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl CharDevice for SbiChar {
+    fn getchar(&self) -> u8 {
+        console_getchar()
+    }
+    fn puts(&self, str: &[u8]) {
+        for s in str {
+            if *s == b'\n' {
+                console_putchar(b'\r'.into());
+            }
+            console_putchar(*s as usize);
+        }
+    }
 }

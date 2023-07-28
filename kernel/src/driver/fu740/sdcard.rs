@@ -2,9 +2,9 @@
 #![allow(non_camel_case_types)]
 #![allow(unused)]
 
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{println, sync::mutex::SpinNoIrqLock};
 
-use super::BlockDevice;
+use crate::driver::BlockDevice;
 
 use super::spi::{SPIImpl, SPI}; //, SPIExt
 use alloc::sync::Arc;
@@ -174,7 +174,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
     //todo clock rate
     fn HIGH_SPEED_ENABLE(&self) {
         // 暂时设置为k210中预定的频率
-        self.spi.set_clk_rate(2);
+        self.spi.set_clk_rate(30);
     }
     //todo clock rate
     fn lowlevel_init(&self) {
@@ -474,7 +474,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             self.send_cmd(cmd, arg, crc);
             let resp = self.get_response();
             self.end_cmd();
-            println!("[kernel] resp = {}", resp);
+            // println!("[kernel] resp = {}", resp);
             if resp == expect {
                 return Ok(());
             }
@@ -511,7 +511,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
         /* SD initialized and set to SPI mode properly */
 
         /* Send software reset */
-        println!("[sd-init] send cmd 0");
+        // println!("[sd-init] send cmd 0");
         // self.send_cmd(CMD::CMD0, 0, 0x95);
         // let mut result = self.get_response();
         // self.end_cmd();
@@ -525,7 +525,7 @@ impl</*'a,*/ X: SPI> SDCard</*'a,*/ X> {
             return Err(InitError::CMDFailed(CMD::CMD0, 0));
         }
 
-        println!("[sd-init] SPI mode start");
+        // println!("[sd-init] SPI mode start");
 
         /* Check voltage range */
         self.send_cmd(CMD::CMD8, 0x01AA, 0x87);
@@ -802,34 +802,11 @@ static PERIPHERALS: SpinNoIrqLock<Option<Peripherals>> = SpinNoIrqLock::new(None
 // SpinNoIrqLock::new(Peripherals::take().unwrap());
 
 fn init_sdcard() -> SDCard<SPIImpl> {
-    //<SPI>
-    // wait previous output
-    // usleep(100000);
     println!("[sdcard] init sdcard start!");
     let peripherals = unsafe { Peripherals::steal() };
-    // sysctl::pll_set_freq(sysctl::pll::PLL0, 800_000_000).unwrap();
-    // sysctl::pll_set_freq(sysctl::pll::PLL1, 300_000_000).unwrap();
-    // sysctl::pll_set_freq(sysctl::pll::PLL2, 45_158_400).unwrap();
-
-    // 生成冻结的时钟
-    // let clocks = peripherals.PRCI.setup().set_pclk(300_000_000);
-    //
-
-    println!("[sdcard] new clocks start !");
-    let clocks = fu740_hal::clock::Clocks::new();
-    println!("[sdcard] new clocks finish !");
-
-    // 是否需要初始化UARTHS ?
-    // peripherals.UARTHS.configure(115_200.bps(), &clocks);
-    // 无需初始化gpiohs -
-    // io_init();
 
     // don't need to change!!
-    let spi = peripherals.SPI2; //.constrain();
-                                // SPI0 不行， sifive官方文档hifive-unmatched-schematics-v3 SDcard部分出错
-                                // let spi = peripherals.SPI0 ;//.constrain();
-                                // SD_CS, SD_CS_GPIONUM 此二值并未改变 = k210
-                                // spi.init();
+    let spi = peripherals.SPI2;
     let mut sd = SDCard::new(SPIImpl { spi: spi }, SD_CS, IS_HC);
     let info = sd.init().unwrap();
     let num_sectors = info.CardCapacity / 512;
@@ -848,51 +825,17 @@ pub struct SDCardWrapper(Arc<SpinNoIrqLock<SDCard<SPIImpl>>>); //<SPI0>
 
 impl SDCardWrapper {
     pub fn new() -> Self {
-        println!("SDCardWrapper sdcard!");
-        unsafe { Self(Arc::new(SpinNoIrqLock::new(init_sdcard()))) }
-    }
-
-    pub fn init(&self) {}
-}
-
-#[cfg(feature = "local_fu740")]
-impl BlockDevice for SDCardWrapper {
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        // println!("read block {}", block_id+10274);
-        self.0
-            .lock()
-            .read_sector(buf, block_id as u32 + 10274)
-            .unwrap();
-    }
-    fn write_block(&self, block_id: usize, buf: &[u8]) {
-        // println!("write block {}", block_id+10274);
-        // self.0.lock().write_sector(buf, block_id as u32 +10274).unwrap();
-        let ret = self.0.lock().write_sector(buf, block_id as u32 + 10274);
-        let ret = match ret {
-            Ok(()) => {} //println!("[BlockDevice-write_sector] OK write block {} | {} ", block_id+10274, block_id ),
-            Err(()) => {
-                println!(
-                    "[BlockDevice-write_sector] retry write block {} | {} ......",
-                    block_id + 10274,
-                    block_id
-                );
-                self.0
-                    .lock()
-                    .write_sector(buf, block_id as u32 + 10274)
-                    .unwrap();
-            }
-        };
+        Self(Arc::new(SpinNoIrqLock::new(init_sdcard())))
     }
 }
 
-#[cfg(not(any(feature = "local_fu740")))]
 impl BlockDevice for SDCardWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
-        println!("read block {} ...", block_id);
+        // println!("read block {} ...", block_id);
         self.0.lock().read_sector(buf, block_id as u32).unwrap();
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
-        println!("write block {} ...", block_id);
+        // println!("write block {} ...", block_id);
         self.0.lock().write_sector(buf, block_id as u32).unwrap();
     }
 }

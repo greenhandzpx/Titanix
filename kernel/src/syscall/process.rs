@@ -1,12 +1,12 @@
 use core::time::Duration;
 
 use crate::config::process::INITPROC_PID;
+use crate::driver::shutdown;
 use crate::fs::{resolve_path, OpenFlags, AT_FDCWD};
 use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
-use crate::sbi::shutdown;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
 use crate::utils::error::SyscallErr;

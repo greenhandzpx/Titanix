@@ -6,7 +6,7 @@ use alloc::{
 };
 
 use crate::{
-    driver::block::BlockDevice,
+    driver::BlockDevice,
     fs::{hash_key::HashKey, inode::INODE_CACHE},
     sync::mutex::SpinNoIrqLock,
     utils::{

@@ -99,8 +99,8 @@ impl SPI for SPIImpl {
 
         while remaining != 0usize {
             // words need to be transferred in a single round
-            let n_words = if 8usize < remaining { 8 } else { remaining };
-            // enqueue n_words junk for transmission
+            let n_words = 1; // if 8usize < remaining { 8 } else { remaining };
+                             // enqueue n_words junk for transmission
             for _ in 0..n_words {
                 unsafe {
                     self.spi.txdata.modify(|_, w| w.bits(0xff)); //默认发ff

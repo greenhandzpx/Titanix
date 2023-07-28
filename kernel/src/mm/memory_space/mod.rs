@@ -5,11 +5,10 @@ use xmas_elf::ElfFile;
 
 use crate::{
     config::{
-        board::MEMORY_END,
-        mm::{DL_INTERP_OFFSET, PAGE_SIZE},
+        board::{MEMORY_END, MMIO},
+        mm::{DL_INTERP_OFFSET, KERNEL_DIRECT_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS},
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
-    driver::block::MMIO_VIRT,
     fs::{resolve_path, OpenFlags, AT_FDCWD},
     mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
     process::aux::*,
@@ -403,7 +402,7 @@ impl MemorySpace {
             VmArea::new(
                 (stext as usize).into(),
                 (strampoline as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
@@ -417,7 +416,7 @@ impl MemorySpace {
             VmArea::new(
                 (etrampoline as usize).into(),
                 (etext as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X,
                 None,
                 None,
@@ -432,7 +431,7 @@ impl MemorySpace {
             VmArea::new(
                 (srodata as usize).into(),
                 (erodata as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R,
                 None,
                 None,
@@ -447,7 +446,7 @@ impl MemorySpace {
             VmArea::new(
                 (sdata as usize).into(),
                 (edata as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -463,7 +462,7 @@ impl MemorySpace {
             VmArea::new(
                 (sstack as usize).into(),
                 (estack as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -478,7 +477,7 @@ impl MemorySpace {
             VmArea::new(
                 (sbss as usize).into(),
                 (ebss as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -493,7 +492,7 @@ impl MemorySpace {
             VmArea::new(
                 (strampoline as usize).into(),
                 (etrampoline as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X | MapPermission::U,
                 None,
                 None,
@@ -509,7 +508,7 @@ impl MemorySpace {
             VmArea::new(
                 (ekernel as usize).into(),
                 MEMORY_END.into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
                 None,
                 None,
@@ -519,27 +518,25 @@ impl MemorySpace {
             0,
             None,
         );
-        #[cfg(not(feature = "tmpfs"))]
-        {
-            info!("[kernel]mapping memory-mapped registers");
-            for pair in MMIO_VIRT {
-                // println!("start va: {:#x}", (*pair).0);
-                // println!("end va: {:#x}", (*pair).0 + (*pair).1);
-                memory_space.push(
-                    VmArea::new(
-                        (*pair).0.into(),
-                        ((*pair).0 + (*pair).1).into(),
-                        MapType::Direct,
-                        MapPermission::R | MapPermission::W,
-                        None,
-                        None,
-                        memory_space.page_table.clone(),
-                        VmAreaType::MMIO,
-                    ),
-                    0,
+        info!("[kernel] mapping mmio registers");
+        for pair in MMIO {
+            info!("start va: {:#x}", (*pair).0);
+            info!("end va: {:#x}", (*pair).0 + (*pair).1);
+            info!("permission: {:?}", (*pair).2);
+            memory_space.push(
+                VmArea::new(
+                    ((*pair).0 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                    ((*pair).0 + (*pair).1 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                    MapType::Direct,
+                    (*pair).2,
                     None,
-                );
-            }
+                    None,
+                    memory_space.page_table.clone(),
+                    VmAreaType::MMIO,
+                ),
+                0,
+                None,
+            );
         }
         info!("[kernel]new kernel finished");
         memory_space

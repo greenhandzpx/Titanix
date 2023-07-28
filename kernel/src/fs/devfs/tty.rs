@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 
 use crate::{
+    driver::getchar,
     fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
     utils::error::GeneralRet,
 };
@@ -10,10 +11,7 @@ use core::{
     task::Waker,
 };
 
-use crate::{
-    process, processor::SumGuard, sbi::console_getchar, sync::mutex::SleepLock,
-    utils::error::AsyscallRet,
-};
+use crate::{process, processor::SumGuard, sync::mutex::SleepLock, utils::error::AsyscallRet};
 
 use crate::fs::file::{File, FileMeta};
 pub struct TtyInode {
@@ -98,7 +96,7 @@ impl File for TtyFile {
                         c = self_buf;
                         break;
                     }
-                    c = console_getchar();
+                    c = getchar();
                     // debug!("stdin read a char {}", c);
                     if c as i8 == -1 {
                         process::yield_now().await;

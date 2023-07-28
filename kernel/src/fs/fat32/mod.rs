@@ -1,6 +1,6 @@
 use self::{bpb::BootSector, fat::FileAllocTable, fat32info::FAT32Info, inode::FAT32Inode};
 use crate::{
-    driver::block::BlockDevice,
+    driver::BlockDevice,
     fs::FileSystemType,
     utils::error::{GeneralRet, SyscallErr},
 };

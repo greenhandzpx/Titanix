@@ -14,7 +14,7 @@ use crate::sync::mutex::SleepLock;
 use crate::utils::cell::SyncUnsafeCell;
 use crate::utils::error::SyscallErr;
 use crate::{
-    driver::block::BlockDevice,
+    driver::BlockDevice,
     fs::HashKey,
     fs::PageCache,
     timer::ffi::TimeSpec,
