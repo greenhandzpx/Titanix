@@ -26,7 +26,6 @@ use crate::{
     trap::TrapContext,
 };
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicBool;
 use core::{cell::UnsafeCell, task::Waker};
 pub use schedule::{spawn_kernel_thread, spawn_thread, yield_now};
 

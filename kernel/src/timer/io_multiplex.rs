@@ -1,11 +1,11 @@
 use core::{future::Future, task::Poll};
 
 use alloc::vec::Vec;
-use log::{debug, trace, warn};
+use log::{debug, warn};
 
 use crate::{
     fs::ffi::FdSet,
-    processor::{current_process, current_task, SumGuard},
+    processor::{current_process, SumGuard},
     syscall::{PollEvents, PollFd},
     utils::error::{SyscallErr, SyscallRet},
 };

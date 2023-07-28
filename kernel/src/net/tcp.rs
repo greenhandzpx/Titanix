@@ -25,13 +25,13 @@ type Mutex<T> = SpinNoIrqLock<T>;
 pub const TCP_MSS: u32 = 32768;
 pub struct TcpSocket {
     inner: Mutex<TcpSocketInner>,
+    mss: u32,
+    socket_handler: SocketHandle,
     file_meta: FileMeta,
 }
 
 #[allow(unused)]
 struct TcpSocketInner {
-    socket_handler: SocketHandle,
-    mss: u32,
     local_endpoint: IpListenEndpoint,
     recvbuf_size: usize,
     sendbuf_size: usize,
@@ -42,12 +42,12 @@ impl TcpSocket {
     pub fn new() -> Self {
         let tx_buf = socket::tcp::SocketBuffer::new(vec![0 as u8; MAX_BUFFER_SIZE]);
         let rx_buf = socket::tcp::SocketBuffer::new(vec![0 as u8; MAX_BUFFER_SIZE]);
-        let sock = socket::tcp::Socket::new(rx_buf, tx_buf);
+        let socket = socket::tcp::Socket::new(rx_buf, tx_buf);
+        let socket_handler = NET_INTERFACE.add_socket(socket);
         Self {
+            socket_handler,
+            mss: TCP_MSS,
             inner: Mutex::new(TcpSocketInner {
-                // socket_handler: NET_INTERFACE.add_socket(socket::Socket::Tcp(sock)),
-                socket_handler: todo!(),
-                mss: TCP_MSS,
                 local_endpoint: IpListenEndpoint {
                     addr: None,
                     port: unsafe { RNG.positive_u32() as u16 },
@@ -67,7 +67,7 @@ impl TcpSocket {
     }
 
     pub fn socket_handler(&self) -> SocketHandle {
-        self.inner.lock().socket_handler
+        self.socket_handler
     }
 
     pub fn recv_buf_size(&self) -> usize {
@@ -94,10 +94,8 @@ impl TcpSocket {
     }
 
     pub fn peer_addr(&self) -> Option<IpEndpoint> {
-        // NET_INTERFACE
-        //     .get_tcp(self.socket_handler())
-        //     .remote_endpoint()
-        todo!()
+        NET_INTERFACE.tcp_socket(self.socket_handler(), |socket| socket.remote_endpoint())
+        // todo!()
     }
 
     pub fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
@@ -107,38 +105,36 @@ impl TcpSocket {
     }
 
     pub fn listen(&self) -> SyscallRet {
-        let inner = self.inner.lock();
-        let local = inner.local_endpoint;
+        let local = self.inner.lock().local_endpoint;
         info!("[Tcp::listen] listening: {:?}", local);
-        // NET_INTERFACE
-        //     .get_tcp(inner.socket_handler)
-        //     .listen(local)
-        //     .ok()
-        //     .ok_or(SyscallErr::EADDRINUSE)?;
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            socket.listen(local).ok().ok_or(SyscallErr::EADDRINUSE)
+        })?;
         Ok(0)
     }
 
+    /// TODO: change to future
     pub async fn accept(&self) -> GeneralRet<IpEndpoint> {
         loop {
-            // if !NET_INTERFACE.get_tcp(self.socket_handler()).is_open() {
-            //     return Err(SyscallErr::EINVAL);
-            // }
-            // if !NET_INTERFACE.get_tcp(self.socket_handler()).is_listening() {
-            //     return Err(SyscallErr::EINVAL);
-            // }
-            // if NET_INTERFACE
-            //     .get_tcp(self.socket_handler())
-            //     .remote_endpoint()
-            //     .is_none()
-            // {
-            //     thread::yield_now().await;
-            // } else {
-            //     return Ok(NET_INTERFACE
-            //         .get_tcp(self.socket_handler())
-            //         .remote_endpoint()
-            //         .unwrap());
-            // }
-            todo!()
+            if let Some(ip_endpoint) =
+                NET_INTERFACE.tcp_socket(self.socket_handler(), |socket| {
+                    if !socket.is_open() {
+                        return Err(SyscallErr::EINVAL);
+                    }
+                    if !socket.is_listening() {
+                        return Err(SyscallErr::EINVAL);
+                    }
+                    if socket.remote_endpoint().is_none() {
+                        return Ok(None);
+                    } else {
+                        return Ok(Some(socket.remote_endpoint().unwrap()));
+                    }
+                })?
+            {
+                return Ok(ip_endpoint);
+            } else {
+                thread::yield_now().await;
+            }
         }
     }
 
@@ -150,19 +146,19 @@ impl TcpSocket {
                 "[Tcp::connect] local: {:?}, remote: {:?}",
                 local, remote_endpoint
             );
-            // let ret = NET_INTERFACE.inner_handler(|inner| {
-            //     inner.sockets.get_mut::<tcp::Socket>(handler).connect(
-            //         inner.iface.context(),
-            //         remote_endpoint,
-            //         local,
-            //     )
-            // });
-            // if ret.is_err() {
-            //     debug!("[Tcp::connect] connect ret: {:?}", ret.err().unwrap());
-            //     thread::yield_now().await;
-            // } else {
-            //     return Ok(0);
-            // }
+            let ret = NET_INTERFACE.inner_handler(|inner| {
+                inner.sockets.get_mut::<tcp::Socket>(handler).connect(
+                    inner.iface.context(),
+                    remote_endpoint,
+                    local,
+                )
+            });
+            if ret.is_err() {
+                debug!("[Tcp::connect] connect ret: {:?}", ret.err().unwrap());
+                thread::yield_now().await;
+            } else {
+                return Ok(0);
+            }
             todo!()
         }
     }
@@ -187,35 +183,32 @@ impl File for TcpSocket {
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
         debug!("[Tcp::pollin] enter");
-        let mut inner = self.inner.lock();
-        // if NET_INTERFACE.get_tcp(inner.socket_handler).can_recv() {
-        //     log::info!("[Tcp::pollin] recv buf have item");
-        //     Ok(true)
-        // } else {
-        //     if let Some(waker) = waker {
-        //         NET_INTERFACE
-        //             .get_tcp(inner.socket_handler)
-        //             .register_recv_waker(&waker);
-        //     }
-        //     Ok(false)
-        // }
-        todo!()
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            if socket.can_recv() {
+                log::info!("[Tcp::pollin] recv buf have item");
+                Ok(true)
+            } else {
+                if let Some(waker) = waker {
+                    socket.register_recv_waker(&waker);
+                }
+                Ok(false)
+            }
+        })
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
         debug!("[Tcp::pollout] enter");
-        // let mut inner = self.inner.lock();
-        // if NET_INTERFACE.get_tcp(inner.socket_handler).can_send() {
-        //     Ok(true)
-        // } else {
-        //     if let Some(waker) = waker {
-        //         NET_INTERFACE
-        //             .get_tcp(inner.socket_handler)
-        //             .register_send_waker(&waker);
-        //     }
-        //     Ok(false)
-        // }
-        todo!()
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            if socket.can_send() {
+                log::info!("[Tcp::pollout] tx buf have slots");
+                Ok(true)
+            } else {
+                if let Some(waker) = waker {
+                    socket.register_send_waker(&waker);
+                }
+                Ok(false)
+            }
+        })
     }
 }
 
@@ -242,26 +235,22 @@ impl<'a> Future for TcpRecvFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
-        let mut inner = self.socket.inner.lock();
-        // if !NET_INTERFACE.get_tcp(inner.socket_handler).may_recv() {
-        //     return Poll::Ready(Err(SyscallErr::ENOTCONN));
-        // }
-        // if let socket = NET_INTERFACE.get_tcp(inner.socket_handler) {
-        //     if socket.can_recv() {
-        //         socket.register_recv_waker(cx.waker());
-        //         return Poll::Pending;
-        //     }
-        // }
-        // let this = self.get_mut();
-        // // TODO: update err code
-        // Poll::Ready(
-        //     NET_INTERFACE
-        //         .get_tcp(inner.socket_handler)
-        //         .recv_slice(&mut this.buf)
-        //         .ok()
-        //         .ok_or(SyscallErr::ENOTCONN),
-        // )
-        todo!()
+        NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
+            if !socket.may_recv() {
+                return Poll::Ready(Err(SyscallErr::ENOTCONN));
+            }
+            if !socket.can_recv() {
+                socket.register_recv_waker(cx.waker());
+                return Poll::Pending;
+            }
+            let this = self.get_mut();
+            Poll::Ready(
+                socket
+                    .recv_slice(&mut this.buf)
+                    .ok()
+                    .ok_or(SyscallErr::ENOTCONN),
+            )
+        })
     }
 }
 
@@ -282,25 +271,21 @@ impl<'a> Future for TcpSendFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
-        let mut inner = self.socket.inner.lock();
-        // if let socket = NET_INTERFACE.get_tcp(inner.socket_handler) {
-        //     if !socket.may_send() {
-        //         return Poll::Ready(Err(SyscallErr::ENOTCONN));
-        //     }
-        //     if !socket.can_send() {
-        //         socket.register_send_waker(cx.waker());
-        //         return Poll::Pending;
-        //     }
-        // }
-        // let this = self.get_mut();
-        // // TODO: modify err code
-        // Poll::Ready(
-        //     NET_INTERFACE
-        //         .get_tcp(inner.socket_handler)
-        //         .send_slice(&this.buf)
-        //         .ok()
-        //         .ok_or(SyscallErr::ENOTCONN),
-        // )
-        todo!()
+        NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
+            if !socket.may_send() {
+                return Poll::Ready(Err(SyscallErr::ENOTCONN));
+            }
+            if !socket.can_send() {
+                socket.register_send_waker(cx.waker());
+                return Poll::Pending;
+            }
+            let this = self.get_mut();
+            Poll::Ready(
+                socket
+                    .send_slice(&mut this.buf)
+                    .ok()
+                    .ok_or(SyscallErr::ENOTCONN),
+            )
+        })
     }
 }
