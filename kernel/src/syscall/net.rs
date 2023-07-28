@@ -90,7 +90,7 @@ pub async fn sys_sendto(
     stack_trace!();
     let _sum_guard = SumGuard::new();
     let socket = current_process()
-        .inner_handler(move |proc| proc.fd_table.get_ref(sockfd as usize).cloned())
+        .inner_handler(move |proc| proc.fd_table.get(sockfd as usize))
         .ok_or(SyscallErr::EBADF)?;
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
@@ -169,7 +169,7 @@ pub fn sys_getsockopt(
             }
         }
         _ => {
-            debug!("[sys_getsockopt] level: {}, optname: {}", level, optname);
+            log::warn!("[sys_getsockopt] level: {}, optname: {}", level, optname);
         }
     }
     Ok(0)
@@ -202,7 +202,7 @@ pub fn sys_setsockopt(
             }
         }
         _ => {
-            debug!("[sys_setsockopt] level: {}, optname: {}", level, optname);
+            log::warn!("[sys_setsockopt] level: {}, optname: {}", level, optname);
         }
     }
     Ok(0)
@@ -210,9 +210,12 @@ pub fn sys_setsockopt(
 
 pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {
     stack_trace!();
-    debug!(
+    log::info!(
         "[sys_socketpair] domain {}, type {}, protocol {}, sv {}",
-        domain, socket_type, protocol, sv
+        domain,
+        socket_type,
+        protocol,
+        sv
     );
     let len = 2 * core::mem::size_of::<u32>();
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;

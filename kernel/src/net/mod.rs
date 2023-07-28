@@ -3,15 +3,18 @@ use core::{
     slice::{self},
 };
 
-use alloc::{collections::BTreeMap, sync::Arc};
+use alloc::{collections::BTreeMap, string::ToString, sync::Arc};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::{
-    fs::{Fd, File},
+    fs::{tmpfs::inode::TmpInode, Fd, File, Inode, InodeMode, OpenFlags},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
-    utils::error::{GeneralRet, SyscallErr, SyscallRet},
+    utils::{
+        error::{GeneralRet, SyscallErr, SyscallRet},
+        random::RNG,
+    },
 };
 
 use self::{
@@ -28,6 +31,7 @@ mod udp;
 pub use tcp::TCP_MSS;
 
 /// domain
+pub const AF_UNIX: u16 = 1;
 pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
 
@@ -76,6 +80,20 @@ impl Socket {
                 } else {
                     Err(SyscallErr::EINVAL)
                 }
+            }
+            AF_UNIX => {
+                let tmp_inde = Arc::new(TmpInode::new(
+                    None,
+                    &unsafe { RNG.positive_u32().to_string() },
+                    InodeMode::FileREG,
+                ));
+                let tmp_file = tmp_inde.open(tmp_inde.clone(), OpenFlags::RDWR)?;
+                current_process().inner_handler(|proc| {
+                    let fd = proc.fd_table.alloc_fd()?;
+                    proc.fd_table.put(fd, tmp_file.clone());
+                    // proc.socket_table.insert(fd, socket);
+                    Ok(fd)
+                })
             }
             _ => Err(SyscallErr::EINVAL),
         }

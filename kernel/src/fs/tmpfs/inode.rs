@@ -15,7 +15,7 @@ impl TmpInode {
             Some(ref parent) => path::merge(&parent.metadata().path.clone(), name),
             None => name.to_string(),
         };
-        log::debug!("[TmpInode::new] path: {}", path);
+        log::info!("[TmpInode::new] path: {}", path);
         Self {
             metadata: InodeMeta::new(parent, &path, mode, 0, None),
         }
