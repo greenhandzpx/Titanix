@@ -3,7 +3,7 @@ use core::{
     slice::{self},
 };
 
-use alloc::{collections::BTreeMap, string::ToString, sync::Arc};
+use alloc::{collections::BTreeMap, string::ToString, sync::Arc, vec::Vec};
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::{
@@ -170,18 +170,18 @@ impl Socket {
         }
     }
 
-    pub async fn accept(&self, addr: usize, addrlen: usize) -> SyscallRet {
+    pub async fn accept(&self, sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet {
         stack_trace!();
         let (new_socket, peer_addr) = match *self {
             Socket::TcpSocket(ref socket) => {
                 let peer_addr = socket.accept().await?;
                 log::info!("[Socket::accept] get peer_addr: {:?}", peer_addr);
+                let local = socket.addr();
+                log::info!("[Socket::accept] new socket try bind to : {:?}", local);
                 let new_socket = TcpSocket::new();
-                new_socket.bind(
-                    peer_addr
-                        .try_into()
-                        .expect("cannot convert to ListenEndpoint"),
-                )?;
+                new_socket.bind(local.try_into().expect("cannot convert to ListenEndpoint"))?;
+                log::info!("[Socket::accept] new socket listen");
+                new_socket.listen()?;
                 let new_socket = Socket::TcpSocket(new_socket);
                 (new_socket, peer_addr)
             }
@@ -217,11 +217,21 @@ impl Socket {
         }
         stack_trace!();
         let new_socket = Arc::new(new_socket);
-        stack_trace!();
         current_process().inner_handler(|proc| {
             let fd = proc.fd_table.alloc_fd()?;
-            proc.fd_table.put(fd, new_socket.clone());
-            proc.socket_table.insert(fd, new_socket);
+            log::debug!("[Socket::accept] get old sock");
+            let old_file = proc.fd_table.take(sockfd as usize);
+            let old_socket: Option<Arc<Socket>> =
+                proc.socket_table.get_ref(sockfd as usize).cloned();
+            // replace old
+            log::debug!("[Socket::accept] replace old sock to new");
+            proc.fd_table.put(sockfd as usize, new_socket.clone());
+            proc.socket_table
+                .insert(sockfd as usize, new_socket.clone());
+            // insert old to newfd
+            log::debug!("[Socket::accept] insert old sock to newfd: {}", fd);
+            proc.fd_table.put(fd, old_file.unwrap());
+            proc.socket_table.insert(fd, old_socket.unwrap());
             Ok(fd)
         })
     }
@@ -330,6 +340,13 @@ impl SocketTable {
     }
     pub fn get_ref(&self, fd: Fd) -> Option<&Arc<Socket>> {
         self.0.get(&fd)
+    }
+    pub fn from_another(socket_table: &SocketTable) -> GeneralRet<Self> {
+        let mut ret = BTreeMap::new();
+        for (sockfd, socket) in socket_table.0.iter() {
+            ret.insert(*sockfd, socket.clone());
+        }
+        Ok(Self(ret))
     }
 }
 

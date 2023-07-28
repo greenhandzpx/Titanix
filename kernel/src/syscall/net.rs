@@ -57,7 +57,7 @@ pub async fn sys_accept(sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet 
     let socket = current_process()
         .inner_handler(|proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
-    socket.accept(addr, addrlen).await
+    socket.accept(sockfd, addr, addrlen).await
 }
 
 pub async fn sys_connect(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
@@ -99,6 +99,7 @@ pub async fn sys_sendto(
     let socket = current_process()
         .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
+    info!("[sys_sendto] get socket sockfd: {}", sockfd);
     let len = match *socket {
         Socket::TcpSocket(_) => socket_file.write(buf).await?,
         Socket::UdpSocket(ref udp) => {

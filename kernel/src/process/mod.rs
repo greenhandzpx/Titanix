@@ -633,6 +633,7 @@ impl Process {
             debug!("fork: child's pid {}, parent's pid {}", pid.0, self.pid.0);
             // create child process pcb
             let child_fd_table = FdTable::from_another(&parent_inner.fd_table)?;
+            let child_socket_table = SocketTable::from_another(&parent_inner.socket_table)?;
 
             let child = Arc::new(Self {
                 pid,
@@ -642,7 +643,7 @@ impl Process {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     fd_table: child_fd_table,
-                    socket_table: SocketTable::new(),
+                    socket_table: child_socket_table,
                     threads: BTreeMap::new(),
                     // sig_queue: child_sig_queue,
                     futex_queue: FutexQueue::new(),
