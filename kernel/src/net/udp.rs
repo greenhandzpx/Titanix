@@ -265,6 +265,7 @@ impl<'a> Future for UdpRecvFuture<'a> {
                     remote
                 );
                 this.socket.inner.lock().remote_endpoint = remote;
+                log::debug!("[UdpRecvFuture::poll] recv {} bytes", ret);
                 Ok(ret)
             })
         });
@@ -321,6 +322,7 @@ impl<'a> Future for UdpSendFuture<'a> {
                     Err(SyscallErr::ENOBUFS)
                 }
             } else {
+                log::debug!("[UdpSendFuture::poll] send {} bytes", len);
                 Ok(len)
             })
             // Poll::Ready({
