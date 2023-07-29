@@ -11,7 +11,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_RD},
+    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_RD, SHUT_WR},
     process::thread,
     processor::{current_task, SumGuard},
     sync::Event,
@@ -118,25 +118,16 @@ impl TcpSocket {
 
     /// TODO: change to future
     pub async fn accept(&self) -> GeneralRet<IpEndpoint> {
-        loop {
-            NET_INTERFACE.poll();
-            if let Some(ip_endpoint) = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
-                if !socket.is_open() {
-                    log::info!("[Tcp::accept] this socket is not open");
-                    return Err(SyscallErr::EINVAL);
-                }
-                if socket.remote_endpoint().is_none() {
-                    log::debug!("[Tcp::accept] remote is none");
-                    return Ok(None);
-                } else {
-                    return Ok(Some(socket.remote_endpoint().unwrap()));
-                }
-            })? {
-                NET_INTERFACE.poll();
-                return Ok(ip_endpoint);
-            } else {
-                NET_INTERFACE.poll();
-                thread::yield_now().await;
+        match Select2Futures::new(
+            TcpAcceptFuture::new(self),
+            current_task().wait_for_events(Event::all()),
+        )
+        .await
+        {
+            SelectOutput::Output1(ret) => ret,
+            SelectOutput::Output2(intr) => {
+                log::info!("[TcpSocket::accept] interrupt by {:?}", intr);
+                Err(SyscallErr::EINTR)
             }
         }
     }
@@ -168,8 +159,8 @@ impl TcpSocket {
     pub fn shutdown(&self, how: u32) -> GeneralRet<()> {
         log::info!("[TcpSocket::shutdown] how {}", how);
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| match how {
-            SHUT_RD => socket.abort(),
-            _ => socket.close(),
+            SHUT_WR => socket.close(),
+            _ => socket.abort(),
         });
         NET_INTERFACE.poll();
         Ok(())
@@ -263,6 +254,47 @@ impl File for TcpSocket {
     }
 }
 
+struct TcpAcceptFuture<'a> {
+    socket: &'a TcpSocket,
+}
+
+impl<'a> TcpAcceptFuture<'a> {
+    fn new(socket: &'a TcpSocket) -> Self {
+        Self { socket }
+    }
+}
+
+impl<'a> Future for TcpAcceptFuture<'a> {
+    type Output = GeneralRet<IpEndpoint>;
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Self::Output> {
+        NET_INTERFACE.poll();
+        let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
+            if !socket.is_open() {
+                log::info!("[TcpAcceptFuture::poll] this socket is not open");
+                return Poll::Ready(Err(SyscallErr::EINVAL));
+            }
+            if socket.state() == tcp::State::SynReceived
+                || socket.state() == tcp::State::Established
+            {
+                log::info!("[TcpAcceptFuture::poll] state become {:?}", socket.state());
+                return Poll::Ready(Ok(socket.remote_endpoint().unwrap()));
+            }
+            log::debug!(
+                "[TcpAcceptFuture::poll] not syn yet, state {:?}",
+                socket.state()
+            );
+            socket.register_recv_waker(cx.waker());
+            Poll::Pending
+        });
+        NET_INTERFACE.poll();
+        ret
+    }
+}
+
+
 struct TcpRecvFuture<'a> {
     socket: &'a TcpSocket,
     buf: ManagedSlice<'a, u8>,
@@ -289,16 +321,16 @@ impl<'a> Future for TcpRecvFuture<'a> {
         let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
+            if socket.state() == tcp::State::CloseWait {
+                log::info!("[TcpRecvFuture::poll] state become {:?}", socket.state());
+                return Poll::Ready(Ok(0));
+            }
             if !socket.may_recv() {
                 log::info!(
                     "[TcpRecvFuture::poll] err when recv, state {:?}",
                     socket.state()
                 );
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
-            }
-            if socket.state() == tcp::State::CloseWait {
-                log::info!("[TcpRecvFuture::poll] state become {:?}", socket.state());
-                return Poll::Ready(Ok(0));
             }
             log::debug!("[TcpRecvFuture::poll] state {:?}", socket.state());
             if !socket.can_recv() {

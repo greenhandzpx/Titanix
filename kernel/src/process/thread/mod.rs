@@ -193,10 +193,14 @@ impl Thread {
             }
             SIGCHLD => {
                 log::info!("[Thread::recv_signal] thread {} recv SIGCHLD", self.tid(),);
-                self.mailbox.send_event(Event::CHILD_EXIT);
+                if !self.sig_queue.lock().blocked_sigs.contain_sig(signo) {
+                    self.mailbox.send_event(Event::CHILD_EXIT);
+                }
             }
             _ => {
-                self.mailbox.send_event(Event::OTHER_SIGNAL);
+                if !self.sig_queue.lock().blocked_sigs.contain_sig(signo) {
+                    self.mailbox.send_event(Event::OTHER_SIGNAL);
+                }
             }
         };
         self.sig_queue.lock().recv_signal(signo)

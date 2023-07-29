@@ -15,6 +15,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
+    net::{SHUT_RD, SHUT_WR},
     processor::SumGuard,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
@@ -141,8 +142,8 @@ impl UdpSocket {
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
             // TODO: not sure
             match how {
-                SHUT_RD => {
-                    log::warn!("[UdpSocket::shutdown] close read end");
+                SHUT_WR => {
+                    log::warn!("[UdpSocket::shutdown] close write end");
                 }
                 _ => socket.close(),
             }

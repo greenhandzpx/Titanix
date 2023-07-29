@@ -55,7 +55,8 @@ bitflags! {
     }
 }
 
-pub const MAX_BUFFER_SIZE: usize = (1 << 16) - 1;
+// pub const MAX_BUFFER_SIZE: usize = 1 << 15;
+pub const MAX_BUFFER_SIZE: usize = 1 << 12;
 
 pub enum Socket {
     TcpSocket(TcpSocket),
