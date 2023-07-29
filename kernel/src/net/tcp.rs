@@ -13,14 +13,14 @@ use crate::{
     fs::{File, FileMeta, OpenFlags},
     net::{config::NET_INTERFACE, MAX_BUFFER_SIZE},
     process::thread,
-    sync::mutex::SpinNoIrqLock,
+    processor::SumGuard,
     utils::{
         error::{GeneralRet, SyscallErr, SyscallRet},
         random::RNG,
     },
 };
 
-type Mutex<T> = SpinNoIrqLock<T>;
+use super::Mutex;
 
 pub const TCP_MSS: u32 = 32768;
 pub struct TcpSocket {
@@ -130,8 +130,10 @@ impl TcpSocket {
                     return Ok(Some(socket.remote_endpoint().unwrap()));
                 }
             })? {
+                NET_INTERFACE.poll();
                 return Ok(ip_endpoint);
             } else {
+                NET_INTERFACE.poll();
                 thread::yield_now().await;
             }
         }
@@ -151,6 +153,7 @@ impl TcpSocket {
                     .get_mut::<tcp::Socket>(self.socket_handler)
                     .connect(inner.iface.context(), remote_endpoint, local)
             });
+            NET_INTERFACE.poll();
             if ret.is_err() {
                 debug!("[Tcp::connect] connect ret: {:?}", ret.err().unwrap());
                 thread::yield_now().await;
@@ -161,12 +164,27 @@ impl TcpSocket {
     }
 }
 
+impl Drop for TcpSocket {
+    fn drop(&mut self) {
+        log::info!(
+            "[TcpSocket::drop] drop socket, localep {:?}",
+            self.inner.lock().local_endpoint
+        );
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            socket.close();
+        });
+        NET_INTERFACE.poll();
+    }
+}
+
 impl File for TcpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
+        log::info!("[Tcp::read] enter");
         Box::pin(TcpRecvFuture::new(self, buf))
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+        log::info!("[Tcp::write] enter");
         Box::pin(TcpSendFuture::new(self, buf))
     }
 
@@ -234,16 +252,21 @@ impl<'a> Future for TcpRecvFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_recv() {
+                log::info!("[TcpRcevFuture::poll] err when recv");
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
             if !socket.can_recv() {
                 socket.register_recv_waker(cx.waker());
+                log::info!("[TcpRcevFuture::poll] cannot recv yet");
                 return Poll::Pending;
             }
+            log::info!("[TcpSendFuture::poll] start to recv...");
             let this = self.get_mut();
+            info!("[Tcp::Recv] recv from {:?}", socket.remote_endpoint());
             Poll::Ready(
                 socket
                     .recv_slice(&mut this.buf)
@@ -273,16 +296,21 @@ impl<'a> Future for TcpSendFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_send() {
+                log::info!("[TcpSendFuture::poll] err when send");
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
             if !socket.can_send() {
                 socket.register_send_waker(cx.waker());
+                log::info!("[TcpSendFuture::poll] cannot send yet");
                 return Poll::Pending;
             }
+            log::info!("[TcpSendFuture::poll] start to send...");
             let this = self.get_mut();
+            info!("[Tcp::Send] send to {:?}", socket.remote_endpoint());
             Poll::Ready(
                 socket
                     .send_slice(&mut this.buf)

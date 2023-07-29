@@ -904,7 +904,7 @@ impl MemorySpace {
 
                     new_pagetable.map(vpn, ppn, pte_flags);
                 } else {
-                    trace!("no ppn for vpn {:#x}", vpn.0);
+                    // trace!("no ppn for vpn {:#x}", vpn.0);
                 }
             }
             memory_space.push_lazily(new_area, None);

@@ -95,10 +95,12 @@ const SYSCALL_LISTEN: usize = 201;
 const SYSCALL_ACCEPT: usize = 202;
 const SYSCALL_CONNECT: usize = 203;
 const SYSCALL_GETSOCKNAME: usize = 204;
+const SYSCALL_GETPEERNAME: usize = 205;
 const SYSCALL_SENDTO: usize = 206;
 const SYSCALL_RECVFROM: usize = 207;
 const SYSCALL_SETSOCKOPT: usize = 208;
 const SYSCALL_GETSOCKOPT: usize = 209;
+const SYSCALL_SHUTDOWN: usize = 210;
 const SYSCALL_BRK: usize = 214;
 const SYSCALL_MUNMAP: usize = 215;
 const SYSCALL_CLONE: usize = 220;
@@ -378,6 +380,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_handler!(sys_connect, (args[0] as u32, args[1], args[2] as u32), await)
         }
         SYSCALL_GETSOCKNAME => sys_handler!(sys_getsockname, (args[0] as u32, args[1], args[2])),
+        SYSCALL_GETPEERNAME => sys_handler!(sys_getpeername, (args[0] as u32, args[1], args[2])),
         SYSCALL_SENDTO => sys_handler!(
             sys_sendto,
             (
@@ -420,6 +423,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[4]
             )
         ),
+        SYSCALL_SHUTDOWN => sys_handler!(sys_shutdown, (args[0] as u32, args[1] as u32)),
         SYSCALL_TKILL => sys_handler!(sys_tkill, (args[0], args[1] as i32)),
         SYSCALL_TGKILL => sys_handler!(
             sys_tgkill,

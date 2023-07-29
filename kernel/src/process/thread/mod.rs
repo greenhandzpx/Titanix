@@ -181,7 +181,11 @@ impl Thread {
     /// Send signal to this thread
     pub fn recv_signal(&self, signo: Signal) {
         stack_trace!();
-        log::info!("[Thread::recv_signal] signo {}", signo);
+        log::info!(
+            "[Thread::recv_signal] thread {} recv signo {}",
+            signo,
+            self.tid()
+        );
         match signo {
             SIGKILL => {
                 log::info!("[Thread::recv_signal] thread {} recv SIGKILL", self.tid(),);

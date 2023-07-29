@@ -216,6 +216,31 @@ pub fn sys_setitimer(
     );
 
     let idx = match which {
+        ITIMER_REAL => which,
+        _ => todo!(),
+    };
+    if old_value as usize != 0 {
+        UserCheck::new()
+            .check_writable_slice(old_value as *mut u8, core::mem::size_of::<ITimerval>())?;
+        let old_value = unsafe { &mut *old_value };
+        *old_value = current_process().inner_handler(|proc| {
+            let next_trigger_ts = Duration::from(proc.timers[idx as usize].it_value);
+            let mut value = next_trigger_ts;
+            if !value.is_zero() {
+                let current_ts = current_time_duration();
+                if value > current_ts {
+                    value -= current_time_duration();
+                } else {
+                    value = Duration::ZERO;
+                }
+            }
+            proc.timers[idx as usize].it_value = value.into();
+            proc.timers[idx as usize]
+        });
+        log::debug!("[sys_settimer] old timer {:?}", old_value);
+    }
+
+    match which {
         ITIMER_REAL => {
             let callback = move || {
                 stack_trace!();
@@ -272,19 +297,5 @@ pub fn sys_setitimer(
         }
     };
 
-    if old_value as usize != 0 {
-        UserCheck::new()
-            .check_writable_slice(old_value as *mut u8, core::mem::size_of::<ITimerval>())?;
-        let old_value = unsafe { &mut *old_value };
-        *old_value = current_process().inner_handler(|proc| {
-            let next_trigger_ts = Duration::from(proc.timers[idx as usize].it_value);
-            let mut value = next_trigger_ts;
-            if !value.is_zero() {
-                value -= current_time_duration();
-            }
-            proc.timers[idx as usize].it_value = value.into();
-            proc.timers[idx as usize]
-        })
-    }
     Ok(0)
 }

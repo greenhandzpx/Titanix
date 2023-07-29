@@ -72,7 +72,7 @@ pub fn current_time_spec() -> TimeSpec {
 }
 
 /// Process's timer
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 #[repr(C)]
 pub struct ITimerval {
     /// timer interval for periodic timer

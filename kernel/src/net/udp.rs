@@ -15,13 +15,11 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    sync::mutex::SpinNoIrqLock,
+    processor::SumGuard,
     utils::error::{SyscallErr, SyscallRet},
 };
 
-use super::{config::NET_INTERFACE, MAX_BUFFER_SIZE};
-
-type Mutex<T> = SpinNoIrqLock<T>;
+use super::{config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
 
 const UDP_PACKET_SIZE: usize = 1472;
 const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;
@@ -112,12 +110,27 @@ impl UdpSocket {
     }
 }
 
+impl Drop for UdpSocket {
+    fn drop(&mut self) {
+        log::info!(
+            "[UdpSocket::drop] drop socket, remoteep {:?}",
+            self.inner.lock().remote_endpoint
+        );
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            socket.close();
+        });
+        NET_INTERFACE.poll();
+    }
+}
+
 impl File for UdpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
+        log::info!("[Udp::read] enter");
         Box::pin(UdpRecvFuture::new(self, buf))
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+        log::info!("[Udp::write] enter");
         Box::pin(UdpSendFuture::new(self, buf))
     }
 
@@ -183,6 +196,7 @@ impl<'a> Future for UdpRecvFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
             if !socket.can_recv() {
@@ -224,6 +238,7 @@ impl<'a> Future for UdpSendFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
             if !socket.can_send() {
