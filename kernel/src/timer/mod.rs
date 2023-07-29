@@ -21,6 +21,7 @@ const USEC_PER_SEC: usize = 1000000;
 /// for clock_gettime
 pub const CLOCK_REALTIME: usize = 0;
 pub const CLOCK_MONOTONIC: usize = 1;
+pub const CLOCK_PROCESS_CPUTIME_ID: usize = 2;
 
 /// for utimensat
 pub const UTIME_NOW: usize = 1073741823;
@@ -72,6 +73,11 @@ pub fn init() {
         .lock()
         .0
         .insert(CLOCK_REALTIME, Duration::ZERO);
+
+    CLOCK_MANAGER
+        .lock()
+        .0
+        .insert(CLOCK_PROCESS_CPUTIME_ID, Duration::ZERO);
 
     info!("init clock manager success");
 }
