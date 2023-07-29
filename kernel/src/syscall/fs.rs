@@ -648,7 +648,6 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_len: {}", iov_len);
         UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
-        trace!("[readv] buf: {:?}", buf);
         let read_ret = file.read(buf).await?;
         ret += read_ret as usize;
     }

@@ -109,9 +109,14 @@ pub async fn sys_sendto(
     info!("[sys_sendto] get socket sockfd: {}", sockfd);
     let len = match *socket {
         Socket::TcpSocket(_) => socket_file.write(buf).await?,
-        Socket::UdpSocket(_) => {
+        Socket::UdpSocket(ref udp) => {
             info!("[sys_sendto] socket is udp");
             UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
+            if udp.addr().addr.is_unspecified() || udp.addr().port == 0 {
+                let addr = SocketAddrv4::new([0; 16].as_slice());
+                let endpoint = IpListenEndpoint::from(addr);
+                udp.bind(endpoint)?;
+            }
             let dest_addr =
                 unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
             socket.connect(dest_addr).await?;

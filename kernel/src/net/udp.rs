@@ -47,10 +47,7 @@ impl UdpSocket {
             vec![PacketMetadata::EMPTY, PacketMetadata::EMPTY],
             vec![0 as u8; MAX_BUFFER_SIZE],
         );
-        let mut socket = socket::udp::Socket::new(rx_buf, tx_buf);
-        let addr = SocketAddrv4::new([0; 16].as_slice());
-        let endpoint = IpListenEndpoint::from(addr);
-        socket.bind(endpoint).expect("udp bind error");
+        let socket = socket::udp::Socket::new(rx_buf, tx_buf);
         let socket_handler = NET_INTERFACE.add_socket(socket);
         NET_INTERFACE.poll();
         Self {
@@ -108,6 +105,33 @@ impl UdpSocket {
         log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
         let mut inner = self.inner.lock();
         inner.remote_endpoint = Some(remote_endpoint);
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            let local = socket.endpoint();
+            info!("[Udp::connect] local: {:?}", local);
+            if local.port == 0 {
+                info!("[Udp::connect] don't have local");
+                let addr = SocketAddrv4::new([0; 16].as_slice());
+                let endpoint = IpListenEndpoint::from(addr);
+                let ret = socket.bind(endpoint);
+                if ret.is_err() {
+                    match ret.err().unwrap() {
+                        socket::udp::BindError::Unaddressable => {
+                            info!("[Udp::bind] unaddr");
+                            return Err(SyscallErr::EINVAL);
+                        }
+                        socket::udp::BindError::InvalidState => {
+                            info!("[Udp::bind] invaild state");
+                            return Err(SyscallErr::EINVAL);
+                        }
+                    }
+                }
+                log::info!("[Udp::bind] bind to {:?}", endpoint);
+                Ok(())
+            } else {
+                Ok(())
+            }
+        })?;
         NET_INTERFACE.poll();
         Ok(0)
     }
