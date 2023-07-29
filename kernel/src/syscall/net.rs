@@ -79,7 +79,12 @@ pub fn sys_getsockname(sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet {
 }
 
 pub fn sys_getpeername(sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet {
-    todo!()
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    let socket = current_process()
+        .inner_handler(|proc| proc.socket_table.get_ref(sockfd as usize).cloned())
+        .ok_or(SyscallErr::ENOTSOCK)?;
+    socket.peer_addr(addr, addrlen)
 }
 
 pub async fn sys_sendto(
