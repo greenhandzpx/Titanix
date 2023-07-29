@@ -75,9 +75,6 @@ impl CharDevice for SbiChar {
     }
     fn puts(&self, str: &[u8]) {
         for s in str {
-            if *s == b'\n' {
-                console_putchar(b'\r'.into());
-            }
             console_putchar(*s as usize);
         }
     }
