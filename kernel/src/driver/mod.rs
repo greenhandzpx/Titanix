@@ -13,8 +13,8 @@ use self::{
 };
 
 pub mod fu740;
-mod qemu;
-mod sbi;
+pub mod qemu;
+pub mod sbi;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
