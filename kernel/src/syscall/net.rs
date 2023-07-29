@@ -278,10 +278,17 @@ pub fn sys_setsockopt(
 
 pub fn sys_shutdown(sockfd: u32, how: u32) -> SyscallRet {
     stack_trace!();
-
-    current_process().close_file(sockfd as usize)?;
-    current_process().inner_handler(|proc| proc.socket_table.take(sockfd as usize));
-    Ok(0)
+    log::info!("[sys_shutdown] sockfd {}, how {}", sockfd, how);
+    // current_process().close_file(sockfd as usize)?;
+    current_process().inner_handler(|proc| {
+        let socket = proc
+            .socket_table
+            .get_ref(sockfd as usize)
+            .ok_or(SyscallErr::EBADF)?
+            .clone();
+        socket.shutdown(how)?;
+        Ok(0)
+    })
 }
 
 pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -> SyscallRet {

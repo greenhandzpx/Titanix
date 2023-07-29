@@ -1296,65 +1296,83 @@ pub async fn sys_pselect6(
         readfds, writefds, exceptfds, timeout
     );
 
-    let mut fds: Vec<PollFd> = Vec::new();
     let fd_slot_bits = 8 * core::mem::size_of::<usize>();
-    for fd_slot in 0..FD_SET_LEN {
-        for offset in 0..fd_slot_bits {
-            let fd = fd_slot * fd_slot_bits + offset;
-            if fd >= nfds as usize {
-                break;
-            }
-            if let Some(readfds) = readfds.as_ref() {
-                if readfds.fds_bits[fd_slot] & (1 << offset) != 0 {
-                    fds.push(PollFd {
-                        fd: fd as i32,
-                        events: PollEvents::POLLIN.bits(),
-                        revents: PollEvents::empty().bits(),
-                    })
+
+    let fds = current_process().inner_handler(|proc| {
+        let mut fds: Vec<PollFd> = Vec::new();
+        for fd_slot in 0..FD_SET_LEN {
+            for offset in 0..fd_slot_bits {
+                let fd = fd_slot * fd_slot_bits + offset;
+                if fd >= nfds as usize {
+                    break;
                 }
-            }
-            if let Some(writefds) = writefds.as_ref() {
-                if writefds.fds_bits[fd_slot] & (1 << offset) != 0 {
-                    if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                if let Some(readfds) = readfds.as_ref() {
+                    if readfds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                        if proc.fd_table.get_ref(fd).is_none() {
+                            log::warn!("[sys_pselect] bad fd {}", fd);
+                            return Err(SyscallErr::EBADF);
+                        }
+
+                        fds.push(PollFd {
+                            fd: fd as i32,
+                            events: PollEvents::POLLIN.bits(),
+                            revents: PollEvents::empty().bits(),
+                        })
+                    }
+                }
+                if let Some(writefds) = writefds.as_ref() {
+                    if writefds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                        if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
                             let events = PollEvents::from_bits(last_fd.events).unwrap()
                                 | PollEvents::POLLOUT;
                             fds.last_mut().unwrap().events = events.bits();
                         } else {
+                            if proc.fd_table.get_ref(fd).is_none() {
+                                log::warn!("[sys_pselect] bad fd {}", fd);
+                                return Err(SyscallErr::EBADF);
+                            }
                             fds.push(PollFd {
                                 fd: fd as i32,
                                 events: PollEvents::POLLOUT.bits(),
                                 revents: PollEvents::empty().bits(),
                             })
                         }
+                    }
                 }
-            }
-            if let Some(exceptfds) = exceptfds.as_ref() {
-                if exceptfds.fds_bits[fd_slot] & (1 << offset) != 0 {
-                    if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                if let Some(exceptfds) = exceptfds.as_ref() {
+                    if exceptfds.fds_bits[fd_slot] & (1 << offset) != 0 {
+                        if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
                             let events = PollEvents::from_bits(last_fd.events).unwrap()
                                 | PollEvents::POLLPRI;
                             fds.last_mut().unwrap().events = events.bits();
                         } else {
+                            if proc.fd_table.get_ref(fd).is_none() {
+                                log::warn!("[sys_pselect] bad fd {}", fd);
+                                return Err(SyscallErr::EBADF);
+                            }
                             fds.push(PollFd {
                                 fd: fd as i32,
                                 events: PollEvents::POLLPRI.bits(),
                                 revents: PollEvents::empty().bits(),
                             })
                         }
+                    }
                 }
             }
         }
-    }
 
-    if let Some(fds) = readfds.as_mut() {
-        fds.clear_all();
-    }
-    if let Some(fds) = writefds.as_mut() {
-        fds.clear_all();
-    }
-    if let Some(fds) = exceptfds.as_mut() {
-        fds.clear_all();
-    }
+        if let Some(fds) = readfds.as_mut() {
+            fds.clear_all();
+        }
+        if let Some(fds) = writefds.as_mut() {
+            fds.clear_all();
+        }
+        if let Some(fds) = exceptfds.as_mut() {
+            fds.clear_all();
+        }
+
+        Ok(fds)
+    })?;
 
     if sigmask_ptr != 0 {
         stack_trace!();

@@ -102,6 +102,7 @@ impl<'a> TitanixNetInterface<'a> {
     }
 
     pub fn poll(&self) {
+        log::debug!("[TitanixNetInterface::poll] poll...");
         self.inner_handler(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),

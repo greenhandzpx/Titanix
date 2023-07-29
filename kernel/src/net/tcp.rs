@@ -11,7 +11,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE},
+    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_RD},
     process::thread,
     processor::SumGuard,
     utils::{
@@ -162,6 +162,16 @@ impl TcpSocket {
             }
         }
     }
+
+    pub fn shutdown(&self, how: u32) -> GeneralRet<()> {
+        log::info!("[TcpSocket::shutdown] how {}", how);
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| match how {
+            SHUT_RD => socket.abort(),
+            _ => socket.close(),
+        });
+        NET_INTERFACE.poll();
+        Ok(())
+    }
 }
 
 impl Drop for TcpSocket {
@@ -171,7 +181,9 @@ impl Drop for TcpSocket {
             self.inner.lock().local_endpoint
         );
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
-            socket.close();
+            if socket.is_open() {
+                socket.close();
+            }
         });
         NET_INTERFACE.poll();
     }
