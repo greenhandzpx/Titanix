@@ -11,7 +11,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_RD, SHUT_WR},
+    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_WR},
     process::thread,
     processor::{current_task, SumGuard},
     sync::Event,
@@ -24,7 +24,13 @@ use crate::{
 
 use super::Mutex;
 
-pub const TCP_MSS: u32 = 32768;
+pub const TCP_MSS_DEFAULT: u32 = 1 << 15;
+pub const TCP_MSS: u32 = if TCP_MSS_DEFAULT > MAX_BUFFER_SIZE as u32 {
+    MAX_BUFFER_SIZE as u32
+} else {
+    TCP_MSS_DEFAULT
+};
+
 pub struct TcpSocket {
     inner: Mutex<TcpSocketInner>,
     mss: u32,
@@ -59,7 +65,10 @@ impl TcpSocket {
                 recvbuf_size: MAX_BUFFER_SIZE,
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
-            file_meta: FileMeta::new(OpenFlags::CLOEXEC | OpenFlags::RDWR),
+            file_meta: FileMeta::new(
+                OpenFlags::CLOEXEC | OpenFlags::RDWR,
+                crate::fs::InodeMode::FileSOCK,
+            ),
         }
     }
     pub fn is_ipv4(&self) -> bool {
@@ -294,7 +303,6 @@ impl<'a> Future for TcpAcceptFuture<'a> {
         ret
     }
 }
-
 
 struct TcpRecvFuture<'a> {
     socket: &'a TcpSocket,

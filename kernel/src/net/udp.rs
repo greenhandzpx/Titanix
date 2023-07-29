@@ -15,7 +15,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{SHUT_RD, SHUT_WR},
+    net::SHUT_WR,
     processor::SumGuard,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
@@ -60,7 +60,10 @@ impl UdpSocket {
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
             socket_handler,
-            file_meta: FileMeta::new(OpenFlags::CLOEXEC | OpenFlags::RDWR),
+            file_meta: FileMeta::new(
+                OpenFlags::CLOEXEC | OpenFlags::RDWR,
+                crate::fs::InodeMode::FileSOCK,
+            ),
         }
     }
 
