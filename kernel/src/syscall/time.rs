@@ -16,7 +16,7 @@ use crate::{
         ffi::{ITimerval, TimeSpec},
         timed_task::TimedTaskFuture,
         timeout_task::ksleep,
-        CLOCK_MANAGER, CLOCK_REALTIME, TIMER_ABSTIME,
+        CLOCK_MANAGER, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, TIMER_ABSTIME,
     },
     utils::error::{SyscallErr, SyscallRet},
 };
@@ -53,6 +53,9 @@ pub fn sys_clock_settime(clock_id: usize, time_spec_ptr: *const TimeSpec) -> Sys
     } else if clock_id == CLOCK_REALTIME && time_spec.sec < current_time_ms() / 1000 {
         debug!("set the time to a value less than the current value of the CLOCK_MONOTONIC clock.");
         return Err(SyscallErr::EINVAL);
+    } else if clock_id == CLOCK_PROCESS_CPUTIME_ID {
+        debug!("Cannot set this clock");
+        return Err(SyscallErr::EPERM);
     }
 
     // calculate the diff
