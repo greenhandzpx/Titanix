@@ -134,8 +134,8 @@ pub fn rust_main(hart_id: usize) {
         #[cfg(feature = "multi_hart")]
         {
             use crate::config::mm::HART_START_ADDR;
-            use crate::processor::HARTS;
             use crate::driver::sbi::hart_start;
+            use crate::processor::HARTS;
             // only start two harts
             let mut has_another = false;
             let hart_num = unsafe { HARTS.len() };
