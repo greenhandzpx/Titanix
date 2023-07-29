@@ -299,7 +299,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
             }
             if socket.state() == tcp::State::CloseWait {
                 log::info!("[TcpRecvFuture::poll] state become {:?}", socket.state());
-                return Poll::Ready(Err(SyscallErr::ENOTCONN));
+                return Poll::Ready(Ok(0));
             }
             log::debug!("[TcpRecvFuture::poll] state {:?}", socket.state());
             if !socket.can_recv() {
