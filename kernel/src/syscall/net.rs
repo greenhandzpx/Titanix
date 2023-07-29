@@ -78,6 +78,10 @@ pub fn sys_getsockname(sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet {
     socket.addr(addr, addrlen)
 }
 
+pub fn sys_getpeername(sockfd: u32, addr: usize, addrlen: usize) -> SyscallRet {
+    todo!()
+}
+
 pub async fn sys_sendto(
     sockfd: u32,
     buf: usize,

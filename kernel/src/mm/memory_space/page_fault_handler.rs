@@ -207,10 +207,10 @@ impl PageFaultHandler for MmapPageFaultHandler {
                 .get_page(offset, Some(map_perm))?;
             page.load_all_buffers().await?;
             // let mut pte_flags = vma.map_perm.into();
-            trace!(
-                "file page content {:?}",
-                String::from_utf8(page.bytes_array().to_vec())
-            );
+            // trace!(
+            //     "file page content {:?}",
+            //     String::from_utf8(page.bytes_array().to_vec())
+            // );
 
             let page = match (
                 pte_flags.contains(PTEFlags::W),
