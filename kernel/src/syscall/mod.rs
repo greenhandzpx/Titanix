@@ -421,6 +421,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[4]
             )
         ),
+        SYSCALL_SHUTDOWN => sys_handler!(sys_shutdown, (args[0] as u32, args[1] as u32)),
         SYSCALL_TKILL => sys_handler!(sys_tkill, (args[0], args[1] as i32)),
         SYSCALL_TGKILL => sys_handler!(
             sys_tgkill,

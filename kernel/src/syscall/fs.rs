@@ -536,7 +536,15 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
 
 pub fn sys_close(fd: usize) -> SyscallRet {
     stack_trace!();
-    current_process().close_file(fd)
+    current_process().inner_handler(|proc| {
+        proc.socket_table.take(fd);
+        if proc.fd_table.take(fd).is_none() {
+            Err(SyscallErr::EBADF)
+        } else {
+            debug!("close fd {}", fd);
+            Ok(0)
+        }
+    })
 }
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {

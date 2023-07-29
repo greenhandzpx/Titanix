@@ -110,6 +110,19 @@ impl UdpSocket {
     }
 }
 
+impl Drop for UdpSocket {
+    fn drop(&mut self) {
+        log::info!(
+            "[UdpSocket::drop] drop socket, remoteep {:?}",
+            self.inner.lock().remote_endpoint
+        );
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            socket.close();
+        });
+        NET_INTERFACE.poll();
+    }
+}
+
 impl File for UdpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
         log::info!("[Udp::read] enter");

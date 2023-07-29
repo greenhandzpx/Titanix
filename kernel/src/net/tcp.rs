@@ -164,6 +164,19 @@ impl TcpSocket {
     }
 }
 
+impl Drop for TcpSocket {
+    fn drop(&mut self) {
+        log::info!(
+            "[TcpSocket::drop] drop socket, localep {:?}",
+            self.inner.lock().local_endpoint
+        );
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            socket.close();
+        });
+        NET_INTERFACE.poll();
+    }
+}
+
 impl File for TcpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
         log::info!("[Tcp::read] enter");

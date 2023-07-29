@@ -362,6 +362,9 @@ impl SocketTable {
     pub fn get_ref(&self, fd: Fd) -> Option<&Arc<Socket>> {
         self.0.get(&fd)
     }
+    pub fn take(&mut self, fd: Fd) -> Option<Arc<Socket>> {
+        self.0.remove(&fd)
+    }
     pub fn from_another(socket_table: &SocketTable) -> GeneralRet<Self> {
         let mut ret = BTreeMap::new();
         for (sockfd, socket) in socket_table.0.iter() {
