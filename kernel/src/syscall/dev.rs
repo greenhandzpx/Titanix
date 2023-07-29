@@ -3,7 +3,7 @@ use core::ptr;
 use log::debug;
 
 use crate::{
-    fs::InodeMode,
+    fs::{ffi::WinSize, InodeMode},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     utils::error::{SyscallErr, SyscallRet},
@@ -33,10 +33,11 @@ pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
             }
         }
         TIOCGWINSZ => {
-            debug!("[sys_ioctl] get windows size");
-            UserCheck::new().check_writable_slice(arg as *mut u8, core::mem::size_of::<u32>())?;
+            debug!("[sys_ioctl] doesn't support windows size");
+            UserCheck::new()
+                .check_writable_slice(arg as *mut u8, core::mem::size_of::<WinSize>())?;
             unsafe {
-                ptr::write(arg as *mut u32, 0);
+                ptr::write(arg as *mut WinSize, WinSize::default());
             }
         }
         _ => {}
