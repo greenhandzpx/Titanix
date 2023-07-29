@@ -90,12 +90,12 @@ pub fn handle_timeout_events() {
     // TODO: should we use SleepLock instead of SpinLock? It seems that the locking time may be a little long.
     loop {
         if let Some(timer) = timers.peek() {
-            log::trace!(
-                "[handle_timeout_events] find a timer, current ts: {:?}, expired ts: {:?}",
+            if current_time >= timer.0.expired_time {
+                log::trace!(
+                "[handle_timeout_events] find a timeout timer, current ts: {:?}, expired ts: {:?}",
                 current_time,
                 timer.0.expired_time
             );
-            if current_time >= timer.0.expired_time {
                 let mut timer = timers.pop().unwrap();
                 timer.0.waker.take().unwrap().wake();
             } else {

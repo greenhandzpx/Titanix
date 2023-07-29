@@ -13,8 +13,10 @@ use crate::{
     fs::{File, FileMeta, OpenFlags},
     net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_RD},
     process::thread,
-    processor::SumGuard,
+    processor::{current_task, SumGuard},
+    sync::Event,
     utils::{
+        async_tools::{Select2Futures, SelectOutput},
         error::{GeneralRet, SyscallErr, SyscallRet},
         random::RNG,
     },
@@ -193,7 +195,20 @@ impl Drop for TcpSocket {
 impl File for TcpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
         log::info!("[Tcp::read] {} enter", self.socket_handler);
-        Box::pin(TcpRecvFuture::new(self, buf))
+        Box::pin(async move {
+            match Select2Futures::new(
+                TcpRecvFuture::new(self, buf),
+                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+            )
+            .await
+            {
+                SelectOutput::Output1(ret) => ret,
+                SelectOutput::Output2(intr) => {
+                    log::info!("[TcpSocket::read] interrupt by event {:?}", intr);
+                    Err(SyscallErr::EINTR)
+                }
+            }
+        })
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
@@ -216,7 +231,14 @@ impl File for TcpSocket {
             if socket.can_recv() {
                 log::info!("[Tcp::pollin] {} recv buf have item", self.socket_handler);
                 Ok(true)
+            } else if socket.state() == tcp::State::CloseWait
+                || socket.state() == tcp::State::FinWait2
+                || socket.state() == tcp::State::TimeWait
+            {
+                log::info!("[Tcp::pollin] state become {:?}", socket.state());
+                Ok(true)
             } else {
+                log::info!("[Tcp::pollin] nothing to read, state {:?}", socket.state());
                 if let Some(waker) = waker {
                     socket.register_recv_waker(&waker);
                 }
@@ -269,9 +291,17 @@ impl<'a> Future for TcpRecvFuture<'a> {
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_recv() {
-                log::info!("[TcpRecvFuture::poll] err when recv");
+                log::info!(
+                    "[TcpRecvFuture::poll] err when recv, state {:?}",
+                    socket.state()
+                );
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
+            if socket.state() == tcp::State::CloseWait {
+                log::info!("[TcpRecvFuture::poll] state become {:?}", socket.state());
+                return Poll::Ready(Err(SyscallErr::ENOTCONN));
+            }
+            log::debug!("[TcpRecvFuture::poll] state {:?}", socket.state());
             if !socket.can_recv() {
                 socket.register_recv_waker(cx.waker());
                 log::info!("[TcpRecvFuture::poll] cannot recv yet");
@@ -284,12 +314,13 @@ impl<'a> Future for TcpRecvFuture<'a> {
                 socket.local_endpoint(),
                 socket.remote_endpoint()
             );
-            Poll::Ready(
-                socket
-                    .recv_slice(&mut this.buf)
-                    .ok()
-                    .ok_or(SyscallErr::ENOTCONN),
-            )
+            Poll::Ready(match socket.recv_slice(&mut this.buf) {
+                Ok(nbytes) => {
+                    log::debug!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
+                    Ok(nbytes)
+                }
+                Err(_) => Err(SyscallErr::ENOTCONN),
+            })
         });
         NET_INTERFACE.poll();
         ret
@@ -332,12 +363,13 @@ impl<'a> Future for TcpSendFuture<'a> {
                 socket.local_endpoint(),
                 socket.remote_endpoint()
             );
-            Poll::Ready(
-                socket
-                    .send_slice(&mut this.buf)
-                    .ok()
-                    .ok_or(SyscallErr::ENOTCONN),
-            )
+            Poll::Ready(match socket.send_slice(&mut this.buf) {
+                Ok(nbytes) => {
+                    log::debug!("[TcpSendFuture::poll] send {} bytes", nbytes);
+                    Ok(nbytes)
+                }
+                Err(_) => Err(SyscallErr::ENOTCONN),
+            })
         });
         NET_INTERFACE.poll();
         ret

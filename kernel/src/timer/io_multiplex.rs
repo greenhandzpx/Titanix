@@ -114,6 +114,7 @@ impl Future for IOMultiplexFuture {
                 if let Some(events) = PollEvents::from_bits(fd.events) {
                     fd.revents = 0;
                     if events.contains(PollEvents::POLLIN) {
+                        log::debug!("[IOMultiplexFuture::poll] pollin fd {}", fd.fd);
                         if let Some(res) = file.pollin(Some(waker.clone())).ok() {
                             if res {
                                 fd.revents |= PollEvents::POLLIN.bits() as i16;
@@ -125,6 +126,7 @@ impl Future for IOMultiplexFuture {
                         }
                     }
                     if events.contains(PollEvents::POLLOUT) {
+                        log::debug!("[IOMultiplexFuture::poll] pollout fd {}", fd.fd);
                         if let Some(res) = file.pollout(Some(waker.clone())).ok() {
                             if res {
                                 fd.revents |= PollEvents::POLLOUT.bits() as i16;
