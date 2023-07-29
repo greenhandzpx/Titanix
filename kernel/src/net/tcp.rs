@@ -250,6 +250,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
                 return Poll::Pending;
             }
             let this = self.get_mut();
+            info!("[Tcp::Recv] recv from {:?}", socket.remote_endpoint());
             Poll::Ready(
                 socket
                     .recv_slice(&mut this.buf)
@@ -290,6 +291,7 @@ impl<'a> Future for TcpSendFuture<'a> {
                 return Poll::Pending;
             }
             let this = self.get_mut();
+            info!("[Tcp::Send] send to {:?}", socket.remote_endpoint());
             Poll::Ready(
                 socket
                     .send_slice(&mut this.buf)

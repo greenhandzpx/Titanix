@@ -95,6 +95,7 @@ const SYSCALL_LISTEN: usize = 201;
 const SYSCALL_ACCEPT: usize = 202;
 const SYSCALL_CONNECT: usize = 203;
 const SYSCALL_GETSOCKNAME: usize = 204;
+const SYSCALL_GETPEERNAME: usize = 205;
 const SYSCALL_SENDTO: usize = 206;
 const SYSCALL_RECVFROM: usize = 207;
 const SYSCALL_SETSOCKOPT: usize = 208;
@@ -378,6 +379,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             sys_handler!(sys_connect, (args[0] as u32, args[1], args[2] as u32), await)
         }
         SYSCALL_GETSOCKNAME => sys_handler!(sys_getsockname, (args[0] as u32, args[1], args[2])),
+        SYSCALL_GETPEERNAME => sys_handler!(sys_getpeername, (args[0] as u32, args[1], args[2])),
         SYSCALL_SENDTO => sys_handler!(
             sys_sendto,
             (

@@ -41,7 +41,7 @@ impl<'a> TitanixNetInterfaceInner<'a> {
             let mut iface = Interface::new(
                 config,
                 &mut device,
-                Instant::from_secs(current_time_duration().as_secs() as i64),
+                Instant::from_millis(current_time_duration().as_millis() as i64),
             );
             iface.update_ip_addrs(|ip_addrs| {
                 ip_addrs
@@ -103,9 +103,11 @@ impl<'a> TitanixNetInterface<'a> {
 
     pub fn poll(&self) {
         self.inner_handler(|inner| {
-            inner
-                .iface
-                .poll(Instant::ZERO, &mut inner.device, &mut inner.sockets)
+            inner.iface.poll(
+                Instant::from_millis(current_time_duration().as_millis() as i64),
+                &mut inner.device,
+                &mut inner.sockets,
+            )
         });
     }
 }

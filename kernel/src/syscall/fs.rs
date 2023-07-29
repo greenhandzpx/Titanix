@@ -556,7 +556,9 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    file.write(buf).await
+    let ret = file.write(buf).await?;
+    trace!("[sys_write] write {} len", ret);
+    Ok(ret)
     // if buf.len() < 2 {
     //     file.sync_write(buf)
     // } else {
@@ -601,6 +603,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         let write_ret = file.write(buf).await?;
         ret += write_ret as usize;
     }
+    trace!("[sys_writev] write {} len", ret);
     Ok(ret)
 }
 
@@ -641,6 +644,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         let read_ret = file.read(buf).await?;
         ret += read_ret as usize;
     }
+    trace!("[sys_readv] read {} len", ret);
     Ok(ret)
 }
 
@@ -667,9 +671,9 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
-    let ret = file.read(buf).await;
-    // log::debug!("[sys_read] len {:?} res buf {:?}", ret, buf);
-    ret
+    let ret = file.read(buf).await?;
+    trace!("[sys_read] read {} len", ret);
+    Ok(ret)
     // if buf.len() < 2 {
     //     file.sync_read(buf)
     // } else {
