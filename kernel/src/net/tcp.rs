@@ -44,6 +44,7 @@ impl TcpSocket {
         let rx_buf = socket::tcp::SocketBuffer::new(vec![0 as u8; MAX_BUFFER_SIZE]);
         let socket = socket::tcp::Socket::new(rx_buf, tx_buf);
         let socket_handler = NET_INTERFACE.add_socket(socket);
+        log::info!("[TcpSocket::new] new {}", socket_handler);
         NET_INTERFACE.poll();
         Self {
             socket_handler,
@@ -191,12 +192,12 @@ impl Drop for TcpSocket {
 
 impl File for TcpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
-        log::info!("[Tcp::read] enter");
+        log::info!("[Tcp::read] {} enter", self.socket_handler);
         Box::pin(TcpRecvFuture::new(self, buf))
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
-        log::info!("[Tcp::write] enter");
+        log::info!("[Tcp::write] {} enter", self.socket_handler);
         Box::pin(TcpSendFuture::new(self, buf))
     }
 
@@ -209,11 +210,11 @@ impl File for TcpSocket {
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        debug!("[Tcp::pollin] enter");
+        debug!("[Tcp::pollin] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             if socket.can_recv() {
-                log::info!("[Tcp::pollin] recv buf have item");
+                log::info!("[Tcp::pollin] {} recv buf have item", self.socket_handler);
                 Ok(true)
             } else {
                 if let Some(waker) = waker {
@@ -225,11 +226,11 @@ impl File for TcpSocket {
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        debug!("[Tcp::pollout] enter");
+        debug!("[Tcp::pollout] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             if socket.can_send() {
-                log::info!("[Tcp::pollout] tx buf have slots");
+                log::info!("[Tcp::pollout] {} tx buf have slots", self.socket_handler);
                 Ok(true)
             } else {
                 if let Some(waker) = waker {
