@@ -1,7 +1,7 @@
 use core::{future::Future, task::Poll};
 
 use alloc::{boxed::Box, vec};
-use log::debug;
+use log::{debug, info};
 use managed::ManagedSlice;
 use smoltcp::{
     iface::SocketHandle,
@@ -19,7 +19,7 @@ use crate::{
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 
-use super::{config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE, SHUT_RD};
+use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
 
 const UDP_PACKET_SIZE: usize = 1472;
 const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;
@@ -105,6 +105,33 @@ impl UdpSocket {
         log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
         let mut inner = self.inner.lock();
         inner.remote_endpoint = Some(remote_endpoint);
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            let local = socket.endpoint();
+            info!("[Udp::connect] local: {:?}", local);
+            if local.port == 0 {
+                info!("[Udp::connect] don't have local");
+                let addr = SocketAddrv4::new([0; 16].as_slice());
+                let endpoint = IpListenEndpoint::from(addr);
+                let ret = socket.bind(endpoint);
+                if ret.is_err() {
+                    match ret.err().unwrap() {
+                        socket::udp::BindError::Unaddressable => {
+                            info!("[Udp::bind] unaddr");
+                            return Err(SyscallErr::EINVAL);
+                        }
+                        socket::udp::BindError::InvalidState => {
+                            info!("[Udp::bind] invaild state");
+                            return Err(SyscallErr::EINVAL);
+                        }
+                    }
+                }
+                log::info!("[Udp::bind] bind to {:?}", endpoint);
+                Ok(())
+            } else {
+                Ok(())
+            }
+        })?;
         NET_INTERFACE.poll();
         Ok(0)
     }
@@ -228,7 +255,13 @@ impl<'a> Future for UdpRecvFuture<'a> {
                     .recv_slice(&mut this.buf)
                     .ok()
                     .ok_or(SyscallErr::ENOTCONN)?;
-                this.socket.inner.lock().remote_endpoint = Some(meta.endpoint);
+                let remote = Some(meta.endpoint);
+                info!(
+                    "[UdpRecvFuture::poll] {:?} <- {:?}",
+                    socket.endpoint(),
+                    remote
+                );
+                this.socket.inner.lock().remote_endpoint = remote;
                 Ok(ret)
             })
         });
@@ -271,6 +304,11 @@ impl<'a> Future for UdpSendFuture<'a> {
                 meta: PacketMeta::default(),
             };
             let len = this.buf.len();
+            info!(
+                "[UdpSendFuture::poll] {:?} -> {:?}",
+                socket.endpoint(),
+                remote
+            );
             // TODO: update err code
             let ret = socket.send_slice(&this.buf, meta);
             Poll::Ready(if let Some(err) = ret.err() {
