@@ -8,7 +8,7 @@ use smoltcp::{
     phy::PacketMeta,
     socket::{
         self,
-        udp::{PacketMetadata, UdpMetadata},
+        udp::{PacketMetadata, SendError, UdpMetadata},
     },
     wire::{IpAddress, IpEndpoint, IpListenEndpoint},
 };
@@ -16,10 +16,10 @@ use smoltcp::{
 use crate::{
     fs::{File, FileMeta, OpenFlags},
     processor::SumGuard,
-    utils::error::{SyscallErr, SyscallRet},
+    utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 
-use super::{config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
+use super::{config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE, SHUT_RD};
 
 const UDP_PACKET_SIZE: usize = 1472;
 const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;
@@ -108,6 +108,21 @@ impl UdpSocket {
         NET_INTERFACE.poll();
         Ok(0)
     }
+
+    pub fn shutdown(&self, how: u32) -> GeneralRet<()> {
+        log::info!("[UdpSocket::shutdown] how {}", how);
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            // TODO: not sure
+            match how {
+                SHUT_RD => {
+                    log::warn!("[UdpSocket::shutdown] close read end");
+                }
+                _ => socket.close(),
+            }
+        });
+        NET_INTERFACE.poll();
+        Ok(())
+    }
 }
 
 impl Drop for UdpSocket {
@@ -117,7 +132,9 @@ impl Drop for UdpSocket {
             self.inner.lock().remote_endpoint
         );
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
-            socket.close();
+            if socket.is_open() {
+                socket.close();
+            }
         });
         NET_INTERFACE.poll();
     }
@@ -255,13 +272,23 @@ impl<'a> Future for UdpSendFuture<'a> {
             };
             let len = this.buf.len();
             // TODO: update err code
-            Poll::Ready({
-                socket
-                    .send_slice(&this.buf, meta)
-                    .ok()
-                    .ok_or(SyscallErr::ENOBUFS)?;
+            let ret = socket.send_slice(&this.buf, meta);
+            Poll::Ready(if let Some(err) = ret.err() {
+                if err == SendError::Unaddressable {
+                    Err(SyscallErr::ENOTCONN)
+                } else {
+                    Err(SyscallErr::ENOBUFS)
+                }
+            } else {
                 Ok(len)
             })
+            // Poll::Ready({
+            //     socket
+            //         .send_slice(&this.buf, meta)
+            //         .ok()
+            //         .ok_or(SyscallErr::ENOBUFS)?;
+            //     Ok(len)
+            // })
         });
         NET_INTERFACE.poll();
         ret

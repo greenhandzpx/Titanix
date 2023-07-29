@@ -38,6 +38,11 @@ pub const AF_UNIX: u16 = 1;
 pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
 
+/// shutdown
+pub const SHUT_RD: u32 = 0;
+pub const SHUT_WR: u32 = 1;
+pub const SHUT_RDWR: u32 = 2;
+
 bitflags! {
     /// socket type
     pub struct SocketType: u32 {
@@ -298,6 +303,14 @@ impl Socket {
             Socket::UnixSocket(_) => todo!(),
         }
     }
+
+    pub fn shutdown(&self, how: u32) -> GeneralRet<()> {
+        match *self {
+            Socket::TcpSocket(ref socket) => socket.shutdown(how),
+            Socket::UdpSocket(ref socket) => socket.shutdown(how),
+            _ => todo!(),
+        }
+    }
 }
 
 impl File for Socket {
@@ -373,9 +386,3 @@ impl SocketTable {
         Ok(Self(ret))
     }
 }
-
-// pub trait SocketOp {
-//     fn bind() {}
-//     fn connect() {}
-//     fn accept() {}
-// }
