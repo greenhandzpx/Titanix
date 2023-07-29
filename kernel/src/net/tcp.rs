@@ -256,17 +256,21 @@ impl<'a> Future for TcpRecvFuture<'a> {
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.may_recv() {
-                log::info!("[TcpRcevFuture::poll] err when recv");
+                log::info!("[TcpRecvFuture::poll] err when recv");
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
             if !socket.can_recv() {
                 socket.register_recv_waker(cx.waker());
-                log::info!("[TcpRcevFuture::poll] cannot recv yet");
+                log::info!("[TcpRecvFuture::poll] cannot recv yet");
                 return Poll::Pending;
             }
-            log::info!("[TcpSendFuture::poll] start to recv...");
+            log::info!("[TcpRecvFuture::poll] start to recv...");
             let this = self.get_mut();
-            info!("[Tcp::Recv] recv from {:?}", socket.remote_endpoint());
+            info!(
+                "[TcpRecvFuture::poll] {:?} <- {:?}",
+                socket.local_endpoint(),
+                socket.remote_endpoint()
+            );
             Poll::Ready(
                 socket
                     .recv_slice(&mut this.buf)
@@ -310,7 +314,11 @@ impl<'a> Future for TcpSendFuture<'a> {
             }
             log::info!("[TcpSendFuture::poll] start to send...");
             let this = self.get_mut();
-            info!("[Tcp::Send] send to {:?}", socket.remote_endpoint());
+            info!(
+                "[TcpSendFuture::poll] {:?} -> {:?}",
+                socket.local_endpoint(),
+                socket.remote_endpoint()
+            );
             Poll::Ready(
                 socket
                     .send_slice(&mut this.buf)

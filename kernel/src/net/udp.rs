@@ -1,7 +1,7 @@
 use core::{future::Future, task::Poll};
 
 use alloc::{boxed::Box, vec};
-use log::debug;
+use log::{debug, info};
 use managed::ManagedSlice;
 use smoltcp::{
     iface::SocketHandle,
@@ -19,7 +19,7 @@ use crate::{
     utils::error::{SyscallErr, SyscallRet},
 };
 
-use super::{config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
+use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
 
 const UDP_PACKET_SIZE: usize = 1472;
 const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;
@@ -47,7 +47,10 @@ impl UdpSocket {
             vec![PacketMetadata::EMPTY, PacketMetadata::EMPTY],
             vec![0 as u8; MAX_BUFFER_SIZE],
         );
-        let socket = socket::udp::Socket::new(rx_buf, tx_buf);
+        let mut socket = socket::udp::Socket::new(rx_buf, tx_buf);
+        let addr = SocketAddrv4::new([0; 16].as_slice());
+        let endpoint = IpListenEndpoint::from(addr);
+        socket.bind(endpoint).expect("udp bind error");
         let socket_handler = NET_INTERFACE.add_socket(socket);
         NET_INTERFACE.poll();
         Self {
@@ -211,7 +214,13 @@ impl<'a> Future for UdpRecvFuture<'a> {
                     .recv_slice(&mut this.buf)
                     .ok()
                     .ok_or(SyscallErr::ENOTCONN)?;
-                this.socket.inner.lock().remote_endpoint = Some(meta.endpoint);
+                let remote = Some(meta.endpoint);
+                info!(
+                    "[UdpRecvFuture::poll] {:?} <- {:?}",
+                    socket.endpoint(),
+                    remote
+                );
+                this.socket.inner.lock().remote_endpoint = remote;
                 Ok(ret)
             })
         });
@@ -254,6 +263,11 @@ impl<'a> Future for UdpSendFuture<'a> {
                 meta: PacketMeta::default(),
             };
             let len = this.buf.len();
+            info!(
+                "[UdpSendFuture::poll] {:?} -> {:?}",
+                socket.endpoint(),
+                remote
+            );
             // TODO: update err code
             Poll::Ready({
                 socket
