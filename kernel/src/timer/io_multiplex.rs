@@ -54,18 +54,21 @@ impl RawFdSetRWE {
         for fd in fds.iter() {
             if let Some(fd_set_ptr) = self.read_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
-                fd_set.clear_all();
+                // fd_set.clear_all();
                 if PollEvents::from_bits(fd.revents)
                     .unwrap()
                     .contains(PollEvents::POLLIN)
                 {
                     fd_set.mark_fd(fd.fd as usize);
-                    debug!("[update_by_fds_vec]: read fd set {:?}", fd_set);
+                    debug!(
+                        "[update_by_fds_vec]: read fd set {:?}, fd set ptr {:#x}",
+                        fd_set, fd_set_ptr
+                    );
                 }
             }
             if let Some(fd_set_ptr) = self.write_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
-                fd_set.clear_all();
+                // fd_set.clear_all();
                 if PollEvents::from_bits(fd.revents)
                     .unwrap()
                     .contains(PollEvents::POLLOUT)
@@ -76,7 +79,7 @@ impl RawFdSetRWE {
             }
             if let Some(fd_set_ptr) = self.except_fd_set_ptr {
                 let fd_set = unsafe { &mut *(fd_set_ptr as *mut FdSet) };
-                fd_set.clear_all();
+                // fd_set.clear_all();
                 if PollEvents::from_bits(fd.revents)
                     .unwrap()
                     .contains(PollEvents::POLLPRI)
@@ -86,6 +89,11 @@ impl RawFdSetRWE {
                 }
             }
         }
+        // if let Some(fd_set_ptr) = self.read_fd_set_ptr {
+        //     log::debug!("[update_by_fds_vec] read fd set {:?}", unsafe {
+        //         &*(fd_set_ptr as *mut FdSet)
+        //     });
+        // }
     }
 }
 
@@ -148,7 +156,7 @@ impl Future for IOMultiplexFuture {
             }
         }
         if cnt > 0 {
-            log::debug!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
+            log::info!("[IOMultiplexFuture]: poll ready, cnt {}", cnt);
             // TODO: can we use user addr directly without copy overhead
             let _sum_guard = SumGuard::new();
             match &mut this.user_format {

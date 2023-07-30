@@ -9,7 +9,7 @@ PRELIMINARY = 0
 FS_IMG_SRC := ../fs-img-src
 FS_IMG := $(FS_IMG_SRC)/sdcard.img
 
-TEST := 22
+TEST := 23
 TEST_DIR := "../$(TEST)-testcases"
 
 STRACE := 
@@ -133,7 +133,6 @@ user-build:
 	@cp ../23-testcases/entry-static.exe ../user/target/riscv64gc-unknown-none-elf/release/entry-static.exe
 	@cp ../23-testcases/run-static.sh ../user/target/riscv64gc-unknown-none-elf/release/run-static.sh
 	@cp ../23-testcases/lmbench_all ../user/target/riscv64gc-unknown-none-elf/release/lmbench_all
-	@cp $(TEST_DIR)/true ../user/target/riscv64gc-unknown-none-elf/release/true
 	@echo "build user finished"
 
 
