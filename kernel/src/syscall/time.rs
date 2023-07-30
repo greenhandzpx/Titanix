@@ -83,6 +83,25 @@ pub fn sys_clock_gettime(clock_id: usize, time_spec_ptr: *mut TimeSpec) -> Sysca
     UserCheck::new()
         .check_writable_slice(time_spec_ptr as *mut u8, core::mem::size_of::<TimeSpec>())?;
     let _sum_guard = SumGuard::new();
+    if clock_id == CLOCK_PROCESS_CPUTIME_ID {
+        let cpu_time = current_process().inner_handler(|proc| {
+            let mut user_time = Duration::ZERO;
+            let mut sys_time = Duration::ZERO;
+            for (_, thread) in proc.threads.iter() {
+                if let Some(thread) = thread.upgrade() {
+                    // TODO: is it ok to just read the other thread's unsafe cell data?
+                    user_time += unsafe { (*thread.inner.get()).time_info.user_time };
+                    sys_time += unsafe { (*thread.inner.get()).time_info.sys_time };
+                }
+            }
+            user_time + sys_time
+        });
+        debug!("[sys_clock_gettime] get process cpu time: {:?}", cpu_time);
+        unsafe {
+            time_spec_ptr.write_volatile(cpu_time.into());
+        }
+        return Ok(0);
+    }
     let manager_locked = CLOCK_MANAGER.lock();
     let clock = manager_locked.0.get(&clock_id);
     match clock {

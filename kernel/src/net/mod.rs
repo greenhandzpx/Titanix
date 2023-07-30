@@ -314,6 +314,17 @@ impl Socket {
             _ => todo!(),
         }
     }
+
+    pub fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet {
+        match *self {
+            Socket::TcpSocket(ref socket) => {
+                socket.set_nagle_enabled(enabled);
+                Ok(0)
+            }
+            Socket::UdpSocket(_) => Err(SyscallErr::EOPNOTSUPP),
+            Socket::UnixSocket(_) => Err(SyscallErr::EOPNOTSUPP),
+        }
+    }
 }
 
 impl File for Socket {
