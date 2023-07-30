@@ -1386,6 +1386,8 @@ pub async fn sys_pselect6(
         }
     }
 
+    log::info!("[sys_pselect] concerned fds {:?}", fds);
+
     let poll_future = IOMultiplexFuture::new(
         fds,
         IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
@@ -1420,6 +1422,11 @@ pub async fn sys_pselect6(
         .await
         {
             SelectOutput::Output1(ret) => {
+                info!(
+                    "[sys_pselect] return, readfds {:?}, writefds {:?}, exceptfds {:?}, timeout {:?}",
+                    readfds, writefds, exceptfds, timeout
+                );
+                debug!("[sys_pselect] return, readfds ptr {:#x}", readfds_ptr);
                 debug!("[sys_pselect]: ready");
                 ret
             }
