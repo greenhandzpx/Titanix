@@ -9,7 +9,7 @@ use crate::{
         path,
     },
 };
-use alloc::{boxed::Box, string::ToString, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 
 use log::info;
 
