@@ -39,8 +39,10 @@ pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
 
 /// shutdown
+#[allow(unused)]
 pub const SHUT_RD: u32 = 0;
 pub const SHUT_WR: u32 = 1;
+#[allow(unused)]
 pub const SHUT_RDWR: u32 = 2;
 
 bitflags! {

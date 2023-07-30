@@ -14,7 +14,7 @@ use crate::{
 use super::{
     close_interrupt,
     context::{EnvContext, LocalContext},
-    open_interrupt,
+    current_trap_cx, open_interrupt,
 };
 
 /// Local context in one hart, either Idle or Something(about one thread)
@@ -128,6 +128,10 @@ impl Hart {
         let new_env = task.env();
         let old_env = self.env();
         let sie = EnvContext::env_change(new_env, old_env);
+
+        // Save float regs
+        current_trap_cx().user_fx.yield_task();
+
         unsafe {
             KERNEL_SPACE
                 .as_ref()
@@ -216,6 +220,7 @@ pub fn init(hart_id: usize) {
     }
     set_hart_stack();
     unsafe {
-        sstatus::set_fs(FS::Clean);
+        // sstatus::set_fs(FS::Clean);
+        sstatus::set_fs(FS::Initial);
     }
 }

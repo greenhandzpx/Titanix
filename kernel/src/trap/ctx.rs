@@ -12,7 +12,7 @@
 
 use core::arch::asm;
 
-use riscv::register::sstatus::{self, SPP};
+use riscv::register::sstatus::{self, Sstatus, FS, SPP};
 
 /// Trap context structure containing sstatus, sepc and registers
 #[derive(Clone, Copy, Debug)]
@@ -22,8 +22,8 @@ pub struct TrapContext {
     /// general regs[0..31]
     pub user_x: [usize; 32],
     /// CSR sstatus      
-    // pub sstatus: Sstatus, // 32
-    pub sstatus: usize, // 32
+    pub sstatus: Sstatus, // 32
+    // pub sstatus: usize, // 32
     /// CSR sepc
     pub sepc: usize, // 33
 
@@ -43,7 +43,6 @@ pub struct TrapContext {
     pub kernel_fp: usize, // 48
     /// kernel hart address
     pub kernel_tp: usize, // 49
-
     /// Float regs
     /// TODO: add dirty flag to know whether we should save
     pub user_fx: UserFloatContext,
@@ -56,6 +55,7 @@ pub struct UserFloatContext {
     pub fcsr: u32,          // 32bit
     pub need_save: u8,
     pub need_restore: u8,
+    pub signal_dirty: u8,
 }
 
 impl UserFloatContext {
@@ -63,18 +63,26 @@ impl UserFloatContext {
         unsafe { core::mem::zeroed() }
     }
 
-    pub fn should_save(&mut self) {
-        self.need_save = 1;
+    pub fn mark_save_if_needed(&mut self, sstatus: Sstatus) {
+        self.need_save |= (sstatus.fs() == FS::Dirty) as u8;
+        self.signal_dirty |= (sstatus.fs() == FS::Dirty) as u8;
     }
 
-    pub fn should_restore(&mut self) {
+    pub fn yield_task(&mut self) {
+        self.save();
         self.need_restore = 1;
     }
 
+    pub fn encounter_signal(&mut self) {
+        self.save();
+    }
+
+    /// Save reg -> mem
     pub fn save(&mut self) {
-        // if self.need_save == 0 {
-        //     return;
-        // }
+        if self.need_save == 0 {
+            return;
+        }
+        self.need_save = 0;
         unsafe {
             let mut _t: usize = 1; // alloc a register but not zero.
             asm!("
@@ -118,10 +126,12 @@ impl UserFloatContext {
         };
     }
 
-    pub fn restore(&self) {
-        // if self.need_restore == 0 {
-        //     return;
-        // }
+    /// Restore mem -> reg
+    pub fn restore(&mut self) {
+        if self.need_restore == 0 {
+            return;
+        }
+        self.need_restore = 0;
         unsafe {
             asm!("
             fld  f0,  0*8({0})
@@ -174,8 +184,8 @@ pub struct UserContext {
     /// general float regs
     pub user_fx: UserFloatContext,
     /// CSR sstatus      
-    // pub sstatus: Sstatus, // 32
-    pub sstatus: usize, // 32
+    pub sstatus: Sstatus, // 32
+    // pub sstatus: usize, // 32
     /// CSR sepc
     pub sepc: usize, // 33
 }
@@ -183,20 +193,25 @@ pub struct UserContext {
 impl UserContext {
     /// Construct a new user context from trap context
     pub fn from_trap_context(trap_context: &TrapContext) -> Self {
-        let mut user_fx = UserFloatContext::new();
-        user_fx.save();
+        // let mut user_fx = UserFloatContext::new();
+        // user_fx.save();
         // log::error!("store fx, fs1 {}", user_fx.user_fx[9]);
         Self {
             user_x: trap_context.user_x,
-            user_fx,
+            user_fx: trap_context.user_fx,
             sstatus: trap_context.sstatus,
             sepc: trap_context.sepc,
         }
     }
-    ///
+    /// Called by `sys_sigreturn`
     pub fn restore_trap_context(&self, trap_context: &mut TrapContext) {
-        self.user_fx.restore();
-        // log::error!("load fx, fs1 {}", self.user_fx.user_fx[9]);
+        if trap_context.user_fx.signal_dirty == 1 {
+            // Signal handler has changed some float regs,
+            // then we should restore the old trap context's float regs
+            // and restore them when trap back.
+            trap_context.user_fx = self.user_fx;
+            trap_context.user_fx.need_restore = 1;
+        }
         trap_context.user_x = self.user_x;
         trap_context.user_x[0] = 0;
         trap_context.sstatus = self.sstatus;
@@ -218,7 +233,7 @@ impl TrapContext {
         sstatus.set_spie(false);
         let mut cx = Self {
             user_x: [0; 32],
-            sstatus: sstatus.bits(),
+            sstatus,
             sepc: entry,
             // The following regs will be stored in asm funciton __restore
             // So we don't need to save them here

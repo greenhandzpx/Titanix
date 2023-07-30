@@ -29,7 +29,10 @@ ifneq ($(STRACE), )
 endif
 ifneq ($(SUBMIT), )
 	KERNEL_FEATURES += submit
+else
+	KERNEL_FEATURES += stack_trace
 endif
+
 ifneq ($(TMPFS), )
 	KERNEL_FEATURES += tmpfs
 endif

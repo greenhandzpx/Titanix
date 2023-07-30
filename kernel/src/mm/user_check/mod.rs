@@ -5,7 +5,7 @@ use riscv::register::{scause::Scause, stvec, utvec::TrapMode};
 
 use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
-    processor::{current_process, current_task, local_hart, SumGuard},
+    processor::{current_process, current_task, SumGuard},
     signal::SIGSEGV,
     stack_trace,
     sync::mutex::SieGuard,
@@ -184,7 +184,10 @@ impl UserCheck {
                 #[cfg(feature = "stack_trace")]
                 {
                     warn!("backtrace:");
-                    local_hart().env().stack_tracker.print_stacks();
+                    crate::processor::local_hart()
+                        .env()
+                        .stack_tracker
+                        .print_stacks();
                 }
                 // exit_and_terminate_all_threads(0);
                 return Err(SyscallErr::EFAULT);

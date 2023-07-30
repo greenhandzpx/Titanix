@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::String, sync::Arc};
+use alloc::{boxed::Box, sync::Arc};
 use log::{debug, info, trace, warn};
 use riscv::register::scause::{Exception, Scause, Trap};
 

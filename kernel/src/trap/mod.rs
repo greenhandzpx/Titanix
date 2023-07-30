@@ -1,5 +1,5 @@
 //! Trap handling functionality
-mod context;
+mod ctx;
 /// Kernel trap handler
 pub mod kernel_trap;
 /// User trap handler
@@ -40,5 +40,5 @@ pub fn enable_timer_interrupt() {
     }
 }
 
-pub use context::TrapContext;
-pub use context::UserContext;
+pub use ctx::TrapContext;
+pub use ctx::UserContext;

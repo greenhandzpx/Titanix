@@ -15,7 +15,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{SHUT_RD, SHUT_WR},
+    net::SHUT_WR,
     processor::SumGuard,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };

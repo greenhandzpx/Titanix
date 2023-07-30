@@ -6,6 +6,7 @@ use core::mem::size_of;
 
 /// Supervisor Status Register
 #[derive(Clone, Copy, Debug)]
+#[repr(C)]
 pub struct Sstatus {
     bits: usize,
 }
@@ -114,6 +115,12 @@ impl Sstatus {
     #[inline]
     pub fn set_spp(&mut self, val: SPP) {
         self.bits.set_bit(8, val == SPP::Supervisor);
+    }
+
+    #[inline]
+    pub fn set_fs(&mut self, fs: FS) {
+        let v: u8 = unsafe { core::mem::transmute(fs) };
+        self.bits.set_bits(13..15, v as usize);
     }
 }
 

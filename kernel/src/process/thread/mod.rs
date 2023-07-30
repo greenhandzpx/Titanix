@@ -189,17 +189,17 @@ impl Thread {
         match signo {
             SIGKILL => {
                 log::info!("[Thread::recv_signal] thread {} recv SIGKILL", self.tid(),);
-                self.mailbox.send_event(Event::THREAD_EXIT);
+                self.mailbox.recv_event(Event::THREAD_EXIT);
             }
             SIGCHLD => {
                 log::info!("[Thread::recv_signal] thread {} recv SIGCHLD", self.tid(),);
-                if !self.sig_queue.lock().blocked_sigs.contain_sig(signo) {
-                    self.mailbox.send_event(Event::CHILD_EXIT);
-                }
+                // if !self.sig_queue.lock().blocked_sigs.contain_sig(signo) {
+                self.mailbox.recv_event(Event::CHILD_EXIT);
+                // }
             }
             _ => {
                 if !self.sig_queue.lock().blocked_sigs.contain_sig(signo) {
-                    self.mailbox.send_event(Event::OTHER_SIGNAL);
+                    self.mailbox.recv_event(Event::OTHER_SIGNAL);
                 }
             }
         };

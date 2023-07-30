@@ -5,6 +5,7 @@ use core::mem::size_of;
 
 /// scause register
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct Scause {
     bits: usize,
 }

@@ -11,7 +11,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_RD, SHUT_WR},
+    net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_WR},
     process::thread,
     processor::{current_task, SumGuard},
     sync::Event,
@@ -294,7 +294,6 @@ impl<'a> Future for TcpAcceptFuture<'a> {
         ret
     }
 }
-
 
 struct TcpRecvFuture<'a> {
     socket: &'a TcpSocket,
