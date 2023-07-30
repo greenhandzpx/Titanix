@@ -159,6 +159,7 @@ pub fn sys_rt_sigreturn() -> SyscallRet {
     signal_context
         .user_context
         .restore_trap_context(trap_context_mut);
+
     info!(
         "[sys_rt_sigreturn] sig return, sepc {:#x}",
         trap_context_mut.sepc

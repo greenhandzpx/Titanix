@@ -15,6 +15,7 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
+    net::SHUT_WR,
     processor::SumGuard,
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
@@ -49,6 +50,7 @@ impl UdpSocket {
         );
         let socket = socket::udp::Socket::new(rx_buf, tx_buf);
         let socket_handler = NET_INTERFACE.add_socket(socket);
+        log::info!("[UdpSocket::new] new {}", socket_handler);
         NET_INTERFACE.poll();
         Self {
             inner: Mutex::new(UdpSocketInner {
@@ -58,7 +60,10 @@ impl UdpSocket {
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
             socket_handler,
-            file_meta: FileMeta::new(OpenFlags::CLOEXEC | OpenFlags::RDWR),
+            file_meta: FileMeta::new(
+                OpenFlags::CLOEXEC | OpenFlags::RDWR,
+                crate::fs::InodeMode::FileSOCK,
+            ),
         }
     }
 
@@ -141,8 +146,8 @@ impl UdpSocket {
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
             // TODO: not sure
             match how {
-                SHUT_RD => {
-                    log::warn!("[UdpSocket::shutdown] close read end");
+                SHUT_WR => {
+                    log::warn!("[UdpSocket::shutdown] close write end");
                 }
                 _ => socket.close(),
             }
@@ -169,12 +174,12 @@ impl Drop for UdpSocket {
 
 impl File for UdpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
-        log::info!("[Udp::read] enter");
+        log::info!("[Udp::read] {} enter", self.socket_handler);
         Box::pin(UdpRecvFuture::new(self, buf))
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
-        log::info!("[Udp::write] enter");
+        log::info!("[Udp::write] {} enter", self.socket_handler);
         Box::pin(UdpSendFuture::new(self, buf))
     }
 
@@ -187,10 +192,11 @@ impl File for UdpSocket {
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        debug!("[Udp::pollin] enter");
+        debug!("[Udp::pollin] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
             if socket.can_recv() {
+                log::info!("[Udp::pollin] {} recv buf have item", self.socket_handler);
                 Ok(true)
             } else {
                 if let Some(waker) = waker {
@@ -202,10 +208,11 @@ impl File for UdpSocket {
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        debug!("[Udp::pollout] enter");
+        debug!("[Udp::pollout] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
             if socket.can_send() {
+                log::info!("[Udp::pollout] {} tx buf have slots", self.socket_handler);
                 Ok(true)
             } else {
                 if let Some(waker) = waker {
@@ -262,6 +269,7 @@ impl<'a> Future for UdpRecvFuture<'a> {
                     remote
                 );
                 this.socket.inner.lock().remote_endpoint = remote;
+                log::debug!("[UdpRecvFuture::poll] recv {} bytes", ret);
                 Ok(ret)
             })
         });
@@ -318,6 +326,7 @@ impl<'a> Future for UdpSendFuture<'a> {
                     Err(SyscallErr::ENOBUFS)
                 }
             } else {
+                log::debug!("[UdpSendFuture::poll] send {} bytes", len);
                 Ok(len)
             })
             // Poll::Ready({

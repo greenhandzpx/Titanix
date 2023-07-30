@@ -51,7 +51,7 @@ impl Mailbox {
     }
 
     /// Send event to this mailbox
-    pub fn send_event(&self, event: Event) {
+    pub fn recv_event(&self, event: Event) {
         stack_trace!();
         log::info!("[send_event] send event {:?}...", event);
         let mut inner = self.inner.lock();

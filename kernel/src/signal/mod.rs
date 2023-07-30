@@ -6,18 +6,16 @@ use crate::{
     trap::UserContext,
 };
 
-mod signal_context;
-mod signal_handler;
+mod ctx;
+mod handler;
 pub mod signal_queue;
-pub use signal_context::SignalContext;
-pub use signal_context::SignalTrampoline;
-pub use signal_handler::SIG_DFL;
-pub use signal_handler::SIG_ERR;
-pub use signal_handler::SIG_IGN;
+pub use ctx::SignalContext;
+pub use ctx::SignalTrampoline;
+pub use handler::SIG_DFL;
+pub use handler::SIG_ERR;
+pub use handler::SIG_IGN;
 
-pub use self::signal_handler::{
-    core_sig_handler, ign_sig_handler, stop_sig_handler, term_sig_handler,
-};
+pub use self::handler::{core_sig_handler, ign_sig_handler, stop_sig_handler, term_sig_handler};
 
 pub type Signal = usize;
 
@@ -264,16 +262,21 @@ fn handle_signal(signo: Signal, sig_action: KSigAction, old_blocked_sigs: SigSet
 }
 
 fn save_context_for_sig_handler(blocked_sigs: SigSet) {
-    // save old sig mask
+    // Save old sig mask
     // and save old user trap context
     log::debug!(
         "[save_context_for_sig_handler] old blocked sigs {:?}",
         blocked_sigs
     );
+
+    // Save float regs if needed
+    current_trap_cx().user_fx.encounter_signal();
+
     let mut signal_context = SignalContext::new(
         blocked_sigs,
-        UserContext::from_trap_context(current_task().trap_context_ref()),
+        UserContext::from_trap_context(current_trap_cx()),
     );
+
     signal_context.user_context.user_x[0] = signal_context.user_context.sepc;
     debug!(
         "[save_context_for_sig_handler] sepc {:#x}",

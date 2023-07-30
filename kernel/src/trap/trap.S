@@ -61,9 +61,6 @@ __return_to_user:
     # a0: *TrapContext in user space(Constant); a1: user space token
     # switch to user space
 
-    # User and Kernel use one pagetable, therefore no need to flush TLB
-    # csrw satp, a1
-    # sfence.vma
     # let sscratch store the trap context's address
     csrw sscratch, a0
     # save kernel callee-saved regs
@@ -93,7 +90,6 @@ __return_to_user:
     csrw sepc, t1
     # restore general purpose registers except x0/sp/
     ld x1, 1*8(sp)
-    # (x4 is tp)
     .set n, 3
     .rept 29
         LOAD_GP %n

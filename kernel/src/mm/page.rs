@@ -54,6 +54,7 @@ pub struct PageBuilder {
 impl PageBuilder {
     /// Construct a page builder
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             offset: None,
             inode: None,
@@ -77,6 +78,7 @@ impl PageBuilder {
     }
     /// Page map permission
     pub fn permission(mut self, permission: MapPermission) -> Self {
+        // stack_trace!();
         // if permission.bits() == 0 {
         //     warn!("permission None: {:?}", permission);
         // }
@@ -95,6 +97,7 @@ impl PageBuilder {
     }
     /// Page's physical page frame
     pub fn physical_frame(mut self, frame: FrameTracker) -> Self {
+        stack_trace!();
         self.physical_frame = Some(frame);
         self
     }

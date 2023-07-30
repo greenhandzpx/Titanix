@@ -136,7 +136,7 @@ impl File for Pipe {
 
 impl Pipe {
     pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
-        let meta = FileMeta::new(OpenFlags::RDONLY);
+        let meta = FileMeta::new(OpenFlags::RDONLY, super::InodeMode::FileFIFO);
         Self {
             readable: true,
             writable: false,
@@ -145,7 +145,7 @@ impl Pipe {
         }
     }
     pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
-        let meta = FileMeta::new(OpenFlags::WRONLY);
+        let meta = FileMeta::new(OpenFlags::WRONLY, super::InodeMode::FileFIFO);
         Self {
             readable: false,
             writable: true,

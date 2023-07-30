@@ -39,8 +39,10 @@ pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
 
 /// shutdown
+#[allow(unused)]
 pub const SHUT_RD: u32 = 0;
 pub const SHUT_WR: u32 = 1;
+#[allow(unused)]
 pub const SHUT_RDWR: u32 = 2;
 
 bitflags! {
@@ -55,7 +57,8 @@ bitflags! {
     }
 }
 
-pub const MAX_BUFFER_SIZE: usize = (1 << 16) - 1;
+// pub const MAX_BUFFER_SIZE: usize = 1 << 15;
+pub const MAX_BUFFER_SIZE: usize = 1 << 12;
 
 pub enum Socket {
     TcpSocket(TcpSocket),
@@ -309,6 +312,17 @@ impl Socket {
             Socket::TcpSocket(ref socket) => socket.shutdown(how),
             Socket::UdpSocket(ref socket) => socket.shutdown(how),
             _ => todo!(),
+        }
+    }
+
+    pub fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet {
+        match *self {
+            Socket::TcpSocket(ref socket) => {
+                socket.set_nagle_enabled(enabled);
+                Ok(0)
+            }
+            Socket::UdpSocket(_) => Err(SyscallErr::EOPNOTSUPP),
+            Socket::UnixSocket(_) => Err(SyscallErr::EOPNOTSUPP),
         }
     }
 }

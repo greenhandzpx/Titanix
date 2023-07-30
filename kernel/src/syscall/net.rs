@@ -17,6 +17,7 @@ const SOL_TCP: u32 = 6;
 const TCP_MAXSEG: u32 = 2;
 const SO_SNDBUF: u32 = 7;
 const SO_RCVBUF: u32 = 8;
+const TCP_NODELAY: u32 = 1;
 
 pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
     stack_trace!();
@@ -252,13 +253,13 @@ pub fn sys_setsockopt(
 ) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
+    let socket = current_process()
+        .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
+        .ok_or(SyscallErr::ENOTSOCK)?;
     match (level, optname) {
         (SOL_SOCKET, SO_SNDBUF | SO_RCVBUF) => {
             UserCheck::new().check_readable_slice(optval_ptr as *mut u8, optlen as usize)?;
             let size = unsafe { *(optval_ptr as *mut u32) };
-            let socket = current_process()
-                .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
-                .ok_or(SyscallErr::ENOTSOCK)?;
             match optname {
                 SO_SNDBUF => {
                     socket.set_send_buf_size(size as usize);
@@ -268,6 +269,10 @@ pub fn sys_setsockopt(
                 }
                 _ => {}
             }
+        }
+        (SOL_TCP, TCP_NODELAY) => {
+            // close Nagle’s Algorithm
+            socket.set_nagle_enabled(false)?;
         }
         _ => {
             log::warn!("[sys_setsockopt] level: {}, optname: {}", level, optname);

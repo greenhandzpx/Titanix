@@ -1,7 +1,9 @@
 use log::warn;
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
-    sepc, stval,
+    sepc,
+    sstatus::FS,
+    stval,
 };
 
 use crate::{
@@ -194,15 +196,20 @@ pub fn trap_return() {
     unsafe {
         (*current_task().inner.get()).time_info.when_trap_ret();
 
+        // Restore the float regs if needed.
+        // Two cases that may need to restore regs:
+        // 1. This task has yielded after last trap
+        // 2. This task encounter a signal handler
         current_trap_cx().user_fx.restore();
-        // if (current_trap_cx().user_x[2] as isize) < 0 {
-        //     log::warn!("[trap_return] sp {:#x}", current_trap_cx().user_x[2]);
-        // }
+        current_trap_cx().sstatus.set_fs(FS::Clean);
 
         __return_to_user(current_trap_cx());
 
+        current_trap_cx()
+            .user_fx
+            .mark_save_if_needed(current_trap_cx().sstatus);
         // Next trap will arrive here
-        current_trap_cx().user_fx.save();
+        // current_trap_cx().user_fx.save();
 
         (*current_task().inner.get()).time_info.when_trap_in();
     }

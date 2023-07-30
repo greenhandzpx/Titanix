@@ -21,6 +21,7 @@ const USEC_PER_SEC: usize = 1000000;
 /// for clock_gettime
 pub const CLOCK_REALTIME: usize = 0;
 pub const CLOCK_MONOTONIC: usize = 1;
+pub const CLOCK_PROCESS_CPUTIME_ID: usize = 2;
 
 /// for utimensat
 pub const UTIME_NOW: usize = 1073741823;

@@ -101,6 +101,7 @@ impl Inode for MeminfoInode {
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),
+                    mode: InodeMode::FileREG,
                     pos: 0,
                     dirent_index: 0,
                 }),

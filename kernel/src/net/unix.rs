@@ -23,7 +23,10 @@ pub struct UnixSocket {
 impl UnixSocket {
     pub fn new() -> Self {
         Self {
-            file_meta: FileMeta::new(OpenFlags::CLOEXEC | OpenFlags::NONBLOCK | OpenFlags::RDWR),
+            file_meta: FileMeta::new(
+                OpenFlags::CLOEXEC | OpenFlags::NONBLOCK | OpenFlags::RDWR,
+                crate::fs::InodeMode::FileSOCK,
+            ),
             buf: Mutex::new(VecDeque::new()),
         }
     }

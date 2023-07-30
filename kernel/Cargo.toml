@@ -40,17 +40,17 @@ fu740-hal = { path = "../dependencies/fu740-hal" }
 [features]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "tmpfs"]
-default = ["stack_trace", "kernel_interrupt"]
+default = ["kernel_interrupt"]
+stack_trace = []
 board_qemu = []
 board_u740 = []
-stack_trace = []
 kernel_interrupt = []
 user_spin = []
 strace = []
 multi_hart = []
 submit = []
-async_flush = []
-tmpfs = []
+async_flush = []  # flush dirty blocks to disk asynchronously
+tmpfs = []  # rootfs is tmpfs
 preliminary = []
 
 [profile.release]
