@@ -69,6 +69,7 @@ impl TtyFile {
                 inner: Mutex::new(FileMetaInner {
                     flags,
                     inode: Some(this),
+                    mode: crate::fs::InodeMode::FileCHR,
                     pos: 0,
                     dirent_index: 0,
                 }),

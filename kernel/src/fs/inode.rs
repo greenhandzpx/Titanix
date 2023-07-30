@@ -184,6 +184,7 @@ pub trait Inode: Send + Sync {
             inner: Mutex::new(FileMetaInner {
                 flags,
                 inode: Some(this),
+                mode: self.metadata().mode,
                 pos: 0,
                 dirent_index: 0,
             }),

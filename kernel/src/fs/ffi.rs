@@ -368,3 +368,21 @@ impl FdSet {
 pub const SEEK_SET: u8 = 0;
 pub const SEEK_CUR: u8 = 1;
 pub const SEEK_END: u8 = 2;
+
+#[repr(C)]
+pub struct WinSize {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16, /* unused */
+    ws_ypixel: u16, /* unused */
+}
+impl Default for WinSize {
+    fn default() -> Self {
+        Self {
+            ws_row: 59,
+            ws_col: 221,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        }
+    }
+}

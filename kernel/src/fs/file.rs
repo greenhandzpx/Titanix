@@ -17,7 +17,7 @@ use crate::{
     },
 };
 
-use super::{inode::Inode, Mutex, OpenFlags};
+use super::{inode::Inode, InodeMode, Mutex, OpenFlags};
 
 pub struct FileMeta {
     /// Mutable,
@@ -30,11 +30,12 @@ impl FileMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
         f(&mut self.inner.lock())
     }
-    pub fn new(flags: OpenFlags) -> Self {
+    pub fn new(flags: OpenFlags, mode: InodeMode) -> Self {
         Self {
             inner: Mutex::new(FileMetaInner {
                 flags,
                 inode: None,
+                mode,
                 pos: 0,
                 dirent_index: 0,
             }),
@@ -47,6 +48,8 @@ pub struct FileMetaInner {
     pub flags: OpenFlags,
     /// inode to which this file refers
     pub inode: Option<Arc<dyn Inode>>,
+    /// file type (the same as InodeMode)
+    pub mode: InodeMode,
     /// file offset
     pub pos: usize,
     // TODO: add more like file version
