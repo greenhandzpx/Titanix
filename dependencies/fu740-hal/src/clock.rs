@@ -120,7 +120,7 @@ impl ClockSetup {
 
     pub fn pclk<F: Into<Hertz>>(mut self, freq: F) -> Self {
         let freq = freq.into().0;
-        assert!(freq < 125_000_000);
+        // assert!(freq < 125_000_000);
 
         self.pclk = Some(freq);
         self

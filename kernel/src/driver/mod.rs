@@ -7,7 +7,7 @@ use core::{
 };
 
 use self::{
-    fu740::{prci::init_prci, sdcard::SDCardWrapper, uart::UartSerial},
+    fu740::{sdcard::SDCardWrapper, uart::UartSerial},
     qemu::virtio_blk::VirtIOBlock,
     sbi::{console_putchar, SbiChar},
 };
@@ -62,7 +62,8 @@ pub fn init() {
     init_block_device();
     #[cfg(feature = "board_u740")]
     {
-        init_prci();
+        fu740::plic::init_plic();
+        fu740::prci::init_prci();
     }
 }
 

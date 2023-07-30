@@ -148,65 +148,114 @@ pub struct RegisterBlock {
     #[doc = "0x1008 - PENDING Register for interrupt ids 69 to 64"]
     pub pending_2: crate::Reg<pending_2::PENDING_2_SPEC>,
     _reserved72: [u8; 0x0ff4],
-    #[doc = "0x2000 - ENABLE Register for interrupt ids 31 to 0 for hart 0"]
-    pub enable_0_0: crate::Reg<enable_0_0::ENABLE_0_0_SPEC>,
-    #[doc = "0x2004 - ENABLE Register for interrupt ids 63 to 32 for hart 0"]
-    pub enable_1_0: crate::Reg<enable_1_0::ENABLE_1_0_SPEC>,
-    #[doc = "0x2008 - ENABLE Register for interrupt ids 69 to 64 for hart 0"]
-    pub enable_2_0: crate::Reg<enable_2_0::ENABLE_2_0_SPEC>,
+    #[doc = "0x2000 - ENABLE Register for interrupt ids 31 to 0 for hart 0 M-Mode"]
+    pub enable_0_0M: crate::Reg<enable_0_0M::ENABLE_0_0M_SPEC>,
+    #[doc = "0x2004 - ENABLE Register for interrupt ids 63 to 32 for hart 0 M-Mode"]
+    pub enable_1_0M: crate::Reg<enable_1_0M::ENABLE_1_0M_SPEC>,
+    #[doc = "0x2008 - ENABLE Register for interrupt ids 69 to 64 for hart 0 M-Mode"]
+    pub enable_2_0M: crate::Reg<enable_2_0M::ENABLE_2_0M_SPEC>,
     _reserved75: [u8; 0x74],
-    #[doc = "0x2080 - ENABLE Register for interrupt ids 31 to 0 for hart 1"]
-    pub enable_0_1: crate::Reg<enable_0_1::ENABLE_0_1_SPEC>,
-    #[doc = "0x2084 - ENABLE Register for interrupt ids 63 to 32 for hart 1"]
-    pub enable_1_1: crate::Reg<enable_1_1::ENABLE_1_1_SPEC>,
-    #[doc = "0x2088 - ENABLE Register for interrupt ids 69 to 64 for hart 1"]
-    pub enable_2_1: crate::Reg<enable_2_1::ENABLE_2_1_SPEC>,
+    #[doc = "0x2080 - ENABLE Register for interrupt ids 31 to 0 for hart 1 M-Mode"]
+    pub enable_0_1M: crate::Reg<enable_0_1M::ENABLE_0_1M_SPEC>,
+    #[doc = "0x2084 - ENABLE Register for interrupt ids 63 to 32 for hart 1 M-Mode"]
+    pub enable_1_1M: crate::Reg<enable_1_1M::ENABLE_1_1M_SPEC>,
+    #[doc = "0x2088 - ENABLE Register for interrupt ids 69 to 64 for hart 1 M-Mode"]
+    pub enable_2_1M: crate::Reg<enable_2_1M::ENABLE_2_1M_SPEC>,
     _reserved78: [u8; 0x74],
-    #[doc = "0x2100 - ENABLE Register for interrupt ids 31 to 0 for hart 2"]
-    pub enable_0_2: crate::Reg<enable_0_2::ENABLE_0_2_SPEC>,
-    #[doc = "0x2104 - ENABLE Register for interrupt ids 63 to 32 for hart 2"]
-    pub enable_1_2: crate::Reg<enable_1_2::ENABLE_1_2_SPEC>,
-    #[doc = "0x2108 - ENABLE Register for interrupt ids 69 to 64 for hart 2"]
-    pub enable_2_2: crate::Reg<enable_2_2::ENABLE_2_2_SPEC>,
+    #[doc = "0x2100 - ENABLE Register for interrupt ids 31 to 0 for hart 1 S-Mode"]
+    pub enable_0_1S: crate::Reg<enable_0_1S::ENABLE_0_1S_SPEC>,
+    #[doc = "0x2104 - ENABLE Register for interrupt ids 63 to 32 for hart 1 S-Mode"]
+    pub enable_1_1S: crate::Reg<enable_1_1S::ENABLE_1_1S_SPEC>,
+    #[doc = "0x2108 - ENABLE Register for interrupt ids 69 to 64 for hart 1 S-Mode"]
+    pub enable_2_1S: crate::Reg<enable_2_1S::ENABLE_2_1S_SPEC>,
     _reserved81: [u8; 0x74],
-    #[doc = "0x2180 - ENABLE Register for interrupt ids 31 to 0 for hart 3"]
-    pub enable_0_3: crate::Reg<enable_0_3::ENABLE_0_3_SPEC>,
-    #[doc = "0x2184 - ENABLE Register for interrupt ids 63 to 32 for hart 3"]
-    pub enable_1_3: crate::Reg<enable_1_3::ENABLE_1_3_SPEC>,
-    #[doc = "0x2188 - ENABLE Register for interrupt ids 69 to 64 for hart 3"]
-    pub enable_2_3: crate::Reg<enable_2_3::ENABLE_2_3_SPEC>,
+    #[doc = "0x2180 - ENABLE Register for interrupt ids 31 to 0 for hart 2 M-Mode"]
+    pub enable_0_2M: crate::Reg<enable_0_2M::ENABLE_0_2M_SPEC>,
+    #[doc = "0x2184 - ENABLE Register for interrupt ids 63 to 32 for hart 2 M-Mode"]
+    pub enable_1_2M: crate::Reg<enable_1_2M::ENABLE_1_2M_SPEC>,
+    #[doc = "0x2188 - ENABLE Register for interrupt ids 69 to 64 for hart 2 M-Mode"]
+    pub enable_2_2M: crate::Reg<enable_2_2M::ENABLE_2_2M_SPEC>,
     _reserved84: [u8; 0x74],
-    #[doc = "0x2200 - ENABLE Register for interrupt ids 31 to 0 for hart 4"]
-    pub enable_0_4: crate::Reg<enable_0_4::ENABLE_0_4_SPEC>,
-    #[doc = "0x2204 - ENABLE Register for interrupt ids 63 to 32 for hart 4"]
-    pub enable_1_4: crate::Reg<enable_1_4::ENABLE_1_4_SPEC>,
-    #[doc = "0x2208 - ENABLE Register for interrupt ids 69 to 64 for hart 4"]
-    pub enable_2_4: crate::Reg<enable_2_4::ENABLE_2_4_SPEC>,
-    _reserved87: [u8; 0x001f_ddf4],
-    #[doc = "0x200000 - PRIORITY THRESHOLD Register for hart 0"]
-    pub threshold_0: crate::Reg<threshold_0::THRESHOLD_0_SPEC>,
-    #[doc = "0x200004 - CLAIM and COMPLETE Register for hart 0"]
-    pub claimplete_0: crate::Reg<claimplete_0::CLAIMPLETE_0_SPEC>,
+    #[doc = "0x2200 - ENABLE Register for interrupt ids 31 to 0 for hart 2 S-Mode"]
+    pub enable_0_2S: crate::Reg<enable_0_2S::ENABLE_0_2S_SPEC>,
+    #[doc = "0x2204 - ENABLE Register for interrupt ids 63 to 32 for hart 2 S-Mode"]
+    pub enable_1_2S: crate::Reg<enable_1_2S::ENABLE_1_2S_SPEC>,
+    #[doc = "0x2208 - ENABLE Register for interrupt ids 69 to 64 for hart 2 S-Mode"]
+    pub enable_2_2S: crate::Reg<enable_2_2S::ENABLE_2_2S_SPEC>,
+    _reserved_add0: [u8; 0x74],
+    #[doc = "0x2280 - ENABLE Register for interrupt ids 31 to 0 for hart 3 M-Mode"]
+    pub enable_0_3M: crate::Reg<enable_0_3M::ENABLE_0_3M_SPEC>,
+    #[doc = "0x2284 - ENABLE Register for interrupt ids 63 to 32 for hart 3 M-Mode"]
+    pub enable_1_3M: crate::Reg<enable_1_3M::ENABLE_1_3M_SPEC>,
+    #[doc = "0x2288 - ENABLE Register for interrupt ids 69 to 64 for hart 3 M-Mode"]
+    pub enable_2_3M: crate::Reg<enable_2_3M::ENABLE_2_3M_SPEC>,
+    _reserved_add1: [u8; 0x74],
+    #[doc = "0x2300 - ENABLE Register for interrupt ids 31 to 0 for hart 3 S-Mode"]
+    pub enable_0_3S: crate::Reg<enable_0_3S::ENABLE_0_3S_SPEC>,
+    #[doc = "0x2304 - ENABLE Register for interrupt ids 63 to 32 for hart 3 S-Mode"]
+    pub enable_1_3S: crate::Reg<enable_1_3S::ENABLE_1_3S_SPEC>,
+    #[doc = "0x2308 - ENABLE Register for interrupt ids 69 to 64 for hart 3 S-Mode"]
+    pub enable_2_3S: crate::Reg<enable_2_3S::ENABLE_2_3S_SPEC>,
+    _reserved_add2: [u8; 0x74],
+    #[doc = "0x2380 - ENABLE Register for interrupt ids 31 to 0 for hart 4 M-Mode"]
+    pub enable_0_4M: crate::Reg<enable_0_4M::ENABLE_0_4M_SPEC>,
+    #[doc = "0x2384 - ENABLE Register for interrupt ids 63 to 32 for hart 4 M-Mode"]
+    pub enable_1_4M: crate::Reg<enable_1_4M::ENABLE_1_4M_SPEC>,
+    #[doc = "0x2388 - ENABLE Register for interrupt ids 69 to 64 for hart 4 M-Mode"]
+    pub enable_2_4M: crate::Reg<enable_2_4M::ENABLE_2_4M_SPEC>,
+    _reserved_add3: [u8; 0x74],
+    #[doc = "0x2400 - ENABLE Register for interrupt ids 31 to 0 for hart 4 S-Mode"]
+    pub enable_0_4S: crate::Reg<enable_0_4S::ENABLE_0_4S_SPEC>,
+    #[doc = "0x2404 - ENABLE Register for interrupt ids 63 to 32 for hart 4 S-Mode"]
+    pub enable_1_4S: crate::Reg<enable_1_4S::ENABLE_1_4S_SPEC>,
+    #[doc = "0x2408 - ENABLE Register for interrupt ids 69 to 64 for hart 4 S-Mode"]
+    pub enable_2_4S: crate::Reg<enable_2_4S::ENABLE_2_4S_SPEC>,
+    _reserved87: [u8; 0x001f_dbf4],
+    #[doc = "0x200000 - PRIORITY THRESHOLD Register for hart 0 M-Mode"]
+    pub threshold_0M: crate::Reg<threshold_0M::THRESHOLD_0M_SPEC>,
+    #[doc = "0x200004 - CLAIM and COMPLETE Register for hart 0 M-Mode"]
+    pub claimplete_0M: crate::Reg<claimplete_0M::CLAIMPLETE_0M_SPEC>,
     _reserved89: [u8; 0x0ff8],
-    #[doc = "0x201000 - PRIORITY THRESHOLD Register for hart 1"]
-    pub threshold_1: crate::Reg<threshold_1::THRESHOLD_1_SPEC>,
-    #[doc = "0x201004 - CLAIM and COMPLETE Register for hart 1"]
-    pub claimplete_1: crate::Reg<claimplete_1::CLAIMPLETE_1_SPEC>,
+    #[doc = "0x201000 - PRIORITY THRESHOLD Register for hart 1 M-Mode"]
+    pub threshold_1M: crate::Reg<threshold_1M::THRESHOLD_1M_SPEC>,
+    #[doc = "0x201004 - CLAIM and COMPLETE Register for hart 1 M-Mode"]
+    pub claimplete_1M: crate::Reg<claimplete_1M::CLAIMPLETE_1M_SPEC>,
     _reserved91: [u8; 0x0ff8],
-    #[doc = "0x202000 - PRIORITY THRESHOLD Register for hart 2"]
-    pub threshold_2: crate::Reg<threshold_2::THRESHOLD_2_SPEC>,
-    #[doc = "0x202004 - CLAIM and COMPLETE Register for hart 2"]
-    pub claimplete_2: crate::Reg<claimplete_2::CLAIMPLETE_2_SPEC>,
+    #[doc = "0x202000 - PRIORITY THRESHOLD Register for hart 1 S-Mode"]
+    pub threshold_1S: crate::Reg<threshold_1S::THRESHOLD_1S_SPEC>,
+    #[doc = "0x202004 - CLAIM and COMPLETE Register for hart 1 S-Mode"]
+    pub claimplete_1S: crate::Reg<claimplete_1S::CLAIMPLETE_1S_SPEC>,
     _reserved93: [u8; 0x0ff8],
-    #[doc = "0x203000 - PRIORITY THRESHOLD Register for hart 3"]
-    pub threshold_3: crate::Reg<threshold_3::THRESHOLD_3_SPEC>,
-    #[doc = "0x203004 - CLAIM and COMPLETE Register for hart 3"]
-    pub claimplete_3: crate::Reg<claimplete_3::CLAIMPLETE_3_SPEC>,
+    #[doc = "0x203000 - PRIORITY THRESHOLD Register for hart 2 M-Mode"]
+    pub threshold_2M: crate::Reg<threshold_2M::THRESHOLD_2M_SPEC>,
+    #[doc = "0x203004 - CLAIM and COMPLETE Register for hart 2 M-Mode"]
+    pub claimplete_2M: crate::Reg<claimplete_2M::CLAIMPLETE_2M_SPEC>,
     _reserved95: [u8; 0x0ff8],
-    #[doc = "0x204000 - PRIORITY THRESHOLD Register for hart 4"]
-    pub threshold_4: crate::Reg<threshold_4::THRESHOLD_4_SPEC>,
-    #[doc = "0x204004 - CLAIM and COMPLETE Register for hart 4"]
-    pub claimplete_4: crate::Reg<claimplete_4::CLAIMPLETE_4_SPEC>,
+    #[doc = "0x204000 - PRIORITY THRESHOLD Register for hart 2 S-Mode"]
+    pub threshold_2S: crate::Reg<threshold_2S::THRESHOLD_2S_SPEC>,
+    #[doc = "0x204004 - CLAIM and COMPLETE Register for hart 2 S-Mode"]
+    pub claimplete_2S: crate::Reg<claimplete_2S::CLAIMPLETE_2S_SPEC>,
+    _reserved97: [u8; 0x0ff8],
+    #[doc = "0x205000 - PRIORITY THRESHOLD Register for hart 3 M-Mode"]
+    pub threshold_3M: crate::Reg<threshold_3M::THRESHOLD_3M_SPEC>,
+    #[doc = "0x205004 - CLAIM and COMPLETE Register for hart 3 M-Mode"]
+    pub claimplete_3M: crate::Reg<claimplete_3M::CLAIMPLETE_3M_SPEC>,
+    _reserved99: [u8; 0x0ff8],
+    #[doc = "0x206000 - PRIORITY THRESHOLD Register for hart 3 S-Mode"]
+    pub threshold_3S: crate::Reg<threshold_3S::THRESHOLD_3S_SPEC>,
+    #[doc = "0x206004 - CLAIM and COMPLETE Register for hart 3 S-Mode"]
+    pub claimplete_3S: crate::Reg<claimplete_3S::CLAIMPLETE_3S_SPEC>,
+    _reserved101: [u8; 0x0ff8],
+    #[doc = "0x207000 - PRIORITY THRESHOLD Register for hart 4 M-Mode"]
+    pub threshold_4M: crate::Reg<threshold_4M::THRESHOLD_4M_SPEC>,
+    #[doc = "0x207004 - CLAIM and COMPLETE Register for hart 4 M-Mode"]
+    pub claimplete_4M: crate::Reg<claimplete_4M::CLAIMPLETE_4M_SPEC>,
+    _reserved103: [u8; 0x0ff8],
+    #[doc = "0x208000 - PRIORITY THRESHOLD Register for hart 4 S-Mode"]
+    pub threshold_4S: crate::Reg<threshold_4S::THRESHOLD_4S_SPEC>,
+    #[doc = "0x208004 - CLAIM and COMPLETE Register for hart 4 S-Mode"]
+    pub claimplete_4S: crate::Reg<claimplete_4S::CLAIMPLETE_4S_SPEC>,
+    
 }
 #[doc = "priority_1 register accessor: an alias for `Reg<PRIORITY_1_SPEC>`"]
 pub type PRIORITY_1 = crate::Reg<priority_1::PRIORITY_1_SPEC>;
@@ -496,103 +545,183 @@ pub mod pending_1;
 pub type PENDING_2 = crate::Reg<pending_2::PENDING_2_SPEC>;
 #[doc = "PENDING Register for interrupt ids 69 to 64"]
 pub mod pending_2;
-#[doc = "enable_0_0 register accessor: an alias for `Reg<ENABLE_0_0_SPEC>`"]
-pub type ENABLE_0_0 = crate::Reg<enable_0_0::ENABLE_0_0_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 0"]
-pub mod enable_0_0;
-#[doc = "enable_1_0 register accessor: an alias for `Reg<ENABLE_1_0_SPEC>`"]
-pub type ENABLE_1_0 = crate::Reg<enable_1_0::ENABLE_1_0_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 0"]
-pub mod enable_1_0;
-#[doc = "enable_2_0 register accessor: an alias for `Reg<ENABLE_2_0_SPEC>`"]
-pub type ENABLE_2_0 = crate::Reg<enable_2_0::ENABLE_2_0_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 0"]
-pub mod enable_2_0;
-#[doc = "enable_0_1 register accessor: an alias for `Reg<ENABLE_0_1_SPEC>`"]
-pub type ENABLE_0_1 = crate::Reg<enable_0_1::ENABLE_0_1_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 1"]
-pub mod enable_0_1;
-#[doc = "enable_1_1 register accessor: an alias for `Reg<ENABLE_1_1_SPEC>`"]
-pub type ENABLE_1_1 = crate::Reg<enable_1_1::ENABLE_1_1_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 1"]
-pub mod enable_1_1;
-#[doc = "enable_2_1 register accessor: an alias for `Reg<ENABLE_2_1_SPEC>`"]
-pub type ENABLE_2_1 = crate::Reg<enable_2_1::ENABLE_2_1_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 1"]
-pub mod enable_2_1;
-#[doc = "enable_0_2 register accessor: an alias for `Reg<ENABLE_0_2_SPEC>`"]
-pub type ENABLE_0_2 = crate::Reg<enable_0_2::ENABLE_0_2_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 2"]
-pub mod enable_0_2;
-#[doc = "enable_1_2 register accessor: an alias for `Reg<ENABLE_1_2_SPEC>`"]
-pub type ENABLE_1_2 = crate::Reg<enable_1_2::ENABLE_1_2_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 2"]
-pub mod enable_1_2;
-#[doc = "enable_2_2 register accessor: an alias for `Reg<ENABLE_2_2_SPEC>`"]
-pub type ENABLE_2_2 = crate::Reg<enable_2_2::ENABLE_2_2_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 2"]
-pub mod enable_2_2;
-#[doc = "enable_0_3 register accessor: an alias for `Reg<ENABLE_0_3_SPEC>`"]
-pub type ENABLE_0_3 = crate::Reg<enable_0_3::ENABLE_0_3_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 3"]
-pub mod enable_0_3;
-#[doc = "enable_1_3 register accessor: an alias for `Reg<ENABLE_1_3_SPEC>`"]
-pub type ENABLE_1_3 = crate::Reg<enable_1_3::ENABLE_1_3_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 3"]
-pub mod enable_1_3;
-#[doc = "enable_2_3 register accessor: an alias for `Reg<ENABLE_2_3_SPEC>`"]
-pub type ENABLE_2_3 = crate::Reg<enable_2_3::ENABLE_2_3_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 3"]
-pub mod enable_2_3;
-#[doc = "enable_0_4 register accessor: an alias for `Reg<ENABLE_0_4_SPEC>`"]
-pub type ENABLE_0_4 = crate::Reg<enable_0_4::ENABLE_0_4_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 4"]
-pub mod enable_0_4;
-#[doc = "enable_1_4 register accessor: an alias for `Reg<ENABLE_1_4_SPEC>`"]
-pub type ENABLE_1_4 = crate::Reg<enable_1_4::ENABLE_1_4_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 4"]
-pub mod enable_1_4;
-#[doc = "enable_2_4 register accessor: an alias for `Reg<ENABLE_2_4_SPEC>`"]
-pub type ENABLE_2_4 = crate::Reg<enable_2_4::ENABLE_2_4_SPEC>;
-#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 4"]
-pub mod enable_2_4;
-#[doc = "threshold_0 register accessor: an alias for `Reg<THRESHOLD_0_SPEC>`"]
-pub type THRESHOLD_0 = crate::Reg<threshold_0::THRESHOLD_0_SPEC>;
-#[doc = "PRIORITY THRESHOLD Register for hart 0"]
-pub mod threshold_0;
-#[doc = "claimplete_0 register accessor: an alias for `Reg<CLAIMPLETE_0_SPEC>`"]
-pub type CLAIMPLETE_0 = crate::Reg<claimplete_0::CLAIMPLETE_0_SPEC>;
-#[doc = "CLAIM and COMPLETE Register for hart 0"]
-pub mod claimplete_0;
-#[doc = "threshold_1 register accessor: an alias for `Reg<THRESHOLD_1_SPEC>`"]
-pub type THRESHOLD_1 = crate::Reg<threshold_1::THRESHOLD_1_SPEC>;
-#[doc = "PRIORITY THRESHOLD Register for hart 1"]
-pub mod threshold_1;
-#[doc = "claimplete_1 register accessor: an alias for `Reg<CLAIMPLETE_1_SPEC>`"]
-pub type CLAIMPLETE_1 = crate::Reg<claimplete_1::CLAIMPLETE_1_SPEC>;
-#[doc = "CLAIM and COMPLETE Register for hart 1"]
-pub mod claimplete_1;
-#[doc = "threshold_2 register accessor: an alias for `Reg<THRESHOLD_2_SPEC>`"]
-pub type THRESHOLD_2 = crate::Reg<threshold_2::THRESHOLD_2_SPEC>;
-#[doc = "PRIORITY THRESHOLD Register for hart 2"]
-pub mod threshold_2;
-#[doc = "claimplete_2 register accessor: an alias for `Reg<CLAIMPLETE_2_SPEC>`"]
-pub type CLAIMPLETE_2 = crate::Reg<claimplete_2::CLAIMPLETE_2_SPEC>;
-#[doc = "CLAIM and COMPLETE Register for hart 2"]
-pub mod claimplete_2;
-#[doc = "threshold_3 register accessor: an alias for `Reg<THRESHOLD_3_SPEC>`"]
-pub type THRESHOLD_3 = crate::Reg<threshold_3::THRESHOLD_3_SPEC>;
-#[doc = "PRIORITY THRESHOLD Register for hart 3"]
-pub mod threshold_3;
-#[doc = "claimplete_3 register accessor: an alias for `Reg<CLAIMPLETE_3_SPEC>`"]
-pub type CLAIMPLETE_3 = crate::Reg<claimplete_3::CLAIMPLETE_3_SPEC>;
-#[doc = "CLAIM and COMPLETE Register for hart 3"]
-pub mod claimplete_3;
-#[doc = "threshold_4 register accessor: an alias for `Reg<THRESHOLD_4_SPEC>`"]
-pub type THRESHOLD_4 = crate::Reg<threshold_4::THRESHOLD_4_SPEC>;
-#[doc = "PRIORITY THRESHOLD Register for hart 4"]
-pub mod threshold_4;
-#[doc = "claimplete_4 register accessor: an alias for `Reg<CLAIMPLETE_4_SPEC>`"]
-pub type CLAIMPLETE_4 = crate::Reg<claimplete_4::CLAIMPLETE_4_SPEC>;
-#[doc = "CLAIM and COMPLETE Register for hart 4"]
-pub mod claimplete_4;
+#[doc = "enable_0_0M register accessor: an alias for `Reg<ENABLE_0_0M_SPEC>`"]
+pub type ENABLE_0_0M = crate::Reg<enable_0_0M::ENABLE_0_0M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 0 M-Mode"]
+pub mod enable_0_0M;
+#[doc = "enable_1_0M register accessor: an alias for `Reg<ENABLE_1_0M_SPEC>`"]
+pub type ENABLE_1_0M = crate::Reg<enable_1_0M::ENABLE_1_0M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 0 M-Mode"]
+pub mod enable_1_0M;
+#[doc = "enable_2_0M register accessor: an alias for `Reg<ENABLE_2_0M_SPEC>`"]
+pub type ENABLE_2_0M = crate::Reg<enable_2_0M::ENABLE_2_0M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 0 M-Mode"]
+pub mod enable_2_0M;
+#[doc = "enable_0_1M register accessor: an alias for `Reg<ENABLE_0_1M_SPEC>`"]
+pub type ENABLE_0_1M = crate::Reg<enable_0_1M::ENABLE_0_1M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 1 M-Mode"]
+pub mod enable_0_1M;
+#[doc = "enable_1_1M register accessor: an alias for `Reg<ENABLE_1_1M_SPEC>`"]
+pub type ENABLE_1_1M = crate::Reg<enable_1_1M::ENABLE_1_1M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 1 M-Mode"]
+pub mod enable_1_1M;
+#[doc = "enable_2_1M register accessor: an alias for `Reg<ENABLE_2_1M_SPEC>`"]
+pub type ENABLE_2_1M = crate::Reg<enable_2_1M::ENABLE_2_1M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 1 M-Mode"]
+pub mod enable_2_1M;
+#[doc = "enable_0_1S register accessor: an alias for `Reg<ENABLE_0_1S_SPEC>`"]
+pub type ENABLE_0_1S = crate::Reg<enable_0_1S::ENABLE_0_1S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 1 S-Mode"]
+pub mod enable_0_1S;
+#[doc = "enable_1_1S register accessor: an alias for `Reg<ENABLE_1_1S_SPEC>`"]
+pub type ENABLE_1_1S = crate::Reg<enable_1_1S::ENABLE_1_1S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 1 S-Mode"]
+pub mod enable_1_1S;
+#[doc = "enable_2_1S register accessor: an alias for `Reg<ENABLE_2_1S_SPEC>`"]
+pub type ENABLE_2_1S = crate::Reg<enable_2_1S::ENABLE_2_1S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 1 S-Mode"]
+pub mod enable_2_1S;
+#[doc = "enable_0_2M register accessor: an alias for `Reg<ENABLE_0_2M_SPEC>`"]
+pub type ENABLE_0_2M = crate::Reg<enable_0_2M::ENABLE_0_2M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 2 M-Mode"]
+pub mod enable_0_2M;
+#[doc = "enable_1_2M register accessor: an alias for `Reg<ENABLE_1_2M_SPEC>`"]
+pub type ENABLE_1_2M = crate::Reg<enable_1_2M::ENABLE_1_2M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 2 M-Mode"]
+pub mod enable_1_2M;
+#[doc = "enable_2_2M register accessor: an alias for `Reg<ENABLE_2_2M_SPEC>`"]
+pub type ENABLE_2_2M = crate::Reg<enable_2_2M::ENABLE_2_2M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 2 M-Mode"]
+pub mod enable_2_2M;
+#[doc = "enable_0_2S register accessor: an alias for `Reg<ENABLE_0_2S_SPEC>`"]
+pub type ENABLE_0_2S = crate::Reg<enable_0_2S::ENABLE_0_2S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 2 S-Mode"]
+pub mod enable_0_2S;
+#[doc = "enable_1_2S register accessor: an alias for `Reg<ENABLE_1_2S_SPEC>`"]
+pub type ENABLE_1_2S = crate::Reg<enable_1_2S::ENABLE_1_2S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 2 S-Mode"]
+pub mod enable_1_2S;
+#[doc = "enable_2_2S register accessor: an alias for `Reg<ENABLE_2_2S_SPEC>`"]
+pub type ENABLE_2_2S = crate::Reg<enable_2_2S::ENABLE_2_2S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 2 S-Mode"]
+pub mod enable_2_2S;
+#[doc = "enable_0_3M register accessor: an alias for `Reg<ENABLE_0_3M_SPEC>`"]
+pub type ENABLE_0_3M = crate::Reg<enable_0_3M::ENABLE_0_3M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 3 M-Mode"]
+pub mod enable_0_3M;
+#[doc = "enable_1_3M register accessor: an alias for `Reg<ENABLE_1_3M_SPEC>`"]
+pub type ENABLE_1_3M = crate::Reg<enable_1_3M::ENABLE_1_3M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 3 M-Mode"]
+pub mod enable_1_3M;
+#[doc = "enable_2_3M register accessor: an alias for `Reg<ENABLE_2_3M_SPEC>`"]
+pub type ENABLE_2_3M = crate::Reg<enable_2_3M::ENABLE_2_3M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 3 M-Mode"]
+pub mod enable_2_3M;
+#[doc = "enable_0_3S register accessor: an alias for `Reg<ENABLE_0_3S_SPEC>`"]
+pub type ENABLE_0_3S = crate::Reg<enable_0_3S::ENABLE_0_3S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 3 S-Mode"]
+pub mod enable_0_3S;
+#[doc = "enable_1_3S register accessor: an alias for `Reg<ENABLE_1_3S_SPEC>`"]
+pub type ENABLE_1_3S = crate::Reg<enable_1_3S::ENABLE_1_3S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 3 S-Mode"]
+pub mod enable_1_3S;
+#[doc = "enable_2_3S register accessor: an alias for `Reg<ENABLE_2_3S_SPEC>`"]
+pub type ENABLE_2_3S = crate::Reg<enable_2_3S::ENABLE_2_3S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 3 S-Mode"]
+pub mod enable_2_3S;
+#[doc = "enable_0_4M register accessor: an alias for `Reg<ENABLE_0_4M_SPEC>`"]
+pub type ENABLE_0_4M = crate::Reg<enable_0_4M::ENABLE_0_4M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 4 M-Mode"]
+pub mod enable_0_4M;
+#[doc = "enable_1_4M register accessor: an alias for `Reg<ENABLE_1_4M_SPEC>`"]
+pub type ENABLE_1_4M = crate::Reg<enable_1_4M::ENABLE_1_4M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 4 M-Mode"]
+pub mod enable_1_4M;
+#[doc = "enable_2_4M register accessor: an alias for `Reg<ENABLE_2_4M_SPEC>`"]
+pub type ENABLE_2_4M = crate::Reg<enable_2_4M::ENABLE_2_4M_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 4 M-Mode"]
+pub mod enable_2_4M;
+#[doc = "enable_0_4S register accessor: an alias for `Reg<ENABLE_0_4S_SPEC>`"]
+pub type ENABLE_0_4S = crate::Reg<enable_0_4S::ENABLE_0_4S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 31 to 0 for hart 4 S-Mode"]
+pub mod enable_0_4S;
+#[doc = "enable_1_4S register accessor: an alias for `Reg<ENABLE_1_4S_SPEC>`"]
+pub type ENABLE_1_4S = crate::Reg<enable_1_4S::ENABLE_1_4S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 63 to 32 for hart 4 S-Mode"]
+pub mod enable_1_4S;
+#[doc = "enable_2_4S register accessor: an alias for `Reg<ENABLE_2_4S_SPEC>`"]
+pub type ENABLE_2_4S = crate::Reg<enable_2_4S::ENABLE_2_4S_SPEC>;
+#[doc = "ENABLE Register for interrupt ids 69 to 64 for hart 4 S-Mode"]
+pub mod enable_2_4S;
+#[doc = "threshold_0M register accessor: an alias for `Reg<THRESHOLD_0M_SPEC>`"]
+pub type THRESHOLD_0M = crate::Reg<threshold_0M::THRESHOLD_0M_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 0 M-Mode"]
+pub mod threshold_0M;
+#[doc = "threshold_1M register accessor: an alias for `Reg<THRESHOLD_1M_SPEC>`"]
+pub type THRESHOLD_1M = crate::Reg<threshold_1M::THRESHOLD_1M_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 1 M-Mode"]
+pub mod threshold_1M;
+#[doc = "threshold_1S register accessor: an alias for `Reg<THRESHOLD_1S_SPEC>`"]
+pub type THRESHOLD_1S = crate::Reg<threshold_1S::THRESHOLD_1S_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 1 S-Mode"]
+pub mod threshold_1S;
+#[doc = "threshold_2M register accessor: an alias for `Reg<THRESHOLD_2M_SPEC>`"]
+pub type THRESHOLD_2M = crate::Reg<threshold_2M::THRESHOLD_2M_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 2 M-Mode"]
+pub mod threshold_2M;
+#[doc = "threshold_2S register accessor: an alias for `Reg<THRESHOLD_2S_SPEC>`"]
+pub type THRESHOLD_2S = crate::Reg<threshold_2S::THRESHOLD_2S_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 2 S-Mode"]
+pub mod threshold_2S;
+#[doc = "threshold_3M register accessor: an alias for `Reg<THRESHOLD_3M_SPEC>`"]
+pub type THRESHOLD_3M = crate::Reg<threshold_3M::THRESHOLD_3M_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 3 M-Mode"]
+pub mod threshold_3M;
+#[doc = "threshold_3S register accessor: an alias for `Reg<THRESHOLD_3S_SPEC>`"]
+pub type THRESHOLD_3S = crate::Reg<threshold_3S::THRESHOLD_3S_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 3 S-Mode"]
+pub mod threshold_3S;
+#[doc = "threshold_4M register accessor: an alias for `Reg<THRESHOLD_4M_SPEC>`"]
+pub type THRESHOLD_4M = crate::Reg<threshold_4M::THRESHOLD_4M_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 4 M-Mode"]
+pub mod threshold_4M;
+#[doc = "threshold_4S register accessor: an alias for `Reg<THRESHOLD_4S_SPEC>`"]
+pub type THRESHOLD_4S = crate::Reg<threshold_4S::THRESHOLD_4S_SPEC>;
+#[doc = "PRIORITY THRESHOLD Register for hart 4 S-Mode"]
+pub mod threshold_4S;
+#[doc = "claimplete_0M register accessor: an alias for `Reg<CLAIMPLETE_0M_SPEC>`"]
+pub type CLAIMPLETE_0M = crate::Reg<claimplete_0M::CLAIMPLETE_0M_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 0 M-Mode"]
+pub mod claimplete_0M;
+#[doc = "claimplete_1M register accessor: an alias for `Reg<CLAIMPLETE_1M_SPEC>`"]
+pub type CLAIMPLETE_1M = crate::Reg<claimplete_1M::CLAIMPLETE_1M_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 1 M-Mode"]
+pub mod claimplete_1M;
+#[doc = "claimplete_1S register accessor: an alias for `Reg<CLAIMPLETE_1S_SPEC>`"]
+pub type CLAIMPLETE_1S = crate::Reg<claimplete_1S::CLAIMPLETE_1S_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 1 S-Mode"]
+pub mod claimplete_1S;
+#[doc = "claimplete_2M register accessor: an alias for `Reg<CLAIMPLETE_2M_SPEC>`"]
+pub type CLAIMPLETE_2M = crate::Reg<claimplete_2M::CLAIMPLETE_2M_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 2 M-Mode"]
+pub mod claimplete_2M;
+#[doc = "claimplete_2S register accessor: an alias for `Reg<CLAIMPLETE_2S_SPEC>`"]
+pub type CLAIMPLETE_2S = crate::Reg<claimplete_2S::CLAIMPLETE_2S_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 2 S-Mode"]
+pub mod claimplete_2S;
+#[doc = "claimplete_3M register accessor: an alias for `Reg<CLAIMPLETE_3M_SPEC>`"]
+pub type CLAIMPLETE_3M = crate::Reg<claimplete_3M::CLAIMPLETE_3M_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 3 M-Mode"]
+pub mod claimplete_3M;
+#[doc = "claimplete_3S register accessor: an alias for `Reg<CLAIMPLETE_3S_SPEC>`"]
+pub type CLAIMPLETE_3S = crate::Reg<claimplete_3S::CLAIMPLETE_3S_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 3 S-Mode"]
+pub mod claimplete_3S;
+#[doc = "claimplete_4M register accessor: an alias for `Reg<CLAIMPLETE_4M_SPEC>`"]
+pub type CLAIMPLETE_4M = crate::Reg<claimplete_4M::CLAIMPLETE_4M_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 4 M-Mode"]
+pub mod claimplete_4M;
+#[doc = "claimplete_4S register accessor: an alias for `Reg<CLAIMPLETE_4S_SPEC>`"]
+pub type CLAIMPLETE_4S = crate::Reg<claimplete_4S::CLAIMPLETE_4S_SPEC>;
+#[doc = "CLAIM and COMPLETE Register for hart 4 S-Mode"]
+pub mod claimplete_4S;
