@@ -173,9 +173,13 @@ impl FileSystemManager {
         let fa_inode;
         let covered_inode;
         let fa_ino;
-        if let Some(some_mount_point_fa) = mount_point_fa {
-            fa_inode = <dyn Inode>::lookup_from_root(&some_mount_point_fa)?;
+        if let Some(mount_point_fa) = mount_point_fa {
+            (fa_inode, _) = <dyn Inode>::lookup_from_root(&mount_point_fa)?;
             if fa_inode.is_none() {
+                log::warn!(
+                    "[mount] parent inode doesn't exist, name {}",
+                    mount_point_fa
+                );
                 return Err(SyscallErr::EEXIST);
             }
             let fa_inode_unwrap = Arc::clone(fa_inode.as_ref().unwrap());

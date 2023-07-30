@@ -303,15 +303,12 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
 
 /// Resolve path at dirfd(except that `path` is absolute path)
 pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
-    let res = path::path_to_inode(dirfd, Some(path));
-    let inode = res.0?;
+    let (inode, path, parent) = path::path_to_inode(dirfd, Some(path))?;
     stack_trace!();
-    let path = res.1.unwrap();
     if inode.is_some() {
         return Ok(inode.unwrap());
     }
     if flags.contains(OpenFlags::CREATE) {
-        let parent = res.2;
         let parent = match parent {
             Some(parent) => parent,
             None => {
@@ -319,6 +316,7 @@ pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Ar
                 <dyn Inode>::lookup_from_root(&parent_path)
                     .ok()
                     .unwrap()
+                    .0
                     .unwrap()
             }
         };

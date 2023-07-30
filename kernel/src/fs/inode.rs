@@ -71,7 +71,8 @@ impl FastPathCache {
     pub fn init(&self) {
         let mut map = HashMap::new();
         for path in FAST_PATH {
-            let inode = <dyn Inode>::lookup_from_root(path).ok().unwrap().unwrap();
+            let (inode, _) = <dyn Inode>::lookup_from_root(path).ok().unwrap();
+            let inode = inode.unwrap();
             map.insert(path.to_string(), inode);
         }
         *self.0.lock() = Some(map);
@@ -330,6 +331,10 @@ impl dyn Inode {
     /// This method will delete the inode in cache (which means deleting inode in parent's children list).
     pub fn remove_child(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        log::info!(
+            "[Inode::remove_child] remove child {}",
+            child.metadata().name
+        );
         debug!("Try to delete child in INODE_CACHE");
         INODE_CACHE.remove(&key);
         let child_name = child.metadata().name.clone();
@@ -341,6 +346,7 @@ impl dyn Inode {
     /// This method will delete the inode in inode cache and call delete() function to delete inode in disk.
     pub fn unlink(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
+        log::info!("[Inode::unlink] unlink child {}", child.metadata().name);
         debug!("Try to delete child in INODE_CACHE");
         INODE_CACHE.remove(&key);
         let child_name = child.metadata().name.clone();
@@ -450,8 +456,9 @@ impl dyn Inode {
         }
     }
 
-    /// Look up from root(e.g. "/home/oscomp/workspace")
-    pub fn lookup_from_root(path: &str) -> GeneralRet<Option<Arc<Self>>> {
+    /// Look up from root(e.g. "/home/oscomp/workspace").
+    /// Return (target inode, parent inode)
+    pub fn lookup_from_root(path: &str) -> GeneralRet<(Option<Arc<Self>>, Option<Arc<Self>>)> {
         let mut path_names = path::split_path_string(path.to_string());
 
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
@@ -460,7 +467,7 @@ impl dyn Inode {
         let (target, fa, child_path) = FAST_PATH_CACHE.get(path.clone());
         if target.is_some() {
             debug!("[lookup_from_root] find in fast path cache");
-            return Ok(target);
+            return Ok((target, None));
         } else {
             debug!("[lookup_from_root] mismatch in fast path cache");
             if fa.is_some() {
@@ -475,18 +482,20 @@ impl dyn Inode {
             match parent.lookup(&name)? {
                 Some(p) => {
                     debug!("[lookup_from_root] inode name: {}", p.metadata().name);
+                    if i == path_names.len() - 1 {
+                        return Ok((Some(p), Some(parent)));
+                    }
                     parent = p
                 }
                 None => {
                     if i == path_names.len() - 1 {
-                        return Ok(None);
+                        return Ok((None, Some(parent)));
                     }
                     return Err(SyscallErr::ENOENT);
                 }
             }
         }
-
-        Ok(Some(parent))
+        Ok((Some(parent), None))
     }
 
     pub fn create_page_cache_if_needed(self: &Arc<Self>) {

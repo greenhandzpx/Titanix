@@ -93,9 +93,8 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallRet {
 
 pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
     stack_trace!();
-    let res = path::path_to_inode_ffi(dirfd, path);
+    let (target_inode, _, _) = path::path_to_inode_ffi(dirfd, path)?;
     stack_trace!();
-    let target_inode = res.0?;
     if target_inode.is_none() {
         return Err(SyscallErr::ENOENT);
     }
@@ -125,35 +124,24 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
 pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRet {
     stack_trace!();
     log::info!("[sys_mkdirat] dirfd {}", dirfd);
-    let res = path::path_to_inode_ffi(dirfd, pathname);
-    if res.0?.is_some() {
+    let (target, path, parent) = path::path_to_inode_ffi(dirfd, pathname)?;
+    if target.is_some() {
         log::info!("[sys_mkdirat] already exists");
         return Err(SyscallErr::EEXIST);
     } else {
         // if have inode, the path also would be have
-        let path = res.1.unwrap();
-        let parent = path::get_parent_dir(&path).unwrap();
-        debug!("[sys_mkdirat] get parent path: {}", parent);
-        let parent_inode = if path::check_double_dot(&path) {
-            <dyn Inode>::lookup_from_root(&parent)?.unwrap()
-        } else {
-            // if path doesn't have ..
-            // parent will be return in res.2
-            if res.2.is_some() {
-                // if the parent inode exist, then use it
-                res.2.unwrap()
-            } else {
-                // else try to find
-                <dyn Inode>::lookup_from_root(&parent)?.unwrap()
+        let parent = match parent {
+            Some(parent) => parent,
+            None => {
+                let parent_path = path::get_parent_dir(&path).unwrap();
+                debug!("[sys_mkdirat] get parent path: {}", parent_path);
+                <dyn Inode>::lookup_from_root(&parent_path)?.0.unwrap()
             }
         };
-        log::info!(
-            "[sys_mkdirat] parent inode name {}",
-            parent_inode.metadata().name
-        );
-        match parent_inode.metadata().mode {
+        log::info!("[sys_mkdirat] parent inode name {}", parent.metadata().name);
+        match parent.metadata().mode {
             InodeMode::FileDIR => {
-                let mut inner_lock = parent_inode.metadata().inner.lock();
+                let mut inner_lock = parent.metadata().inner.lock();
                 // change the time
                 inner_lock.st_atim = current_time_spec();
                 inner_lock.st_mtim = current_time_spec();
@@ -171,7 +159,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
                 drop(inner_lock);
                 stack_trace!();
                 let child_name = path::get_name(&path);
-                parent_inode.mkdir_v(child_name, InodeMode::FileDIR)?;
+                parent.mkdir_v(child_name, InodeMode::FileDIR)?;
                 Ok(0)
             }
             _ => {
@@ -212,7 +200,7 @@ pub fn sys_mount(
         return Err(SyscallErr::ENOENT);
     }
     let target_path = target_path.unwrap();
-    let target_inode = <dyn Inode>::lookup_from_root(&target_path)?;
+    let target_inode = <dyn Inode>::lookup_from_root(&target_path)?.0;
     if target_inode.is_none() {
         return Err(SyscallErr::EACCES);
     }
@@ -231,7 +219,7 @@ pub fn sys_mount(
         }
     };
 
-    let dev = <dyn Inode>::lookup_from_root(&dev_name)?;
+    let dev = <dyn Inode>::lookup_from_root(&dev_name)?.0;
     let dev = match dev {
         Some(inode) => match &inode.metadata().device {
             Some(d) => FsDevice::from_inode_device(d.clone()),
@@ -346,7 +334,7 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(path)?;
     let path = &c_str_to_string(path);
-    let target_inode = <dyn Inode>::lookup_from_root(path)?;
+    let target_inode = <dyn Inode>::lookup_from_root(path)?.0;
     match target_inode {
         Some(target_inode) => {
             let mut inner_lock = target_inode.metadata().inner.lock();
@@ -476,8 +464,7 @@ pub fn sys_newfstatat(
     let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_writable_slice(stat_buf as *mut u8, STAT_SIZE)?;
-    let res = path::path_to_inode_ffi(dirfd, pathname);
-    let inode = res.0?;
+    let (inode, _, _) = path::path_to_inode_ffi(dirfd, pathname)?;
     if inode.is_some() {
         // find inode
         return _fstat(inode.unwrap(), stat_buf);
@@ -846,10 +833,8 @@ pub fn sys_renameat2(
         return Err(SyscallErr::EINVAL);
     }
 
-    let old_res = path::path_to_inode_ffi(olddirfd, oldpath);
-    let oldinode = old_res.0?;
-    let new_res = path::path_to_inode_ffi(newdirfd, newpath);
-    let newinode = new_res.0?;
+    let (oldinode, _, oldparent) = path::path_to_inode_ffi(olddirfd, oldpath)?;
+    let (newinode, newpath, newparent) = path::path_to_inode_ffi(newdirfd, newpath)?;
     // change path
     if oldinode.is_none() {
         debug!("[sys_renameat2] doesn'n have oldinode");
@@ -865,14 +850,11 @@ pub fn sys_renameat2(
             return Err(SyscallErr::ENOENT);
         }
         // check new path
-        let newparent = new_res.2;
-
         if newparent.is_none() {
             debug!("[sys_renameat2] newparent doesn't create");
             // restore
             return Err(SyscallErr::ENOENT);
         } else {
-            let newpath = new_res.1.unwrap();
             // remove from old path
             let oldparent = oldinode
                 .metadata()
@@ -1049,8 +1031,7 @@ pub fn sys_utimensat(
 ) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    let res = path::path_to_inode_ffi(dirfd, pathname);
-    let inode = res.0?;
+    let (inode, _, _) = path::path_to_inode_ffi(dirfd, pathname)?;
     if inode.is_none() {
         debug!("[sys_utimensat] cannot find inode relatived to pathname");
         return Err(SyscallErr::ENOENT);
@@ -1102,8 +1083,8 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     let _mode = FaccessatFlags::from_bits(mode).ok_or(SyscallErr::EINVAL)?;
     let _flags = FcntlFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     stack_trace!();
-    let res = path::path_to_inode_ffi(dirfd, pathname);
-    if res.0?.is_none() {
+    let inode = path::path_to_inode_ffi(dirfd, pathname)?.0;
+    if inode.is_none() {
         debug!("[sys_faccessat] don't find inode");
         Err(SyscallErr::ENOENT)
     } else {
