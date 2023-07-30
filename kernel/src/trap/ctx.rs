@@ -1,13 +1,3 @@
-/*
- * @Author: greenhandzpx 893522573@qq.com
- * @Date: 2023-01-28 12:24:08
- * @LastEditors: greenhandzpx 893522573@qq.com
- * @LastEditTime: 2023-02-23 15:45:28
- * @FilePath: /oscomp-kernel/os/src/trap/context.rs
- * @Description:
- *
- * Copyright (c) 2023 by ${git_name_email}, All Rights Reserved.
- */
 //! Implementation of [`TrapContext`]
 
 use core::arch::asm;

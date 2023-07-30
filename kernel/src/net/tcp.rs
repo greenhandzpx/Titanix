@@ -177,8 +177,6 @@ impl TcpSocket {
                 debug!("[Tcp::connect] not connect yet, state {:?}", state);
                 thread::yield_now().await;
             } else {
-                // ksleep(Duration::from_millis(10000)).await;
-                // thread::yield_now().await;
                 info!("[Tcp::connect] connected, state {:?}", state);
                 thread::yield_now().await;
                 return Ok(0);
@@ -312,6 +310,7 @@ impl<'a> Future for TcpAcceptFuture<'a> {
             if socket.state() == tcp::State::SynReceived
                 || socket.state() == tcp::State::Established
             {
+                self.socket.inner.lock().last_state = socket.state();
                 log::info!("[TcpAcceptFuture::poll] state become {:?}", socket.state());
                 return Poll::Ready(Ok(socket.remote_endpoint().unwrap()));
             }
