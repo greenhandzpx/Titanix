@@ -76,9 +76,6 @@ impl Write for Stdout {
             cd.puts(s.as_bytes());
         } else {
             for s in s.as_bytes() {
-                if *s == b'\n' {
-                    console_putchar(b'\r'.into());
-                }
                 console_putchar(*s as usize);
             }
         }
