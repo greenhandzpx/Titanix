@@ -41,6 +41,7 @@ pub struct TcpSocket {
 #[allow(unused)]
 struct TcpSocketInner {
     local_endpoint: IpListenEndpoint,
+    last_state: tcp::State,
     recvbuf_size: usize,
     sendbuf_size: usize,
     // TODO: add more
@@ -62,6 +63,7 @@ impl TcpSocket {
                     addr: None,
                     port: unsafe { RNG.positive_u32() as u16 },
                 },
+                last_state: tcp::State::Closed,
                 recvbuf_size: MAX_BUFFER_SIZE,
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
@@ -90,6 +92,11 @@ impl TcpSocket {
     }
     pub fn set_send_buf_size(&self, size: usize) {
         self.inner.lock().sendbuf_size = size;
+    }
+    pub fn set_nagle_enabled(&self, enabled: bool) {
+        NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            socket.set_nagle_enabled(enabled)
+        })
     }
 
     pub fn addr(&self) -> IpEndpoint {
@@ -120,7 +127,9 @@ impl TcpSocket {
         info!("[Tcp::listen] listening: {:?}", local);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
-            socket.listen(local).ok().ok_or(SyscallErr::EADDRINUSE)
+            let ret = socket.listen(local).ok().ok_or(SyscallErr::EADDRINUSE);
+            self.inner.lock().last_state = socket.state();
+            ret
         })?;
         NET_INTERFACE.poll();
         Ok(0)
@@ -143,24 +152,35 @@ impl TcpSocket {
     }
 
     pub async fn connect(&self, remote_endpoint: IpEndpoint) -> SyscallRet {
+        NET_INTERFACE.poll();
+        let local = self.inner.lock().local_endpoint;
+        debug!(
+            "[Tcp::connect] local: {:?}, remote: {:?}",
+            local, remote_endpoint
+        );
+        NET_INTERFACE.inner_handler(|inner| {
+            let socket = inner.sockets.get_mut::<tcp::Socket>(self.socket_handler);
+            let ret = socket.connect(inner.iface.context(), remote_endpoint, local);
+            if ret.is_err() {
+                match ret.err().unwrap() {
+                    tcp::ConnectError::Unaddressable => return Err(SyscallErr::EINVAL),
+                    tcp::ConnectError::InvalidState => return Err(SyscallErr::EISCONN),
+                }
+            }
+            Ok(())
+        })?;
+        NET_INTERFACE.poll();
         loop {
             NET_INTERFACE.poll();
-            let local = self.inner.lock().local_endpoint;
-            debug!(
-                "[Tcp::connect] local: {:?}, remote: {:?}",
-                local, remote_endpoint
-            );
-            let ret = NET_INTERFACE.inner_handler(|inner| {
-                inner
-                    .sockets
-                    .get_mut::<tcp::Socket>(self.socket_handler)
-                    .connect(inner.iface.context(), remote_endpoint, local)
-            });
-            NET_INTERFACE.poll();
-            if ret.is_err() {
-                debug!("[Tcp::connect] connect ret: {:?}", ret.err().unwrap());
+            let state = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.state());
+            if state != tcp::State::Established {
+                debug!("[Tcp::connect] not connect yet, state {:?}", state);
                 thread::yield_now().await;
             } else {
+                // ksleep(Duration::from_millis(10000)).await;
+                // thread::yield_now().await;
+                info!("[Tcp::connect] connected, state {:?}", state);
+                thread::yield_now().await;
                 return Ok(0);
             }
         }
@@ -234,6 +254,9 @@ impl File for TcpSocket {
             } else if socket.state() == tcp::State::CloseWait
                 || socket.state() == tcp::State::FinWait2
                 || socket.state() == tcp::State::TimeWait
+                || (self.inner.lock().last_state == tcp::State::Listen
+                    && socket.state() == tcp::State::Established)
+                || socket.state() == tcp::State::SynReceived
             {
                 log::info!("[Tcp::pollin] state become {:?}", socket.state());
                 Ok(true)

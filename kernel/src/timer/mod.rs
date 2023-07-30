@@ -74,11 +74,6 @@ pub fn init() {
         .0
         .insert(CLOCK_REALTIME, Duration::ZERO);
 
-    CLOCK_MANAGER
-        .lock()
-        .0
-        .insert(CLOCK_PROCESS_CPUTIME_ID, Duration::ZERO);
-
     info!("init clock manager success");
 }
 
