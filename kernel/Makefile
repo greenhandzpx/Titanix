@@ -9,7 +9,7 @@ PRELIMINARY = 0
 FS_IMG_SRC := ../fs-img-src
 FS_IMG := $(FS_IMG_SRC)/sdcard.img
 
-TEST := 22
+TEST := 23
 TEST_DIR := "../$(TEST)-testcases"
 
 STRACE := 
