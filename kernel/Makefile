@@ -20,6 +20,8 @@ TMPFS :=
 
 MULTI_HART :=
 
+STACK_TRACE := 
+
 BOARD := qemu
 
 KERNEL_FEATURES := 
@@ -27,8 +29,13 @@ KERNEL_FEATURES :=
 ifneq ($(STRACE), )
 	KERNEL_FEATURES += strace
 endif
+
 ifneq ($(SUBMIT), )
 	KERNEL_FEATURES += submit
+	KERNEL_FEATURES += stack_trace
+	ifneq ($(STACK_TRACE), )
+		KERNEL_FEATURES += stack_trace
+	endif
 else
 	KERNEL_FEATURES += stack_trace
 endif

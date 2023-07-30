@@ -1,7 +1,7 @@
 //! The panic handler
-use crate::{driver::shutdown, processor::local_hart};
+use crate::driver::shutdown;
 use core::panic::PanicInfo;
-use log::{error, warn};
+use log::error;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -16,7 +16,12 @@ fn panic(info: &PanicInfo) -> ! {
         error!("[kernel] Panicked: {}", info.message().unwrap());
     }
     #[cfg(feature = "stack_trace")]
-    warn!("backtrace:");
-    local_hart().env().stack_tracker.print_stacks();
+    {
+        log::error!("backtrace:");
+        crate::processor::local_hart()
+            .env()
+            .stack_tracker
+            .print_stacks_err();
+    }
     shutdown()
 }

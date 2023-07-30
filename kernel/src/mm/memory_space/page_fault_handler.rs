@@ -5,7 +5,7 @@ use riscv::register::scause::{Exception, Scause, Trap};
 use crate::{
     mm::{frame_alloc, page::PageBuilder, page_table::PTEFlags, MapPermission, VirtAddr},
     process::Process,
-    processor::{current_process, SumGuard},
+    processor::SumGuard,
     stack_trace,
     syscall::MmapFlags,
     utils::error::{AgeneralRet, GeneralRet, SyscallErr},
@@ -284,6 +284,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                 .get_unchecked_mut()
                 .0
                 .get(&va.floor())
+                .cloned()
                 .unwrap();
 
             if !shared_page.permission.contains(MapPermission::W) {
@@ -298,26 +299,26 @@ impl PageFaultHandler for CowPageFaultHandler {
             // Note that we must hold the process_inner's lock now
             // so it is safe for us to check the ref count.
 
-            let page = match Arc::strong_count(shared_page) {
-                1 => {
-                    debug!(
-                        "[pid {}] ph frame ref cnt is 1, va: {:#x}",
-                        current_process().pid(),
-                        va.0
-                    );
-                    // If the ref cnt is only 1
-                    // we can just modify the pagetable without
-                    // allocating new frame
-                    pte.set_flags(pte_flags);
-                    page_table.activate();
-                    memory_space
-                        .cow_pages
-                        .page_mgr
-                        .get_unchecked_mut()
-                        .0
-                        .remove(&vpn)
-                        .unwrap()
-                }
+            let page = match Arc::strong_count(&shared_page) {
+                // 1 => {
+                //     debug!(
+                //         "[pid {}] ph frame ref cnt is 1, va: {:#x}",
+                //         current_process().pid(),
+                //         va.0
+                //     );
+                //     // If the ref cnt is only 1
+                //     // we can just modify the pagetable without
+                //     // allocating new frame
+                //     pte.set_flags(pte_flags);
+                //     page_table.activate();
+                //     memory_space
+                //         .cow_pages
+                //         .page_mgr
+                //         .get_unchecked_mut()
+                //         .0
+                //         .remove(&vpn)
+                //         .unwrap()
+                // }
                 _ => {
                     stack_trace!();
                     // Else
@@ -334,8 +335,8 @@ impl PageFaultHandler for CowPageFaultHandler {
                     // modify page tableray());
                     // modify page table
                     page_table.unmap(vpn);
-                    page_table.activate();
                     page_table.map(vpn, new_frame.ppn, pte_flags);
+                    page_table.activate();
                     // decrease old frame's ref cnt
                     memory_space
                         .cow_pages
@@ -344,12 +345,14 @@ impl PageFaultHandler for CowPageFaultHandler {
                         .0
                         .remove(&vpn);
                     stack_trace!();
-                    Arc::new(
+                    let ret = Arc::new(
                         PageBuilder::new()
                             .permission(shared_page.permission)
                             .physical_frame(new_frame)
                             .build(),
-                    )
+                    );
+                    stack_trace!();
+                    ret
                 }
             };
             stack_trace!();

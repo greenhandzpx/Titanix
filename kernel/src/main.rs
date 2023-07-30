@@ -1,7 +1,6 @@
 //! The main module and entrypoint
 
 #![deny(missing_docs)]
-// #![deny(warnings)]
 #![no_std]
 #![no_main]
 #![feature(build_hasher_simple_hash_one)]
@@ -75,6 +74,31 @@ fn clear_bss() {
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
+#[allow(unused)]
+fn hart_start(hart_id: usize) {
+    use crate::config::mm::HART_START_ADDR;
+    use crate::driver::sbi;
+    use crate::processor::HARTS;
+    // only start two harts
+    let mut has_another = false;
+    let hart_num = unsafe { HARTS.len() };
+    for i in 0..hart_num {
+        #[cfg(feature = "board_u740")]
+        if i == 0 {
+            continue;
+        }
+        if has_another {
+            break;
+        }
+        if i == hart_id {
+            continue;
+        }
+        println!("[kernel] start to wake up hart {}...", i);
+        sbi::hart_start(i, HART_START_ADDR);
+        has_another = true;
+    }
+}
+
 ///
 #[no_mangle]
 pub fn fake_main(hart_id: usize) {
@@ -90,7 +114,6 @@ pub fn fake_main(hart_id: usize) {
 // TODO: We will add multi cores support in the future
 #[no_mangle]
 /// the rust entry-point of os
-// pub fn rust_main(hart_id: usize) -> ! {
 pub fn rust_main(hart_id: usize) {
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -132,29 +155,7 @@ pub fn rust_main(hart_id: usize) {
         INIT_FINISHED.store(true, Ordering::SeqCst);
 
         #[cfg(feature = "multi_hart")]
-        {
-            use crate::config::mm::HART_START_ADDR;
-            use crate::driver::sbi::hart_start;
-            use crate::processor::HARTS;
-            // only start two harts
-            let mut has_another = false;
-            let hart_num = unsafe { HARTS.len() };
-            for i in 0..hart_num {
-                if i == 0 {
-                    continue;
-                }
-                if has_another {
-                    break;
-                }
-                if i == hart_id {
-                    continue;
-                }
-                println!("[kernel] start to wake up hart {}...", i);
-                hart_start(i, HART_START_ADDR);
-                has_another = true;
-            }
-        }
-        // println!("[main hart] current time {:?}", current_time_duration());
+        hart_start(hart_id);
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
