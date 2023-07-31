@@ -207,7 +207,7 @@ pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
 pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    info!("send signal {} to proc {}", signo, pid);
+    log::info!("send signal {} to proc {}", signo, pid);
     // TODO: add permission check for sending signal
     match pid {
         0 => {

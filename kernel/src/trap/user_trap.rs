@@ -70,6 +70,9 @@ pub async fn trap_handler() {
                     -(err as isize) as usize
                 }
             };
+            // if current_task().tid() == 4 {
+            //     log::warn!("[trap_handler] syscall {} return", cx.user_x[17]);
+            // }
             // log::info!("[trap_handler] user sp {:#x}", cx.user_x[2]);
             // TODO: Change into async syscall
         }
