@@ -31,7 +31,8 @@ mod udp;
 mod unix;
 
 pub use tcp::TCP_MSS;
-pub use unix::UNIX_SOCKET_BUF_MANAGER;
+pub use unix::make_unix_socket_pair;
+// pub use unix::UNIX_SOCKET_BUF_MANAGER;
 
 /// domain
 pub const AF_UNIX: u16 = 1;
@@ -95,14 +96,15 @@ impl Socket {
                 }
             }
             AF_UNIX => {
-                let socket = UnixSocket::new();
-                let socket = Arc::new(Socket::UnixSocket(socket));
-                current_process().inner_handler(|proc| {
-                    let fd = proc.fd_table.alloc_fd()?;
-                    proc.fd_table.put(fd, socket.clone());
-                    proc.socket_table.insert(fd, socket);
-                    Ok(fd)
-                })
+                todo!()
+                // let socket = UnixSocket::new();
+                // let socket = Arc::new(Socket::UnixSocket(socket));
+                // current_process().inner_handler(|proc| {
+                //     let fd = proc.fd_table.alloc_fd()?;
+                //     proc.fd_table.put(fd, socket.clone());
+                //     proc.socket_table.insert(fd, socket);
+                //     Ok(fd)
+                // })
             }
             _ => Err(SyscallErr::EINVAL),
         }
