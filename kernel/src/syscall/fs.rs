@@ -103,6 +103,11 @@ pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
         debug!("target_inode is dir");
         Err(SyscallErr::EISDIR)
     } else {
+        let mut inner = target_inode.metadata().inner.lock();
+        inner.st_atim = Duration::ZERO.into();
+        inner.st_ctim = Duration::ZERO.into();
+        inner.st_mtim = Duration::ZERO.into();
+        drop(inner);
         let parent = target_inode.metadata().inner.lock().parent.clone();
         match parent {
             Some(parent) => {
@@ -416,10 +421,8 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
         // TODO:
         kstat.st_dev = 12138;
     }
-    // TODO: pre
     kstat.st_ino = inode_meta.ino as u64;
     kstat.st_mode = inode_meta.mode as u32;
-    // kstat.st_mode = InodeMode::FileCHR as u32;
     debug!(
         "[_fstat] inode name: {}, mode: {:?}",
         inode_meta.name, inode_meta.mode
@@ -445,6 +448,8 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
     kstat.st_atim = inner_lock.st_atim;
     kstat.st_mtim = inner_lock.st_mtim;
     kstat.st_ctim = inner_lock.st_ctim;
+
+    debug!("[_fstat] kstat: {:?}", kstat);
 
     let kst_ptr = stat_buf as *mut STAT;
     unsafe {
@@ -1017,6 +1022,12 @@ pub fn sys_utimensat(
     } else {
         let inode = inode.unwrap();
 
+        debug!(
+            "[sys_utimensat] get inode name: {}, ino: {}",
+            inode.metadata().name,
+            inode.metadata().ino
+        );
+
         let mut inner_lock = inode.metadata().inner.lock();
         if times.is_null() {
             debug!("[sys_utimensat] times is null");
@@ -1031,24 +1042,26 @@ pub fn sys_utimensat(
             let mtime = unsafe { &*times };
             // change access time
             if atime.nsec == UTIME_NOW {
-                debug!("[sys_utimensat] atime nsec is UTIME_NOW");
+                debug!("[sys_utimensat] atime nsec is UTIME_NOW, set to now");
                 inner_lock.st_atim = current_time_spec();
             } else if atime.nsec == UTIME_OMIT {
-                debug!("[sys_utimensat] atime nsec is UTIME_OMIT");
+                debug!("[sys_utimensat] atime nsec is UTIME_OMIT, unchanged");
             } else {
                 debug!("[sys_utimensat] atime normal nsec");
                 inner_lock.st_atim = *atime;
             }
+            debug!("[sys_utimensat] atime: {:?}", inner_lock.st_atim);
             // change modify time
             if mtime.nsec == UTIME_NOW {
-                debug!("[sys_utimensat] mtime nsec is UTIME_NOW");
+                debug!("[sys_utimensat] mtime nsec is UTIME_NOW, set to now");
                 inner_lock.st_mtim = current_time_spec();
             } else if mtime.nsec == UTIME_OMIT {
-                debug!("[sys_utimensat] mtime nsec is UTIME_OMIT");
+                debug!("[sys_utimensat] mtime nsec is UTIME_OMIT, unchanged");
             } else {
                 debug!("[sys_utimensat] mtime normal nsec");
                 inner_lock.st_mtim = *mtime;
             }
+            debug!("[sys_utimensat] mtime: {:?}", inner_lock.st_mtim);
             // change state change time
             inner_lock.st_ctim = current_time_spec();
         }

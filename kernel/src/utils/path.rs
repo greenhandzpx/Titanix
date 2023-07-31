@@ -106,6 +106,14 @@ pub fn path_to_inode(
         None => {
             match dirfd {
                 AT_FDCWD => {
+                    debug!("[path_to_inode] path is null and dirfd is AT_FDCWD");
+                    return current_process().inner_handler(|proc| {
+                        // If it have file, it must have inode
+                        let (target, parent) = <dyn Inode>::lookup_from_root(&proc.cwd)?;
+                        Ok((target, proc.cwd.clone(), parent))
+                    });
+                }
+                _ => {
                     debug!("[path_to_inode] path is null and dirfd is not AT_FDCWD");
                     return current_process().inner_handler(|proc| {
                         let wd_file = proc.fd_table.get_ref(dirfd as usize);
@@ -123,14 +131,6 @@ pub fn path_to_inode(
                             }
                             None => Err(SyscallErr::EBADF),
                         }
-                    });
-                }
-                _ => {
-                    debug!("[path_to_inode] path is null and dirfd is AT_FDCWD");
-                    return current_process().inner_handler(|proc| {
-                        // If it have file, it must have inode
-                        let (target, parent) = <dyn Inode>::lookup_from_root(&proc.cwd)?;
-                        Ok((target, proc.cwd.clone(), parent))
                     });
                 }
             }
