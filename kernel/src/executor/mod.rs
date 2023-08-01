@@ -40,6 +40,7 @@ where
     F::Output: Send + 'static,
 {
     let schedule = move |runnable: Runnable, info: ScheduleInfo| {
+        // TASK_QUEUE.push(runnable);
         if info.woken_while_running {
             // i.e `yield_now()`
             TASK_QUEUE.push(runnable);
