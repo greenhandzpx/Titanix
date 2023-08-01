@@ -26,8 +26,8 @@ pub fn core_sig_handler(signo: usize) {
     stack_trace!();
     log::info!("core sig handler, sig {}", signo);
     // TODO: not sure what the exit code should be here
-    // exit_and_terminate_all_threads(-1);
-    exit_and_terminate_all_threads(0);
+    exit_and_terminate_all_threads(-1);
+    // exit_and_terminate_all_threads(0);
     // terminate_given_thread(current_task().tid(), 0);
 
     // TODO: add core dump ?

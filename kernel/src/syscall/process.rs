@@ -396,8 +396,9 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 return Ok(0);
             }
             current_task().wait_for_events(Event::all()).await;
-            let mut signos = SigSet::all();
-            signos.remove(SigSet::SIGCHLD);
+            // let mut signos = SigSet::all();
+            let signos = SigSet::SIGINT;
+            // signos.remove(SigSet::SIGCHLD);
             if current_task().sig_queue.lock().check_spec_signal(signos) {
                 return Err(SyscallErr::EINTR);
             }
