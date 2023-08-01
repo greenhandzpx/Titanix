@@ -14,6 +14,8 @@
 - Unmatched赛道，目前总分第一：
 ![](docs/fig/unmatched.png)
 
+- Qemu赛道，目前总分第四：
+![](docs/fig/qemu.png)
 
 
 ### Titanix内核介绍
@@ -58,7 +60,7 @@
 
 第一次运行需要先在/kernel目录下输入
 ```jax
-sudo make fs-imag
+sudo make fs-img
 ```
 
 在/kernel目录下输入
@@ -66,6 +68,13 @@ sudo make fs-imag
 ```jsx
 make run
 ```
+可以进入busybox的shell，并进行一些busybox支持的基本操作；
+
+如果要在Unmatched-U740上运行，则输入
+```jsx
+make run BOARD=u740
+```
+
 
 ### 项目人员：
 
