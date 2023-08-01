@@ -1,8 +1,4 @@
-use alloc::{
-    boxed::Box,
-    collections::{BTreeMap, VecDeque},
-    sync::Arc,
-};
+use alloc::sync::Arc;
 use smoltcp::wire::IpEndpoint;
 
 use crate::{
@@ -11,20 +7,12 @@ use crate::{
         File, FileMeta, OpenFlags,
     },
     net::address::SocketAddrv4,
-    process::thread,
-    processor::{current_task, SumGuard},
-    sync::Event,
-    utils::{
-        async_tools::{Select2Futures, SelectOutput},
-        error::{AsyscallRet, SyscallErr},
-    },
+    processor::SumGuard,
+    utils::error::AsyscallRet,
 };
-
-use super::{Mutex, MAX_BUFFER_SIZE};
 
 pub struct UnixSocket {
     file_meta: FileMeta,
-    // pub buf: Mutex<VecDeque<u8>>,
     read_end: Arc<Pipe>,
     write_end: Arc<Pipe>,
 }
