@@ -141,7 +141,7 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
         }
         return None;
     }) {
-        debug!("terminate given tid {}", tid);
+        log::info!("terminate given tid {}", tid);
         // thread.recv_signal(SIGKILL);
         thread.terminate();
     }

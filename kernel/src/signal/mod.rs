@@ -185,22 +185,6 @@ impl KSigAction {
     }
 }
 
-// /// Note that we handle only one pending signal every time.
-// /// Return true if there is a user-defined pending sig to handle.
-// pub fn check_signal_for_current_process() -> bool {
-//     // TODO: handle nesting sig handle:
-//     // Do we need to save trap contexts like a stack?
-//     if let Some((signo, sig_action, old_blocked_sigs)) =
-//         current_process().inner_handler(|proc| proc.sig_queue.check_signal())
-//     {
-//         // Note that serveral sig handlers may be executed at the same time by different threads
-//         // since we don't hold the process inner lock
-//         handle_signal(signo, sig_action, old_blocked_sigs)
-//     } else {
-//         false
-//     }
-// }
-
 /// Note that we handle only one pending signal every time.
 /// Return true if there is a user-defined pending sig to handle.
 pub fn check_signal_for_current_task() -> bool {

@@ -180,10 +180,10 @@ pub fn rust_main(hart_id: usize) {
             hart_id
         );
 
-        #[cfg(feature = "board_u740")]
-        {
-            driver::fu740::plic::plic_inithart();
-        }
+        // #[cfg(feature = "board_u740")]
+        // {
+        //     driver::fu740::plic::plic_inithart();
+        // }
 
         trap::init();
         unsafe {
