@@ -3,7 +3,7 @@
 [package]
 name = "kernel"
 version = "0.1.0"
-authors = ["Peixin Tsang <893522573@qq.com>", "Straho Chen", "ghj1222"]
+authors = ["Peixin Tsang <893522573@qq.com>", "Straho Chen", "ghj1222 <rqj.rac.hel@gmail.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
