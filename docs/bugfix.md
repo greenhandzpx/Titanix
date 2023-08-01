@@ -11,3 +11,4 @@
 - 信号被阻塞时不应从队列中清除，而是一直留着直到不阻塞并处理
 - 需要将buddy_system_allocator中的LcokHeap的锁改为SpinNoIrqLock，否则内核中断可能会死锁并且不报错！！
 - 记得存浮点寄存器（lmbench ctx switch）
+- 注意某些耗时系统调用可能被信号中断，否则可能永远阻塞

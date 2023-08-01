@@ -27,7 +27,7 @@ fn insert_app_data() -> Result<()> {
     apps.sort();
 
     let testcases = [
-        "true",
+        // "true",
         "time-test",
         "busybox_testcode.sh",
         "busybox_cmd.txt",

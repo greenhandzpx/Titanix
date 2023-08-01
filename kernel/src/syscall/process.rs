@@ -7,6 +7,7 @@ use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
+use crate::signal::SigSet;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
 use crate::utils::error::SyscallErr;
@@ -188,17 +189,15 @@ pub async fn sys_clone(
         let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
-        info!(
-            "[sys_clone] return new pid: {}, clone flags {:?}",
-            new_pid, clone_flags,
+        log::info!(
+            "[sys_clone] clone a new process, pid {}, clone flags {:?}",
+            new_pid,
+            clone_flags,
         );
         // thread::yield_now().await;
         Ok(new_pid)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
-
-        info!("clone a new thread");
-
         let current_process = current_process();
         let new_tid = current_process.create_thread(
             stack_ptr,
@@ -208,6 +207,7 @@ pub async fn sys_clone(
             clone_flags,
         );
         // thread::yield_now().await;
+        log::info!("[sys_clone] clone a new thread, tid {:?}", new_tid);
         new_tid
     } else {
         panic!()
@@ -395,7 +395,12 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
             if options.contains(WaitOption::WNOHANG) {
                 return Ok(0);
             }
-            current_task().wait_for_events(Event::CHILD_EXIT).await;
+            current_task().wait_for_events(Event::all()).await;
+            let mut signos = SigSet::all();
+            signos.remove(SigSet::SIGCHLD);
+            if current_task().sig_queue.lock().check_spec_signal(signos) {
+                return Err(SyscallErr::EINTR);
+            }
         }
     }
 }

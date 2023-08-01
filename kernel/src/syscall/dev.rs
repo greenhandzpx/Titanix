@@ -15,7 +15,7 @@ const TIOCGWINSZ: usize = 0x5413;
 
 pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
-    log::info!("[sys_ioctl] fd: {}, request: {}, arg:{}", fd, request, arg);
+    log::warn!("[sys_ioctl] fd: {}, request: {}, arg:{}", fd, request, arg);
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;

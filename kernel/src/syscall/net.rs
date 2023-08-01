@@ -3,7 +3,7 @@ use smoltcp::wire::IpListenEndpoint;
 
 use crate::{
     mm::user_check::UserCheck,
-    net::{address::SocketAddrv4, Socket, TCP_MSS, UNIX_SOCKET_BUF_MANAGER},
+    net::{address::SocketAddrv4, make_unix_socket_pair, Socket, TCP_MSS},
     processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
@@ -107,7 +107,7 @@ pub async fn sys_sendto(
     let socket = current_process()
         .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
-    info!("[sys_sendto] get socket sockfd: {}", sockfd);
+    log::info!("[sys_sendto] get socket sockfd: {}", sockfd);
     let len = match *socket {
         Socket::TcpSocket(_) => socket_file.write(buf).await?,
         Socket::UdpSocket(ref udp) => {
@@ -125,16 +125,17 @@ pub async fn sys_sendto(
         }
         Socket::UnixSocket(ref unix) => {
             info!("[sys_sendto] socket is unix");
-            UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
-            let dest_addr =
-                unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
-            let endpoint = unix.addr(dest_addr);
-            let ret = socket_file.write(buf).await?;
-            UNIX_SOCKET_BUF_MANAGER
-                .buf_mgr
-                .lock()
-                .insert(endpoint, socket_file);
-            ret
+            todo!()
+            // UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
+            // let dest_addr =
+            //     unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
+            // let endpoint = unix.addr(dest_addr);
+            // let ret = socket_file.write(buf).await?;
+            // UNIX_SOCKET_BUF_MANAGER
+            //     .buf_mgr
+            //     .lock()
+            //     .insert(endpoint, socket_file);
+            // ret
         }
     };
     Ok(len)
@@ -162,18 +163,19 @@ pub async fn sys_recvfrom(
     match *socket {
         Socket::UnixSocket(ref unix) => {
             info!("[sys_sendto] socket is unix");
-            UserCheck::new().check_readable_slice(src_addr as *const u8, addrlen)?;
-            let src_addr =
-                unsafe { core::slice::from_raw_parts(src_addr as *const u8, addrlen as usize) };
-            let endpoint = unix.addr(src_addr);
-            let dest_file = UNIX_SOCKET_BUF_MANAGER
-                .buf_mgr
-                .lock()
-                .get(&endpoint)
-                .unwrap()
-                .clone();
-            let len = dest_file.read(buf).await?;
-            Ok(len)
+            todo!()
+            // UserCheck::new().check_readable_slice(src_addr as *const u8, addrlen)?;
+            // let src_addr =
+            //     unsafe { core::slice::from_raw_parts(src_addr as *const u8, addrlen as usize) };
+            // let endpoint = unix.addr(src_addr);
+            // let dest_file = UNIX_SOCKET_BUF_MANAGER
+            //     .buf_mgr
+            //     .lock()
+            //     .get(&endpoint)
+            //     .unwrap()
+            //     .clone();
+            // let len = dest_file.read(buf).await?;
+            // Ok(len)
         }
         Socket::TcpSocket(_) => {
             let len = socket_file.read(buf).await?;
@@ -306,8 +308,18 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;
     let _sum_guard = SumGuard::new();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
-    sv[0] = Socket::new(domain, socket_type)? as u32;
-    sv[1] = Socket::new(domain, socket_type)? as u32;
+    let (socket1, socket2) = make_unix_socket_pair();
+
+    let (fd1, fd2) = current_process().inner_handler(move |proc| {
+        let fd1 = proc.fd_table.alloc_fd()?;
+        proc.fd_table.put(fd1, socket1);
+        let fd2 = proc.fd_table.alloc_fd()?;
+        proc.fd_table.put(fd2, socket2);
+        Ok((fd1, fd2))
+    })?;
+
+    sv[0] = fd1 as u32;
+    sv[1] = fd2 as u32;
     info!("[sys_socketpair] new sv: {:?}", sv);
     Ok(0)
 }

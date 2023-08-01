@@ -46,14 +46,16 @@ mod utils;
 use core::{
     arch::{asm, global_asm},
     sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
 };
 
 use crate::{
     config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
-    process::thread,
+    process::{thread, PROCESS_MANAGER},
     processor::hart,
+    timer::timeout_task::ksleep,
 };
 
 global_asm!(include_str!("entry.S"));
@@ -151,6 +153,13 @@ pub fn rust_main(hart_id: usize) {
             process::add_initproc();
         });
 
+        thread::spawn_kernel_thread(async move {
+            loop {
+                log::warn!("[daemon] process cnt {}", PROCESS_MANAGER.total_num());
+                ksleep(Duration::from_secs(3)).await;
+            }
+        });
+
         // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);
 
@@ -171,10 +180,10 @@ pub fn rust_main(hart_id: usize) {
             hart_id
         );
 
-        #[cfg(feature = "board_u740")]
-        {
-            driver::fu740::plic::plic_inithart();
-        }
+        // #[cfg(feature = "board_u740")]
+        // {
+        //     driver::fu740::plic::plic_inithart();
+        // }
 
         trap::init();
         unsafe {
