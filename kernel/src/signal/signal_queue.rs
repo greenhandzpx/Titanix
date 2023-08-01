@@ -71,6 +71,11 @@ impl SigQueue {
         self.pending_sigs.add(signo);
     }
 
+    pub fn check_spec_signal(&self, signos: SigSet) -> bool {
+        stack_trace!();
+        self.pending_sigs.bitmap.intersects(signos)
+    }
+
     /// Return (signo, sig action, old blocked sigs)
     pub fn check_signal(&mut self) -> Option<(usize, KSigAction, SigSet)> {
         stack_trace!();
@@ -89,11 +94,12 @@ impl SigQueue {
                     // TODO: just work around for libc-bench
                     log::warn!("SIGSEGV has been blocked");
                 } else {
-                    log::info!("sig {} has been blocked", signo);
+                    log::info!("[check_signal] sig {} has been blocked", signo);
                     self.pending_sigs.add(signo);
                     continue;
                 }
             }
+            log::info!("[check_signal] find a unblocked signal {}", signo);
 
             let old_blocked_sigs = self.blocked_sigs;
 

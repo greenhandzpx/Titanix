@@ -775,7 +775,7 @@ pub async fn sys_sendfile(
     count: usize,
 ) -> SyscallRet {
     stack_trace!();
-    debug!(
+    info!(
         "[sys_sendfile]: out fd {} in fd {} offset_ptr {:#x} count {}",
         out_fd, in_fd, offset_ptr, count
     );
@@ -813,9 +813,9 @@ pub async fn sys_sendfile(
             nbytes
         }
     };
-    debug!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
+    info!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
     let ret = output_file.write(&buf[0..nbytes as usize]).await;
-    info!("[sys_sendfile]: finished");
+    debug!("[sys_sendfile]: finished");
     ret
 }
 /// If newpath already exists, replace it.

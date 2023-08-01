@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{stack_trace, sync::mutex::SpinNoIrqLock};
 use alloc::sync::Arc;
 use core::{
     any::Any,
@@ -17,6 +17,8 @@ pub mod qemu;
 pub mod sbi;
 
 type Mutex<T> = SpinNoIrqLock<T>;
+
+static PRINT_MUTEX: Mutex<()> = Mutex::new(());
 
 // Block Device
 pub trait BlockDevice: Send + Sync + Any {
@@ -63,7 +65,7 @@ pub fn init() {
     #[cfg(feature = "board_u740")]
     {
         fu740::plic::init_plic();
-        fu740::prci::init_prci();
+        // fu740::prci::init_prci();
     }
 }
 
@@ -93,6 +95,7 @@ pub fn getchar() -> u8 {
 }
 
 pub fn print(args: fmt::Arguments<'_>) {
+    let _lock = PRINT_MUTEX.lock();
     Stdout.write_fmt(args).unwrap();
 }
 

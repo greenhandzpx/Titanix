@@ -207,7 +207,7 @@ pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SyscallRet {
 pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
-    info!("send signal {} to proc {}", signo, pid);
+    log::info!("send signal {} to proc {}", signo, pid);
     // TODO: add permission check for sending signal
     match pid {
         0 => {
@@ -237,24 +237,21 @@ pub fn sys_kill(pid: isize, signo: i32) -> SyscallRet {
             }
         }
         -1 => {
-            for (_, proc) in PROCESS_MANAGER.0.lock().iter() {
-                if let Some(proc) = proc.upgrade() {
-                    if proc.pid() == INITPROC_PID {
-                        continue;
-                    }
-                    debug!(
-                        "proc {} send signal {} to proc {}",
-                        current_process().pid(),
-                        signo,
-                        proc.pid()
-                    );
-                    if signo != 0 {
-                        proc.recv_signal(signo as usize)?;
-                    }
-                } else {
-                    continue;
+            PROCESS_MANAGER.for_each(|p| {
+                if p.pid() == INITPROC_PID {
+                    return Ok(());
                 }
-            }
+                debug!(
+                    "proc {} send signal {} to proc {}",
+                    current_process().pid(),
+                    signo,
+                    p.pid()
+                );
+                if signo != 0 {
+                    p.recv_signal(signo as usize)?;
+                }
+                Ok(())
+            })?;
         }
         _ if pid > 0 => {
             if let Some(proc) = PROCESS_MANAGER.get(pid as usize) {

@@ -164,12 +164,6 @@ macro_rules! sys_handler {
 
 /// Handle syscall exception with `syscall_id` and other arguments.
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
-    // strace!(
-    //     "syscall: {}, args: {:?}, sepc: {:#x}",
-    //     SYSCALL_NAMES[syscall_id],
-    //     args,
-    //     crate::processor::current_trap_cx().sepc
-    // );
     match syscall_id {
         SYSCALL_GETCWD => sys_handler!(sys_getcwd, (args[0], args[1])),
         SYSCALL_DUP => sys_handler!(sys_dup, (args[0])),

@@ -13,7 +13,7 @@ use super::Thread;
 /// Things the thread need to do when it terminated
 pub fn handle_exit(thread: &Arc<Thread>) {
     stack_trace!();
-    info!("thread {} handle exit", thread.tid());
+    log::info!("thread {} handle exit", thread.tid());
     if thread.process.pid() == INITPROC_PID {
         panic!("initproc die!!!, sepc {:#x}", current_trap_cx().sepc);
     }
@@ -141,7 +141,7 @@ pub fn terminate_given_thread(tid: usize, exit_code: i8) {
         }
         return None;
     }) {
-        debug!("terminate given tid {}", tid);
+        log::info!("terminate given tid {}", tid);
         // thread.recv_signal(SIGKILL);
         thread.terminate();
     }

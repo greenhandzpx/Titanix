@@ -50,7 +50,7 @@ impl Inode for TtyInode {
     }
 }
 
-const PRINT_LOCKED: bool = true;
+const PRINT_LOCKED: bool = false;
 
 // static PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
 
@@ -85,6 +85,7 @@ impl File for TtyFile {
     }
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+        // println!("[TtyFile::read] read...");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
             let mut c: u8;
@@ -112,28 +113,23 @@ impl File for TtyFile {
                     break;
                 }
             }
+            // println!("[TtyFile::read] read finished");
             Ok(buf.len())
         })
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
-        // warn!("Cannot write to stdin");
-        // Box::pin(async move { Err(SyscallErr::EBADF) })
+        // println!("[TtyFile::write] buf {:?}...", buf);
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
             // let buff = unsafe { core::slice::from_raw_parts(buf, len) };
             if PRINT_LOCKED {
                 let _locked = PRINT_MUTEX.lock().await;
-                // info!("[test]:{:?}", buf);
-                // if let Some(ch) = core::str::from_utf8(buf).ok() {
-                //     print!("{}", ch);
-                // } else {
-                //     warn!("cannot transfer to utf8: {:?}", buf);
-                // }
                 print!("{}", unsafe { core::str::from_utf8_unchecked(buf) });
             } else {
-                print!("{}", core::str::from_utf8(buf).unwrap());
+                print!("{}", unsafe { core::str::from_utf8_unchecked(buf) });
             }
+            // println!("[TtyFile::write] write finished");
             Ok(buf.len())
         })
     }

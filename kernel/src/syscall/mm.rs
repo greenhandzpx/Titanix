@@ -10,6 +10,7 @@ use crate::{
         },
         MapPermission, VPNRange, VirtAddr, SHARED_MEMORY_MANAGER,
     },
+    process::thread::exit_and_terminate_all_threads,
     processor::current_process,
     stack_trace,
     syscall::{MmapFlags, MmapProt},
@@ -73,6 +74,9 @@ pub fn sys_mmap(
             );
             return Err(SyscallErr::EINVAL);
         }
+        // if flags.contains(MmapFlags::MAP_FIXED) {
+        //     exit_and_terminate_all_threads(0);
+        // }
         current_process().inner_handler(|proc| {
             let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
             let mut vma = {
@@ -90,10 +94,10 @@ pub fn sys_mmap(
             let handler = MmapPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
 
-            vma.backup_file = Some(BackupFile {
-                offset,
-                file: file.clone(),
-            });
+            // if vma.backup_file.is_none() {
+            //     vma.backup_file = Some(BackupFile { offset, file });
+            // }
+            vma.backup_file = Some(BackupFile { offset, file });
             let start_va: VirtAddr = vma.start_vpn().into();
             proc.memory_space.insert_area(vma);
 

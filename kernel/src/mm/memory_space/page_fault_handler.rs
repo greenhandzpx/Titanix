@@ -247,6 +247,12 @@ impl PageFaultHandler for MmapPageFaultHandler {
                     .0
                     .insert(va.floor(), page);
             });
+
+            let _sum_guard = SumGuard::new();
+            debug!("[MmapPageFaultHandler] value {}", unsafe {
+                *(va.0 as *const usize)
+            });
+
             Ok(())
         })
     }

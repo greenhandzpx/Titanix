@@ -33,7 +33,6 @@ pub const TCP_MSS: u32 = if TCP_MSS_DEFAULT > MAX_BUFFER_SIZE as u32 {
 
 pub struct TcpSocket {
     inner: Mutex<TcpSocketInner>,
-    mss: u32,
     socket_handler: SocketHandle,
     file_meta: FileMeta,
 }
@@ -57,7 +56,6 @@ impl TcpSocket {
         NET_INTERFACE.poll();
         Self {
             socket_handler,
-            mss: TCP_MSS,
             inner: Mutex::new(TcpSocketInner {
                 local_endpoint: IpListenEndpoint {
                     addr: None,

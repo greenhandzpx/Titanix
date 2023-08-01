@@ -11,7 +11,7 @@ use crate::{
     },
     fs::{resolve_path, OpenFlags, AT_FDCWD},
     mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
-    process::aux::*,
+    process::{aux::*, thread::exit_and_terminate_all_threads},
     processor::current_process,
     stack_trace,
     utils::{
@@ -778,7 +778,9 @@ impl MemorySpace {
         }
 
         if is_dl {
-            info!("[load_dl] encounter a dl elf");
+            log::info!("[load_dl] encounter a dl elf");
+            exit_and_terminate_all_threads(0);
+
             let interp_inode = resolve_path(AT_FDCWD, DL_INTERP, OpenFlags::RDONLY)
                 .ok()
                 .unwrap();

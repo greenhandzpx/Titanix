@@ -183,8 +183,8 @@ impl Thread {
         stack_trace!();
         log::info!(
             "[Thread::recv_signal] thread {} recv signo {}",
+            self.tid(),
             signo,
-            self.tid()
         );
         match signo {
             SIGKILL => {

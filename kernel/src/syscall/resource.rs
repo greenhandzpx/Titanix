@@ -63,7 +63,7 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> Sysc
             }
             Ok(0)
         } else {
-            debug!(
+            log::info!(
                 "[sys_sched_getaffinity] No such tid {} in pid {}",
                 pid,
                 proc.pid()
@@ -71,7 +71,7 @@ pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> Sysc
             Err(SyscallErr::ESRCH)
         }
     } else {
-        debug!("[sys_sched_getaffinity] No such process");
+        log::info!("[sys_sched_getaffinity] No such process, tid {}", pid);
         Err(SyscallErr::ESRCH)
     }
 }
