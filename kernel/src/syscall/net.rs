@@ -38,7 +38,25 @@ pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
     let socket = current_process()
         .inner_handler(|proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
-    socket.bind(addr_buf)
+    let endpoint = Socket::endpoint(addr_buf)?;
+    match *socket {
+        Socket::TcpSocket(ref socket) => socket.bind(endpoint),
+        Socket::UdpSocket(ref socket) => current_process().inner_handler(|proc| {
+            let res = proc.socket_table.can_bind(endpoint);
+            if res.is_none() {
+                info!("[sys_bind] not find port exist");
+                socket.bind(endpoint)
+            } else {
+                let (_, sock) = res.unwrap();
+                proc.socket_table.insert(sockfd as usize, sock.clone());
+                stack_trace!();
+                proc.fd_table.take(sockfd as usize);
+                proc.fd_table.put(sockfd as usize, sock);
+                Ok(0)
+            }
+        }),
+        Socket::UnixSocket(_) => todo!(),
+    }
 }
 
 pub fn sys_listen(sockfd: u32, _backlog: u32) -> SyscallRet {
@@ -274,7 +292,13 @@ pub fn sys_setsockopt(
         }
         (SOL_TCP, TCP_NODELAY) => {
             // close Nagle’s Algorithm
-            socket.set_nagle_enabled(false)?;
+            UserCheck::new().check_readable_slice(optval_ptr as *const u8, optlen as usize)?;
+            let enabled = unsafe { *(optval_ptr as *const u32) };
+            log::debug!("[sys_setsockopt] set TCPNODELY: {}", enabled);
+            match enabled {
+                0 => socket.set_nagle_enabled(true)?,
+                _ => socket.set_nagle_enabled(false)?,
+            };
         }
         _ => {
             log::warn!("[sys_setsockopt] level: {}, optname: {}", level, optname);
@@ -288,12 +312,18 @@ pub fn sys_shutdown(sockfd: u32, how: u32) -> SyscallRet {
     log::info!("[sys_shutdown] sockfd {}, how {}", sockfd, how);
     // current_process().close_file(sockfd as usize)?;
     current_process().inner_handler(|proc| {
-        let socket = proc
+        // let socket = proc
+        //     .socket_table
+        //     .get_ref(sockfd as usize)
+        //     .ok_or(SyscallErr::EBADF)?
+        //     .clone();
+        // socket.shutdown(how)?;
+
+        let _ = proc
             .socket_table
-            .get_ref(sockfd as usize)
-            .ok_or(SyscallErr::EBADF)?
-            .clone();
-        socket.shutdown(how)?;
+            .take(sockfd as usize)
+            .ok_or(SyscallErr::EBADF)?;
+
         Ok(0)
     })
 }

@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use alloc::vec;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
@@ -7,7 +9,10 @@ use smoltcp::{
     wire::{EthernetAddress, IpAddress, IpCidr},
 };
 
-use crate::{sync::mutex::SpinNoIrqLock, timer::current_time_duration};
+use crate::{
+    sync::mutex::SpinNoIrqLock,
+    timer::{current_time_duration, timeout_task::ksleep},
+};
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -108,7 +113,7 @@ impl<'a> TitanixNetInterface<'a> {
                 Instant::from_millis(current_time_duration().as_millis() as i64),
                 &mut inner.device,
                 &mut inner.sockets,
-            )
+            );
         });
     }
 }

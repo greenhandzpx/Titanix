@@ -161,27 +161,22 @@ impl Socket {
         }
         Self::fill_with_endpoint(remote_endpoint.unwrap(), addr, addrlen)
     }
-    pub fn bind(&self, addr_buf: &[u8]) -> SyscallRet {
+    pub fn endpoint(addr_buf: &[u8]) -> GeneralRet<IpListenEndpoint> {
         stack_trace!();
         let _sum_guard = SumGuard::new();
         let family = u16::from_ne_bytes(addr_buf[0..2].try_into().expect("family size wrong"));
         log::info!("[Socket::bind] addr family {}", family);
-        let endpoint = match family {
+        match family {
             AF_INET => {
                 let ipv4 = SocketAddrv4::new(addr_buf);
-                IpListenEndpoint::from(ipv4)
+                Ok(IpListenEndpoint::from(ipv4))
             }
             AF_INET6 => {
                 let ipv6 = SocketAddrv6::new(addr_buf);
-                IpListenEndpoint::from(ipv6)
+                Ok(IpListenEndpoint::from(ipv6))
             }
             AF_UNIX => todo!(),
             _ => return Err(SyscallErr::EINVAL),
-        };
-        match *self {
-            Self::TcpSocket(ref socket) => socket.bind(endpoint),
-            Self::UdpSocket(ref socket) => socket.bind(endpoint),
-            Socket::UnixSocket(_) => todo!(),
         }
     }
     pub fn listen(&self) -> SyscallRet {
@@ -407,5 +402,19 @@ impl SocketTable {
             ret.insert(*sockfd, socket.clone());
         }
         Ok(Self(ret))
+    }
+    pub fn can_bind(&self, endpoint: IpListenEndpoint) -> Option<(Fd, Arc<Socket>)> {
+        for (sockfd, socket) in self.0.clone() {
+            match *socket {
+                Socket::UdpSocket(ref udp) => {
+                    if udp.listen_endpoint().eq(&endpoint) {
+                        log::info!("[SockTable::can_bind] find port exist");
+                        return Some((sockfd, socket));
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 }
