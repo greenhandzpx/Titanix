@@ -111,6 +111,13 @@ impl Socket {
 
 impl Socket {
     fn fill_with_endpoint(endpoint: IpEndpoint, addr: usize, addrlen: usize) -> SyscallRet {
+        stack_trace!();
+        let _sum_guard = SumGuard::new();
+        log::debug!(
+            "[fill_with_endpoint] fill addr {} with endpoint {:?}",
+            addr,
+            endpoint
+        );
         match endpoint.addr {
             IpAddress::Ipv4(_) => {
                 let len = mem::size_of::<u16>() + mem::size_of::<SocketAddrv4>();

@@ -22,8 +22,6 @@ use crate::{
 
 use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
 
-const UDP_PACKET_SIZE: usize = 1472;
-const MAX_PACKET: usize = MAX_BUFFER_SIZE / UDP_PACKET_SIZE;
 pub struct UdpSocket {
     inner: Mutex<UdpSocketInner>,
     socket_handler: SocketHandle,
@@ -32,7 +30,6 @@ pub struct UdpSocket {
 
 #[allow(unused)]
 struct UdpSocketInner {
-    max_packet: usize,
     remote_endpoint: Option<IpEndpoint>,
     recvbuf_size: usize,
     sendbuf_size: usize,
@@ -54,7 +51,6 @@ impl UdpSocket {
         NET_INTERFACE.poll();
         Self {
             inner: Mutex::new(UdpSocketInner {
-                max_packet: MAX_PACKET,
                 remote_endpoint: None,
                 recvbuf_size: MAX_BUFFER_SIZE,
                 sendbuf_size: MAX_BUFFER_SIZE,
