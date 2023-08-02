@@ -568,11 +568,9 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
 
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    trace!(
+    debug!(
         "[sys_writev] fd: {}, iov: {:#x}, iovcnt:{}",
-        fd,
-        iov,
-        iovcnt
+        fd, iov, iovcnt
     );
     let _sum_guard = SumGuard::new();
 
@@ -582,6 +580,11 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     if !file.writable() {
         return Err(SyscallErr::EPERM);
     }
+    log::info!(
+        "[sys_writev] fd: {}, file ref cnt {}",
+        fd,
+        Arc::strong_count(&file)
+    );
 
     stack_trace!();
     let mut ret: usize = 0;
@@ -609,11 +612,9 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
 
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     stack_trace!();
-    trace!(
+    debug!(
         "[sys_readv] fd: {}, iov: {:#x}, iovcnt: {}",
-        fd,
-        iov,
-        iovcnt
+        fd, iov, iovcnt
     );
     let _sum_guard = SumGuard::new();
 
@@ -698,7 +699,7 @@ pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
     let buf = unsafe { core::slice::from_raw_parts_mut(pipe, 2 * core::mem::size_of::<i32>()) };
     buf[0] = read_fd as i32;
     buf[1] = write_fd as i32;
-    debug!("[sys_pipe]: read fd {}, write fd {}", read_fd, write_fd);
+    log::info!("[sys_pipe]: read fd {}, write fd {}", read_fd, write_fd);
     Ok(0)
 }
 

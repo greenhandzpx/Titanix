@@ -81,15 +81,13 @@ pub struct ProcessInner {
     pub parent: Option<Weak<Process>>,
     /// Children processes
     pub children: Vec<Arc<Process>>,
+    // pub children: Vec<Weak<Process>>,
     /// File descriptor table
     pub fd_table: FdTable,
     /// Socket table
     pub socket_table: SocketTable,
     /// TODO: use BTreeMap to query and delete more quickly
     pub threads: BTreeMap<usize, Weak<Thread>>,
-
-    // /// Pending sigs that wait for the prcoess to handle
-    // pub sig_queue: SigQueue,
     /// Futex queue
     pub futex_queue: FutexQueue,
     /// Exit code of the current process
@@ -122,6 +120,11 @@ pub struct Process {
 }
 
 impl Process {
+    /// Main thread
+    pub fn main_thread(&self) -> Option<Weak<Thread>> {
+        self.inner.lock().threads.get(&self.pid()).cloned()
+    }
+
     /// Main thread's trap context
     pub fn trap_context_main(&self) -> &mut TrapContext {
         let inner = self.inner.lock();
@@ -220,7 +223,17 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
-        debug!("process {} died!", self.pid());
+        let inner = self.inner.lock();
+        for (fd, file) in inner.fd_table.fd_table.iter().enumerate() {
+            if file.is_some() {
+                log::info!(
+                    "[Process::drop] drop fd {}, file ref cnt {}",
+                    fd,
+                    Arc::strong_count(file.as_ref().unwrap())
+                );
+            }
+        }
+        log::info!("process {} died!", self.pid());
     }
 }
 
@@ -289,7 +302,8 @@ impl Process {
     /// main thread, and the new program is executed in the main thread.
     pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
         stack_trace!();
-        debug!("exec pid {}", current_process().pid());
+        log::debug!("[Process::exec] pid {}", current_process().pid());
+        log::info!("[Process::exec] elf name {}", args[0]);
 
         // memory_space with elf program headers/trampoline/trap context/user stack
         // substitute memory_space
@@ -319,10 +333,6 @@ impl Process {
 
         let main_thread_inner = unsafe { &mut (*main_thread.inner.get()) };
         main_thread_inner.ustack_top = ustack_top;
-        // // dealloc old ustack
-        // task.dealloc_ustack();
-        // self.inner.lock().memory_space = memory_space;
-        // main_thread_inner.ustack_base = ustack_base;
 
         // // alloc new ustack
         // main_thread.alloc_ustack();

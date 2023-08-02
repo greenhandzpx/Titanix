@@ -101,16 +101,6 @@ impl FutexQueue {
     /// Wake up one waiter.
     /// Returns the waiter's tid.
     pub fn wake_one(&mut self, addr: VirtAddr) -> Option<usize> {
-        // if let Some(waiters) = self.0.get_mut(&addr) {
-        //     for (_, waiter) in waiters.iter() {
-        //         let tid = waiter.tid;
-        //         waiter.wake_by_ref();
-        //         return Some(tid);
-        //     }
-        //     None
-        // } else {
-        //     None
-        // }
         if let Some(waiters) = self.0.get_mut(&addr) {
             log::info!(
                 "[FutexQueue::wake_one] addr {:#x} waiters len {}",

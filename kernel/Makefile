@@ -18,7 +18,7 @@ SUBMIT :=
 
 TMPFS :=
 
-MULTI_HART :=
+SMP :=
 
 STACK_TRACE := 
 
@@ -43,7 +43,7 @@ endif
 ifneq ($(TMPFS), )
 	KERNEL_FEATURES += tmpfs
 endif
-ifneq ($(MULTI_HART), )
+ifneq ($(SMP), )
 	KERNEL_FEATURES += multi_hart
 endif
 ifeq ($(BOARD), u740)

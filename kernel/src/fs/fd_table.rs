@@ -15,7 +15,7 @@ use super::{file::File, resolve_path, Inode, OpenFlags, AT_FDCWD};
 pub type Fd = usize;
 
 pub struct FdTable {
-    fd_table: Vec<Option<Arc<dyn File>>>,
+    pub fd_table: Vec<Option<Arc<dyn File>>>,
     /// max fd
     rlimit: RLimit,
 }

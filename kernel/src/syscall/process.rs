@@ -9,7 +9,6 @@ use crate::mm::user_check::UserCheck;
 use crate::process::thread::{exit_and_terminate_all_threads, terminate_given_thread};
 use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
-use crate::signal::SigSet;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
 use crate::utils::async_tools::{Select2Futures, SelectOutput};
@@ -19,28 +18,16 @@ use crate::utils::path;
 use crate::utils::string::c_str_to_string;
 use crate::{process, stack_trace};
 use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use log::{debug, info, trace, warn};
 
 use super::TimeVal;
 
 type Pid = usize;
-type Tid = usize;
-
-// pub fn sys_exit(exit_code: i32) -> SyscallRet { //     stack_trace!();
-//     debug!("sys exit");
-//     // exit_current_and_run_next(exit_code);
-//     // panic!("Unreachable in sys_exit!");
-//     let tid = local_hart().current_task().tid();
-//     terminate_given_thread(tid, exit_code);
-//     todo!("we still need to set zombie");
-//     Ok(0)
-// }
 
 pub fn sys_exit(exit_code: i8) -> SyscallRet {
     stack_trace!();
-    // // TODO how can we only exit one thread but still let the parent process can wait for the child
-    // sys_exit_group(exit_code)
     info!(
         "[sys_exit]: exit code {}, sepc {:#x}",
         exit_code,
@@ -60,16 +47,12 @@ pub fn sys_exit_group(exit_code: i8) -> SyscallRet {
         current_trap_cx().sepc
     );
     exit_and_terminate_all_threads(exit_code);
-    // current_process().set_exit_code(exit_code);
-    // current_process().set_zombie();
-    // todo!();
     Ok(0)
 }
 
 pub async fn sys_yield() -> SyscallRet {
     stack_trace!();
     process::yield_now().await;
-    // suspend_current_and_run_next();
     Ok(0)
 }
 
