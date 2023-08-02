@@ -178,6 +178,11 @@ impl Thread {
         self.mailbox.wait_for_events(events).await
     }
 
+    /// Register for some event
+    pub fn register_event_waiter(&self, events: Event, waker: Waker) -> bool {
+        self.mailbox.register_event_waiter(events, waker)
+    }
+
     /// Send signal to this thread
     pub fn recv_signal(&self, signo: Signal) {
         stack_trace!();

@@ -55,23 +55,25 @@ impl Mailbox {
         stack_trace!();
         log::info!("[send_event] send event {:?}...", event);
         let mut inner = self.inner.lock();
-        if inner.events | event != inner.events {
-            inner.events |= event;
-            let new_event = inner.events;
-            inner.callbacks.retain(|(e, waker)| {
-                let cared_events = e.intersection(new_event);
-                if !cared_events.is_empty() {
-                    log::info!(
-                        "[send_event] recv event {:?}, which is what we want",
-                        cared_events
-                    );
-                    waker.wake_by_ref();
-                    false
-                } else {
-                    true
-                }
-            });
-        }
+        log::debug!("[send_event] callback len {}", inner.callbacks.len());
+        // if inner.events | event != inner.events {
+        inner.events |= event;
+        let new_event = inner.events;
+        inner.callbacks.retain(|(e, waker)| {
+            let cared_events = e.intersection(new_event);
+            log::debug!("[send_event] recv event {:?}, we care {:?}", new_event, e,);
+            if !cared_events.is_empty() {
+                log::info!(
+                    "[send_event] recv event {:?}, which is what we want",
+                    cared_events
+                );
+                waker.wake_by_ref();
+                false
+            } else {
+                true
+            }
+        });
+        // }
         log::info!("[send_event] send event {:?} finished", event);
     }
 
@@ -79,12 +81,34 @@ impl Mailbox {
     pub async fn wait_for_events(&self, events: Event) -> Event {
         WaitForEventFuture::new(events, self).await
     }
+
+    /// Register for waiting some event
+    pub fn register_event_waiter(&self, mut events: Event, waker: Waker) -> bool {
+        stack_trace!();
+        log::info!("[register_event_waiter] register event {:?}...", events);
+        let mut inner = self.inner.lock();
+        // Remove those that will wake the same task as us.
+        inner.callbacks.retain(|(e, w)| {
+            if w.will_wake(&waker) {
+                events |= *e;
+                false
+            } else {
+                true
+            }
+        });
+        inner.callbacks.push((events, waker));
+        log::debug!(
+            "[register_event_waiter] callback len {}",
+            inner.callbacks.len()
+        );
+        inner.events.intersects(events)
+    }
 }
 
 struct WaitForEventFuture<'a> {
     mailbox: &'a Mailbox,
     events: Event,
-    has_added_cb: bool,
+    // has_added_cb: bool,
 }
 
 impl<'a> WaitForEventFuture<'a> {
@@ -92,7 +116,7 @@ impl<'a> WaitForEventFuture<'a> {
         Self {
             mailbox,
             events,
-            has_added_cb: false,
+            // has_added_cb: false,
         }
     }
 }
@@ -112,17 +136,22 @@ impl<'a> Future for WaitForEventFuture<'a> {
             );
             return Poll::Ready(happend_events);
         }
-        let this = unsafe { Pin::get_unchecked_mut(self) };
-        if !this.has_added_cb {
-            this.has_added_cb = true;
-            let self_events = this.events;
-            let waker = cx.waker().clone();
-            // Remove those that will wake the same task as us.
-            inner
-                .callbacks
-                .retain(|(_, w)| if w.will_wake(&waker) { false } else { true });
-            inner.callbacks.push((self_events, waker));
-        }
+        // let this = unsafe { Pin::get_unchecked_mut(self) };
+        // if !this.has_added_cb {
+        // this.has_added_cb = true;
+        let mut self_events = self.events;
+        let waker = cx.waker().clone();
+        // Remove those that will wake the same task as us.
+        inner.callbacks.retain(|(e, w)| {
+            if w.will_wake(&waker) {
+                self_events |= *e;
+                false
+            } else {
+                true
+            }
+        });
+        inner.callbacks.push((self_events, waker));
+        // }
         Poll::Pending
     }
 }

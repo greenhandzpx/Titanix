@@ -1,3 +1,5 @@
+use core::future::Future;
+use core::task::Poll;
 use core::time::Duration;
 
 use crate::config::process::INITPROC_PID;
@@ -10,6 +12,7 @@ use crate::processor::{current_process, current_task, current_trap_cx, local_har
 use crate::signal::SigSet;
 use crate::sync::Event;
 use crate::timer::current_time_duration;
+use crate::utils::async_tools::{Select2Futures, SelectOutput};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -21,8 +24,10 @@ use log::{debug, info, trace, warn};
 
 use super::TimeVal;
 
-// pub fn sys_exit(exit_code: i32) -> SyscallRet {
-//     stack_trace!();
+type Pid = usize;
+type Tid = usize;
+
+// pub fn sys_exit(exit_code: i32) -> SyscallRet { //     stack_trace!();
 //     debug!("sys exit");
 //     // exit_current_and_run_next(exit_code);
 //     // panic!("Unreachable in sys_exit!");
@@ -297,29 +302,43 @@ bitflags! {
     }
 }
 
-pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> SyscallRet {
-    stack_trace!();
-    let process = current_process();
-
-    info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
-
-    let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
-
-    loop {
-        if let Some((os_exit, found_pid, exit_code)) = process.inner_handler(|proc| {
+struct WaitFuture {
+    options: WaitOption,
+    pid: Pid,
+    exit_status_addr: usize,
+}
+impl WaitFuture {
+    fn new(options: WaitOption, pid: Pid, exit_status_addr: usize) -> Self {
+        Self {
+            options,
+            pid,
+            exit_status_addr,
+        }
+    }
+}
+impl Future for WaitFuture {
+    type Output = SyscallRet;
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        let process = current_process();
+        if let Some((child_pid, exit_code)) = process.inner_handler(|proc| {
             if process.pid() == INITPROC_PID && proc.children.is_empty() {
-                return Ok(Some((true, 0, 0)));
+                // system exit
+                info!("os will exit");
+                shutdown();
             }
             if !proc
                 .children
                 .iter()
-                .any(|p| pid == -1 || pid as usize == p.pid())
+                .any(|p| self.pid as isize == -1 || self.pid == p.pid())
             {
                 info!(
-                    "proc[{}] no such pid {} exit code addr {:#x}",
+                    "[sys_wait4] proc[{}] no such pid {} exit code addr {:#x}",
                     current_process().pid(),
-                    pid,
-                    exit_status_addr
+                    self.pid,
+                    self.exit_status_addr
                 );
                 return Err(SyscallErr::ECHILD);
             }
@@ -327,17 +346,12 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 .children
                 .iter()
                 .enumerate()
-                .find(|(_, p)| p.is_zombie() && (pid == -1 || pid as usize == p.pid()))
+                .find(|(_, p)| p.is_zombie() && (self.pid as isize == -1 || self.pid == p.pid()))
                 .map(|(idx, _)| idx);
+
             if let Some(idx) = idx {
                 // the child has become zombie
                 let child = proc.children.remove(idx);
-
-                // After being removed, the child process may still not be destructed
-                // because the child process's threads may still alive and own its reference
-                // TODO: not sure whether we should exit all of its threads in advance
-                // // confirm that child will be deallocated after removing from children list
-                // assert_eq!(Arc::strong_count(&child), 1);
                 let found_pid = child.pid();
                 // get child's exit code
                 let exit_code = child.exit_code();
@@ -345,10 +359,8 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                     "[sys_wait4] found pid {} exit code {}",
                     found_pid, exit_code
                 );
-
-                Ok(Some((false, found_pid, exit_code as i32)))
+                Ok(Some((found_pid, exit_code as i32)))
             } else {
-                // the child still alive
                 debug!(
                     "[sys_wait4] no such pid, children size {}",
                     proc.children.len()
@@ -356,51 +368,61 @@ pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> Sys
                 if proc.children.len() > 0 {
                     debug!("[sys_wait4] first child pid {}", proc.children[0].pid());
                 }
-                // Ok((-1  , 0))
                 Ok(None)
             }
         })? {
-            if os_exit {
-                // system exit
-                info!("os will exit");
-                exit_and_terminate_all_threads(0);
-                // TODO: not sure where to invoke `shutdown`
-                shutdown();
-            } else {
-                if exit_status_addr != 0 {
-                    UserCheck::new().check_writable_slice(
-                        exit_status_addr as *mut u8,
-                        core::mem::size_of::<i32>(),
-                    )?;
-                    // TODO: here may cause some concurrency problem between we user_check and write it
-                    let _sum_guard = SumGuard::new();
-                    let exit_status_ptr = exit_status_addr as *mut i32;
+            if self.exit_status_addr != 0 {
+                UserCheck::new().check_writable_slice(
+                    self.exit_status_addr as *mut u8,
+                    core::mem::size_of::<i32>(),
+                )?;
+                // TODO: here may cause some concurrency problem between we user_check and write it
+                let _sum_guard = SumGuard::new();
+                let exit_status_ptr = self.exit_status_addr as *mut i32;
+                debug!(
+                    "[sys_wait4] write pid to exit_status_ptr {:#x} before",
+                    self.exit_status_addr
+                );
+                // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
+                unsafe {
+                    exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
                     debug!(
-                        "wait4: write pid to exit_status_ptr {:#x} before",
-                        exit_status_addr
+                        "wait4: write pid to exit_code_ptr after, exit code {:#x}",
+                        (*exit_status_ptr & 0xff00) >> 8
                     );
-                    // info!("waitpid: write pid to exit_status_ptr before, addr {:#x}", exit_status_addr);
-                    unsafe {
-                        exit_status_ptr.write_volatile((exit_code as i32 & 0xff) << 8);
-                        debug!(
-                            "wait4: write pid to exit_code_ptr after, exit code {:#x}",
-                            (*exit_status_ptr & 0xff00) >> 8
-                        );
-                    }
                 }
-                debug!("[sys_wait4] ret {}", found_pid);
-                return Ok(found_pid);
             }
+            debug!("[sys_wait4] ret {}", child_pid);
+            Poll::Ready(Ok(child_pid))
         } else {
-            if options.contains(WaitOption::WNOHANG) {
-                return Ok(0);
+            if self.options.contains(WaitOption::WNOHANG) {
+                Poll::Ready(Ok(0))
+            } else {
+                current_task().register_event_waiter(Event::CHILD_EXIT, cx.waker().clone());
+                Poll::Pending
             }
-            current_task().wait_for_events(Event::all()).await;
-            let mut signos = SigSet::all();
-            signos.remove(SigSet::SIGCHLD);
-            if current_task().sig_queue.lock().check_spec_signal(signos) {
-                return Err(SyscallErr::EINTR);
-            }
+        }
+    }
+}
+
+pub async fn sys_wait4(pid: isize, exit_status_addr: usize, options: i32) -> SyscallRet {
+    stack_trace!();
+    info!("[sys_wait4]: enter, pid {}, options {:#x}", pid, options);
+
+    let options = WaitOption::from_bits(options).ok_or(SyscallErr::EINVAL)?;
+
+    let mut concernd_events = Event::all();
+    concernd_events.remove(Event::CHILD_EXIT);
+    match Select2Futures::new(
+        WaitFuture::new(options, pid as usize, exit_status_addr),
+        current_task().wait_for_events(concernd_events),
+    )
+    .await
+    {
+        SelectOutput::Output1(ret) => ret,
+        SelectOutput::Output2(intr) => {
+            log::warn!("[sys_wait4] interrupt by event {:?}", intr);
+            Err(SyscallErr::EINTR)
         }
     }
 }
