@@ -10,7 +10,6 @@ use crate::{
         },
         MapPermission, VPNRange, VirtAddr, SHARED_MEMORY_MANAGER,
     },
-    process::thread::exit_and_terminate_all_threads,
     processor::current_process,
     stack_trace,
     syscall::{MmapFlags, MmapProt},

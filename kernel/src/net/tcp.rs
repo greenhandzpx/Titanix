@@ -1,7 +1,7 @@
-use core::{future::Future, task::Poll};
+use core::{future::Future, task::Poll, time::Duration};
 
 use alloc::{boxed::Box, vec};
-use log::{debug, info};
+use log::info;
 use managed::ManagedSlice;
 use smoltcp::{
     iface::SocketHandle,
@@ -15,6 +15,7 @@ use crate::{
     process::thread,
     processor::{current_task, SumGuard},
     sync::Event,
+    timer::timeout_task::ksleep,
     utils::{
         async_tools::{Select2Futures, SelectOutput},
         error::{GeneralRet, SyscallErr, SyscallRet},
@@ -141,7 +142,10 @@ impl TcpSocket {
         )
         .await
         {
-            SelectOutput::Output1(ret) => ret,
+            SelectOutput::Output1(ret) => {
+                thread::yield_now().await;
+                ret
+            }
             SelectOutput::Output2(intr) => {
                 log::info!("[TcpSocket::accept] interrupt by {:?}", intr);
                 Err(SyscallErr::EINTR)
@@ -149,10 +153,10 @@ impl TcpSocket {
         }
     }
 
-    pub async fn connect(&self, remote_endpoint: IpEndpoint) -> SyscallRet {
+    pub fn _connect(&self, remote_endpoint: IpEndpoint) -> GeneralRet<()> {
         NET_INTERFACE.poll();
         let local = self.inner.lock().local_endpoint;
-        debug!(
+        info!(
             "[Tcp::connect] local: {:?}, remote: {:?}",
             local, remote_endpoint
         );
@@ -160,24 +164,49 @@ impl TcpSocket {
             let socket = inner.sockets.get_mut::<tcp::Socket>(self.socket_handler);
             let ret = socket.connect(inner.iface.context(), remote_endpoint, local);
             if ret.is_err() {
+                log::info!("[Tcp::connect] {} connect error occur", self.socket_handler);
                 match ret.err().unwrap() {
                     tcp::ConnectError::Unaddressable => return Err(SyscallErr::EINVAL),
                     tcp::ConnectError::InvalidState => return Err(SyscallErr::EISCONN),
                 }
             }
+            info!("berfore poll socket state: {}", socket.state());
             Ok(())
         })?;
         NET_INTERFACE.poll();
+        Ok(())
+    }
+
+    pub async fn connect(&self, remote_endpoint: IpEndpoint) -> SyscallRet {
+        self._connect(remote_endpoint)?;
         loop {
             NET_INTERFACE.poll();
             let state = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.state());
-            if state != tcp::State::Established {
-                debug!("[Tcp::connect] not connect yet, state {:?}", state);
-                thread::yield_now().await;
-            } else {
-                info!("[Tcp::connect] connected, state {:?}", state);
-                thread::yield_now().await;
-                return Ok(0);
+            match state {
+                tcp::State::Closed => {
+                    // close but not already connect, retry
+                    info!(
+                        "[Tcp::connect] {} already closed, try again",
+                        self.socket_handler
+                    );
+                    self._connect(remote_endpoint)?;
+                    thread::yield_now().await;
+                }
+                tcp::State::Established => {
+                    info!(
+                        "[Tcp::connect] {} connected, state {:?}",
+                        self.socket_handler, state
+                    );
+                    thread::yield_now().await;
+                    return Ok(0);
+                }
+                _ => {
+                    info!(
+                        "[Tcp::connect] {} not connect yet, state {:?}",
+                        self.socket_handler, state
+                    );
+                    thread::yield_now().await;
+                }
             }
         }
     }
@@ -218,7 +247,11 @@ impl File for TcpSocket {
             )
             .await
             {
-                SelectOutput::Output1(ret) => ret,
+                SelectOutput::Output1(ret) => {
+                    thread::yield_now().await;
+                    ksleep(Duration::from_millis(5)).await;
+                    ret
+                }
                 SelectOutput::Output2(intr) => {
                     log::info!("[TcpSocket::read] interrupt by event {:?}", intr);
                     Err(SyscallErr::EINTR)
@@ -229,7 +262,24 @@ impl File for TcpSocket {
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
         log::info!("[Tcp::write] {} enter", self.socket_handler);
-        Box::pin(TcpSendFuture::new(self, buf))
+        Box::pin(async move {
+            match Select2Futures::new(
+                TcpSendFuture::new(self, buf),
+                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+            )
+            .await
+            {
+                SelectOutput::Output1(ret) => {
+                    thread::yield_now().await;
+                    ksleep(Duration::from_millis(5)).await;
+                    ret
+                }
+                SelectOutput::Output2(intr) => {
+                    log::info!("[TcpSocket::write] interrupt by event {:?}", intr);
+                    Err(SyscallErr::EINTR)
+                }
+            }
+        })
     }
 
     fn metadata(&self) -> &FileMeta {
@@ -241,7 +291,7 @@ impl File for TcpSocket {
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        debug!("[Tcp::pollin] {} enter", self.socket_handler);
+        info!("[Tcp::pollin] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             if socket.can_recv() {
@@ -267,7 +317,7 @@ impl File for TcpSocket {
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
-        debug!("[Tcp::pollout] {} enter", self.socket_handler);
+        info!("[Tcp::pollout] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             if socket.can_send() {
@@ -312,7 +362,7 @@ impl<'a> Future for TcpAcceptFuture<'a> {
                 log::info!("[TcpAcceptFuture::poll] state become {:?}", socket.state());
                 return Poll::Ready(Ok(socket.remote_endpoint().unwrap()));
             }
-            log::debug!(
+            log::info!(
                 "[TcpAcceptFuture::poll] not syn yet, state {:?}",
                 socket.state()
             );
@@ -361,7 +411,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
                 );
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
-            log::debug!("[TcpRecvFuture::poll] state {:?}", socket.state());
+            log::info!("[TcpRecvFuture::poll] state {:?}", socket.state());
             if !socket.can_recv() {
                 socket.register_recv_waker(cx.waker());
                 log::info!("[TcpRecvFuture::poll] cannot recv yet");
@@ -376,7 +426,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
             );
             Poll::Ready(match socket.recv_slice(&mut this.buf) {
                 Ok(nbytes) => {
-                    log::debug!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
+                    log::info!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
                     Ok(nbytes)
                 }
                 Err(_) => Err(SyscallErr::ENOTCONN),
@@ -425,7 +475,7 @@ impl<'a> Future for TcpSendFuture<'a> {
             );
             Poll::Ready(match socket.send_slice(&mut this.buf) {
                 Ok(nbytes) => {
-                    log::debug!("[TcpSendFuture::poll] send {} bytes", nbytes);
+                    log::info!("[TcpSendFuture::poll] send {} bytes", nbytes);
                     Ok(nbytes)
                 }
                 Err(_) => Err(SyscallErr::ENOTCONN),

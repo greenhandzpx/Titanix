@@ -59,7 +59,7 @@ bitflags! {
 }
 
 // pub const MAX_BUFFER_SIZE: usize = 1 << 15;
-pub const MAX_BUFFER_SIZE: usize = 1 << 12;
+pub const MAX_BUFFER_SIZE: usize = 1 << 17;
 
 pub enum Socket {
     TcpSocket(TcpSocket),
@@ -250,7 +250,7 @@ impl Socket {
             proc.socket_table
                 .insert(sockfd as usize, new_socket.clone());
             // insert old to newfd
-            log::debug!("[Socket::accept] insert old sock to newfd: {}", fd);
+            log::info!("[Socket::accept] insert old sock to newfd: {}", fd);
             proc.fd_table.put(fd, old_file.unwrap());
             proc.socket_table.insert(fd, old_socket.unwrap());
             Ok(fd)
