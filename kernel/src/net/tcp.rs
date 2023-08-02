@@ -225,7 +225,8 @@ impl TcpSocket {
 impl Drop for TcpSocket {
     fn drop(&mut self) {
         log::info!(
-            "[TcpSocket::drop] drop socket, localep {:?}",
+            "[TcpSocket::drop] drop socket {}, localep {:?}",
+            self.socket_handler,
             self.inner.lock().local_endpoint
         );
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {

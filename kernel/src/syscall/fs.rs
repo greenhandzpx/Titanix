@@ -1215,7 +1215,7 @@ pub async fn sys_ppoll(
     }
 }
 
-const THRESHOLD: u8 = 5;
+const THRESHOLD: u8 = 1;
 
 pub async fn sys_pselect6(
     nfds: i32,

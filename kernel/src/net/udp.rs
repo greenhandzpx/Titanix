@@ -1,4 +1,4 @@
-use core::{future::Future, task::Poll};
+use core::{future::Future, task::Poll, time::Duration};
 
 use alloc::{boxed::Box, vec};
 use log::{debug, info};
@@ -16,8 +16,14 @@ use smoltcp::{
 use crate::{
     fs::{File, FileMeta, OpenFlags},
     net::SHUT_WR,
-    processor::SumGuard,
-    utils::error::{GeneralRet, SyscallErr, SyscallRet},
+    process::thread,
+    processor::{current_task, SumGuard},
+    sync::Event,
+    timer::timeout_task::ksleep,
+    utils::{
+        async_tools::{Select2Futures, SelectOutput},
+        error::{GeneralRet, SyscallErr, SyscallRet},
+    },
 };
 
 use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
@@ -163,7 +169,8 @@ impl UdpSocket {
 impl Drop for UdpSocket {
     fn drop(&mut self) {
         log::info!(
-            "[UdpSocket::drop] drop socket, remoteep {:?}",
+            "[UdpSocket::drop] drop socket {}, remoteep {:?}",
+            self.socket_handler,
             self.inner.lock().remote_endpoint
         );
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
@@ -177,13 +184,47 @@ impl Drop for UdpSocket {
 
 impl File for UdpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
-        log::info!("[Udp::read] {} enter", self.socket_handler);
-        Box::pin(UdpRecvFuture::new(self, buf))
+        log::info!("[Ucp::read] {} enter", self.socket_handler);
+        Box::pin(async move {
+            match Select2Futures::new(
+                UdpRecvFuture::new(self, buf),
+                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+            )
+            .await
+            {
+                SelectOutput::Output1(ret) => {
+                    thread::yield_now().await;
+                    ksleep(Duration::from_millis(5)).await;
+                    ret
+                }
+                SelectOutput::Output2(intr) => {
+                    log::info!("[TcpSocket::read] interrupt by event {:?}", intr);
+                    Err(SyscallErr::EINTR)
+                }
+            }
+        })
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
         log::info!("[Udp::write] {} enter", self.socket_handler);
-        Box::pin(UdpSendFuture::new(self, buf))
+        Box::pin(async move {
+            match Select2Futures::new(
+                UdpSendFuture::new(self, buf),
+                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+            )
+            .await
+            {
+                SelectOutput::Output1(ret) => {
+                    thread::yield_now().await;
+                    ksleep(Duration::from_millis(5)).await;
+                    ret
+                }
+                SelectOutput::Output2(intr) => {
+                    log::info!("[TcpSocket::write] interrupt by event {:?}", intr);
+                    Err(SyscallErr::EINTR)
+                }
+            }
+        })
     }
 
     fn metadata(&self) -> &crate::fs::FileMeta {
