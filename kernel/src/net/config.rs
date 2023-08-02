@@ -108,7 +108,7 @@ impl<'a> TitanixNetInterface<'a> {
                 Instant::from_millis(current_time_duration().as_millis() as i64),
                 &mut inner.device,
                 &mut inner.sockets,
-            )
+            );
         });
     }
 }

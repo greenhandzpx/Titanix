@@ -54,7 +54,7 @@ pub fn init_prci() {
     let coreclk_rate = prci.core_pllcfg.read().rate();
     let pclk_rate = prci.hfpclk_pllcfg.read().rate();
     println!("coreclk rate = {}, pclk rate = {}", coreclk_rate, pclk_rate);
-    let new_coreclk_rate = (coreclk_rate as f64 * 1.05) as u32;
+    let new_coreclk_rate = (coreclk_rate as f64 * 1.04) as u32;
     println!("new coreclk rate = {}", new_coreclk_rate);
     let mut setup = prci.setup();
     setup = setup.pclk((pclk_rate as u32).hz());

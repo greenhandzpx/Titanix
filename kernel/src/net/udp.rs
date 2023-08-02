@@ -88,6 +88,13 @@ impl UdpSocket {
         IpEndpoint::new(addr, local.port)
     }
 
+    pub fn listen_endpoint(&self) -> IpListenEndpoint {
+        NET_INTERFACE.poll();
+        let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
+        NET_INTERFACE.poll();
+        local
+    }
+
     pub fn peer_addr(&self) -> Option<IpEndpoint> {
         self.inner.lock().remote_endpoint
     }

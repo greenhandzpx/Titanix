@@ -3,7 +3,11 @@
 [package]
 name = "kernel"
 version = "0.1.0"
-authors = ["Peixin Tsang <893522573@qq.com>", "Straho Chen", "ghj1222"]
+authors = [
+    "Peixin Tsang <893522573@qq.com>",
+    "Straho Chen <Straho@163.com>",
+    "ghj1222 <rqj.rac.hel@gmail.com>",
+]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -49,8 +53,8 @@ user_spin = []
 strace = []
 multi_hart = []
 submit = []
-async_flush = []  # flush dirty blocks to disk asynchronously
-tmpfs = []  # rootfs is tmpfs
+async_flush = []               # flush dirty blocks to disk asynchronously
+tmpfs = []                     # rootfs is tmpfs
 preliminary = []
 
 [profile.release]

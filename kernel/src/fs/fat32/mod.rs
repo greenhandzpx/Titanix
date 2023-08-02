@@ -23,7 +23,6 @@ const SNAME_LEN: usize = 11;
 const LNAME_MAXLEN: usize = 256;
 const BOOT_SECTOR_ID: usize = 0;
 const FATENTRY_PER_SECTOR: usize = 128;
-const FAT_CACHE_SIZE: usize = 16;
 const FSI_LEADSIG: u32 = 0x41615252;
 const FSI_STRUCSIG: u32 = 0x61417272;
 const FSI_TRAILSIG: u32 = 0xAA550000;
@@ -32,7 +31,6 @@ const FSI_RESERVED2_SIZE: usize = 12;
 const FSI_NOT_AVAILABLE: u32 = 0xFFFFFFFF;
 
 pub struct FAT32FileSystem {
-    fat: Arc<FileAllocTable>,
     meta: FileSystemMeta,
 }
 
@@ -80,10 +78,7 @@ impl FAT32FileSystem {
             covered_inode,
             s_dirty: Vec::new(),
         };
-        let ret = Self {
-            fat: Arc::clone(&fat),
-            meta,
-        };
+        let ret = Self { meta };
         Ok(ret)
     }
 }
