@@ -68,7 +68,6 @@ pub enum SeekFrom {
     Current(isize),
 }
 
-// #[async_trait]
 pub trait File: Send + Sync {
     fn readable(&self) -> bool {
         let flags = self.metadata().inner.lock().flags;
