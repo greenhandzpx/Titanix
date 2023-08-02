@@ -12,3 +12,4 @@
 - 需要将buddy_system_allocator中的LcokHeap的锁改为SpinNoIrqLock，否则内核中断可能会死锁并且不报错！！
 - 记得存浮点寄存器（lmbench ctx switch）
 - 注意某些耗时系统调用可能被信号中断，否则可能永远阻塞
+- 当进程退出时，需要将子进程转移到initproc下，转移完后需要向initproc发送信号唤醒它！！否则会有如下情况：某个进程退出后由于其父进程持有其强引用，但父进程没有调用wait系统调用释放子进程内存，而是在父进程退出时将子进程挂到initproc下，但由于没有唤醒initproc，initproc不会醒过来去回收子进程的内存空间，从而造成内存泄漏。

@@ -59,6 +59,7 @@ bitflags! {
 }
 
 // pub const MAX_BUFFER_SIZE: usize = 1 << 15;
+// pub const MAX_BUFFER_SIZE: usize = 1 << 16;
 pub const MAX_BUFFER_SIZE: usize = 1 << 17;
 
 pub enum Socket {

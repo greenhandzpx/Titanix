@@ -14,6 +14,7 @@ use crate::{
     net::{config::NET_INTERFACE, MAX_BUFFER_SIZE, SHUT_WR},
     process::thread,
     processor::{current_task, SumGuard},
+    stack_trace,
     sync::Event,
     timer::timeout_task::ksleep,
     utils::{
@@ -49,6 +50,7 @@ struct TcpSocketInner {
 
 impl TcpSocket {
     pub fn new() -> Self {
+        stack_trace!();
         let tx_buf = socket::tcp::SocketBuffer::new(vec![0 as u8; MAX_BUFFER_SIZE]);
         let rx_buf = socket::tcp::SocketBuffer::new(vec![0 as u8; MAX_BUFFER_SIZE]);
         let socket = socket::tcp::Socket::new(rx_buf, tx_buf);

@@ -183,6 +183,7 @@ pub trait File: Send + Sync {
 
     fn truncate(&self, len: usize) -> AgeneralRet<()> {
         Box::pin(async move {
+            stack_trace!();
             let (old_pos, writable, inode) = self.metadata().inner_get(|inner| {
                 let flags = inner.flags;
                 let inode = inner.inode.as_ref().ok_or(SyscallErr::EINVAL)?.clone();
@@ -199,9 +200,11 @@ pub trait File: Send + Sync {
             if len < old_data_len {
                 inode.metadata().inner.lock().data_len = len;
             } else if len > old_data_len {
+                stack_trace!();
                 inode.metadata().inner.lock().data_len = len;
                 // fill with \0
                 let buf = vec![0 as u8; len - old_data_len];
+                stack_trace!();
                 self.seek(SeekFrom::Start(old_data_len))?;
                 self.write(&buf).await?;
                 self.seek(SeekFrom::Start(old_pos))?;

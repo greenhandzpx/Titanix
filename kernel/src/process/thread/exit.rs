@@ -59,14 +59,16 @@ pub fn handle_exit(thread: &Arc<Thread>) {
         child.inner.lock().parent = Some(Arc::downgrade(&init_proc));
         init_proc.inner.lock().children.push(child.clone());
     }
+    // TODO: need we add memory barrier here?
     init_proc
         .main_thread()
         .unwrap()
         .upgrade()
         .unwrap()
         .recv_signal(SIGCHLD);
-    // TODO: Maybe we don't need to clear here?()
+    // We must clear the children set here to avoid memeory leak.
     process_inner.children.clear();
+
     let parent_prcess = {
         if let Some(parent_process) = process_inner.parent.as_ref() {
             parent_process.upgrade().unwrap()
