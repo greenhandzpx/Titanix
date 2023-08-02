@@ -59,6 +59,12 @@ pub fn handle_exit(thread: &Arc<Thread>) {
         child.inner.lock().parent = Some(Arc::downgrade(&init_proc));
         init_proc.inner.lock().children.push(child.clone());
     }
+    init_proc
+        .main_thread()
+        .unwrap()
+        .upgrade()
+        .unwrap()
+        .recv_signal(SIGCHLD);
     // TODO: Maybe we don't need to clear here?()
     process_inner.children.clear();
     let parent_prcess = {

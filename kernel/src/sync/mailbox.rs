@@ -53,18 +53,18 @@ impl Mailbox {
     /// Send event to this mailbox
     pub fn recv_event(&self, event: Event) {
         stack_trace!();
-        log::info!("[send_event] send event {:?}...", event);
+        log::info!("[recv_event] recv event {:?}...", event);
         let mut inner = self.inner.lock();
-        log::debug!("[send_event] callback len {}", inner.callbacks.len());
+        log::debug!("[recv_event] callback len {}", inner.callbacks.len());
         // if inner.events | event != inner.events {
         inner.events |= event;
         let new_event = inner.events;
         inner.callbacks.retain(|(e, waker)| {
             let cared_events = e.intersection(new_event);
-            log::debug!("[send_event] recv event {:?}, we care {:?}", new_event, e,);
+            log::debug!("[recv_event] recv event {:?}, we care {:?}", new_event, e,);
             if !cared_events.is_empty() {
                 log::info!(
-                    "[send_event] recv event {:?}, which is what we want",
+                    "[recv_event] recv event {:?}, which is what we want",
                     cared_events
                 );
                 waker.wake_by_ref();
@@ -74,7 +74,7 @@ impl Mailbox {
             }
         });
         // }
-        log::info!("[send_event] send event {:?} finished", event);
+        log::info!("[recv_event] recv event {:?} finished", event);
     }
 
     /// Wait for some event

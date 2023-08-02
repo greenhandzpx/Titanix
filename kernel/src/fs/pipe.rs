@@ -44,7 +44,7 @@ impl File for Pipe {
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         assert!(self.readable());
-        debug!("[Pipe::read] start to pipe read {} bytes", buf.len());
+        log::info!("[Pipe::read] start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
             // debug!("start to pipe read {} bytes", buf.len());
@@ -73,7 +73,7 @@ impl File for Pipe {
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
         assert!(self.writable());
-        debug!("[Pipe::write] start to pipe write {} bytes", buf.len());
+        log::info!("[Pipe::write] start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(async move {
             // TODO: not sure event
@@ -160,12 +160,14 @@ impl Pipe {
 
 impl Drop for Pipe {
     fn drop(&mut self) {
+        log::info!("[Pipe::drop] start drop..., writable {}", self.writable);
         if self.writable {
             // Write end,
             // we should wake up all read waiters(if any)
             let mut buffer = self.buffer.lock();
             while !buffer.read_waiters.is_empty() {
                 let waker = buffer.read_waiters.pop().unwrap();
+                log::info!("[Pipe::drop] wake up");
                 waker.wake();
             }
         }
@@ -252,10 +254,10 @@ impl PipeRingBuffer {
     }
 
     pub fn all_write_ends_closed(&self) -> bool {
-        // debug!(
-        //     "writen end ref cnt {}",
-        //     self.write_end.as_ref().unwrap().strong_count()
-        // );
+        log::info!(
+            "[all_write_end_closed] write end ref cnt {}",
+            self.write_end.as_ref().unwrap().strong_count()
+        );
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 
@@ -278,6 +280,7 @@ impl PipeRingBuffer {
         };
         while !queue.is_empty() {
             let waker = queue.pop().unwrap();
+            log::trace!("[Pipe::wake] wake up");
             waker.wake();
         }
     }
@@ -357,9 +360,11 @@ impl Future for PipeFuture {
                     if ring_buffer.all_write_ends_closed() {
                         // all of the buffer's write ends have
                         // been closed, then just end reading
+                        log::info!("[PipeFuture::poll] all write ends has closed");
                         return Poll::Ready(Ok(this.already_put));
                     } else {
                         ring_buffer.wait_for_reading(cx.waker().clone());
+                        log::info!("[PipeFuture::poll] nothing to read, wait...");
                         return Poll::Pending;
                     }
                 }
@@ -389,6 +394,7 @@ impl Future for PipeFuture {
                         return Poll::Ready(Ok(this.already_put));
                     } else {
                         ring_buffer.wait_for_writing(cx.waker().clone());
+                        debug!("[PipeFuture::poll] no space to write, wait...");
                         return Poll::Pending;
                     }
                 }
