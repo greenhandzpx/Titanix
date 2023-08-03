@@ -111,4 +111,9 @@ impl<'a> TitanixNetInterface<'a> {
             );
         });
     }
+    pub fn remove(&self, handler: SocketHandle) {
+        self.inner_handler(|inner| {
+            inner.sockets.remove(handler);
+        });
+    }
 }

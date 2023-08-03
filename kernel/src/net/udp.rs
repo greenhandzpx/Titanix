@@ -16,7 +16,6 @@ use smoltcp::{
 use crate::{
     fs::{File, FileMeta, OpenFlags},
     net::SHUT_WR,
-    process::thread,
     processor::{current_task, SumGuard},
     sync::Event,
     timer::timeout_task::ksleep,
@@ -152,16 +151,6 @@ impl UdpSocket {
 
     pub fn shutdown(&self, how: u32) -> GeneralRet<()> {
         log::info!("[UdpSocket::shutdown] how {}", how);
-        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
-            // TODO: not sure
-            match how {
-                SHUT_WR => {
-                    log::warn!("[UdpSocket::shutdown] close write end");
-                }
-                _ => socket.close(),
-            }
-        });
-        NET_INTERFACE.poll();
         Ok(())
     }
 }
@@ -178,6 +167,7 @@ impl Drop for UdpSocket {
                 socket.close();
             }
         });
+        NET_INTERFACE.remove(self.socket_handler);
         NET_INTERFACE.poll();
     }
 }
@@ -193,8 +183,7 @@ impl File for UdpSocket {
             .await
             {
                 SelectOutput::Output1(ret) => {
-                    thread::yield_now().await;
-                    ksleep(Duration::from_millis(5)).await;
+                    ksleep(Duration::from_millis(2)).await;
                     ret
                 }
                 SelectOutput::Output2(intr) => {
@@ -215,8 +204,7 @@ impl File for UdpSocket {
             .await
             {
                 SelectOutput::Output1(ret) => {
-                    thread::yield_now().await;
-                    ksleep(Duration::from_millis(5)).await;
+                    ksleep(Duration::from_millis(2)).await;
                     ret
                 }
                 SelectOutput::Output2(intr) => {
