@@ -1,4 +1,4 @@
-use alloc::{collections::BTreeMap, sync::Arc};
+use alloc::sync::Arc;
 use log::{trace, warn};
 
 use crate::{
@@ -20,18 +20,7 @@ use crate::{
     },
 };
 
-use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType};
-
-///
-#[derive(Clone)]
-pub struct PageManager(pub BTreeMap<VirtPageNum, Arc<Page>>);
-
-impl PageManager {
-    ///
-    pub fn new() -> Self {
-        Self(BTreeMap::new())
-    }
-}
+use super::{page_fault_handler::PageFaultHandler, MapPermission, MapType, PageManager};
 
 /// Backup file struct
 #[derive(Clone)]
@@ -172,11 +161,6 @@ impl VmArea {
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&Self>)> {
         if let Some(handler) = self.handler.as_ref() {
             Ok((handler.clone(), Some(self)))
-            // if !handler.handle_page_fault(va, Some(self), page_table)? {
-            //     Ok(self.handler.as_ref().cloned())
-            // } else {
-            //     Ok(None)
-            // }
         } else {
             warn!("No page fault handler for va {:#x}", va.0);
             Err(SyscallErr::EFAULT)
@@ -191,9 +175,6 @@ impl VmArea {
         match self.map_type {
             MapType::Identical => {
                 unreachable!();
-                // ppn = PhysPageNum(vpn.0);
-                // println!("ppn {:#x}, vpn {:#x}", ppn.0, vpn.0);
-                // ppn = PhysPageNum(vpn.0);
             }
             MapType::Framed => {
                 let frame = match physical_frame {
@@ -210,13 +191,9 @@ impl VmArea {
             }
             MapType::Direct => {
                 ppn = PhysPageNum(vpn.0 - KERNEL_DIRECT_OFFSET);
-                // println!("vpn {:#x}, ppn {:#x}", vpn.0, ppn.0);
-                // todo!()
             }
         }
-        // let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
         let pte_flags = PTEFlags::from(self.map_perm);
-        // debug!("vpn {:#x} pg ph {:#x}", vpn.0, ppn.0);
         page_table.map(vpn, ppn, pte_flags);
         ppn
     }

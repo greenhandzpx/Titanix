@@ -83,6 +83,7 @@ impl FrameAllocator for StackFrameAllocator {
         }
     }
     fn dealloc(&mut self, ppn: PhysPageNum) {
+        // ppn.bytes_array().fill(0);
         let ppn = ppn.0;
         // validity check
         if ppn >= self.current || self.recycled.iter().any(|&v| v == ppn) {

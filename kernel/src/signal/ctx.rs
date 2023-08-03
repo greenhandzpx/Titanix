@@ -78,24 +78,25 @@ impl SignalTrampoline {
                 .permission(MapPermission::R | MapPermission::W | MapPermission::U)
                 .build(),
         );
+        let permission = *page.permission.lock();
         process.inner_handler(|proc| {
             let trampoline_vma = proc
                 .memory_space
-                .allocate_area(PAGE_SIZE, page.permission, VmAreaType::Mmap)
+                .allocate_area(PAGE_SIZE, permission, VmAreaType::Mmap)
                 .unwrap();
             let user_addr: VirtAddr = trampoline_vma.start_vpn().into();
             let page_table = trampoline_vma.page_table.get_unchecked_mut();
             page_table.map(
                 user_addr.floor(),
                 page.data_frame.ppn.into(),
-                page.permission.into(),
+                permission.into(),
             );
             proc.memory_space.insert_area(trampoline_vma);
             log::debug!(
                 "[SignalTrampoline::new] map sig trampoline, vpn: {:#x}, ppn: {:#x}, flags: {:?}",
                 user_addr.floor().0,
                 page.data_frame.ppn.0,
-                page.permission
+                permission
             );
             Self { page, user_addr }
         })
