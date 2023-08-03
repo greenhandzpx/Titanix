@@ -176,6 +176,14 @@ impl PageTable {
         }
     }
 
+    /// Clear user space ptes
+    pub fn clear_user_space(&mut self) {
+        let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
+        let level_1_index = kernel_start_vpn.indices()[0];
+        log::debug!("[clear_user_space] level 1 index {}", level_1_index);
+        self.root_ppn.pte_array()[..level_1_index].fill(PageTableEntry::empty());
+    }
+
     /// Dump page table
     pub fn dump(&self) {
         info!("----- Dump page table -----");
@@ -199,15 +207,13 @@ impl PageTable {
         }
     }
 
-    fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    fn find_pte_create(&mut self, vpn: VirtPageNum) -> &mut PageTableEntry {
         let idxs = vpn.indices();
         let mut ppn = self.root_ppn;
-        let mut result: Option<&mut PageTableEntry> = None;
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.pte_array()[*idx];
             if i == 2 {
-                result = Some(pte);
-                break;
+                return pte;
             }
             if !pte.is_valid() {
                 let frame = frame_alloc().unwrap();
@@ -216,8 +222,9 @@ impl PageTable {
             }
             ppn = pte.ppn();
         }
-        result
+        unreachable!()
     }
+
     ///
     pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indices();
@@ -241,11 +248,9 @@ impl PageTable {
     #[allow(unused)]
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         stack_trace!();
-        // println!("{:#x}", vpn.0);
-        let pte = self.find_pte_create(vpn).unwrap();
+        let pte = self.find_pte_create(vpn);
         if pte.is_valid() {
-            error!("faillll");
-            error!("ppn {:#x}, pte {:?}", pte.ppn().0, pte.flags());
+            error!("fail!!! ppn {:#x}, pte {:?}", pte.ppn().0, pte.flags());
         }
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V | PTEFlags::D | PTEFlags::A);

@@ -9,7 +9,7 @@ use crate::{
         mm::{DL_INTERP_OFFSET, KERNEL_DIRECT_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS},
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
-    fs::{resolve_path, OpenFlags, AT_FDCWD},
+    fs::{resolve_path, File, OpenFlags, AT_FDCWD},
     mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
     process::{aux::*, thread::exit_and_terminate_all_threads},
     processor::current_process,
@@ -27,8 +27,8 @@ pub use self::{
 };
 
 use super::{
-    address::SimpleRange, page_table::PTEFlags, PageTable, PageTableEntry, VPNRange, VirtAddr,
-    VirtPageNum,
+    address::SimpleRange, page_table::PTEFlags, Page, PageTable, PageTableEntry, VPNRange,
+    VirtAddr, VirtPageNum,
 };
 
 ///
@@ -71,6 +71,17 @@ pub fn init_kernel_space() {
 /// Heap range
 pub type HeapRange = SimpleRange<VirtAddr>;
 
+///
+#[derive(Clone)]
+pub struct PageManager(pub BTreeMap<VirtPageNum, Arc<Page>>);
+
+impl PageManager {
+    ///
+    pub fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+}
+
 /// memory space structure, controls virtual-memory space
 pub struct MemorySpace {
     /// we should ensure modifying page table exclusively(e.g. through process_inner's lock)
@@ -98,19 +109,6 @@ impl MemorySpace {
 
     ///Create an empty `MemorySpace` but owns the global kernel mapping
     pub fn new_from_global() -> Self {
-        // TODO: optimize:
-        // Now we copy all the kernel space's ptes one by one
-        // but actually we can only copy the root ppn's corresponding ptes(i.e. level 1)
-        // which may be faster (see `PageTable::from_global()`)
-        // let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };
-        // let mut new_page_table = PageTable::new();
-        // for (_, area) in kernel_space.areas.get_unchecked_mut().iter() {
-        //     let pte_flags = PTEFlags::from_bits(area.map_perm.bits()).unwrap();
-        //     for vpn in area.vpn_range {
-        //         let ppn = kernel_space.translate(vpn).unwrap().ppn();
-        //         new_page_table.map(vpn, ppn, pte_flags);
-        //     }
-        // }
         let new_page_table = PageTable::from_global();
         let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
@@ -347,14 +345,11 @@ impl MemorySpace {
     /// Add the map area to memory set and map the map area(allocating physical frames)
     fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
         stack_trace!();
-        // let pgtbl_ref = self.page_table.get_unchecked_mut();
         vm_area.map();
         if let Some(data) = data {
             vm_area.copy_data_with_offset(data_offset, data);
         }
-        self.areas
-            .get_unchecked_mut()
-            .insert(vm_area.start_vpn(), vm_area);
+        self.areas.get_mut().insert(vm_area.start_vpn(), vm_area);
     }
     /// Only add the map area to memory set (without allocating physical frames)
     fn push_lazily(&self, vm_area: VmArea, _: Option<&[u8]>) {
@@ -544,13 +539,42 @@ impl MemorySpace {
 
     /// Map the sections in the elf.
     /// Return the max end vpn and the first section's va.
-    fn map_elf(&mut self, elf: &ElfFile, offset: VirtAddr) -> (VirtPageNum, VirtAddr) {
+    fn map_elf(
+        &mut self,
+        elf: &ElfFile,
+        elf_file: Option<&Arc<dyn File>>,
+        offset: VirtAddr,
+    ) -> (VirtPageNum, VirtAddr) {
+        stack_trace!();
         let elf_header = elf.header;
         let ph_count = elf_header.pt2.ph_count();
 
         let mut max_end_vpn = offset.floor();
         let mut head_va = 0;
         info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+
+        let page_cache = match elf_file {
+            Some(file) => Some(
+                file.metadata()
+                    .inner
+                    .lock()
+                    .inode
+                    .as_ref()
+                    .unwrap()
+                    .metadata()
+                    .inner
+                    .lock()
+                    .page_cache
+                    .as_ref()
+                    .unwrap()
+                    .clone(),
+            ),
+            None => None,
+        };
+
+        // self.cow_pages.clear();
+        // self.areas.get_mut().clear();
+        // self.page_table.get_unchecked_mut().clear_user_space();
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -572,7 +596,7 @@ impl MemorySpace {
                 if ph_flags.is_execute() {
                     map_perm |= MapPermission::X;
                 }
-                let vm_area = VmArea::new(
+                let mut vm_area = VmArea::new(
                     start_va,
                     end_va,
                     MapType::Framed,
@@ -582,21 +606,53 @@ impl MemorySpace {
                     self.page_table.clone(),
                     VmAreaType::Elf,
                 );
+
+                debug!(
+                    "[map_elf] [{:#x}, {:#x}], map_perm: {:?} start...",
+                    start_va.0, end_va.0, map_perm
+                );
+
                 max_end_vpn = vm_area.vpn_range.end();
 
                 let map_offset = start_va.0 - start_va.floor().0 * PAGE_SIZE;
-                self.push(
-                    vm_area,
-                    map_offset,
-                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
+
+                log::debug!(
+                    "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
+                    ph.offset(),
+                    ph.file_size(),
+                    ph.mem_size()
                 );
-                // self.push(
-                //     vm_area,
-                //     map_offset,
-                //     None
-                // );
+                if !map_perm.contains(MapPermission::W) && page_cache.is_some() {
+                    log::debug!(
+                        "[map_elf] map shared page: [{:#x}, {:#x}]",
+                        vm_area.start_vpn().0,
+                        vm_area.end_vpn().0
+                    );
+                    let mut file_offset = ph.offset() as usize;
+                    for vpn in vm_area.vpn_range {
+                        let page = page_cache
+                            .as_ref()
+                            .unwrap()
+                            .get_page(file_offset, Some(map_perm))
+                            .unwrap();
+                        *page.permission.lock() = map_perm;
+                        vm_area.map_one(vpn, Some(page));
+                        file_offset += PAGE_SIZE;
+                    }
+                    self.push_lazily(vm_area, None);
+                } else {
+                    self.push(
+                        vm_area,
+                        map_offset,
+                        Some(
+                            &elf.input
+                                [ph.offset() as usize..(ph.offset() + ph.file_size()) as usize],
+                        ),
+                    );
+                }
+
                 info!(
-                    "[map_elf]: {:#x}, {:#x}, map_perm: {:?}",
+                    "[map_elf] [{:#x}, {:#x}], map_perm: {:?}",
                     start_va.0, end_va.0, map_perm
                 );
             }
@@ -608,7 +664,10 @@ impl MemorySpace {
     /// Include sections in elf and TrapContext and user stack,
     /// also returns user_sp and entry point.
     /// TODO: resolve elf file lazily
-    pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize, Vec<AuxHeader>) {
+    pub fn from_elf(
+        elf_data: &[u8],
+        elf_file: Option<&Arc<dyn File>>,
+    ) -> (Self, usize, usize, Vec<AuxHeader>) {
         let mut memory_space = Self::new_from_global();
 
         // map program headers of elf, with U flag
@@ -647,14 +706,6 @@ impl MemorySpace {
                 value: 0,
             });
         }
-        // _at_base = memory_space.load_dl(&elf);
-        // if _at_base != 0 {
-        //     auxv.push(AuxHeader {
-        //         aux_type: AT_BASE,
-        //         value: DYNAMIC_LINKER as usize,
-        //     });
-        //     _at_base += DYNAMIC_LINKER;
-        // }
 
         auxv.push(AuxHeader {
             aux_type: AT_FLAGS,
@@ -701,7 +752,7 @@ impl MemorySpace {
             value: 0x112d as usize,
         });
 
-        let (max_end_vpn, head_va) = memory_space.map_elf(&elf, 0.into());
+        let (max_end_vpn, head_va) = memory_space.map_elf(&elf, elf_file, 0.into());
 
         let ph_head_addr = head_va.0 + elf.header.pt2.ph_offset() as usize;
         debug!("[from_elf] AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
@@ -794,7 +845,7 @@ impl MemorySpace {
                 .ok()
                 .unwrap();
             let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
-            self.map_elf(&interp_elf, DL_INTERP_OFFSET.into());
+            self.map_elf(&interp_elf, Some(&interp_file), DL_INTERP_OFFSET.into());
 
             Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET)
         } else {
@@ -844,9 +895,10 @@ impl MemorySpace {
         for (_, area) in user_space.areas.get_unchecked_mut().iter() {
             let new_area = VmArea::from_another(area, memory_space.page_table.clone());
             info!(
-                "[from_existed_user_lazily] area range [{:#x}, {:#x})",
+                "[from_existed_user_lazily] area range [{:#x}, {:#x}), map perm {:?}",
                 new_area.start_vpn().0,
-                new_area.end_vpn().0
+                new_area.end_vpn().0,
+                new_area.map_perm,
             );
             // copy data from another space
             for vpn in area.vpn_range {

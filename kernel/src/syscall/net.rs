@@ -141,7 +141,7 @@ pub async fn sys_sendto(
             socket.connect(dest_addr).await?;
             socket_file.write(buf).await?
         }
-        Socket::UnixSocket(ref unix) => {
+        Socket::UnixSocket(_) => {
             info!("[sys_sendto] socket is unix");
             todo!()
             // UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
@@ -179,21 +179,8 @@ pub async fn sys_recvfrom(
         .ok_or(SyscallErr::ENOTSOCK)?;
     info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
     match *socket {
-        Socket::UnixSocket(ref unix) => {
-            info!("[sys_sendto] socket is unix");
-            todo!()
-            // UserCheck::new().check_readable_slice(src_addr as *const u8, addrlen)?;
-            // let src_addr =
-            //     unsafe { core::slice::from_raw_parts(src_addr as *const u8, addrlen as usize) };
-            // let endpoint = unix.addr(src_addr);
-            // let dest_file = UNIX_SOCKET_BUF_MANAGER
-            //     .buf_mgr
-            //     .lock()
-            //     .get(&endpoint)
-            //     .unwrap()
-            //     .clone();
-            // let len = dest_file.read(buf).await?;
-            // Ok(len)
+        Socket::UnixSocket(_) => {
+            todo!("[sys_sendto] socket is unix");
         }
         Socket::TcpSocket(_) => {
             let len = socket_file.read(buf).await?;

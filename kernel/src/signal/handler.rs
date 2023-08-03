@@ -1,10 +1,6 @@
 use log::debug;
 
-use crate::{
-    process::thread::{exit_and_terminate_all_threads, terminate_given_thread},
-    processor::current_task,
-    stack_trace,
-};
+use crate::{process::thread::exit_and_terminate_all_threads, stack_trace};
 
 pub const SIG_ERR: usize = usize::MAX;
 pub const SIG_DFL: usize = 0;

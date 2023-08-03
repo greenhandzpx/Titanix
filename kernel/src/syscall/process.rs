@@ -18,7 +18,6 @@ use crate::utils::path;
 use crate::utils::string::c_str_to_string;
 use crate::{process, stack_trace};
 use alloc::string::{String, ToString};
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use log::{debug, info, trace, warn};
 
@@ -274,7 +273,8 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     if elf_data.is_empty() {
         app_file.read_all_from_start(elf_data)?;
     }
-    current_process().exec(&elf_data, args_vec, envs_vec)
+    // app_file.read_all_from_start(elf_data)?;
+    current_process().exec(&elf_data, Some(&app_file), args_vec, envs_vec)
 }
 
 bitflags! {

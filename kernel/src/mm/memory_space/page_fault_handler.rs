@@ -293,8 +293,9 @@ impl PageFaultHandler for CowPageFaultHandler {
                 .cloned()
                 .unwrap();
 
-            if !shared_page.permission.contains(MapPermission::W) {
-                warn!("pagefault illegal although cow since map perm doesn't contain W, va {:#x}, ppn {:#x}, map perm {:?}, pte flags {:?}", va.0, pte.ppn().0, shared_page.permission, pte.flags());
+            let permission = *shared_page.permission.lock();
+            if !permission.contains(MapPermission::W) {
+                warn!("pagefault illegal although cow since map perm doesn't contain W, va {:#x}, ppn {:#x}, map perm {:?}, pte flags {:?}", va.0, pte.ppn().0, permission, pte.flags());
                 return Err(SyscallErr::EFAULT);
             }
 
@@ -353,7 +354,7 @@ impl PageFaultHandler for CowPageFaultHandler {
                     stack_trace!();
                     let ret = Arc::new(
                         PageBuilder::new()
-                            .permission(shared_page.permission)
+                            .permission(*shared_page.permission.lock())
                             .physical_frame(new_frame)
                             .build(),
                     );

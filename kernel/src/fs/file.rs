@@ -81,8 +81,8 @@ pub trait File: Send + Sync {
 
     /// For default file, data must be read from page cache first.
     /// Note that only guarantee the safety of the first PAGE_SIZE bytes
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
 
+    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
     /// For default file, data must be written to page cache first.
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
 
@@ -168,8 +168,29 @@ pub trait File: Send + Sync {
 
     /// Read all data from this file synchronously
     /// TODO: add async version
-    fn read_all_from_start(&self, _buf: &mut Vec<u8>) -> GeneralRet<()> {
-        todo!()
+    fn read_all_from_start(&self, buffer: &mut Vec<u8>) -> GeneralRet<()> {
+        stack_trace!();
+        let old_pos = self.seek(SeekFrom::Start(0))?;
+        stack_trace!();
+        self.seek(SeekFrom::Start(0))?;
+        stack_trace!();
+        buffer.clear();
+        buffer.resize(PAGE_SIZE, 0);
+        // *buffer = vec![0u8; PAGE_SIZE];
+        stack_trace!();
+        let mut idx = 0;
+        loop {
+            let len = self.sync_read(&mut buffer.as_mut_slice()[idx..idx + PAGE_SIZE])?;
+            if len == 0 {
+                break;
+            }
+            idx += len;
+            buffer.resize(idx + PAGE_SIZE, 0);
+        }
+        stack_trace!();
+        self.seek(SeekFrom::Start(old_pos))?;
+        stack_trace!();
+        Ok(())
     }
 
     // TODO: not sure the args
@@ -364,24 +385,5 @@ impl File for DefaultFile {
             );
             Ok(res)
         })
-    }
-
-    fn read_all_from_start(&self, buffer: &mut Vec<u8>) -> GeneralRet<()> {
-        // let mut inner = self.inner.lock();
-        // let mut buffer = [0u8; PAGE_SIZE];
-        // buffer.clear();
-        self.seek(SeekFrom::Start(0))?;
-        *buffer = vec![0u8; PAGE_SIZE];
-        let mut idx = 0;
-        loop {
-            let len = self.sync_read(&mut buffer.as_mut_slice()[idx..idx + PAGE_SIZE])?;
-            if len == 0 {
-                break;
-            }
-            // log::info!("[read_all_from_start] len {}", len);
-            idx += len;
-            buffer.resize(idx + PAGE_SIZE, 0);
-        }
-        Ok(())
     }
 }

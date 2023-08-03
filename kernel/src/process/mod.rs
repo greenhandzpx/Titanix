@@ -18,7 +18,7 @@ pub mod resource;
 
 use crate::{
     config::process::CLONE_STACK_SIZE,
-    fs::FdTable,
+    fs::{FdTable, File},
     loader::get_app_data_by_name,
     mm::{user_check::UserCheck, MemorySpace},
     net::SocketTable,
@@ -57,7 +57,7 @@ pub fn add_initproc() {
     #[cfg(not(feature = "submit"))]
     let elf_data = get_app_data_by_name("initproc").unwrap();
 
-    let _init_proc = Process::new_initproc(elf_data);
+    let _init_proc = Process::new_initproc(elf_data, None);
     // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
 
     #[cfg(feature = "user_spin")]
@@ -239,8 +239,9 @@ impl Drop for Process {
 
 impl Process {
     /// Create a new process
-    pub fn new_initproc(elf_data: &[u8]) -> Arc<Self> {
-        let (memory_space, user_sp_top, entry_point, _auxv) = MemorySpace::from_elf(elf_data);
+    pub fn new_initproc(elf_data: &[u8], elf_file: Option<&Arc<dyn File>>) -> Arc<Self> {
+        let (memory_space, user_sp_top, entry_point, _auxv) =
+            MemorySpace::from_elf(elf_data, elf_file);
 
         // Alloc a pid
         let pid = Arc::new(tid_alloc());
@@ -300,14 +301,21 @@ impl Process {
     /// Note that the return value is `argc`.
     /// When one process invokes `exec`, all of the threads will terminate except the
     /// main thread, and the new program is executed in the main thread.
-    pub fn exec(&self, elf_data: &[u8], args: Vec<String>, envs: Vec<String>) -> SyscallRet {
+    pub fn exec(
+        &self,
+        elf_data: &[u8],
+        elf_file: Option<&Arc<dyn File>>,
+        args: Vec<String>,
+        envs: Vec<String>,
+    ) -> SyscallRet {
         stack_trace!();
         log::debug!("[Process::exec] pid {}", current_process().pid());
         log::info!("[Process::exec] elf name {}", args[0]);
 
         // memory_space with elf program headers/trampoline/trap context/user stack
         // substitute memory_space
-        let (memory_space, ustack_top, entry_point, mut auxs) = MemorySpace::from_elf(elf_data);
+        let (memory_space, ustack_top, entry_point, mut auxs) =
+            MemorySpace::from_elf(elf_data, elf_file);
         let main_thread = self.inner_handler(|proc| {
             if proc.thread_count() > 1 {
                 warn!("[Process:exec] thread count > 1: {}", proc.thread_count());

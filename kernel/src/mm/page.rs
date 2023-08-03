@@ -5,7 +5,7 @@ use crate::{
     config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
     fs::Inode,
     mm, stack_trace,
-    sync::mutex::SleepLock,
+    sync::mutex::{SleepLock, SpinLock},
     utils::error::{GeneralRet, SyscallErr},
 };
 
@@ -18,7 +18,7 @@ type Mutex<T> = SleepLock<T>;
 /// one page can be evicted by `Arc::strong_count()`
 pub struct Page {
     /// Immutable page permission
-    pub permission: MapPermission,
+    pub permission: SpinLock<MapPermission>,
     /// Physical data frame
     pub data_frame: FrameTracker,
     /// Mutable page inner
@@ -109,7 +109,7 @@ impl PageBuilder {
             Some(_) => self.physical_frame.take().unwrap(),
         };
         Page {
-            permission: self.permission,
+            permission: SpinLock::new(self.permission),
             data_frame: frame,
             file_info: match self.is_file_page {
                 true => Some(Mutex::new(FilePageInfo {
