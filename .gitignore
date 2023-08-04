@@ -27,4 +27,3 @@ tmp/
 kernel-qemu
 sbi-qemu
 *.log
-rootfs/

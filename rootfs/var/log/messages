@@ -1,0 +1,8 @@
+Jan  1 00:15:21 oscomp authpriv.info dropbear[70]: Child connection from 192.168.100.1:53604
+Jan  1 00:15:23 oscomp authpriv.notice dropbear[70]: Password auth succeeded for 'root' from 192.168.100.1:53604
+Jan  1 00:15:23 oscomp authpriv.info dropbear[70]: Exit (root) from <192.168.100.1:53604>: Disconnect received
+Jan  1 00:15:28 oscomp authpriv.info dropbear[72]: Child connection from 192.168.100.1:53606
+Jan  1 00:15:30 oscomp authpriv.notice dropbear[72]: Password auth succeeded for 'root' from 192.168.100.1:53606
+Jan  1 00:15:30 oscomp authpriv.info dropbear[72]: Exit (root) from <192.168.100.1:53606>: Disconnect received
+Jan  1 00:15:44 oscomp authpriv.info dropbear[74]: Child connection from 192.168.100.1:53608
+Jan  1 00:15:46 oscomp authpriv.notice dropbear[74]: Password auth succeeded for 'root' from 192.168.100.1:53608
