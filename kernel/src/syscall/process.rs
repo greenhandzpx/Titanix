@@ -176,7 +176,7 @@ pub async fn sys_clone(
         let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
-        log::info!(
+        log::warn!(
             "[sys_clone] clone a new process, pid {}, clone flags {:?}",
             new_pid,
             clone_flags,
@@ -259,7 +259,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             }
         }
     }
-    envs_vec.push("PATH=/:".to_string());
+    envs_vec.push("PATH=/:/bin:".to_string());
 
     let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY);
     if app_inode.is_err() {

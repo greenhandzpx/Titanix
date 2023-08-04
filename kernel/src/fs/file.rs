@@ -171,21 +171,21 @@ pub trait File: Send + Sync {
     fn read_all_from_start(&self, buffer: &mut Vec<u8>) -> GeneralRet<()> {
         stack_trace!();
         let old_pos = self.seek(SeekFrom::Start(0))?;
-        stack_trace!();
         self.seek(SeekFrom::Start(0))?;
-        stack_trace!();
         buffer.clear();
         buffer.resize(PAGE_SIZE, 0);
         // *buffer = vec![0u8; PAGE_SIZE];
-        stack_trace!();
         let mut idx = 0;
         loop {
+            stack_trace!();
             let len = self.sync_read(&mut buffer.as_mut_slice()[idx..idx + PAGE_SIZE])?;
             if len == 0 {
                 break;
             }
             idx += len;
+            stack_trace!();
             buffer.resize(idx + PAGE_SIZE, 0);
+            stack_trace!();
         }
         stack_trace!();
         self.seek(SeekFrom::Start(old_pos))?;
@@ -260,6 +260,7 @@ impl File for DefaultFile {
     /// TODO: change to real async
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         Box::pin(async move {
+            stack_trace!();
             let _sum_guard = SumGuard::new();
             let (pos, inode) = self
                 .metadata()
@@ -279,6 +280,7 @@ impl File for DefaultFile {
             let mut res = 0;
             let mut file_offset = pos;
 
+            stack_trace!();
             while buf_offset < buf_end {
                 // Get the page from page cache
                 let page = page_cache.get_page(file_offset, None)?;

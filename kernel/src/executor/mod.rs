@@ -70,6 +70,7 @@ pub fn run_until_idle() -> usize {
 
 pub fn run_forever() -> ! {
     loop {
+        // log::info!("fetch task");
         if let Some(task) = TASK_QUEUE.fetch() {
             // info!("fetch a task");
             task.run();

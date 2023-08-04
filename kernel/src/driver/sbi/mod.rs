@@ -57,8 +57,8 @@ pub fn shutdown() -> ! {
 }
 
 /// use sbi call to start the specific core
-pub fn hart_start(hart_id: usize, start_addr: usize) {
-    sbi_call(SBI_HART_START, hart_id, start_addr, 0);
+pub fn hart_start(hart_id: usize, start_addr: usize) -> usize {
+    sbi_call(SBI_HART_START, hart_id, start_addr, 0)
 }
 
 pub struct SbiChar;

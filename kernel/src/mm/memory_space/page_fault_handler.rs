@@ -156,8 +156,8 @@ impl PageFaultHandler for MmapPageFaultHandler {
         process: &'static Arc<Process>,
         scause: Scause,
     ) -> AgeneralRet<()> {
-        stack_trace!();
         Box::pin(async move {
+            stack_trace!();
             debug!("handle mmap page fault asynchronously");
 
             let (backup_file, map_perm, mmap_flags, start_vpn) = process.inner_handler(|proc| {
@@ -187,8 +187,8 @@ impl PageFaultHandler for MmapPageFaultHandler {
 
             let offset = backup_file.offset + (va.0 - VirtAddr::from(start_vpn).0);
             debug!(
-                "handle mmap page fault, offset {:#x}, backup file offset {:#x}",
-                offset, backup_file.offset
+                "handle mmap page fault, offset {:#x}, backup file offset {:#x}, backup file name {}",
+                offset, backup_file.offset, backup_file.file.metadata().inner.lock().inode.as_ref().unwrap().metadata().name
             );
             let page = backup_file
                 .file
@@ -236,6 +236,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
                 "[MmapPageFaultHandler]: va {:#x}, ppn {:#x}, map perm {:?}",
                 va.0, page.data_frame.ppn.0, map_perm
             );
+            // trace!("[MmapPageFaultHandler] content {:?}", page.bytes_array());
 
             process.inner_handler(|proc| {
                 let page_table = proc.memory_space.page_table.get_unchecked_mut();
@@ -249,7 +250,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             });
 
             let _sum_guard = SumGuard::new();
-            debug!("[MmapPageFaultHandler] value {}", unsafe {
+            debug!("[MmapPageFaultHandler] value {:#x}", unsafe {
                 *(va.0 as *const usize)
             });
 

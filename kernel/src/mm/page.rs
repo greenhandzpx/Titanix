@@ -2,7 +2,10 @@ use alloc::sync::Weak;
 use log::{info, trace};
 
 use crate::{
-    config::{board::BLOCK_SIZE, mm::PAGE_SIZE},
+    config::{
+        board::BLOCK_SIZE,
+        mm::{PAGE_SIZE, PAGE_SIZE_BITS},
+    },
     fs::Inode,
     mm, stack_trace,
     sync::mutex::{SleepLock, SpinLock},
@@ -87,7 +90,7 @@ impl PageBuilder {
     }
     /// Page's file offset
     pub fn offset(mut self, offset: usize) -> Self {
-        self.offset = Some(offset);
+        self.offset = Some((offset >> PAGE_SIZE_BITS) << PAGE_SIZE_BITS);
         self
     }
     /// Page's backup inode
@@ -235,13 +238,15 @@ impl Page {
         let mut file_info = self.file_info.as_ref().unwrap().lock().await;
         for idx in start_buffer_idx..end_buffer_idx {
             if file_info.data_states[idx] == DataState::Outdated {
-                trace!(
-                    "outdated block, idx {}, start_page_off {:#x}",
-                    idx,
-                    start_off
-                );
                 let page_offset = idx * BLOCK_SIZE;
                 let file_offset = page_offset + file_info.file_offset;
+                trace!(
+                    "outdated block, idx {}, start_page_off {:#x}, file_off {:#x}, backup-file off {:#x}",
+                    idx,
+                    start_off,
+                    file_offset,
+                    file_info.file_offset
+                );
                 file_info
                     .inode
                     .upgrade()

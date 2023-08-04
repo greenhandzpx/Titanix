@@ -10,7 +10,11 @@ FS_IMG_SRC := ../fs-img-src
 FS_IMG := $(FS_IMG_SRC)/sdcard.img
 
 TEST := 23
-TEST_DIR := "../$(TEST)-testcases"
+ifeq ($(TEST), rootfs)
+	TEST_DIR := "../rootfs"
+else
+	TEST_DIR := "../$(TEST)-testcases"
+endif
 
 STRACE := 
 
@@ -75,7 +79,11 @@ ifndef CPUS
 CPUS := 2
 endif
 QFLAGS := 
-QFLAGS += -m 128M
+ifeq ($(SUBMIT), )
+	QFLAGS += -m 256M
+else
+	QFLAGS += -m 128M
+endif
 QFLAGS += -machine virt 
 QFLAGS += -nographic
 QFLAGS += -smp $(CPUS)
@@ -139,11 +147,15 @@ user-build:
 fs-img: $(APPS)
 	@rm -rf $(FS_IMG)
 	@mkdir -p $(FS_IMG_SRC)
-	@dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+	# @dd if=/dev/zero of=$(FS_IMG) count=62768 bs=1K
+	@dd if=/dev/zero of=$(FS_IMG) count=1363148 bs=1K
 	@mkfs.vfat -F 32 $(FS_IMG)
 ifeq ($(TEST), 0)
 	@echo "make empty fatfs img"
 else
+ifeq ($(TEST), rootfs)
+	@echo "make rootfs fatfs img"
+endif
 	@mkdir -p mnt
 	@sudo mount -t vfat -o user,umask=000,utf8=1 --source $(FS_IMG) --target mnt
 	@cp -r $(TEST_DIR)/* mnt

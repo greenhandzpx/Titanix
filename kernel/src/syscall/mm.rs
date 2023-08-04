@@ -51,6 +51,7 @@ pub fn sys_mmap(
                         .ok_or(SyscallErr::ENOMEM)?
                 }
             };
+            vma.map_perm = map_permission | MapPermission::U;
             vma.mmap_flags = Some(flags);
             let handler = SBrkPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
@@ -89,6 +90,7 @@ pub fn sys_mmap(
                         .ok_or(SyscallErr::ENOMEM)?
                 }
             };
+            vma.map_perm = map_permission | MapPermission::U;
             vma.mmap_flags = Some(flags);
             let handler = MmapPageFaultHandler {};
             vma.handler = Some(handler.arc_clone());
@@ -96,11 +98,17 @@ pub fn sys_mmap(
             // if vma.backup_file.is_none() {
             //     vma.backup_file = Some(BackupFile { offset, file });
             // }
+            // if flags.contains(MmapFlags::MAP_FIXED) {
+            //     vma.backup_file = Some(BackupFile { offset: 0, file });
+            // }
             vma.backup_file = Some(BackupFile { offset, file });
-            let start_va: VirtAddr = vma.start_vpn().into();
-            proc.memory_space.insert_area(vma);
 
-            debug!("[sys_mmap]: finished, vma: {:#x}", start_va.0,);
+            let start_va: VirtAddr = vma.start_vpn().into();
+            debug!(
+                "[sys_mmap]: finished, vma: {:#x}, map perm {:?}",
+                start_va.0, vma.map_perm
+            );
+            proc.memory_space.insert_area(vma);
             Ok(start_va.0)
         })
     }
@@ -148,6 +156,10 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
         "[sys_mprotect]: addr {:#x} len {:#x}, prot {:?}",
         addr, len, prot
     );
+    if prot == MmapProt::PROT_NONE {
+        log::warn!("[sys_mprotect] PROT_NONE, ignore");
+        return Ok(0);
+    }
     current_process().inner_handler(|proc| {
         let vma = proc
             .memory_space
