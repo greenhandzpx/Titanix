@@ -139,23 +139,15 @@ pub fn init() {
         .unwrap();
 
     let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
-    #[cfg(feature = "submit")]
-    let musl_dl_path = etc_dir
-        .mknod_v("ld-musl-riscv64-sf.path", InodeMode::FileREG, None)
-        .expect("mknod /etc/ld-musl-riscv64-sf.path fail!");
-    #[cfg(not(feature = "submit"))]
-    let musl_dl_path = etc_dir
-        .mknod_v("ld-musl-riscv64-sf.path", InodeMode::FileREG, None)
-        .expect("mknod /etc/ld-musl-riscv64-sf.path fail!");
-    let file = musl_dl_path
-        .open(musl_dl_path.clone(), OpenFlags::RDWR)
-        .unwrap();
-
-    // #[cfg(feature = "submit")]
-    // file.sync_write("/".as_bytes()).unwrap();
-    // #[cfg(not(feature = "submit"))]
-    file.sync_write("/\n/lib\n/lib64/lp64d\n".as_bytes())
-        .unwrap();
+    let paths = ["ld-musl-riscv64-sf.path", "ld-musl-riscv64.path"];
+    for path in paths {
+        let musl_dl_path = etc_dir.mknod_v(path, InodeMode::FileREG, None).unwrap();
+        let file = musl_dl_path
+            .open(musl_dl_path.clone(), OpenFlags::RDWR)
+            .unwrap();
+        file.sync_write("/\n/lib\n/lib64/lp64d\n".as_bytes())
+            .unwrap();
+    }
 
     FILE_SYSTEM_MANAGER
         .mount(

@@ -1,4 +1,9 @@
-use alloc::{collections::BTreeMap, string::String, sync::Arc, vec::Vec};
+use alloc::{
+    collections::BTreeMap,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 use log::{debug, error, info, trace, warn};
 use riscv::register::scause::Scause;
 use xmas_elf::ElfFile;
@@ -55,13 +60,6 @@ extern "C" {
     fn ekernel();
 }
 
-#[cfg(feature = "submit")]
-const DL_INTERP: &str = "/libc.so";
-#[cfg(not(feature = "submit"))]
-// const DL_INTERP: &str = "/lib64/lp64d/libc.so.6";
-// const DL_INTERP: &str = "/libc.so";
-// const DL_INTERP: &str = "/lib/libc.so";
-const DL_INTERP: &str = "/lib/ld-linux-riscv64-lp64d.so.1";
 
 /// Kernel Space for all processes
 pub static mut KERNEL_SPACE: Option<MemorySpace> = None;
@@ -836,14 +834,15 @@ impl MemorySpace {
 
         if is_dl {
             log::info!("[load_dl] encounter a dl elf");
-            let section = elf.find_section_by_name(".interp");
-            if let Some(section) = section {
-                let interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
-                log::info!("[load_dl] interp {}", interp);
+            let section = elf.find_section_by_name(".interp").unwrap();
+            let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+            interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
+            log::info!("[load_dl] interp {}", interp);
+            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") {
+                interp = "/libc.so".to_string();
             }
-            // exit_and_terminate_all_threads(0);
 
-            let interp_inode = resolve_path(AT_FDCWD, DL_INTERP, OpenFlags::RDONLY)
+            let interp_inode = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY)
                 .ok()
                 .unwrap();
             let interp_file = interp_inode

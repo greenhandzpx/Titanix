@@ -33,7 +33,6 @@ KERNEL_FEATURES :=
 ifneq ($(STRACE), )
 	KERNEL_FEATURES += strace
 endif
-
 ifneq ($(SUBMIT), )
 	KERNEL_FEATURES += submit
 	KERNEL_FEATURES += stack_trace
