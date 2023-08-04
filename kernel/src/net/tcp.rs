@@ -144,10 +144,7 @@ impl TcpSocket {
         )
         .await
         {
-            SelectOutput::Output1(ret) => {
-                thread::yield_now().await;
-                ret
-            }
+            SelectOutput::Output1(ret) => ret,
             SelectOutput::Output2(intr) => {
                 log::info!("[TcpSocket::accept] interrupt by {:?}", intr);
                 Err(SyscallErr::EINTR)
@@ -192,14 +189,12 @@ impl TcpSocket {
                         self.socket_handler
                     );
                     self._connect(remote_endpoint)?;
-                    thread::yield_now().await;
                 }
                 tcp::State::Established => {
                     info!(
                         "[Tcp::connect] {} connected, state {:?}",
                         self.socket_handler, state
                     );
-                    thread::yield_now().await;
                     return Ok(0);
                 }
                 _ => {
@@ -207,7 +202,6 @@ impl TcpSocket {
                         "[Tcp::connect] {} not connect yet, state {:?}",
                         self.socket_handler, state
                     );
-                    thread::yield_now().await;
                 }
             }
         }
@@ -232,10 +226,14 @@ impl Drop for TcpSocket {
             self.inner.lock().local_endpoint
         );
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+            log::info!("[TcpSocket::drop] before state is {:?}", socket.state());
             if socket.is_open() {
                 socket.close();
             }
+            log::info!("[TcpSocket::drop] after state is {:?}", socket.state());
         });
+        NET_INTERFACE.poll();
+        NET_INTERFACE.remove(self.socket_handler);
         NET_INTERFACE.poll();
     }
 }
@@ -251,8 +249,7 @@ impl File for TcpSocket {
             .await
             {
                 SelectOutput::Output1(ret) => {
-                    thread::yield_now().await;
-                    ksleep(Duration::from_millis(5)).await;
+                    ksleep(Duration::from_millis(3)).await;
                     ret
                 }
                 SelectOutput::Output2(intr) => {
@@ -273,8 +270,7 @@ impl File for TcpSocket {
             .await
             {
                 SelectOutput::Output1(ret) => {
-                    thread::yield_now().await;
-                    ksleep(Duration::from_millis(5)).await;
+                    ksleep(Duration::from_millis(3)).await;
                     ret
                 }
                 SelectOutput::Output2(intr) => {
@@ -403,7 +399,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
         let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
-            if socket.state() == tcp::State::CloseWait {
+            if socket.state() == tcp::State::CloseWait || socket.state() == tcp::State::TimeWait {
                 log::info!("[TcpRecvFuture::poll] state become {:?}", socket.state());
                 return Poll::Ready(Ok(0));
             }

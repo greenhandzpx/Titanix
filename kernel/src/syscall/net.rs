@@ -299,17 +299,12 @@ pub fn sys_shutdown(sockfd: u32, how: u32) -> SyscallRet {
     log::info!("[sys_shutdown] sockfd {}, how {}", sockfd, how);
     // current_process().close_file(sockfd as usize)?;
     current_process().inner_handler(|proc| {
-        // let socket = proc
-        //     .socket_table
-        //     .get_ref(sockfd as usize)
-        //     .ok_or(SyscallErr::EBADF)?
-        //     .clone();
-        // socket.shutdown(how)?;
-
-        let _ = proc
+        let socket = proc
             .socket_table
-            .take(sockfd as usize)
-            .ok_or(SyscallErr::EBADF)?;
+            .get_ref(sockfd as usize)
+            .ok_or(SyscallErr::EBADF)?
+            .clone();
+        socket.shutdown(how)?;
 
         Ok(0)
     })

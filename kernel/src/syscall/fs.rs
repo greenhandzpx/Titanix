@@ -1216,8 +1216,6 @@ pub async fn sys_ppoll(
     }
 }
 
-const THRESHOLD: u8 = 1;
-
 pub async fn sys_pselect6(
     nfds: i32,
     readfds_ptr: usize,
@@ -1369,11 +1367,6 @@ pub async fn sys_pselect6(
         fds,
         IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
     );
-    let wait_times = current_process().inner_handler(|proc| {
-        proc.wait_times += 1;
-        proc.wait_times
-    });
-    info!("[sys_pselect6] wait_times {}", wait_times);
     if let Some(timeout) = timeout {
         if !timeout.is_zero() {
             info!("[sys_pselect]: timeout {:?}", timeout);
@@ -1385,12 +1378,6 @@ pub async fn sys_pselect6(
                 } else {
                     info!("[sys_pselect]: ready");
                 }
-                if wait_times == THRESHOLD {
-                    current_process().inner_handler(|proc| {
-                        proc.wait_times = 0;
-                    });
-                    thread::yield_now().await;
-                }
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {
@@ -1399,9 +1386,6 @@ pub async fn sys_pselect6(
                 } else {
                     debug!("[sys_pselect]: timeout!");
                 }
-                current_process().inner_handler(|proc| {
-                    proc.wait_times = 0;
-                });
                 return Ok(0);
             }
         }
@@ -1419,19 +1403,10 @@ pub async fn sys_pselect6(
                 );
                 debug!("[sys_pselect] return, readfds ptr {:#x}", readfds_ptr);
                 debug!("[sys_pselect]: ready");
-                if wait_times == THRESHOLD {
-                    current_process().inner_handler(|proc| {
-                        proc.wait_times = 0;
-                    });
-                    thread::yield_now().await;
-                }
                 ret
             }
             SelectOutput::Output2(e) => {
                 info!("[sys_pselect] interrupt by event {:?}", e);
-                current_process().inner_handler(|proc| {
-                    proc.wait_times = 0;
-                });
                 Err(SyscallErr::EINTR)
             }
         }
