@@ -3,6 +3,8 @@ use alloc::sync::Arc;
 use crate::{
     driver::getchar,
     fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
+    process::thread::spawn_kernel_thread,
+    timer::POLL_QUEUE,
     utils::error::GeneralRet,
 };
 use alloc::boxed::Box;
@@ -31,7 +33,9 @@ impl Inode for TtyInode {
         this: alloc::sync::Arc<dyn Inode>,
         flags: crate::fs::OpenFlags,
     ) -> GeneralRet<Arc<dyn crate::fs::File>> {
-        Ok(Arc::new(TtyFile::new(this, flags)))
+        let file: Arc<dyn File> = Arc::new(TtyFile::new(this, flags));
+        file.metadata().inner.lock().file = Some(Arc::downgrade(&file));
+        Ok(file)
     }
     fn metadata(&self) -> &crate::fs::inode::InodeMeta {
         &self.metadata
@@ -72,6 +76,7 @@ impl TtyFile {
                     mode: crate::fs::InodeMode::FileCHR,
                     pos: 0,
                     dirent_index: 0,
+                    file: None,
                 }),
                 prw_lock: SleepLock::new(()),
             },
@@ -134,20 +139,28 @@ impl File for TtyFile {
         })
     }
 
-    fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
-        Ok(true)
-        // if self.buf.load(Ordering::Acquire) != 255 {
-        //     return Ok(true);
-        // }
-        // let _sum_guard = SumGuard::new();
-        // let c = console_getchar();
-        // if c as i8 == -1 {
-        //     return Ok(false);
-        // } else {
-        //     self.buf.store(c as u8, Ordering::Release);
-        //     return Ok(true);
-        // }
+    fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        // Ok(true)
+        if self.buf.load(Ordering::Acquire) != 255 {
+            return Ok(true);
+        }
+        let _sum_guard = SumGuard::new();
+        let c = getchar();
+        if c as i8 == -1 {
+            if let Some(waker) = waker {
+                POLL_QUEUE.register(
+                    self.metadata().inner.lock().file.as_ref().unwrap().clone(),
+                    waker,
+                    true,
+                )
+            }
+            return Ok(false);
+        } else {
+            self.buf.store(c as u8, Ordering::Release);
+            return Ok(true);
+        }
     }
+
     fn flags(&self) -> OpenFlags {
         self.metadata.inner.lock().flags
     }

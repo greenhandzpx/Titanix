@@ -25,7 +25,7 @@ use crate::fs::{
     Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
-use crate::fs::{resolve_path, HashKey, SeekFrom};
+use crate::fs::{resolve_path, resolve_path_ffi, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
 use crate::process::thread;
 use crate::processor::{current_process, current_task, SumGuard};
@@ -516,14 +516,16 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
         dirfd,
         flags,
         {
-            let _sum_guard = SumGuard::new();
-            UserCheck::new().check_c_str(filename_addr)?;
-            c_str_to_string(filename_addr)
+            if !filename_addr.is_null() {
+                let _sum_guard = SumGuard::new();
+                UserCheck::new().check_c_str(filename_addr)?;
+                c_str_to_string(filename_addr)
+            } else {
+                "null".to_string()
+            }
         }
     );
-    UserCheck::new().check_c_str(filename_addr)?;
-    let path = c_str_to_string(filename_addr);
-    let inode = resolve_path(dirfd, &path, flags)?;
+    let inode = resolve_path_ffi(dirfd, filename_addr, flags)?;
     current_process().inner_handler(|proc| proc.fd_table.open(inode, flags))
 }
 

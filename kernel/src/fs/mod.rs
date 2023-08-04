@@ -11,6 +11,7 @@ pub mod pipe;
 mod procfs;
 pub mod tmpfs;
 
+use alloc::string::String;
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::Fd;
@@ -145,7 +146,7 @@ pub fn init() {
         let file = musl_dl_path
             .open(musl_dl_path.clone(), OpenFlags::RDWR)
             .unwrap();
-        file.sync_write("/\n/lib\n/lib64/lp64d\n".as_bytes())
+        file.sync_write("/\n/lib\n/lib64/lp64d\n/usr/lib\n".as_bytes())
             .unwrap();
     }
 
@@ -303,9 +304,29 @@ fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
     }
 }
 
+pub fn resolve_path_ffi(
+    dirfd: isize,
+    path: *const u8,
+    flags: OpenFlags,
+) -> GeneralRet<Arc<dyn Inode>> {
+    stack_trace!();
+    let (inode, path, parent) = path::path_to_inode_ffi(dirfd, path)?;
+    _resolve_path(inode, parent, path, flags)
+}
+
 /// Resolve path at dirfd(except that `path` is absolute path)
 pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Arc<dyn Inode>> {
+    stack_trace!();
     let (inode, path, parent) = path::path_to_inode(dirfd, Some(path))?;
+    _resolve_path(inode, parent, path, flags)
+}
+
+fn _resolve_path(
+    inode: Option<Arc<dyn Inode>>,
+    parent: Option<Arc<dyn Inode>>,
+    path: String,
+    flags: OpenFlags,
+) -> GeneralRet<Arc<dyn Inode>> {
     stack_trace!();
     if inode.is_some() {
         return Ok(inode.unwrap());
@@ -341,7 +362,7 @@ pub fn resolve_path(dirfd: isize, path: &str, flags: OpenFlags) -> GeneralRet<Ar
     }
 }
 
-pub fn list_rootfs() {
+fn list_rootfs() {
     stack_trace!();
     FILE_SYSTEM_MANAGER.root_inode().load_children();
     for sb in FILE_SYSTEM_MANAGER

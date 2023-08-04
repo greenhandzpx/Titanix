@@ -104,6 +104,7 @@ impl Inode for MeminfoInode {
                     mode: InodeMode::FileREG,
                     pos: 0,
                     dirent_index: 0,
+                    file: None,
                 }),
                 prw_lock: SleepLock::new(()),
             },
