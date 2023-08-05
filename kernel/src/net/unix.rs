@@ -16,7 +16,7 @@ pub struct UnixSocket {
 }
 
 impl Socket for UnixSocket {
-    fn bind(&self, addr: smoltcp::wire::IpListenEndpoint) -> crate::utils::error::SyscallRet {
+    fn bind(&self, _addr: smoltcp::wire::IpListenEndpoint) -> crate::utils::error::SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
 
@@ -24,11 +24,11 @@ impl Socket for UnixSocket {
         Err(SyscallErr::EOPNOTSUPP)
     }
 
-    fn connect(&self, addr_buf: &[u8]) -> AsyscallRet {
+    fn connect(&self, _addr_buf: &[u8]) -> AsyscallRet {
         Box::pin(async move { Err(SyscallErr::EOPNOTSUPP) })
     }
 
-    fn accept(&self, sockfd: u32, addr: usize, addrlen: usize) -> AsyscallRet {
+    fn accept(&self, _sockfd: u32, _addr: usize, _addrlen: usize) -> AsyscallRet {
         Box::pin(async move { Err(SyscallErr::EOPNOTSUPP) })
     }
 
@@ -44,11 +44,11 @@ impl Socket for UnixSocket {
         todo!()
     }
 
-    fn set_recv_buf_size(&self, size: usize) {
+    fn set_recv_buf_size(&self, _size: usize) {
         todo!()
     }
 
-    fn set_send_buf_size(&self, size: usize) {
+    fn set_send_buf_size(&self, _size: usize) {
         todo!()
     }
 
@@ -65,7 +65,7 @@ impl Socket for UnixSocket {
         Ok(())
     }
 
-    fn set_nagle_enabled(&self, enabled: bool) -> crate::utils::error::SyscallRet {
+    fn set_nagle_enabled(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
 }

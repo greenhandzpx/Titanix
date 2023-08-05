@@ -13,8 +13,9 @@
 #![feature(const_mut_refs)]
 #![feature(poll_ready)]
 #![feature(let_chains)]
-#![feature(trait_upcasting)]
 #![feature(once_cell)]
+#![allow(incomplete_features)]
+#![feature(trait_upcasting)]
 
 extern crate alloc;
 // extern crate intrusive_collections;

@@ -1,7 +1,7 @@
 use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, Socket, MAX_BUFFER_SIZE};
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::{address, SHUT_WR},
+    net::address,
     processor::{current_task, SumGuard},
     sync::Event,
     timer::timeout_task::ksleep,
@@ -135,7 +135,7 @@ impl Socket for UdpSocket {
         Ok(())
     }
 
-    fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet {
+    fn set_nagle_enabled(&self, _enabled: bool) -> SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
 }
