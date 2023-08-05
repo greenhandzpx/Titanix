@@ -15,7 +15,6 @@ use smoltcp::{
 
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::SHUT_WR,
     processor::{current_task, SumGuard},
     sync::Event,
     timer::timeout_task::ksleep,

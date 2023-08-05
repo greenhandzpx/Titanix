@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
     config::process::INITPROC_PID,
@@ -210,38 +210,43 @@ impl File for TtyFile {
         // println!("[TtyFile::write] buf {:?}...", buf);
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
-            // let buff = unsafe { core::slice::from_raw_parts(buf, len) };
+            let utf8_buf: Vec<u8> = buf.iter().filter(|c| c.is_ascii()).map(|c| *c).collect();
             if PRINT_LOCKED {
                 let _locked = PRINT_MUTEX.lock().await;
-                print!("{}", unsafe { core::str::from_utf8_unchecked(buf) });
+                print!("{}", unsafe { core::str::from_utf8_unchecked(&utf8_buf) });
             } else {
-                print!("{}", unsafe { core::str::from_utf8_unchecked(buf) });
+                print!("{}", unsafe { core::str::from_utf8_unchecked(&utf8_buf) });
             }
-            // println!("[TtyFile::write] write finished");
             Ok(buf.len())
         })
     }
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         stack_trace!();
-        // Ok(true)
-        if self.buf.load(Ordering::Acquire) != 255 {
-            return Ok(true);
+        #[cfg(feature = "submit")]
+        {
+            Ok(true)
         }
-        let _sum_guard = SumGuard::new();
-        let c = getchar();
-        if c as i8 == -1 {
-            if let Some(waker) = waker {
-                POLL_QUEUE.register(
-                    self.metadata().inner.lock().file.as_ref().unwrap().clone(),
-                    waker,
-                    true,
-                )
+        #[cfg(not(feature = "submit"))]
+        {
+            if self.buf.load(Ordering::Acquire) != 255 {
+                return Ok(true);
             }
-            return Ok(false);
-        } else {
-            self.buf.store(c as u8, Ordering::Release);
-            return Ok(true);
+            let _sum_guard = SumGuard::new();
+            let c = getchar();
+            if c as i8 == -1 {
+                if let Some(waker) = waker {
+                    POLL_QUEUE.register(
+                        self.metadata().inner.lock().file.as_ref().unwrap().clone(),
+                        waker,
+                        true,
+                    )
+                }
+                return Ok(false);
+            } else {
+                self.buf.store(c as u8, Ordering::Release);
+                return Ok(true);
+            }
         }
     }
 
@@ -330,8 +335,8 @@ struct Termios {
     pub lflag: u32,
     pub line: u8,
     /// Terminal special characters.
-    // pub cc: [u8; 32],
     pub cc: [u8; 19],
+    // pub cc: [u8; 32],
     // pub ispeed: u32,
     // pub ospeed: u32,
 }

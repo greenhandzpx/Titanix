@@ -180,6 +180,8 @@ pub fn rust_main(hart_id: usize) {
                 ksleep(Duration::from_secs(3)).await;
             }
         });
+
+        #[cfg(not(feature = "submit"))]
         thread::spawn_kernel_thread(async move {
             loop {
                 POLL_QUEUE.poll();
@@ -195,9 +197,6 @@ pub fn rust_main(hart_id: usize) {
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-
-        // #[cfg(feature = "multi_hart")]
-        // loop {}
     } else {
         // The other harts
         hart::init(hart_id);
@@ -223,7 +222,6 @@ pub fn rust_main(hart_id: usize) {
                 .activate();
         }
         println!("[kernel] ---------- hart {} started ---------- ", hart_id);
-        // println!("[other hart] current time {:?}", current_time_duration());
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();

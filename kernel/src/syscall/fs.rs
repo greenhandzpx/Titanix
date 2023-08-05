@@ -27,7 +27,6 @@ use crate::fs::{
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::fs::{resolve_path_ffi, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
-use crate::process::thread;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
 use crate::stack_trace;

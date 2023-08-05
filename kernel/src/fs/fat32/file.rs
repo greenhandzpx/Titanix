@@ -22,6 +22,7 @@ impl FAT32File {
         }
     }
 
+    #[allow(unused)]
     pub fn first_cluster(&self) -> u32 {
         if self.clusters.is_empty() == false {
             self.clusters[0] as u32

@@ -10,10 +10,10 @@ pub fn init() {
     POLL_QUEUE.init();
 }
 
-// pub fn register(file: &Arc<dyn File>, waker: Waker, for_read: bool) {
-//     POLL_QUEUE.register(file, waker, for_read)
-// }
-
+/// We will start a kernel thread to poll this queue
+/// again and again when the kernel started.
+/// Note that this is just a work-around for those devices
+/// that cannot send interrupt by themselves.
 pub struct PollQueue {
     inner: SpinNoIrqLock<PollQueueInner>,
 }

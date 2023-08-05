@@ -38,6 +38,7 @@ impl FSInfo {
         load!(self.FSI_TrailSig);
     }
 
+    #[allow(unused)]
     pub fn store(&mut self, dest: &mut [u8; 512]) {
         let mut offset: usize = 0;
         macro_rules! store {
