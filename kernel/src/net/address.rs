@@ -1,8 +1,15 @@
-use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address, Ipv6Address};
-
-use crate::{processor::SumGuard, utils::random::RNG};
-
 use super::{AF_INET, AF_INET6};
+use crate::stack_trace;
+use crate::utils::error::SyscallErr;
+use crate::utils::error::SyscallRet;
+use crate::{
+    mm::user_check::UserCheck,
+    processor::SumGuard,
+    utils::{error::GeneralRet, random::RNG},
+};
+use core::mem;
+use core::slice;
+use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address, Ipv6Address};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 #[repr(C)]
@@ -152,5 +159,65 @@ impl From<SocketAddrv6> for IpListenEndpoint {
                 port,
             }
         }
+    }
+}
+pub fn to_endpoint(listen_endpoint: IpListenEndpoint) -> IpEndpoint {
+    let addr = if listen_endpoint.addr.is_none() {
+        IpAddress::v4(127, 0, 0, 1)
+    } else {
+        listen_endpoint.addr.unwrap()
+    };
+    IpEndpoint::new(addr, listen_endpoint.port)
+}
+pub fn endpoint(addr_buf: &[u8]) -> GeneralRet<IpEndpoint> {
+    let listen_endpoint = listen_endpoint(addr_buf)?;
+    let addr = if listen_endpoint.addr.is_none() {
+        IpAddress::v4(127, 0, 0, 1)
+    } else {
+        listen_endpoint.addr.unwrap()
+    };
+    Ok(IpEndpoint::new(addr, listen_endpoint.port))
+}
+pub fn fill_with_endpoint(endpoint: IpEndpoint, addr: usize, addrlen: usize) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    log::debug!(
+        "[address::fill_with_endpoint] fill addr {} with endpoint {:?}",
+        addr,
+        endpoint
+    );
+    match endpoint.addr {
+        IpAddress::Ipv4(_) => {
+            let len = mem::size_of::<u16>() + mem::size_of::<SocketAddrv4>();
+            UserCheck::new().check_writable_slice(addr as *mut u8, len)?;
+            UserCheck::new().check_writable_slice(addrlen as *mut u8, mem::size_of::<u32>())?;
+            let addr_buf = unsafe { slice::from_raw_parts_mut(addr as *mut u8, len) };
+            SocketAddrv4::from(endpoint).fill(addr_buf, addrlen);
+        }
+        IpAddress::Ipv6(_) => {
+            let len = mem::size_of::<u16>() + mem::size_of::<SocketAddrv6>();
+            UserCheck::new().check_writable_slice(addr as *mut u8, len)?;
+            UserCheck::new().check_writable_slice(addrlen as *mut u8, mem::size_of::<u32>())?;
+            let addr_buf = unsafe { slice::from_raw_parts_mut(addr as *mut u8, len) };
+            SocketAddrv6::from(endpoint).fill(addr_buf, addrlen);
+        }
+    }
+    Ok(0)
+}
+pub fn listen_endpoint(addr_buf: &[u8]) -> GeneralRet<IpListenEndpoint> {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    let family = u16::from_ne_bytes(addr_buf[0..2].try_into().expect("family size wrong"));
+    log::info!("[address::listen_enpoint] addr family {}", family);
+    match family {
+        AF_INET => {
+            let ipv4 = SocketAddrv4::new(addr_buf);
+            Ok(IpListenEndpoint::from(ipv4))
+        }
+        AF_INET6 => {
+            let ipv6 = SocketAddrv6::new(addr_buf);
+            Ok(IpListenEndpoint::from(ipv6))
+        }
+        _ => return Err(SyscallErr::EINVAL),
     }
 }
