@@ -1,13 +1,15 @@
-use log::info;
-use smoltcp::wire::IpListenEndpoint;
-
 use crate::{
     mm::user_check::UserCheck,
-    net::{address::SocketAddrv4, make_unix_socket_pair, Socket, TCP_MSS},
+    net::{
+        address::{self, SocketAddrv4},
+        make_unix_socket_pair, Socket, SocketType, TCP_MSS,
+    },
     processor::{current_process, SumGuard},
     stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
+use log::info;
+use smoltcp::wire::IpListenEndpoint;
 
 /// level
 const SOL_SOCKET: u32 = 1;
@@ -25,7 +27,7 @@ pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
         "[sys_socket] domain: {}, type: {}, protocol: {}",
         domain, socket_type, protocol
     );
-    let sockfd = Socket::new(domain, socket_type)?;
+    let sockfd = <dyn Socket>::alloc(domain, socket_type)?;
     info!("[sys_socket] new sockfd: {}", sockfd);
     Ok(sockfd)
 }
@@ -38,10 +40,10 @@ pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
     let socket = current_process()
         .inner_handler(|proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
-    let endpoint = Socket::endpoint(addr_buf)?;
-    match *socket {
-        Socket::TcpSocket(ref socket) => socket.bind(endpoint),
-        Socket::UdpSocket(ref socket) => current_process().inner_handler(|proc| {
+    let endpoint = address::listen_endpoint(addr_buf)?;
+    match socket.socket_type() {
+        SocketType::SOCK_STREAM => socket.bind(endpoint),
+        SocketType::SOCK_DGRAM => current_process().inner_handler(|proc| {
             let res = proc.socket_table.can_bind(endpoint);
             if res.is_none() {
                 info!("[sys_bind] not find port exist");
@@ -55,7 +57,7 @@ pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
                 Ok(0)
             }
         }),
-        Socket::UnixSocket(_) => todo!(),
+        _ => todo!(),
     }
 }
 
@@ -126,35 +128,22 @@ pub async fn sys_sendto(
         .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
     log::info!("[sys_sendto] get socket sockfd: {}", sockfd);
-    let len = match *socket {
-        Socket::TcpSocket(_) => socket_file.write(buf).await?,
-        Socket::UdpSocket(ref udp) => {
+    let len = match socket.socket_type() {
+        SocketType::SOCK_STREAM => socket_file.write(buf).await?,
+        SocketType::SOCK_DGRAM => {
             info!("[sys_sendto] socket is udp");
             UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
-            if udp.addr().addr.is_unspecified() || udp.addr().port == 0 {
+            if socket.loacl_endpoint().port == 0 {
                 let addr = SocketAddrv4::new([0; 16].as_slice());
                 let endpoint = IpListenEndpoint::from(addr);
-                udp.bind(endpoint)?;
+                socket.bind(endpoint)?;
             }
             let dest_addr =
                 unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
             socket.connect(dest_addr).await?;
             socket_file.write(buf).await?
         }
-        Socket::UnixSocket(_) => {
-            info!("[sys_sendto] socket is unix");
-            todo!()
-            // UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
-            // let dest_addr =
-            //     unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
-            // let endpoint = unix.addr(dest_addr);
-            // let ret = socket_file.write(buf).await?;
-            // UNIX_SOCKET_BUF_MANAGER
-            //     .buf_mgr
-            //     .lock()
-            //     .insert(endpoint, socket_file);
-            // ret
-        }
+        _ => todo!(),
     };
     Ok(len)
 }
@@ -178,24 +167,22 @@ pub async fn sys_recvfrom(
         .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
     info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
-    match *socket {
-        Socket::UnixSocket(_) => {
-            todo!("[sys_sendto] socket is unix");
-        }
-        Socket::TcpSocket(_) => {
+    match socket.socket_type() {
+        SocketType::SOCK_STREAM => {
             let len = socket_file.read(buf).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
             Ok(len)
         }
-        Socket::UdpSocket(_) => {
+        SocketType::SOCK_DGRAM => {
             let len = socket_file.read(buf).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
             Ok(len)
         }
+        _ => todo!(),
     }
 }
 

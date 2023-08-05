@@ -13,6 +13,7 @@
 #![feature(const_mut_refs)]
 #![feature(poll_ready)]
 #![feature(let_chains)]
+#![feature(trait_upcasting)]
 #![feature(once_cell)]
 
 extern crate alloc;

@@ -1,6 +1,17 @@
-use core::{future::Future, task::Poll, time::Duration};
-
+use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, Socket, MAX_BUFFER_SIZE};
+use crate::{
+    fs::{File, FileMeta, OpenFlags},
+    net::{address, SHUT_WR},
+    processor::{current_task, SumGuard},
+    sync::Event,
+    timer::timeout_task::ksleep,
+    utils::{
+        async_tools::{Select2Futures, SelectOutput},
+        error::{GeneralRet, SyscallErr, SyscallRet},
+    },
+};
 use alloc::{boxed::Box, vec};
+use core::{future::Future, task::Poll, time::Duration};
 use log::{debug, info};
 use managed::ManagedSlice;
 use smoltcp::{
@@ -10,22 +21,8 @@ use smoltcp::{
         self,
         udp::{PacketMetadata, SendError, UdpMetadata},
     },
-    wire::{IpAddress, IpEndpoint, IpListenEndpoint},
+    wire::{IpEndpoint, IpListenEndpoint},
 };
-
-use crate::{
-    fs::{File, FileMeta, OpenFlags},
-    net::SHUT_WR,
-    processor::{current_task, SumGuard},
-    sync::Event,
-    timer::timeout_task::ksleep,
-    utils::{
-        async_tools::{Select2Futures, SelectOutput},
-        error::{GeneralRet, SyscallErr, SyscallRet},
-    },
-};
-
-use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, MAX_BUFFER_SIZE};
 
 pub struct UdpSocket {
     inner: Mutex<UdpSocketInner>,
@@ -38,6 +35,109 @@ struct UdpSocketInner {
     remote_endpoint: Option<IpEndpoint>,
     recvbuf_size: usize,
     sendbuf_size: usize,
+}
+
+impl Socket for UdpSocket {
+    fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
+        log::info!("[Udp::bind] bind to {:?}", addr);
+        NET_INTERFACE.poll();
+        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+            socket.bind(addr).ok().ok_or(SyscallErr::EINVAL)
+        })?;
+        NET_INTERFACE.poll();
+        Ok(0)
+    }
+
+    fn listen(&self) -> SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
+
+    fn connect<'a>(&'a self, addr_buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+        Box::pin(async move {
+            let remote_endpoint = address::endpoint(addr_buf)?;
+            log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
+            let mut inner = self.inner.lock();
+            inner.remote_endpoint = Some(remote_endpoint);
+            NET_INTERFACE.poll();
+            NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
+                let local = socket.endpoint();
+                info!("[Udp::connect] local: {:?}", local);
+                if local.port == 0 {
+                    info!("[Udp::connect] don't have local");
+                    let addr = SocketAddrv4::new([0; 16].as_slice());
+                    let endpoint = IpListenEndpoint::from(addr);
+                    let ret = socket.bind(endpoint);
+                    if ret.is_err() {
+                        match ret.err().unwrap() {
+                            socket::udp::BindError::Unaddressable => {
+                                info!("[Udp::bind] unaddr");
+                                return Err(SyscallErr::EINVAL);
+                            }
+                            socket::udp::BindError::InvalidState => {
+                                info!("[Udp::bind] invaild state");
+                                return Err(SyscallErr::EINVAL);
+                            }
+                        }
+                    }
+                    log::info!("[Udp::bind] bind to {:?}", endpoint);
+                    Ok(())
+                } else {
+                    Ok(())
+                }
+            })?;
+            NET_INTERFACE.poll();
+            Ok(0)
+        })
+    }
+
+    fn accept(
+        &self,
+        _sockfd: u32,
+        _addr: usize,
+        _addrlen: usize,
+    ) -> crate::utils::error::AsyscallRet {
+        Box::pin(async move { Err(SyscallErr::EOPNOTSUPP) })
+    }
+
+    fn socket_type(&self) -> super::SocketType {
+        super::SocketType::SOCK_DGRAM
+    }
+
+    fn recv_buf_size(&self) -> usize {
+        self.inner.lock().recvbuf_size
+    }
+
+    fn set_recv_buf_size(&self, size: usize) {
+        self.inner.lock().recvbuf_size = size;
+    }
+
+    fn send_buf_size(&self) -> usize {
+        self.inner.lock().sendbuf_size
+    }
+
+    fn set_send_buf_size(&self, size: usize) {
+        self.inner.lock().sendbuf_size = size;
+    }
+
+    fn loacl_endpoint(&self) -> IpListenEndpoint {
+        NET_INTERFACE.poll();
+        let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
+        NET_INTERFACE.poll();
+        local
+    }
+
+    fn remote_endpoint(&self) -> Option<IpEndpoint> {
+        self.inner.lock().remote_endpoint
+    }
+
+    fn shutdown(&self, how: u32) -> GeneralRet<()> {
+        log::info!("[UdpSocket::shutdown] how {}", how);
+        Ok(())
+    }
+
+    fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
 }
 
 impl UdpSocket {
@@ -66,92 +166,6 @@ impl UdpSocket {
                 crate::fs::InodeMode::FileSOCK,
             ),
         }
-    }
-
-    pub fn recv_buf_size(&self) -> usize {
-        self.inner.lock().recvbuf_size
-    }
-    pub fn set_recv_buf_size(&self, size: usize) {
-        self.inner.lock().recvbuf_size = size;
-    }
-    pub fn send_buf_size(&self) -> usize {
-        self.inner.lock().sendbuf_size
-    }
-    pub fn set_send_buf_size(&self, size: usize) {
-        self.inner.lock().sendbuf_size = size;
-    }
-
-    pub fn addr(&self) -> IpEndpoint {
-        NET_INTERFACE.poll();
-        let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
-        NET_INTERFACE.poll();
-        let addr = if local.addr.is_none() {
-            IpAddress::v4(127, 0, 0, 1)
-        } else {
-            local.addr.unwrap()
-        };
-        IpEndpoint::new(addr, local.port)
-    }
-
-    pub fn listen_endpoint(&self) -> IpListenEndpoint {
-        NET_INTERFACE.poll();
-        let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
-        NET_INTERFACE.poll();
-        local
-    }
-
-    pub fn peer_addr(&self) -> Option<IpEndpoint> {
-        self.inner.lock().remote_endpoint
-    }
-
-    pub fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
-        log::info!("[Udp::bind] bind to {:?}", addr);
-        NET_INTERFACE.poll();
-        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
-            socket.bind(addr).ok().ok_or(SyscallErr::EINVAL)
-        })?;
-        NET_INTERFACE.poll();
-        Ok(0)
-    }
-
-    pub async fn connect(&self, remote_endpoint: IpEndpoint) -> SyscallRet {
-        log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
-        let mut inner = self.inner.lock();
-        inner.remote_endpoint = Some(remote_endpoint);
-        NET_INTERFACE.poll();
-        NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
-            let local = socket.endpoint();
-            info!("[Udp::connect] local: {:?}", local);
-            if local.port == 0 {
-                info!("[Udp::connect] don't have local");
-                let addr = SocketAddrv4::new([0; 16].as_slice());
-                let endpoint = IpListenEndpoint::from(addr);
-                let ret = socket.bind(endpoint);
-                if ret.is_err() {
-                    match ret.err().unwrap() {
-                        socket::udp::BindError::Unaddressable => {
-                            info!("[Udp::bind] unaddr");
-                            return Err(SyscallErr::EINVAL);
-                        }
-                        socket::udp::BindError::InvalidState => {
-                            info!("[Udp::bind] invaild state");
-                            return Err(SyscallErr::EINVAL);
-                        }
-                    }
-                }
-                log::info!("[Udp::bind] bind to {:?}", endpoint);
-                Ok(())
-            } else {
-                Ok(())
-            }
-        })?;
-        NET_INTERFACE.poll();
-        Ok(0)
-    }
-
-    pub fn shutdown(&self, how: u32) -> GeneralRet<()> {
-        log::info!("[UdpSocket::shutdown] how {}", how);
-        Ok(())
     }
 }
 
