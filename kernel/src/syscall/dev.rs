@@ -3,9 +3,10 @@ use core::ptr;
 use log::debug;
 
 use crate::{
-    fs::{ffi::WinSize, InodeMode},
+    fs::{ffi::WinSize, resolve_path, InodeMode, OpenFlags},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
+    stack_trace,
     utils::error::{SyscallErr, SyscallRet},
 };
 
@@ -14,6 +15,7 @@ const TIOCGPGRP: usize = 0x540F;
 const TIOCGWINSZ: usize = 0x5413;
 
 pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
+    stack_trace!();
     let _sum_guard = SumGuard::new();
     log::warn!("[sys_ioctl] fd: {}, request: {}, arg:{}", fd, request, arg);
     let file = current_process()
@@ -43,4 +45,16 @@ pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
         _ => {}
     }
     Ok(0)
+}
+
+pub async fn sys_getrandom(buf: usize, buflen: usize, _flags: u32) -> SyscallRet {
+    stack_trace!();
+    let _sum_guard = SumGuard::new();
+    UserCheck::new().check_writable_slice(buf as *mut u8, buflen)?;
+    let inode = resolve_path(0, "/dev/urandom", OpenFlags::RDONLY)?;
+    let file = inode.open(inode.clone(), OpenFlags::RDONLY)?;
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
+    let ret = file.read(buf).await?;
+    log::info!("[sys_read] read {} len", ret);
+    Ok(ret)
 }

@@ -379,9 +379,9 @@ pub struct WinSize {
 impl Default for WinSize {
     fn default() -> Self {
         Self {
-            ws_row: 59,
-            ws_col: 221,
-            ws_xpixel: 0,
+            ws_row: 67,
+            ws_col: 270,
+            ws_xpixel: 21971,
             ws_ypixel: 0,
         }
     }
