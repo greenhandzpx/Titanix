@@ -17,7 +17,7 @@ pub fn kernel_trap_handler() {
             todo!()
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // warn!("timer interrupt!!");
+            // log::error!("kernel timer interrupt!!");
             handle_timeout_events();
             set_next_trigger();
         }

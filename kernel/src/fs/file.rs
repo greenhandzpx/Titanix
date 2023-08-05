@@ -240,6 +240,11 @@ pub trait File: Send + Sync {
             Ok(())
         })
     }
+
+    fn ioctl(&self, _command: usize, _value: usize) -> SyscallRet {
+        log::warn!("[File::ioctl] unsupported");
+        Ok(0)
+    }
 }
 
 /// Default file(i.e. files in the disk)

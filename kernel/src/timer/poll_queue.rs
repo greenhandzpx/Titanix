@@ -1,9 +1,6 @@
 use core::task::Waker;
 
-use alloc::{
-    collections::VecDeque,
-    sync::{Arc, Weak},
-};
+use alloc::{collections::VecDeque, sync::Weak};
 
 use crate::{fs::File, sync::mutex::SpinNoIrqLock};
 
@@ -23,7 +20,6 @@ pub struct PollQueue {
 
 struct PollQueueInner {
     queue: Option<VecDeque<PollEvent>>,
-    waker: Option<Waker>,
 }
 
 struct PollEvent {
@@ -35,10 +31,7 @@ struct PollEvent {
 impl PollQueue {
     pub const fn new() -> Self {
         Self {
-            inner: SpinNoIrqLock::new(PollQueueInner {
-                queue: None,
-                waker: None,
-            }),
+            inner: SpinNoIrqLock::new(PollQueueInner { queue: None }),
         }
     }
 
@@ -60,7 +53,13 @@ impl PollQueue {
 
     pub fn poll(&self) {
         let mut inner = self.inner.lock();
+        let totol_num = inner.queue.as_mut().unwrap().len();
+        let mut cnt = 0;
         while !inner.queue.as_mut().unwrap().is_empty() {
+            if cnt == totol_num {
+                break;
+            }
+            cnt += 1;
             let event = inner.queue.as_mut().unwrap().pop_back().unwrap();
             if let Some(file) = event.file.upgrade() {
                 let ret = match event.for_read {
