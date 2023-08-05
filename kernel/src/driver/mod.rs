@@ -34,6 +34,9 @@ pub trait CharDevice: Send + Sync {
     fn puts(&self, char: &[u8]);
 }
 
+// Net Device
+pub trait NetDevice: smoltcp::phy::Device {}
+
 pub static BLOCK_DEVICE: Mutex<Option<Arc<dyn BlockDevice>>> = Mutex::new(None);
 pub static CHAR_DEVICE: Mutex<Option<Arc<dyn CharDevice>>> = Mutex::new(None);
 
