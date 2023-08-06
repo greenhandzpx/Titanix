@@ -260,6 +260,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         }
     }
     envs_vec.push("PATH=/:/bin:/usr/bin:".to_string());
+    envs_vec.push("TERM=screen".to_string());
 
     let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY);
     if app_inode.is_err() {
