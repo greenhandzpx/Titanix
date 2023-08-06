@@ -2,6 +2,7 @@ use alloc::{
     collections::BTreeMap,
     string::{String, ToString},
     sync::Arc,
+    vec,
     vec::Vec,
 };
 use log::{debug, error, info, trace, warn};
@@ -838,21 +839,28 @@ impl MemorySpace {
             let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
             interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
             log::info!("[load_dl] interp {}", interp);
-            #[cfg(not(feature = "submit"))]
-            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
-                interp = "/lib/libc.so".to_string();
-                // interp = "libc.so".to_string();
-                // interp = "/lib/ld-linux-riscv64-lp64d.so.1".to_string();
-                // interp = "/usr/local/riscv64-linux-musl/lib/libc.so".to_string();
-            }
-            #[cfg(feature = "submit")]
-            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
-                interp = "/libc.so".to_string();
-            }
+            let mut interps: Vec<String> = vec![interp.clone()];
 
-            let interp_inode = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY)
-                .ok()
-                .unwrap();
+            log::info!("interp {}", interp);
+            // #[cfg(not(feature = "submit"))]
+            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
+                // interp = "/lib/libc.so".to_string();
+                interps.push("/libc.so".to_string());
+                interps.push("/lib/libc.so".to_string());
+            }
+            // #[cfg(feature = "submit")]
+            // if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
+            //     interp = "/libc.so".to_string();
+            // }
+
+            let mut interp_inode = None;
+            for interp in interps {
+                if let Some(inode) = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY).ok() {
+                    interp_inode = Some(inode);
+                    break;
+                }
+            }
+            let interp_inode = interp_inode.unwrap();
             let interp_file = interp_inode.open(interp_inode.clone()).ok().unwrap();
             let mut interp_elf_data = Vec::new();
             interp_file

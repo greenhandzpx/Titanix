@@ -17,7 +17,7 @@ fn main() -> i32 {
             ],
             &[
                 "PATH=/:/bin:/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin:\0".as_ptr(),
-                "LD_LIBRARY_PATH=/lib:/lib64/lp64d:/usr/lib:\0".as_ptr(),
+                "LD_LIBRARY_PATH=/:/lib:/lib64/lp64d:/usr/lib:\0".as_ptr(),
                 "TERM=screen\0".as_ptr(),
                 core::ptr::null::<u8>(),
             ],
