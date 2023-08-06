@@ -2,8 +2,10 @@
 
 pub mod ffi;
 pub mod io_multiplex;
+mod poll_queue;
 pub mod timed_task;
 pub mod timeout_task;
+pub use poll_queue::POLL_QUEUE;
 
 use core::{cmp::Reverse, task::Waker, time::Duration};
 
@@ -74,6 +76,7 @@ pub fn init() {
         .0
         .insert(CLOCK_REALTIME, Duration::ZERO);
 
+    poll_queue::init();
     info!("init clock manager success");
 }
 

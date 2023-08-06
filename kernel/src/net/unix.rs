@@ -1,20 +1,73 @@
-use alloc::sync::Arc;
-use smoltcp::wire::IpEndpoint;
-
+use super::Socket;
 use crate::{
     fs::{
         pipe::{make_pipe, Pipe},
         File, FileMeta, OpenFlags,
     },
-    net::address::SocketAddrv4,
-    processor::SumGuard,
-    utils::error::AsyscallRet,
+    utils::error::{AsyscallRet, SyscallErr},
 };
+use alloc::{boxed::Box, sync::Arc};
+use smoltcp::wire::IpEndpoint;
 
 pub struct UnixSocket {
     file_meta: FileMeta,
     read_end: Arc<Pipe>,
     write_end: Arc<Pipe>,
+}
+
+impl Socket for UnixSocket {
+    fn bind(&self, _addr: smoltcp::wire::IpListenEndpoint) -> crate::utils::error::SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
+
+    fn listen(&self) -> crate::utils::error::SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
+
+    fn connect(&self, _addr_buf: &[u8]) -> AsyscallRet {
+        Box::pin(async move { Err(SyscallErr::EOPNOTSUPP) })
+    }
+
+    fn accept(&self, _sockfd: u32, _addr: usize, _addrlen: usize) -> AsyscallRet {
+        Box::pin(async move { Err(SyscallErr::EOPNOTSUPP) })
+    }
+
+    fn socket_type(&self) -> super::SocketType {
+        todo!()
+    }
+
+    fn recv_buf_size(&self) -> usize {
+        todo!()
+    }
+
+    fn send_buf_size(&self) -> usize {
+        todo!()
+    }
+
+    fn set_recv_buf_size(&self, _size: usize) {
+        todo!()
+    }
+
+    fn set_send_buf_size(&self, _size: usize) {
+        todo!()
+    }
+
+    fn loacl_endpoint(&self) -> smoltcp::wire::IpListenEndpoint {
+        todo!()
+    }
+
+    fn remote_endpoint(&self) -> Option<IpEndpoint> {
+        None
+    }
+
+    fn shutdown(&self, how: u32) -> crate::utils::error::GeneralRet<()> {
+        log::info!("[UnixSocket::shutdown] how {}", how);
+        Ok(())
+    }
+
+    fn set_nagle_enabled(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
 }
 
 impl UnixSocket {
@@ -28,15 +81,6 @@ impl UnixSocket {
             read_end,
             write_end,
         }
-    }
-    pub fn addr(&self, addr_buf: &[u8]) -> IpEndpoint {
-        let _sum_guard = SumGuard::new();
-        let endpoint = {
-            let ipv4 = SocketAddrv4::new(addr_buf);
-            IpEndpoint::from(ipv4)
-        };
-        log::info!("[Unix::addr] {:?}", endpoint);
-        endpoint
     }
 }
 impl File for UnixSocket {

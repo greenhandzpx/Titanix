@@ -1,6 +1,11 @@
 use core::task::Waker;
 
-use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
+use alloc::{
+    boxed::Box,
+    sync::{Arc, Weak},
+    vec,
+    vec::Vec,
+};
 use log::{debug, trace};
 
 use crate::{
@@ -38,6 +43,7 @@ impl FileMeta {
                 mode,
                 pos: 0,
                 dirent_index: 0,
+                file: None,
             }),
             prw_lock: SleepLock::new(()),
         }
@@ -52,9 +58,10 @@ pub struct FileMetaInner {
     pub mode: InodeMode,
     /// file offset
     pub pos: usize,
-    // TODO: add more like file version
     /// current read dirent index
     pub dirent_index: usize,
+    /// attached file
+    pub file: Option<Weak<dyn File>>,
 }
 
 /// It is based on the `std::io::SeekFrom` enum.
@@ -232,6 +239,11 @@ pub trait File: Send + Sync {
             }
             Ok(())
         })
+    }
+
+    fn ioctl(&self, _command: usize, _value: usize) -> SyscallRet {
+        log::warn!("[File::ioctl] unsupported");
+        Ok(0)
     }
 }
 

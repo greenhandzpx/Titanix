@@ -32,6 +32,7 @@ impl<'a> FAT32DentryContent<'a> {
         Self { file, offset: 0 }
     }
 
+    #[allow(unused)]
     pub fn seek(&mut self, offset: usize) {
         self.offset = offset
     }
@@ -225,6 +226,7 @@ impl FAT32DirEntry {
         }
     }
 
+    #[allow(unused)]
     fn write_dentry(&self, writer: &mut dyn DentryWriter) {
         let mut lname_len = 0;
         while lname_len < LNAME_MAXLEN && self.lname[lname_len] != 0 {

@@ -172,7 +172,7 @@ impl Future for IOMultiplexFuture {
             }
             Poll::Ready(Ok(cnt))
         } else {
-            debug!("[IOMultiplexFuture]: no event happens");
+            log::debug!("[IOMultiplexFuture]: no event happens");
             Poll::Pending
         }
     }

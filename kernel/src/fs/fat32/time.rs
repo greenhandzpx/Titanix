@@ -19,6 +19,7 @@ const MILLISEC_PER_HR: i64 = MILLISEC_PER_MIN * MIN_PER_HR;
 const MILLISEC_PER_DAY: i64 = MILLISEC_PER_HR * HR_PER_DAY;
 
 const DAY_PER_YEAR: i64 = 365;
+#[allow(unused)]
 const DAY_PER_400YEAR: i64 = DAY_PER_YEAR * 400 + 97;
 const DAY_PER_MONTH: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
@@ -38,6 +39,7 @@ fn year_to_day_count(year: i64) -> i64 {
 /// convert Unix timestamp to FAT32 timestamp
 /// unix_time: 19700101 00:00:00 to now (millisecond)
 #[allow(non_snake_case)]
+#[allow(unused)]
 pub fn unix_time_to_FAT32(unix_time: i64) -> FAT32Timestamp {
     let day_count: i64 = unix_time / MILLISEC_PER_DAY;
     let maybe_year: i64 = 1970 + day_count * 400 / (DAY_PER_400YEAR);

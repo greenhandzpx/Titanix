@@ -47,6 +47,7 @@ macro_rules! stack_trace {
 }
 
 pub enum Msg {
+    #[allow(unused)]
     None,
     #[allow(unused)]
     Str(&'static str),

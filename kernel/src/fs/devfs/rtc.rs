@@ -40,6 +40,7 @@ impl Inode for RtcInode {
                     mode: self.metadata.mode,
                     pos: 0,
                     dirent_index: 0,
+                    file: None,
                 }),
                 prw_lock: SleepLock::new(()),
             },

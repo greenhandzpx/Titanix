@@ -25,9 +25,8 @@ use crate::fs::{
     Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
-use crate::fs::{resolve_path, HashKey, SeekFrom};
+use crate::fs::{resolve_path_ffi, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
-use crate::process::thread;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
 use crate::stack_trace;
@@ -516,14 +515,16 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
         dirfd,
         flags,
         {
-            let _sum_guard = SumGuard::new();
-            UserCheck::new().check_c_str(filename_addr)?;
-            c_str_to_string(filename_addr)
+            if !filename_addr.is_null() {
+                let _sum_guard = SumGuard::new();
+                UserCheck::new().check_c_str(filename_addr)?;
+                c_str_to_string(filename_addr)
+            } else {
+                "null".to_string()
+            }
         }
     );
-    UserCheck::new().check_c_str(filename_addr)?;
-    let path = c_str_to_string(filename_addr);
-    let inode = resolve_path(dirfd, &path, flags)?;
+    let inode = resolve_path_ffi(dirfd, filename_addr, flags)?;
     current_process().inner_handler(|proc| proc.fd_table.open(inode, flags))
 }
 
@@ -558,7 +559,10 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
     let ret = file.write(buf).await?;
-    trace!("[sys_write] write {} len", ret);
+    trace!("[sys_write] write len {}", ret);
+    // if ret > 0 {
+    //     log::debug!("[sys_write] buf[0]: [{}]", buf[0]);
+    // }
     Ok(ret)
     // if buf.len() < 2 {
     //     file.sync_write(buf)
@@ -673,7 +677,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
     let ret = file.read(buf).await?;
-    trace!("[sys_read] read {} len", ret);
+    trace!("[sys_read] read len {}", ret);
     Ok(ret)
     // if buf.len() < 2 {
     //     file.sync_read(buf)
@@ -1157,8 +1161,6 @@ pub async fn sys_ppoll(
     let mut fds: Vec<PollFd> = Vec::new();
     fds.extend_from_slice(raw_fds);
 
-    trace!("[sys_ppoll]: fds {:?}", fds);
-
     let timeout = match timeout_ptr {
         0 => {
             trace!("[sys_ppoll]: infinite timeout");
@@ -1170,6 +1172,7 @@ pub async fn sys_ppoll(
             Some(Duration::from(unsafe { *(timeout_ptr as *const TimeSpec) }))
         }
     };
+    log::info!("[sys_ppoll]: fds {:?}, timeout {:?}", fds, timeout);
 
     if sigmask_ptr != 0 {
         stack_trace!();
@@ -1190,7 +1193,7 @@ pub async fn sys_ppoll(
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {
-                warn!("[sys_ppoll]: timeout");
+                log::debug!("[sys_ppoll]: timeout");
                 return Ok(0);
             }
         }
@@ -1202,7 +1205,7 @@ pub async fn sys_ppoll(
         .await
         {
             SelectOutput::Output1(ret) => {
-                debug!("[sys_ppoll]: ready");
+                log::debug!("[sys_ppoll]: ready");
                 ret
             }
             SelectOutput::Output2(e) => {
@@ -1210,9 +1213,6 @@ pub async fn sys_ppoll(
                 Err(SyscallErr::EINTR)
             }
         }
-        // let ret = poll_future.await;
-        // trace!("[sys_ppoll]: ready");
-        // ret
     }
 }
 

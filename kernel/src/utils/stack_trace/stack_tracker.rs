@@ -17,12 +17,16 @@ impl StackTracker {
         }
     }
 
+    #[allow(unused)]
     pub fn push_stack_info(&mut self, stack_info: StackInfo) {
         self.stack_info_trace.push(stack_info);
     }
+
     pub fn pop_stack_info(&mut self) {
         self.stack_info_trace.pop();
     }
+
+    #[allow(unused)]
     pub fn print_stacks(&self) {
         for stack_info in &self.stack_info_trace {
             log::warn!("{}", stack_info);
@@ -38,6 +42,7 @@ impl StackTracker {
 pub struct StackInfoGuard {}
 
 impl StackInfoGuard {
+    #[allow(unused)]
     pub fn new(msg: Msg, file: &'static str, line: u32) -> Self {
         local_hart()
             .env_mut()

@@ -76,23 +76,23 @@ impl EnvContext {
         }
     }
 
-    pub fn sie_dec(&mut self) {
-        if self.sie_disabled == 0 {
-            unsafe {
-                sstatus::clear_sie();
-            }
-        }
-        self.sie_disabled += 1;
-    }
+    // pub fn sie_dec(&mut self) {
+    //     if self.sie_disabled == 0 {
+    //         unsafe {
+    //             sstatus::clear_sie();
+    //         }
+    //     }
+    //     self.sie_disabled += 1;
+    // }
 
-    pub fn sie_inc(&mut self) {
-        if self.sie_disabled == 1 {
-            unsafe {
-                sstatus::set_sie();
-            }
-        }
-        self.sie_disabled -= 1;
-    }
+    // pub fn sie_inc(&mut self) {
+    //     if self.sie_disabled == 1 {
+    //         unsafe {
+    //             sstatus::set_sie();
+    //         }
+    //     }
+    //     self.sie_disabled -= 1;
+    // }
 
     pub fn sum_inc(&mut self) {
         if self.sum_enabled == 0 {

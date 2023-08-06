@@ -1,3 +1,4 @@
+use crate::{sync::mutex::SpinNoIrqLock, timer::current_time_duration};
 use alloc::vec;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
@@ -6,8 +7,6 @@ use smoltcp::{
     time::Instant,
     wire::{EthernetAddress, IpAddress, IpCidr},
 };
-
-use crate::{sync::mutex::SpinNoIrqLock, timer::current_time_duration};
 
 type Mutex<T> = SpinNoIrqLock<T>;
 

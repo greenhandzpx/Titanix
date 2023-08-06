@@ -60,7 +60,6 @@ extern "C" {
     fn ekernel();
 }
 
-
 /// Kernel Space for all processes
 pub static mut KERNEL_SPACE: Option<MemorySpace> = None;
 

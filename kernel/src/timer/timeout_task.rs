@@ -5,8 +5,6 @@ use core::{
     time::Duration,
 };
 
-use log::trace;
-
 use super::{current_time_duration, Timer, TIMER_QUEUE};
 
 pub enum TimeoutTaskOutput<T> {
@@ -50,7 +48,7 @@ impl<F: Future + Send + 'static> Future for TimeoutTaskFuture<F> {
                     log::trace!("[TimeoutTaskFuture::poll] add timer");
                 }
 
-                trace!("[TimeoutTaskFuture::poll] still not ready");
+                log::trace!("[TimeoutTaskFuture::poll] still not ready");
 
                 // If single core
                 #[cfg(not(feature = "kernel_interrupt"))]

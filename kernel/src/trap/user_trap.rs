@@ -159,6 +159,7 @@ pub async fn trap_handler() {
             // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            // log::error!("user timer interrupt!!");
             handle_timeout_events();
             set_next_trigger();
             // log::debug!(

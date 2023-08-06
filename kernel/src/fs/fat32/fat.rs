@@ -166,6 +166,7 @@ impl FATBufferCache {
         fat_sector.write(offset, val)
     }
 
+    #[allow(unused)]
     fn sync_buffer(&mut self, sector_id: usize) -> Option<()> {
         if sector_id > (self.info.tot_cluster_count + 1) / FATENTRY_PER_SECTOR {
             None
@@ -267,6 +268,8 @@ impl FileAllocTable {
     pub fn write_fat(&self, cluster_id: usize, val: u32) -> Option<()> {
         self.fatcache.lock().write_fat(cluster_id, val)
     }
+
+    #[allow(unused)]
     pub fn sync_fat(&self) {
         self.fatcache.lock().sync_all_buffers();
     }

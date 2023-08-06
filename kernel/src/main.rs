@@ -14,6 +14,8 @@
 #![feature(poll_ready)]
 #![feature(let_chains)]
 #![feature(once_cell)]
+#![allow(incomplete_features)]
+#![feature(trait_upcasting)]
 
 extern crate alloc;
 // extern crate intrusive_collections;
@@ -55,7 +57,7 @@ use crate::{
     mm::KERNEL_SPACE,
     process::{thread, PROCESS_MANAGER},
     processor::hart,
-    timer::timeout_task::ksleep,
+    timer::{timeout_task::ksleep, POLL_QUEUE},
 };
 
 global_asm!(include_str!("entry.S"));
@@ -176,8 +178,16 @@ pub fn rust_main(hart_id: usize) {
 
         thread::spawn_kernel_thread(async move {
             loop {
-                log::warn!("[daemon] process cnt {}", PROCESS_MANAGER.total_num());
+                log::info!("[daemon] process cnt {}", PROCESS_MANAGER.total_num());
                 ksleep(Duration::from_secs(3)).await;
+            }
+        });
+
+        #[cfg(not(feature = "submit"))]
+        thread::spawn_kernel_thread(async move {
+            loop {
+                POLL_QUEUE.poll();
+                ksleep(Duration::from_millis(30)).await;
             }
         });
 
@@ -189,9 +199,6 @@ pub fn rust_main(hart_id: usize) {
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-
-        // #[cfg(feature = "multi_hart")]
-        // loop {}
     } else {
         // The other harts
         hart::init(hart_id);
@@ -217,7 +224,6 @@ pub fn rust_main(hart_id: usize) {
                 .activate();
         }
         println!("[kernel] ---------- hart {} started ---------- ", hart_id);
-        // println!("[other hart] current time {:?}", current_time_duration());
 
         trap::enable_timer_interrupt();
         timer::set_next_trigger();

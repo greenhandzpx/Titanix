@@ -10,15 +10,12 @@ use crate::{
     utils::error::GeneralRet,
 };
 
-use super::DevFs;
-
 pub struct BlockDeviceInode {
     metadata: InodeMeta,
-    dev_fs: Option<Arc<DevFs>>,
 }
 
 impl Inode for BlockDeviceInode {
-    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    fn open(&self, _this: Arc<dyn Inode>, _flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
         todo!()
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
@@ -28,15 +25,16 @@ impl Inode for BlockDeviceInode {
     fn metadata(&self) -> &InodeMeta {
         &self.metadata
     }
-    fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+    fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
         panic!("Unsupported operation")
     }
-    fn delete_child(&self, child_name: &str) {
+    fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation delete")
     }
 }
 
 impl BlockDeviceInode {
+    #[allow(unused)]
     pub fn new(
         parent: Arc<dyn Inode>,
         path: &str,
@@ -53,9 +51,6 @@ impl BlockDeviceInode {
                 dev_id,
             })),
         );
-        Self {
-            metadata,
-            dev_fs: None,
-        }
+        Self { metadata }
     }
 }
