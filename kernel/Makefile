@@ -11,9 +11,9 @@ FS_IMG := $(FS_IMG_SRC)/sdcard.img
 
 TEST := 23
 ifeq ($(TEST), rootfs)
-	TEST_DIR := "../rootfs"
+	TEST_DIR := "../Titanix-rootfs/rootfs"
 else
-	TEST_DIR := "../$(TEST)-testcases"
+	TEST_DIR := "../testcase/$(TEST)"
 endif
 
 STRACE := 
@@ -130,16 +130,7 @@ endif
 user-build:
 	@echo "build user..."
 	@cd ../user && make build PRELIMINARY=$(PRELIMINARY)
-	@cp ../22-testcases/busybox ../user/target/riscv64gc-unknown-none-elf/release/busybox
-	@cp ../23-testcases/time-test ../user/target/riscv64gc-unknown-none-elf/release/time-test
-	@cp ../23-testcases/busybox_testcode.sh ../user/target/riscv64gc-unknown-none-elf/release/busybox_testcode.sh
-	@cp ../23-testcases/busybox_cmd.txt ../user/target/riscv64gc-unknown-none-elf/release/busybox_cmd.txt
-	@cp ../23-testcases/lmbench_all ../user/target/riscv64gc-unknown-none-elf/release/lmbench_all
-	@cp ../23-testcases/lmbench_testcode.sh ../user/target/riscv64gc-unknown-none-elf/release/lmbench_testcode.sh
-	@cp ../23-testcases/runtest.exe ../user/target/riscv64gc-unknown-none-elf/release/runtest.exe
-	@cp ../23-testcases/entry-static.exe ../user/target/riscv64gc-unknown-none-elf/release/entry-static.exe
-	@cp ../23-testcases/run-static.sh ../user/target/riscv64gc-unknown-none-elf/release/run-static.sh
-	@cp ../23-testcases/lmbench_all ../user/target/riscv64gc-unknown-none-elf/release/lmbench_all
+	@cp ../testcase/22/busybox ../user/target/riscv64gc-unknown-none-elf/release/busybox
 	@echo "build user finished"
 
 

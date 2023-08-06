@@ -21,7 +21,7 @@ _num_app:
     .global _app_names
 _app_names:
     .string "initproc"
-    .string "runtestcases"
+    .string "runtestcase"
     .string "shell"
     .string "time-test"
     .string "busybox_testcode.sh"
@@ -46,7 +46,7 @@ app_0_end:
     .global app_1_end
     .align 3
 app_1_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/runtestcases"
+    .incbin "../user/target/riscv64gc-unknown-none-elf/release/runtestcase"
 app_1_end:
 
     .section .data

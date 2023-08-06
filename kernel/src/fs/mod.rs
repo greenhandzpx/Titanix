@@ -104,7 +104,7 @@ pub fn init() {
         "busybox_testcode.sh",
         "busybox_cmd.txt",
         "busybox",
-        "runtestcases",
+        "runtestcase",
         "shell",
         "lmbench_all",
         "lmbench_testcode.sh",
@@ -113,7 +113,7 @@ pub fn init() {
         "run-static.sh",
     ];
     #[cfg(not(feature = "tmpfs"))]
-    let mem_apps = ["busybox", "runtestcases", "shell"];
+    let mem_apps = ["busybox", "runtestcase", "shell"];
     for app in mem_apps {
         create_mem_file(&root_inode, app);
     }

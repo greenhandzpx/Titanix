@@ -118,7 +118,7 @@ impl FastPathCache {
     }
 }
 
-pub const FAST_PATH: [&str; 9] = [
+pub const FAST_PATH: [&str; 8] = [
     "/dev/null",
     "/dev/zero",
     "/dev/tty",
@@ -127,7 +127,7 @@ pub const FAST_PATH: [&str; 9] = [
     "/proc",
     "/tmp",
     "/var/tmp",
-    "/etc",
+    // "/etc",
 ];
 
 #[derive(PartialEq, Debug, Clone, Copy)]

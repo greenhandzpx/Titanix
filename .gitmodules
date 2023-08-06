@@ -1,0 +1,3 @@
+[submodule "Titanix-rootfs"]
+	path = Titanix-rootfs
+	url = git@github.com:greenhandzpx/Titanix-rootfs.git
