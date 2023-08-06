@@ -267,7 +267,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
         return Err(app_inode.err().unwrap());
     }
     let app_inode = app_inode.unwrap();
-    let app_file = app_inode.open(app_inode.clone(), OpenFlags::RDONLY)?;
+    let app_file = app_inode.open(app_inode.clone())?;
     let elf_data_arc = app_inode.metadata().inner.lock().elf_data.clone();
     let elf_data = elf_data_arc.get_unchecked_mut();
     if elf_data.is_empty() {

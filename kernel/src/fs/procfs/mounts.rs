@@ -6,7 +6,7 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, InodeMode, Mutex, OpenFlags, FILE_SYSTEM_MANAGER,
+        File, Inode, InodeMode, Mutex, FILE_SYSTEM_MANAGER,
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
@@ -25,11 +25,10 @@ impl MountsInode {
 }
 
 impl Inode for MountsInode {
-    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(MountsFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
-                    flags,
                     inode: Some(this),
                     mode: InodeMode::FileREG,
                     pos: 0,
@@ -62,12 +61,6 @@ pub struct MountsFile {
 }
 
 impl File for MountsFile {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        false
-    }
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
         debug!("[MountsFile] read");
         Box::pin(async move {

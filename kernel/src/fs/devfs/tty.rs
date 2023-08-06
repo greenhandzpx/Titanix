@@ -3,7 +3,7 @@ use alloc::{sync::Arc, vec::Vec};
 use crate::{
     config::process::INITPROC_PID,
     driver::getchar,
-    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
+    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex},
     mm::user_check::UserCheck,
     stack_trace,
     sync::mutex::SpinLock,
@@ -31,12 +31,8 @@ impl TtyInode {
 }
 
 impl Inode for TtyInode {
-    fn open(
-        &self,
-        this: alloc::sync::Arc<dyn Inode>,
-        flags: crate::fs::OpenFlags,
-    ) -> GeneralRet<Arc<dyn crate::fs::File>> {
-        let file: Arc<dyn File> = Arc::new(TtyFile::new(this, flags));
+    fn open(&self, this: alloc::sync::Arc<dyn Inode>) -> GeneralRet<Arc<dyn crate::fs::File>> {
+        let file: Arc<dyn File> = Arc::new(TtyFile::new(this));
         file.metadata().inner.lock().file = Some(Arc::downgrade(&file));
         Ok(file)
     }
@@ -144,12 +140,11 @@ struct TtyInner {
 }
 
 impl TtyFile {
-    pub fn new(this: Arc<dyn Inode>, flags: OpenFlags) -> Self {
+    pub fn new(this: Arc<dyn Inode>) -> Self {
         Self {
             buf: AtomicU8::new(255),
             metadata: FileMeta {
                 inner: Mutex::new(FileMetaInner {
-                    flags,
                     inode: Some(this),
                     mode: crate::fs::InodeMode::FileCHR,
                     pos: 0,

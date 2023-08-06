@@ -101,7 +101,10 @@ pub fn sys_mmap(
             // if flags.contains(MmapFlags::MAP_FIXED) {
             //     vma.backup_file = Some(BackupFile { offset: 0, file });
             // }
-            vma.backup_file = Some(BackupFile { offset, file });
+            vma.backup_file = Some(BackupFile {
+                offset,
+                file: file.file,
+            });
 
             let start_va: VirtAddr = vma.start_vpn().into();
             debug!(

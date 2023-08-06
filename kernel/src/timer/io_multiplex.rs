@@ -119,6 +119,7 @@ impl Future for IOMultiplexFuture {
             if let Some(file) =
                 current_process().inner_handler(|proc| proc.fd_table.get(fd.fd as usize))
             {
+                let file = file.file;
                 if let Some(events) = PollEvents::from_bits(fd.events) {
                     fd.revents = 0;
                     if events.contains(PollEvents::POLLIN) {

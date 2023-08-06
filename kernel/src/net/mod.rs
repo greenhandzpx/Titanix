@@ -1,5 +1,5 @@
 use crate::{
-    fs::{Fd, File},
+    fs::{Fd, FdInfo, File, OpenFlags},
     net::{tcp::TcpSocket, udp::UdpSocket},
     processor::{current_process, SumGuard},
     stack_trace,
@@ -77,7 +77,8 @@ impl dyn Socket {
                     let socket = Arc::new(socket);
                     current_process().inner_handler(|proc| {
                         let fd = proc.fd_table.alloc_fd()?;
-                        proc.fd_table.put(fd, socket.clone());
+                        proc.fd_table
+                            .put(fd, FdInfo::new(socket.clone(), OpenFlags::all()));
                         proc.socket_table.insert(fd, socket);
                         Ok(fd)
                     })
@@ -86,7 +87,8 @@ impl dyn Socket {
                     let socket = Arc::new(socket);
                     current_process().inner_handler(|proc| {
                         let fd = proc.fd_table.alloc_fd()?;
-                        proc.fd_table.put(fd, socket.clone());
+                        proc.fd_table
+                            .put(fd, FdInfo::new(socket.clone(), OpenFlags::all()));
                         proc.socket_table.insert(fd, socket);
                         Ok(fd)
                     })

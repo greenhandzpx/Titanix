@@ -1,6 +1,6 @@
 use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, Socket, MAX_BUFFER_SIZE};
 use crate::{
-    fs::{File, FileMeta, OpenFlags},
+    fs::{File, FileMeta},
     net::address,
     processor::{current_task, SumGuard},
     sync::Event,
@@ -162,7 +162,7 @@ impl UdpSocket {
             }),
             socket_handler,
             file_meta: FileMeta::new(
-                OpenFlags::CLOEXEC | OpenFlags::RDWR,
+                // OpenFlags::CLOEXEC | OpenFlags::RDWR,
                 crate::fs::InodeMode::FileSOCK,
             ),
         }

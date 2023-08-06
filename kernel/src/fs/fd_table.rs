@@ -15,9 +15,21 @@ use super::{file::File, resolve_path, Inode, OpenFlags, AT_FDCWD};
 pub type Fd = usize;
 
 pub struct FdTable {
-    pub fd_table: Vec<Option<Arc<dyn File>>>,
+    pub fd_table: Vec<Option<FdInfo>>,
     /// max fd
     rlimit: RLimit,
+}
+
+#[derive(Clone)]
+pub struct FdInfo {
+    pub file: Arc<dyn File>,
+    pub flags: OpenFlags,
+}
+
+impl FdInfo {
+    pub fn new(file: Arc<dyn File>, flags: OpenFlags) -> Self {
+        Self { file, flags }
+    }
 }
 
 impl FdTable {
@@ -26,15 +38,18 @@ impl FdTable {
             .ok()
             .unwrap();
         // .unwrap();
-        let stdin = tty_inode
-            .open(tty_inode.clone(), OpenFlags::RDONLY)
-            .unwrap();
-        let stdout = tty_inode
-            .open(tty_inode.clone(), OpenFlags::WRONLY)
-            .unwrap();
-        let stderr = tty_inode
-            .open(tty_inode.clone(), OpenFlags::WRONLY)
-            .unwrap();
+        let stdin = FdInfo::new(
+            tty_inode.open(tty_inode.clone()).unwrap(),
+            OpenFlags::RDONLY,
+        );
+        let stdout = FdInfo::new(
+            tty_inode.open(tty_inode.clone()).unwrap(),
+            OpenFlags::WRONLY,
+        );
+        let stderr = FdInfo::new(
+            tty_inode.open(tty_inode.clone()).unwrap(),
+            OpenFlags::WRONLY,
+        );
         Self {
             fd_table: vec![
                 // 0 -> stdin
@@ -70,9 +85,10 @@ impl FdTable {
         );
         // TODO: add to fs's dirty list
         let fd = self.alloc_fd()?;
-        let file = inode.open(inode.clone(), flags)?;
+        let file = inode.open(inode.clone())?;
+        let fd_info = FdInfo::new(file, flags);
 
-        self.put(fd, file);
+        self.put(fd, fd_info);
         debug!("[FdTable::open] find fd: {}", fd);
         Ok(fd)
     }
@@ -96,7 +112,7 @@ impl FdTable {
     }
 
     /// Get a ref of the given fd
-    pub fn get_ref(&self, fd: Fd) -> Option<&Arc<dyn File>> {
+    pub fn get_ref(&self, fd: Fd) -> Option<&FdInfo> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -110,7 +126,7 @@ impl FdTable {
     }
 
     /// Get the ownership of the given fd by clone
-    pub fn get(&self, fd: Fd) -> Option<Arc<dyn File>> {
+    pub fn get(&self, fd: Fd) -> Option<FdInfo> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -118,8 +134,17 @@ impl FdTable {
         }
     }
 
+    /// Get the ownership of the given fd by clone
+    pub fn get_mut(&mut self, fd: Fd) -> Option<&mut FdInfo> {
+        if fd >= self.fd_table.len() {
+            None
+        } else {
+            self.fd_table[fd].as_mut()
+        }
+    }
+
     /// Take the ownership of the given fd
-    pub fn take(&mut self, fd: Fd) -> Option<Arc<dyn File>> {
+    pub fn take(&mut self, fd: Fd) -> Option<FdInfo> {
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -127,10 +152,10 @@ impl FdTable {
         }
     }
 
-    pub fn put(&mut self, fd: Fd, file: Arc<dyn File>) {
+    pub fn put(&mut self, fd: Fd, fd_info: FdInfo) {
         assert!(fd < self.fd_table.len());
         assert!(self.fd_table[fd].is_none());
-        self.fd_table[fd] = Some(file);
+        self.fd_table[fd] = Some(fd_info);
     }
 
     pub fn alloc_fd(&mut self) -> GeneralRet<usize> {
@@ -177,9 +202,10 @@ impl FdTable {
     }
 
     pub fn close_on_exec(&mut self) {
-        for file in self.fd_table.iter_mut() {
+        for (_fd, file) in self.fd_table.iter_mut().enumerate() {
             if let Some(f) = file {
-                if f.flags().contains(OpenFlags::CLOEXEC) {
+                if f.flags.contains(OpenFlags::CLOEXEC) {
+                    // log::error!("[close_on_exec] close fd {}, flags {:?}", fd, f.flags);
                     *file = None;
                 }
             }

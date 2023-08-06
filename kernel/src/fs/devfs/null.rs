@@ -2,7 +2,7 @@ use crate::{
     fs::{
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, Mutex, OpenFlags,
+        File, Inode, Mutex,
     },
     sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
@@ -23,11 +23,10 @@ impl NullInode {
 }
 
 impl Inode for NullInode {
-    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(NullFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
-                    flags,
                     inode: Some(this),
                     mode: self.metadata.mode,
                     pos: 0,
@@ -59,12 +58,6 @@ pub struct NullFile {
 
 // #[async_trait]
 impl File for NullFile {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }

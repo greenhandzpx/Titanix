@@ -3,7 +3,7 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, Mutex, OpenFlags,
+        File, Inode, Mutex,
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
@@ -35,11 +35,10 @@ impl UrandomInode {
 }
 
 impl Inode for UrandomInode {
-    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
         Ok(Arc::new(UrandomFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
-                    flags,
                     inode: Some(this),
                     mode: self.metadata.mode,
                     pos: 0,
@@ -70,12 +69,6 @@ pub struct UrandomFile {
 
 // #[async_trait]
 impl File for UrandomFile {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }

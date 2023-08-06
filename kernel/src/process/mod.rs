@@ -59,14 +59,6 @@ pub fn add_initproc() {
 
     let _init_proc = Process::new_initproc(elf_data, None);
     // PROCESS_MANAGER.add_process(_init_proc.pid(), &_init_proc);
-
-    #[cfg(feature = "user_spin")]
-    {
-        let elf_data = get_app_data_by_name("user_spin").unwrap();
-        let spin_proc = Process::new_initproc(elf_data);
-        info!("[add_initproc]: add user spin, pid {}", spin_proc.pid());
-        // PROCESS_MANAGER.add_process(spin_proc.pid(), &spin_proc);
-    }
 }
 
 use self::{resource::RLimit, thread::tid::TidHandle};
@@ -229,7 +221,7 @@ impl Drop for Process {
                 log::info!(
                     "[Process::drop] drop fd {}, file ref cnt {}",
                     fd,
-                    Arc::strong_count(file.as_ref().unwrap())
+                    Arc::strong_count(&file.as_ref().unwrap().file)
                 );
             }
         }

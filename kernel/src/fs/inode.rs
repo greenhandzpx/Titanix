@@ -28,7 +28,7 @@ use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
     pipe::Pipe,
-    File, Mutex, OpenFlags,
+    File, Mutex,
 };
 
 /// Dcache: cache: (parent ino, child name) -> dentry.
@@ -179,11 +179,10 @@ pub trait Inode: Send + Sync {
     }
 
     /// Default operation is to open the default file(i.e. file from disk)
-    fn open(&self, this: Arc<dyn Inode>, flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
         debug!("[inode] open");
         let file_meta = FileMeta {
             inner: Mutex::new(FileMetaInner {
-                flags,
                 inode: Some(this),
                 mode: self.metadata().mode,
                 pos: 0,

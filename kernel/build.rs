@@ -26,15 +26,15 @@ fn insert_app_data() -> Result<()> {
 
     let testcases = [
         // "true",
-        "time-test",
-        "busybox_testcode.sh",
-        "busybox_cmd.txt",
+        // "time-test",
+        // "busybox_testcode.sh",
+        // "busybox_cmd.txt",
         "busybox",
-        "lmbench_all",
-        "lmbench_testcode.sh",
-        "runtest.exe",
-        "entry-static.exe",
-        "run-static.sh",
+        // "lmbench_all",
+        // "lmbench_testcode.sh",
+        // "runtest.exe",
+        // "entry-static.exe",
+        // "run-static.sh",
     ];
 
     for testcase in testcases {

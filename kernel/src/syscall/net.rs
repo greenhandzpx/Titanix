@@ -1,4 +1,5 @@
 use crate::{
+    fs::{FdInfo, OpenFlags},
     mm::user_check::UserCheck,
     net::{
         address::{self, SocketAddrv4},
@@ -53,7 +54,8 @@ pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
                 proc.socket_table.insert(sockfd as usize, sock.clone());
                 stack_trace!();
                 proc.fd_table.take(sockfd as usize);
-                proc.fd_table.put(sockfd as usize, sock);
+                proc.fd_table
+                    .put(sockfd as usize, FdInfo::new(sock, OpenFlags::all()));
                 Ok(0)
             }
         }),
@@ -129,7 +131,7 @@ pub async fn sys_sendto(
         .ok_or(SyscallErr::ENOTSOCK)?;
     log::info!("[sys_sendto] get socket sockfd: {}", sockfd);
     let len = match socket.socket_type() {
-        SocketType::SOCK_STREAM => socket_file.write(buf).await?,
+        SocketType::SOCK_STREAM => socket_file.file.write(buf).await?,
         SocketType::SOCK_DGRAM => {
             info!("[sys_sendto] socket is udp");
             UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
@@ -141,7 +143,7 @@ pub async fn sys_sendto(
             let dest_addr =
                 unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
             socket.connect(dest_addr).await?;
-            socket_file.write(buf).await?
+            socket_file.file.write(buf).await?
         }
         _ => todo!(),
     };
@@ -169,14 +171,14 @@ pub async fn sys_recvfrom(
     info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
     match socket.socket_type() {
         SocketType::SOCK_STREAM => {
-            let len = socket_file.read(buf).await?;
+            let len = socket_file.file.read(buf).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
             Ok(len)
         }
         SocketType::SOCK_DGRAM => {
-            let len = socket_file.read(buf).await?;
+            let len = socket_file.file.read(buf).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
@@ -311,9 +313,11 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
 
     let (fd1, fd2) = current_process().inner_handler(move |proc| {
         let fd1 = proc.fd_table.alloc_fd()?;
-        proc.fd_table.put(fd1, socket1);
+        proc.fd_table
+            .put(fd1, FdInfo::new(socket1, OpenFlags::all()));
         let fd2 = proc.fd_table.alloc_fd()?;
-        proc.fd_table.put(fd2, socket2);
+        proc.fd_table
+            .put(fd2, FdInfo::new(socket2, OpenFlags::all()));
         Ok((fd1, fd2))
     })?;
 
