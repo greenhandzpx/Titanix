@@ -25,7 +25,6 @@ const TESTCASES: [&str; 11] = [
     "cyclictest_testcode.sh",
 ];
 
-
 #[no_mangle]
 fn main() -> i32 {
     if fork() == 0 {
