@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-use super::{inode::Inode, InodeMode, Mutex, OpenFlags};
+use super::{inode::Inode, InodeMode, Mutex};
 
 pub struct FileMeta {
     /// Mutable,
@@ -35,10 +35,10 @@ impl FileMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
         f(&mut self.inner.lock())
     }
-    pub fn new(flags: OpenFlags, mode: InodeMode) -> Self {
+    pub fn new(mode: InodeMode) -> Self {
         Self {
             inner: Mutex::new(FileMetaInner {
-                flags,
+                // flags,
                 inode: None,
                 mode,
                 pos: 0,
@@ -50,8 +50,8 @@ impl FileMeta {
     }
 }
 pub struct FileMetaInner {
-    /// open flags
-    pub flags: OpenFlags,
+    // /// open flags
+    // pub flags: OpenFlags,
     /// inode to which this file refers
     pub inode: Option<Arc<dyn Inode>>,
     /// file type (the same as InodeMode)
@@ -76,16 +76,6 @@ pub enum SeekFrom {
 }
 
 pub trait File: Send + Sync {
-    fn readable(&self) -> bool {
-        let flags = self.metadata().inner.lock().flags;
-        flags.contains(OpenFlags::RDONLY) || flags.contains(OpenFlags::RDWR)
-    }
-
-    fn writable(&self) -> bool {
-        let flags = self.metadata().inner.lock().flags;
-        flags.contains(OpenFlags::RDWR) || flags.contains(OpenFlags::WRONLY)
-    }
-
     /// For default file, data must be read from page cache first.
     /// Note that only guarantee the safety of the first PAGE_SIZE bytes
 
@@ -207,25 +197,25 @@ pub trait File: Send + Sync {
 
     fn metadata(&self) -> &FileMeta;
 
-    fn flags(&self) -> OpenFlags {
-        self.metadata().inner.lock().flags
-    }
+    // fn flags(&self) -> OpenFlags {
+    //     self.metadata().inner.lock().flags
+    // }
 
     fn truncate(&self, len: usize) -> AgeneralRet<()> {
         Box::pin(async move {
             stack_trace!();
-            let (old_pos, writable, inode) = self.metadata().inner_get(|inner| {
-                let flags = inner.flags;
+            let (old_pos, inode) = self.metadata().inner_get(|inner| {
+                // let flags = inner.flags;
                 let inode = inner.inode.as_ref().ok_or(SyscallErr::EINVAL)?.clone();
                 Ok((
                     inner.pos,
-                    flags.contains(OpenFlags::WRONLY) || flags.contains(OpenFlags::RDWR),
+                    // flags.contains(OpenFlags::WRONLY) || flags.contains(OpenFlags::RDWR),
                     inode,
                 ))
             })?;
-            if !writable {
-                return Err(SyscallErr::EACCES);
-            }
+            // if !writable {
+            //     return Err(SyscallErr::EACCES);
+            // }
             let old_data_len = inode.metadata().inner.lock().data_len;
             if len < old_data_len {
                 inode.metadata().inner.lock().data_len = len;

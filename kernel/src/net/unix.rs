@@ -2,7 +2,7 @@ use super::Socket;
 use crate::{
     fs::{
         pipe::{make_pipe, Pipe},
-        File, FileMeta, OpenFlags,
+        File, FileMeta,
     },
     utils::error::{AsyscallRet, SyscallErr},
 };
@@ -74,7 +74,7 @@ impl UnixSocket {
     pub fn new(read_end: Arc<Pipe>, write_end: Arc<Pipe>) -> Self {
         Self {
             file_meta: FileMeta::new(
-                OpenFlags::CLOEXEC | OpenFlags::NONBLOCK | OpenFlags::RDWR,
+                // OpenFlags::CLOEXEC | OpenFlags::NONBLOCK | OpenFlags::RDWR,
                 crate::fs::InodeMode::FileSOCK,
             ),
             // buf: Mutex::new(VecDeque::new()),

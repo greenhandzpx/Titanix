@@ -1,6 +1,6 @@
 use super::{Mutex, Socket};
 use crate::{
-    fs::{File, FileMeta, OpenFlags},
+    fs::{FdInfo, File, FileMeta, OpenFlags},
     net::{
         address::{self},
         config::NET_INTERFACE,
@@ -92,7 +92,10 @@ impl Socket for TcpSocket {
                     proc.socket_table.get_ref(sockfd as usize).cloned();
                 // replace old
                 log::debug!("[Socket::accept] replace old sock to new");
-                proc.fd_table.put(sockfd as usize, new_socket.clone());
+                proc.fd_table.put(
+                    sockfd as usize,
+                    FdInfo::new(new_socket.clone(), OpenFlags::all()),
+                );
                 proc.socket_table
                     .insert(sockfd as usize, new_socket.clone());
                 // insert old to newfd
@@ -210,7 +213,7 @@ impl TcpSocket {
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
             file_meta: FileMeta::new(
-                OpenFlags::CLOEXEC | OpenFlags::RDWR,
+                // OpenFlags::CLOEXEC | OpenFlags::RDWR,
                 crate::fs::InodeMode::FileSOCK,
             ),
         }

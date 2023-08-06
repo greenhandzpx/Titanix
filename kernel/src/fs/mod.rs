@@ -15,6 +15,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 pub use fat32::FAT32FileSystem;
 pub use fd_table::Fd;
+pub use fd_table::FdInfo;
 pub use fd_table::FdTable;
 pub use file::File;
 pub use file::FileMeta;
@@ -51,7 +52,7 @@ fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
     let inode = parent_inode
         .mknod_v(name, InodeMode::FileREG, None)
         .unwrap();
-    let file = inode.open(inode.clone(), OpenFlags::RDWR).unwrap();
+    let file = inode.open(inode.clone()).unwrap();
     file.sync_write(get_app_data_by_name(name).unwrap())
         .unwrap();
 }
@@ -269,6 +270,12 @@ impl OpenFlags {
         } else {
             (true, true)
         }
+    }
+    pub fn readable(&self) -> bool {
+        self.contains(OpenFlags::RDONLY) || self.contains(OpenFlags::RDWR)
+    }
+    pub fn writable(&self) -> bool {
+        self.contains(OpenFlags::WRONLY) || self.contains(OpenFlags::RDWR)
     }
 }
 

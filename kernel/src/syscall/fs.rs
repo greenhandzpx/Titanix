@@ -25,7 +25,7 @@ use crate::fs::{
     Renameat2Flags, AT_FDCWD, FILE_SYSTEM_MANAGER,
 };
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
-use crate::fs::{resolve_path_ffi, HashKey, SeekFrom};
+use crate::fs::{resolve_path_ffi, FdInfo, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
@@ -266,7 +266,8 @@ pub fn sys_getdents(fd: usize, dirp: usize, count: usize) -> SyscallRet {
     // check if the fd is legal.
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
-        .ok_or(SyscallErr::EBADF)?;
+        .ok_or(SyscallErr::EBADF)?
+        .file;
     let file_inner = file.metadata().inner.lock();
     let inode = file_inner.inode.clone();
     let dirent_index = file_inner.dirent_index;
@@ -390,10 +391,10 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SyscallRet {
     //     info!("[_fstat]: file cannot be read, fd {}, stat_buf addr {:#x}", fd, stat_buf);
     //     return Err(SyscallErr::EACCES);
     // }
-    let file = current_process()
+    let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    let inner = file.metadata().inner.lock();
+    let inner = fd_info.file.metadata().inner.lock();
     let inode = inner.inode.as_ref();
     if inode.is_none() {
         Ok(0)
@@ -481,10 +482,12 @@ pub fn sys_newfstatat(
 
 pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
     stack_trace!();
-    let file = current_process()
+    let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    if !file.readable() {
+    let file = fd_info.file;
+    let flags = fd_info.flags;
+    if !flags.readable() {
         return Err(SyscallErr::EACCES);
     }
     match whence {
@@ -525,7 +528,9 @@ pub fn sys_openat(dirfd: isize, filename_addr: *const u8, flags: u32, _mode: u32
         }
     );
     let inode = resolve_path_ffi(dirfd, filename_addr, flags)?;
-    current_process().inner_handler(|proc| proc.fd_table.open(inode, flags))
+    let ret = current_process().inner_handler(|proc| proc.fd_table.open(inode, flags));
+    log::info!("[sys_openat] return fd {}", ret?);
+    ret
 }
 
 pub fn sys_close(fd: usize) -> SyscallRet {
@@ -544,11 +549,12 @@ pub fn sys_close(fd: usize) -> SyscallRet {
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
     info!("[sys_write]: fd {}, len {}", fd, len);
-    let file = current_process()
+    let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
 
-    if !file.writable() {
+    let file = fd_info.file;
+    if !fd_info.flags.writable() {
         return Err(SyscallErr::EPERM);
     }
     if len == 0 {
@@ -579,10 +585,11 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     );
     let _sum_guard = SumGuard::new();
 
-    let file = current_process()
+    let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    if !file.writable() {
+    let file = fd_info.file;
+    if !fd_info.flags.writable() {
         return Err(SyscallErr::EPERM);
     }
     log::info!(
@@ -623,10 +630,11 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
     );
     let _sum_guard = SumGuard::new();
 
-    let file = current_process()
+    let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    if !file.readable() {
+    let file = fd_info.file;
+    if !fd_info.flags.readable() {
         return Err(SyscallErr::EPERM);
     }
     stack_trace!();
@@ -656,13 +664,14 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
     info!("[sys_read]: fd {}, len {}", fd, len);
-    let file = current_process()
+    let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-
-    if !file.readable() {
+    let file = fd_info.file;
+    if !fd_info.flags.readable() {
         return Err(SyscallErr::EPERM);
     }
+
     if len == 0 {
         return Ok(0);
     }
@@ -693,9 +702,11 @@ pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SyscallRet {
 
     let (read_fd, write_fd) = current_process().inner_handler(move |proc| {
         let read_fd = proc.fd_table.alloc_fd()?;
-        proc.fd_table.put(read_fd, pipe_read);
+        proc.fd_table
+            .put(read_fd, FdInfo::new(pipe_read, flags | OpenFlags::RDONLY));
         let write_fd = proc.fd_table.alloc_fd()?;
-        proc.fd_table.put(write_fd, pipe_write);
+        proc.fd_table
+            .put(write_fd, FdInfo::new(pipe_write, flags | OpenFlags::WRONLY));
         Ok((read_fd, write_fd))
     })?;
 
@@ -718,32 +729,36 @@ const F_SETFL: i32 = 4;
 
 pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
     stack_trace!();
-    debug!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
+    info!("[sys_fcntl]: fd {}, cmd {:#x}, arg {:#x}", fd, cmd, arg);
     // TODO
     match cmd {
-        F_DUPFD | F_DUPFD_CLOEXEC => {
-            current_process().inner_handler(|proc| {
-                // if proc.fd_table.get_ref(fd).is_none()
-                // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
-                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                let newfd = proc.fd_table.alloc_fd_lower_bound(arg)?;
-                proc.fd_table.put(newfd, file);
-                debug!("[sys_fcntl]: dup file fd from {} to {}", fd, newfd);
-                Ok(newfd)
-            })
-        }
+        F_DUPFD => current_process().inner_handler(|proc| {
+            let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+            let newfd = proc.fd_table.alloc_fd_lower_bound(arg)?;
+            proc.fd_table.put(newfd, file);
+            info!("[sys_fcntl]: dup file fd from {} to {}", fd, newfd);
+            Ok(newfd)
+        }),
+        F_DUPFD_CLOEXEC => current_process().inner_handler(|proc| {
+            let mut file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+            file.flags |= OpenFlags::CLOEXEC;
+            let newfd = proc.fd_table.alloc_fd_lower_bound(arg)?;
+            proc.fd_table.put(newfd, file);
+            info!(
+                "[sys_fcntl]: dup file fd from {} to {}, and add CLOEXEC",
+                fd, newfd
+            );
+            Ok(newfd)
+        }),
         F_SETFD => {
             let flags = FcntlFlags::from_bits(arg as u32).ok_or(SyscallErr::EINVAL)?;
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
                 // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
-                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
+                let fd_info = proc.fd_table.get_mut(fd).ok_or(SyscallErr::EBADF)?;
                 if flags.contains(FcntlFlags::FD_CLOEXEC) {
-                    file.metadata().inner.lock().flags |= OpenFlags::CLOEXEC;
-                    debug!(
-                        "[sys_fcntl]: set file flags to {:?}",
-                        file.metadata().inner.lock().flags
-                    );
+                    fd_info.flags |= OpenFlags::CLOEXEC;
+                    info!("[sys_fcntl]: set file flags to {:?}", fd_info.flags,);
                 }
                 Ok(0)
             })
@@ -753,16 +768,16 @@ pub fn sys_fcntl(fd: usize, cmd: i32, arg: usize) -> SyscallRet {
             current_process().inner_handler(|proc| {
                 // if proc.fd_table.get_ref(fd).is_none()
                 // let fd = proc.fd_table.alloc_fd_lower_bound(arg);
-                let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-                file.metadata().inner.lock().flags = flags;
-                debug!("[sys_fcntl]: set file flags to {:?}", flags);
+                let fd_info = proc.fd_table.get_mut(fd).ok_or(SyscallErr::EBADF)?;
+                fd_info.flags = flags;
+                info!("[sys_fcntl]: set file flags to {:?}", flags);
                 Ok(0)
             })
         }
         F_GETFD | F_GETFL => current_process().inner_handler(|proc| {
-            let file = proc.fd_table.get(fd).ok_or(SyscallErr::EBADF)?;
-            let flags = file.flags();
-            debug!("[sys_fcntl]: get file flags {:?}", flags);
+            let fd_info = proc.fd_table.get_ref(fd).ok_or(SyscallErr::EBADF)?;
+            let flags = fd_info.flags;
+            info!("[sys_fcntl]: get file flags {:?}", flags);
             if flags.contains(OpenFlags::CLOEXEC) && cmd == F_GETFD {
                 Ok(FcntlFlags::bits(&FcntlFlags::FD_CLOEXEC) as usize)
             } else {
@@ -794,22 +809,22 @@ pub async fn sys_sendfile(
                 .ok_or(SyscallErr::EBADF)?,
         ))
     })?;
-    if !input_file.readable() {
+    if !input_file.flags.readable() {
         return Err(SyscallErr::EBADF);
     }
-    if !output_file.writable() {
+    if !output_file.flags.writable() {
         return Err(SyscallErr::EBADF);
     }
 
     let mut buf = vec![0 as u8; count];
     let nbytes = match offset_ptr {
-        0 => input_file.read(&mut buf).await?,
+        0 => input_file.file.read(&mut buf).await?,
         _ => {
             UserCheck::new()
                 .check_readable_slice(offset_ptr as *const u8, core::mem::size_of::<usize>())?;
             let _sum_guard = SumGuard::new();
             let input_offset = unsafe { *(offset_ptr as *const usize) };
-            let nbytes = input_file.pread(&mut buf, input_offset).await?;
+            let nbytes = input_file.file.pread(&mut buf, input_offset).await?;
             // let old_offset = input_file.offset()?;
             // input_file.seek(input_offset)?;
             // let nbytes = input_file.read(&mut buf).await?;
@@ -821,7 +836,7 @@ pub async fn sys_sendfile(
         }
     };
     info!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
-    let ret = output_file.write(&buf[0..nbytes as usize]).await;
+    let ret = output_file.file.write(&buf[0..nbytes as usize]).await;
     debug!("[sys_sendfile]: finished");
     ret
 }
@@ -1421,7 +1436,7 @@ pub async fn sys_ftruncate(fd: usize, len: usize) -> SyscallRet {
     let file = current_process()
         .inner_handler(|proc| proc.fd_table.get(fd))
         .ok_or(SyscallErr::EBADF)?;
-    file.truncate(len).await?;
+    file.file.truncate(len).await?;
     Ok(0)
 }
 
@@ -1469,7 +1484,7 @@ pub async fn sys_pread64(fd: usize, buf_ptr: usize, len: usize, offset: usize) -
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, len) };
 
-    file.pread(buf, offset).await
+    file.file.pread(buf, offset).await
 }
 
 pub async fn sys_pwrite64(fd: usize, buf_ptr: usize, len: usize, offset: usize) -> SyscallRet {
@@ -1479,7 +1494,7 @@ pub async fn sys_pwrite64(fd: usize, buf_ptr: usize, len: usize, offset: usize) 
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
 
-    if !file.writable() {
+    if !file.flags.writable() {
         return Err(SyscallErr::EPERM);
     }
     if len == 0 {
@@ -1489,7 +1504,7 @@ pub async fn sys_pwrite64(fd: usize, buf_ptr: usize, len: usize, offset: usize) 
     UserCheck::new().check_readable_slice(buf_ptr as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    file.pwrite(buf, offset).await
+    file.file.pwrite(buf, offset).await
 }
 
 pub fn sys_fchmodat() -> SyscallRet {

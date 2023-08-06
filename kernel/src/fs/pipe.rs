@@ -24,16 +24,6 @@ pub struct Pipe {
 }
 
 impl File for Pipe {
-    fn readable(&self) -> bool {
-        debug!("Pipe::readable {}", self.readable);
-        self.readable
-    }
-
-    fn writable(&self) -> bool {
-        debug!("Pipe::writable {}", self.writable);
-        self.writable
-    }
-
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
@@ -43,7 +33,6 @@ impl File for Pipe {
     }
 
     fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
-        assert!(self.readable());
         log::info!("[Pipe::read] start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
@@ -72,7 +61,6 @@ impl File for Pipe {
     }
 
     fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
-        assert!(self.writable());
         log::info!("[Pipe::write] start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(async move {
@@ -135,7 +123,7 @@ impl Pipe {
     pub fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
         let readable = flags.contains(OpenFlags::RDONLY);
         let writable = flags.contains(OpenFlags::WRONLY);
-        let meta = FileMeta::new(flags, super::InodeMode::FileFIFO);
+        let meta = FileMeta::new(super::InodeMode::FileFIFO);
         Self {
             readable,
             writable,
@@ -158,6 +146,13 @@ impl Drop for Pipe {
             let mut buffer = self.buffer.lock();
             while !buffer.read_waiters.is_empty() {
                 let waker = buffer.read_waiters.pop().unwrap();
+                log::info!("[Pipe::drop] wake up");
+                waker.wake();
+            }
+        } else if self.readable {
+            let mut buffer = self.buffer.lock();
+            while !buffer.write_waiters.is_empty() {
+                let waker = buffer.write_waiters.pop().unwrap();
                 log::info!("[Pipe::drop] wake up");
                 waker.wake();
             }

@@ -853,10 +853,7 @@ impl MemorySpace {
             let interp_inode = resolve_path(AT_FDCWD, &interp, OpenFlags::RDONLY)
                 .ok()
                 .unwrap();
-            let interp_file = interp_inode
-                .open(interp_inode.clone(), OpenFlags::RDONLY)
-                .ok()
-                .unwrap();
+            let interp_file = interp_inode.open(interp_inode.clone()).ok().unwrap();
             let mut interp_elf_data = Vec::new();
             interp_file
                 .read_all_from_start(&mut interp_elf_data)

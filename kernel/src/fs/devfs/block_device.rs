@@ -5,7 +5,7 @@ use crate::{
     fs::{
         fat32::SECTOR_SIZE,
         inode::{DevWrapper, InodeDevice, InodeMeta},
-        File, Inode, OpenFlags,
+        File, Inode,
     },
     utils::error::GeneralRet,
 };
@@ -15,7 +15,7 @@ pub struct BlockDeviceInode {
 }
 
 impl Inode for BlockDeviceInode {
-    fn open(&self, _this: Arc<dyn Inode>, _flags: OpenFlags) -> GeneralRet<Arc<dyn File>> {
+    fn open(&self, _this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
         todo!()
     }
     fn set_metadata(&mut self, meta: InodeMeta) {

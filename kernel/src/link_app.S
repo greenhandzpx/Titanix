@@ -3,35 +3,19 @@
     .section .data
     .global _num_app
 _num_app:
-    .quad 12
+    .quad 4
     .quad app_0_start
     .quad app_1_start
     .quad app_2_start
     .quad app_3_start
-    .quad app_4_start
-    .quad app_5_start
-    .quad app_6_start
-    .quad app_7_start
-    .quad app_8_start
-    .quad app_9_start
-    .quad app_10_start
-    .quad app_11_start
-    .quad app_11_end
+    .quad app_3_end
 
     .global _app_names
 _app_names:
     .string "initproc"
     .string "runtestcase"
     .string "shell"
-    .string "time-test"
-    .string "busybox_testcode.sh"
-    .string "busybox_cmd.txt"
     .string "busybox"
-    .string "lmbench_all"
-    .string "lmbench_testcode.sh"
-    .string "runtest.exe"
-    .string "entry-static.exe"
-    .string "run-static.sh"
 
     .section .data
     .global app_0_start
@@ -62,69 +46,5 @@ app_2_end:
     .global app_3_end
     .align 3
 app_3_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/time-test"
-app_3_end:
-
-    .section .data
-    .global app_4_start
-    .global app_4_end
-    .align 3
-app_4_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/busybox_testcode.sh"
-app_4_end:
-
-    .section .data
-    .global app_5_start
-    .global app_5_end
-    .align 3
-app_5_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/busybox_cmd.txt"
-app_5_end:
-
-    .section .data
-    .global app_6_start
-    .global app_6_end
-    .align 3
-app_6_start:
     .incbin "../user/target/riscv64gc-unknown-none-elf/release/busybox"
-app_6_end:
-
-    .section .data
-    .global app_7_start
-    .global app_7_end
-    .align 3
-app_7_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/lmbench_all"
-app_7_end:
-
-    .section .data
-    .global app_8_start
-    .global app_8_end
-    .align 3
-app_8_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/lmbench_testcode.sh"
-app_8_end:
-
-    .section .data
-    .global app_9_start
-    .global app_9_end
-    .align 3
-app_9_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/runtest.exe"
-app_9_end:
-
-    .section .data
-    .global app_10_start
-    .global app_10_end
-    .align 3
-app_10_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/entry-static.exe"
-app_10_end:
-
-    .section .data
-    .global app_11_start
-    .global app_11_end
-    .align 3
-app_11_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/run-static.sh"
-app_11_end:
+app_3_end:

@@ -119,7 +119,7 @@ pub fn path_to_inode(
                         let wd_file = proc.fd_table.get_ref(dirfd as usize);
                         match wd_file {
                             Some(wd_file) => {
-                                let inode = wd_file.metadata().inner.lock().inode.clone();
+                                let inode = wd_file.file.metadata().inner.lock().inode.clone();
                                 match inode {
                                     None => Err(SyscallErr::EBADF),
                                     Some(inode) => Ok((
@@ -148,7 +148,7 @@ pub fn path_to_inode(
                         let wd_file = proc.fd_table.get_ref(dirfd as usize);
                         match wd_file {
                             Some(wd_file) => {
-                                let inode = wd_file.metadata().inner.lock().inode.clone();
+                                let inode = wd_file.file.metadata().inner.lock().inode.clone();
                                 if inode.is_none() {
                                     return Err(SyscallErr::ENOENT);
                                 }
@@ -270,7 +270,7 @@ pub fn path_with_dirfd(dirfd: isize, path: String) -> Option<String> {
         let wd_file = proc.fd_table.get_ref(dirfd as usize);
         match wd_file {
             Some(wd_file) => {
-                let inner = wd_file.metadata().inner.lock();
+                let inner = wd_file.file.metadata().inner.lock();
                 let inode = inner.inode.as_ref().clone();
                 let wd = inode.unwrap().metadata().path.clone();
                 debug!("wd: {}", wd);
