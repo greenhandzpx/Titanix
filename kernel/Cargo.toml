@@ -28,9 +28,11 @@ smoltcp = { version = "0.10.0", default-features = false, features = [
     "medium-ip",
     "proto-ipv4",
     "proto-ipv6",
+    "proto-dhcpv4",
     "proto-ipv4-fragmentation",
     "socket-udp",
     "socket-tcp",
+    "socket-dhcpv4",
     "async",
 ] }
 async-task = { version = "4.4.0", default-features = false }

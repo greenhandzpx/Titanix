@@ -52,7 +52,7 @@ pub fn add_initproc() {
     stack_trace!();
 
     #[cfg(feature = "submit")]
-    let elf_data = get_app_data_by_name("runtestcases").unwrap();
+    let elf_data = get_app_data_by_name("runtestcase").unwrap();
 
     #[cfg(not(feature = "submit"))]
     let elf_data = get_app_data_by_name("initproc").unwrap();
