@@ -17,6 +17,7 @@ fn main() -> i32 {
             ],
             &[
                 "PATH=/:/bin:/usr/bin:/usr/local/bin:\0".as_ptr(),
+                "TERM=screen\0".as_ptr(),
                 core::ptr::null::<u8>(),
             ],
         );

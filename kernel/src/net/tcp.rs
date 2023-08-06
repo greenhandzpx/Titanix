@@ -6,6 +6,7 @@ use crate::{
         config::NET_INTERFACE,
         MAX_BUFFER_SIZE, SHUT_WR,
     },
+    process::thread,
     processor::{current_process, current_task, SumGuard},
     stack_trace,
     sync::Event,
@@ -122,6 +123,7 @@ impl Socket for TcpSocket {
                             self.socket_handler
                         );
                         self._connect(remote_endpoint)?;
+                        thread::yield_now().await;
                     }
                     tcp::State::Established => {
                         info!(
@@ -135,6 +137,7 @@ impl Socket for TcpSocket {
                             "[Tcp::connect] {} not connect yet, state {:?}",
                             self.socket_handler, state
                         );
+                        thread::yield_now().await;
                     }
                 }
             }
