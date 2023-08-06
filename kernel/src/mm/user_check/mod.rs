@@ -11,7 +11,7 @@ use crate::{
     sync::mutex::SieGuard,
     trap::set_kernel_trap_entry,
     utils::{
-        async_tools::block_on,
+        async_utils::block_on,
         error::{GeneralRet, SyscallErr},
     },
 };

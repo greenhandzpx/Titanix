@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-#[macro_use]
 extern crate user_lib;
 
 use user_lib::{execve, fork, wait};
@@ -9,16 +8,6 @@ use user_lib::{execve, fork, wait};
 #[no_mangle]
 fn main() -> i32 {
     if fork() == 0 {
-        // execve(
-        //     "shell\0",
-        //     &["shell\0".as_ptr(), core::ptr::null::<u8>()],
-        //     &[core::ptr::null::<u8>()],
-        // );
-        // execve(
-        //     "runtestcases\0",
-        //     &["runtestcases\0".as_ptr(), core::ptr::null::<u8>()],
-        //     &[core::ptr::null::<u8>()],
-        // );
         execve(
             "busybox\0",
             &[
@@ -26,7 +15,10 @@ fn main() -> i32 {
                 "sh\0".as_ptr(),
                 core::ptr::null::<u8>(),
             ],
-            &[core::ptr::null::<u8>()],
+            &[
+                "PATH=/:/bin:/usr/bin:/usr/local/bin:\0".as_ptr(),
+                core::ptr::null::<u8>(),
+            ],
         );
     } else {
         loop {

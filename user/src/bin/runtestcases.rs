@@ -25,17 +25,6 @@ const TESTCASES: [&str; 11] = [
     "cyclictest_testcode.sh",
 ];
 
-// const TESTCASES: [&str; 4] = [
-//     "busybox_testcode.sh",
-//     "time-test",
-//     "run-static.sh",
-//     // "lua_testcode.sh",
-//     // "iozone_testcode.sh",
-//     "lmbench_testcode.sh",
-//     // "libc-bench",
-//     // "unixbench_testcode.sh",
-//     // "cyclictest_testcode.sh",
-// ];
 
 #[no_mangle]
 fn main() -> i32 {

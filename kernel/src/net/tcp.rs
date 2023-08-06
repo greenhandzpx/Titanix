@@ -17,7 +17,7 @@ use crate::{
     sync::Event,
     timer::timeout_task::ksleep,
     utils::{
-        async_tools::{Select2Futures, SelectOutput},
+        async_utils::{Select2Futures, SelectOutput},
         error::{GeneralRet, SyscallErr, SyscallRet},
         random::RNG,
     },

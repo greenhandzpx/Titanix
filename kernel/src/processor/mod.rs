@@ -5,8 +5,8 @@ use crate::{
 
 pub use self::hart::{local_hart, HARTS};
 
-use self::context::EnvContext;
-pub mod context;
+use self::ctx::EnvContext;
+pub mod ctx;
 pub mod env;
 pub mod hart;
 

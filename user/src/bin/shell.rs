@@ -109,6 +109,7 @@ const PRELIMINARY_TESTS: [&str; 32] = [
     "openat",
 ];
 
+#[allow(unused)]
 fn preliminary_test() {
     print!("---------- START TO RUN PRELIMINARY TEST -----------\n");
     println!("");

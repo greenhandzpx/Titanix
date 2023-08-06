@@ -5,9 +5,10 @@ use log::{debug, info, trace};
 use crate::{
     mm::user_check::UserCheck,
     process::{thread::spawn_kernel_thread, PROCESS_MANAGER},
-    processor::{current_process, SumGuard},
+    processor::{current_process, current_task, SumGuard},
     signal::SIGALRM,
     stack_trace,
+    sync::Event,
     timer::{
         current_time_duration, current_time_ms,
         ffi::current_time_spec,
@@ -18,7 +19,10 @@ use crate::{
         timeout_task::ksleep,
         CLOCK_MANAGER, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, TIMER_ABSTIME,
     },
-    utils::error::{SyscallErr, SyscallRet},
+    utils::{
+        async_utils::{Select2Futures, SelectOutput},
+        error::{SyscallErr, SyscallRet},
+    },
 };
 
 pub fn sys_get_time(time_val_ptr: *mut TimeVal) -> SyscallRet {
@@ -172,7 +176,19 @@ pub async fn sys_clock_nanosleep(
         return Ok(0);
     } else {
         // request time is relative
-        ksleep(request).await;
+        match Select2Futures::new(
+            ksleep(request),
+            current_task().wait_for_events(Event::all()),
+        )
+        .await
+        {
+            SelectOutput::Output1(_) => {}
+            SelectOutput::Output2(intr) => {
+                log::warn!("[sys_nanosleep] interrupt by event {:?}", intr);
+                return Err(SyscallErr::EINTR);
+            }
+        };
+        // ksleep(request).await;
         if has_remain {
             UserCheck::new().check_writable_slice(remain as *mut u8, size)?;
             unsafe {

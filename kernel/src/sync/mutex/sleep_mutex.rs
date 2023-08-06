@@ -7,7 +7,7 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
-use crate::utils::async_tools;
+use crate::utils::async_utils;
 
 use super::{spin_mutex::SpinMutex, MutexSupport};
 use alloc::{collections::VecDeque, sync::Arc};
@@ -92,7 +92,7 @@ impl<'a, T: ?Sized, S: MutexSupport> SleepMutexFuture<'a, T, S> {
                 .store(true, Ordering::Release);
         } else {
             log::trace!("[SleepMutexFuture::init] wait for lock...");
-            unsafe { &mut *this.grant.inner.get() }.1 = Some(async_tools::take_waker().await);
+            unsafe { &mut *this.grant.inner.get() }.1 = Some(async_utils::take_waker().await);
             let queue = unsafe { &mut (*inner.queue.get()) };
             if queue.is_none() {
                 *queue = Some(VecDeque::new());

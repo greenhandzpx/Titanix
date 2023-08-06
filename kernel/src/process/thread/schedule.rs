@@ -8,10 +8,10 @@ use log::trace;
 
 use crate::{
     executor,
-    processor::{self, context::UserTaskContext},
+    processor::{self, ctx::UserTaskContext},
 };
 // use crate::process::context::TaskContext;
-use crate::processor::context::LocalContext;
+use crate::processor::ctx::LocalContext;
 
 use super::{thread_loop::threadloop, Thread};
 

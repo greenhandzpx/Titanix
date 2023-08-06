@@ -19,9 +19,7 @@ fn insert_app_data() -> Result<()> {
             name_with_ext.drain(name_with_ext.find('.').unwrap()..name_with_ext.len());
             name_with_ext
         })
-        .filter(|name| {
-            name == "initproc" || name == "shell" || name == "user_spin" || name == "runtestcases"
-        })
+        .filter(|name| name == "initproc" || name == "shell" || name == "runtestcases")
         .collect();
 
     apps.sort();

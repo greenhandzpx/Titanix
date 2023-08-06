@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     close_interrupt,
-    context::{EnvContext, LocalContext},
+    ctx::{EnvContext, LocalContext},
     current_trap_cx, open_interrupt,
 };
 

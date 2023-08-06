@@ -10,7 +10,7 @@ use crate::{
     fs::{hash_key::HashKey, inode::INODE_CACHE},
     sync::mutex::SpinNoIrqLock,
     utils::{
-        async_tools::block_on,
+        async_utils::block_on,
         error::{AgeneralRet, GeneralRet, SyscallErr},
         path,
     },

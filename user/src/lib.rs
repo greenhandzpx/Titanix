@@ -153,10 +153,6 @@ pub fn fork() -> isize {
     sys_fork()
 }
 
-fn clone_wrapper(f: fn(*const u8) -> i32, arg: *const u8) -> isize {
-    exit(f(arg))
-}
-
 bitflags! {
     ///Open file flags
     pub struct CloneFlags: u32 {

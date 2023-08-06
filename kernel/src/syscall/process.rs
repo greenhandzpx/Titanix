@@ -11,7 +11,7 @@ use crate::process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER};
 use crate::processor::{current_process, current_task, current_trap_cx, local_hart, SumGuard};
 use crate::sync::Event;
 use crate::timer::current_time_duration;
-use crate::utils::async_tools::{Select2Futures, SelectOutput};
+use crate::utils::async_utils::{Select2Futures, SelectOutput};
 use crate::utils::error::SyscallErr;
 use crate::utils::error::SyscallRet;
 use crate::utils::path;
@@ -259,7 +259,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             }
         }
     }
-    envs_vec.push("PATH=/:/bin:/usr/bin:".to_string());
+    // envs_vec.push("PATH=/:/bin:/usr/bin:/usr/local/bin:".to_string());
 
     let app_inode = resolve_path(AT_FDCWD, &path, OpenFlags::RDONLY);
     if app_inode.is_err() {
@@ -310,6 +310,7 @@ impl Future for WaitFuture {
             if process.pid() == INITPROC_PID && proc.children.is_empty() {
                 // system exit
                 info!("os will exit");
+                println!("[kernel] kernel will shutdown...");
                 shutdown();
             }
             if !proc

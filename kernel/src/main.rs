@@ -174,6 +174,7 @@ pub fn rust_main(hart_id: usize) {
             process::add_initproc();
         });
 
+        #[cfg(not(feature = "submit"))]
         thread::spawn_kernel_thread(async move {
             loop {
                 log::info!("[daemon] process cnt {}", PROCESS_MANAGER.total_num());

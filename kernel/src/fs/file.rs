@@ -17,7 +17,7 @@ use crate::{
     sync::mutex::SleepLock,
     timer::ffi::current_time_spec,
     utils::{
-        async_tools::block_on,
+        async_utils::block_on,
         error::{AgeneralRet, AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
     },
 };

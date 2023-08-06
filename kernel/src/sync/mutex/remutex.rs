@@ -9,7 +9,7 @@ use core::{
 
 use crate::{
     processor::{current_task, hart::local_hart},
-    utils::async_tools::SendWrapper,
+    utils::async_utils::SendWrapper,
 };
 
 use super::MutexSupport;
