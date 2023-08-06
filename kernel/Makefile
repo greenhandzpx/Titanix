@@ -79,7 +79,7 @@ CPUS := 2
 endif
 QFLAGS := 
 ifeq ($(SUBMIT), )
-	QFLAGS += -m 256M
+	QFLAGS += -m 512M
 else
 	QFLAGS += -m 128M
 endif

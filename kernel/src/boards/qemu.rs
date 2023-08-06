@@ -8,7 +8,8 @@ pub const CLOCK_FREQ: usize = 10000000;
 #[cfg(feature = "submit")]
 pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x88000000;
 #[cfg(not(feature = "submit"))]
-pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x8e000000;
+// pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x8e000000;
+pub const MEMORY_END: usize = (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS) + 0x9f000000;
 
 pub const PERMISSION_RW: MapPermission = MapPermission::union(MapPermission::R, MapPermission::W);
 

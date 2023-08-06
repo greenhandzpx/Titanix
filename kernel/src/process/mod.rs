@@ -337,6 +337,7 @@ impl Process {
         self.inner_handler(|proc| {
             // proc.ustack_base = ustack_base;
             proc.memory_space = memory_space;
+            proc.fd_table.close_on_exec();
         });
 
         let main_thread_inner = unsafe { &mut (*main_thread.inner.get()) };
@@ -475,10 +476,6 @@ impl Process {
         // let argc_addr = user_sp;
         stack_trace!();
 
-        // // // Make the user_sp aligned to 8B for k210 platform
-        // // let len = user_sp % core::mem::size_of::<usize>();
-        // // user_sp -= len;
-
         // Initialize trap_cx
         let mut trap_cx = TrapContext::app_init_context(entry_point, user_sp);
         debug!("entry {:#x}, sp {:#x}", entry_point, user_sp);
@@ -501,6 +498,7 @@ impl Process {
         );
 
         main_thread_inner.trap_context = trap_cx;
+
         // Ok(args.len()  )
         Ok(0)
     }

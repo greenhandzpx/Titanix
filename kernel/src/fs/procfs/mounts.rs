@@ -94,8 +94,4 @@ impl File for MountsFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-
-    fn flags(&self) -> OpenFlags {
-        self.meta.inner.lock().flags
-    }
 }

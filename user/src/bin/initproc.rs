@@ -16,7 +16,8 @@ fn main() -> i32 {
                 core::ptr::null::<u8>(),
             ],
             &[
-                "PATH=/:/bin:/usr/bin:/usr/local/bin:\0".as_ptr(),
+                "PATH=/:/bin:/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin:\0".as_ptr(),
+                "LD_LIBRARY_PATH=/lib:/lib64/lp64d:/usr/lib:\0".as_ptr(),
                 core::ptr::null::<u8>(),
             ],
         );

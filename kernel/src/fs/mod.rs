@@ -139,16 +139,16 @@ pub fn init() {
         .mknod_v("lat_sig", InodeMode::FileREG, None)
         .unwrap();
 
-    let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
-    let paths = ["ld-musl-riscv64-sf.path", "ld-musl-riscv64.path"];
-    for path in paths {
-        let musl_dl_path = etc_dir.mknod_v(path, InodeMode::FileREG, None).unwrap();
-        let file = musl_dl_path
-            .open(musl_dl_path.clone(), OpenFlags::RDWR)
-            .unwrap();
-        file.sync_write("/\n/lib\n/lib64/lp64d\n/usr/lib\n".as_bytes())
-            .unwrap();
-    }
+    // let etc_dir = root_inode.mkdir_v("etc", InodeMode::FileDIR).unwrap();
+    // let paths = ["ld-musl-riscv64-sf.path", "ld-musl-riscv64.path"];
+    // for path in paths {
+    //     let musl_dl_path = etc_dir.mknod_v(path, InodeMode::FileREG, None).unwrap();
+    //     let file = musl_dl_path
+    //         .open(musl_dl_path.clone(), OpenFlags::RDWR)
+    //         .unwrap();
+    //     file.sync_write("/\n/lib\n/lib64/lp64d\n/usr/lib\n".as_bytes())
+    //         .unwrap();
+    // }
 
     FILE_SYSTEM_MANAGER
         .mount(

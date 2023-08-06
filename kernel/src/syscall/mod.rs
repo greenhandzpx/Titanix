@@ -213,7 +213,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
             )
         ),
         SYSCALL_CLOSE => sys_handler!(sys_close, (args[0])),
-        SYSCALL_PIPE => sys_handler!(sys_pipe, (args[0] as *mut i32)),
+        SYSCALL_PIPE => sys_handler!(sys_pipe2, (args[0] as *mut i32, args[1] as u32)),
         SYSCALL_GETDENTS => sys_handler!(sys_getdents, (args[0], args[1], args[2])),
         SYSCALL_LSEEK => sys_handler!(sys_lseek, (args[0], args[1] as isize, args[2] as u8)),
         SYSCALL_READ => sys_handler!(sys_read, (args[0], args[1], args[2]), await),

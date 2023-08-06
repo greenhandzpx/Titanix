@@ -101,7 +101,4 @@ impl File for LatencyFile {
         debug!("[sync_write] /dev/cpu_dma_latency");
         Ok(buf.len())
     }
-    fn flags(&self) -> OpenFlags {
-        self.meta.inner.lock().flags
-    }
 }

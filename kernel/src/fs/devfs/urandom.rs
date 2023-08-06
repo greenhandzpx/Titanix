@@ -105,7 +105,4 @@ impl File for UrandomFile {
     fn sync_write(&self, _buf: &[u8]) -> SyscallRet {
         todo!()
     }
-    fn flags(&self) -> OpenFlags {
-        self.meta.inner.lock().flags
-    }
 }

@@ -11,7 +11,7 @@ pub const KERNEL_HEAP_SIZE: usize = 0x2000_0000; // 320M -- u740
 #[cfg(all(not(feature = "board_u740"), feature = "submit"))]
 pub const KERNEL_HEAP_SIZE: usize = 0x2000_000; // 32M -- qemu & submit
 #[cfg(all(not(feature = "board_u740"), not(feature = "submit")))]
-pub const KERNEL_HEAP_SIZE: usize = 0x6000_000; // 96M -- qemu & not submit
+pub const KERNEL_HEAP_SIZE: usize = 0xc000_000; // 192M -- qemu & not submit
 
 // pub const PAGE_CACHE_LEVEL_NUM: usize = 3;
 

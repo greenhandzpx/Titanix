@@ -793,10 +793,11 @@ impl MemorySpace {
 
         // guard page
         let heap_start_va = user_stack_top + PAGE_SIZE;
+        let heap_end_va = heap_start_va;
         let map_perm = MapPermission::U | MapPermission::R | MapPermission::W;
         let heap_vma = VmArea::new(
             heap_start_va.into(),
-            heap_start_va.into(),
+            heap_end_va.into(),
             MapType::Framed,
             map_perm,
             Some(Arc::new(SBrkPageFaultHandler {})),
@@ -805,11 +806,11 @@ impl MemorySpace {
             VmAreaType::Brk,
         );
         memory_space.push(heap_vma, 0, None);
-        memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_start_va.into()));
+        memory_space.heap_range = Some(HeapRange::new(heap_start_va.into(), heap_end_va.into()));
         log::info!(
             "[from_elf] map heap: {:#x}, {:#x}",
             heap_start_va,
-            heap_start_va
+            heap_end_va
         );
 
         (memory_space, user_stack_top, entry_point, auxv)
@@ -837,7 +838,15 @@ impl MemorySpace {
             let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
             interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
             log::info!("[load_dl] interp {}", interp);
-            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") {
+            #[cfg(not(feature = "submit"))]
+            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
+                interp = "/lib/libc.so".to_string();
+                // interp = "libc.so".to_string();
+                // interp = "/lib/ld-linux-riscv64-lp64d.so.1".to_string();
+                // interp = "/usr/local/riscv64-linux-musl/lib/libc.so".to_string();
+            }
+            #[cfg(feature = "submit")]
+            if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
                 interp = "/libc.so".to_string();
             }
 

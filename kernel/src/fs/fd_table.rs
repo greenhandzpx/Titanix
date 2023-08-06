@@ -176,6 +176,16 @@ impl FdTable {
         Ok(newfd)
     }
 
+    pub fn close_on_exec(&mut self) {
+        for file in self.fd_table.iter_mut() {
+            if let Some(f) = file {
+                if f.flags().contains(OpenFlags::CLOEXEC) {
+                    *file = None;
+                }
+            }
+        }
+    }
+
     pub fn set_rlimit(&mut self, rlimit: RLimit) {
         self.rlimit = rlimit;
     }

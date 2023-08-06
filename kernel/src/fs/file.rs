@@ -207,7 +207,9 @@ pub trait File: Send + Sync {
 
     fn metadata(&self) -> &FileMeta;
 
-    fn flags(&self) -> OpenFlags;
+    fn flags(&self) -> OpenFlags {
+        self.metadata().inner.lock().flags
+    }
 
     fn truncate(&self, len: usize) -> AgeneralRet<()> {
         Box::pin(async move {
@@ -262,10 +264,6 @@ impl DefaultFile {
 impl File for DefaultFile {
     fn metadata(&self) -> &FileMeta {
         &self.metadata
-    }
-
-    fn flags(&self) -> OpenFlags {
-        self.metadata.inner.lock().flags
     }
 
     /// For default file, data must be read from page cache first

@@ -129,30 +129,21 @@ impl File for Pipe {
             }
         })
     }
-    fn flags(&self) -> OpenFlags {
-        todo!()
-    }
 }
 
 impl Pipe {
-    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
-        let meta = FileMeta::new(OpenFlags::RDONLY, super::InodeMode::FileFIFO);
+    pub fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+        let readable = flags.contains(OpenFlags::RDONLY);
+        let writable = flags.contains(OpenFlags::WRONLY);
+        let meta = FileMeta::new(flags, super::InodeMode::FileFIFO);
         Self {
-            readable: true,
-            writable: false,
+            readable,
+            writable,
             buffer,
             meta,
         }
     }
-    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
-        let meta = FileMeta::new(OpenFlags::WRONLY, super::InodeMode::FileFIFO);
-        Self {
-            readable: false,
-            writable: true,
-            buffer,
-            meta,
-        }
-    }
+
     fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
         f(&mut self.buffer.lock())
     }
@@ -291,11 +282,16 @@ impl PipeRingBuffer {
 }
 
 /// Return (read_end, write_end)
-pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
+pub fn make_pipe(flags: Option<OpenFlags>) -> (Arc<Pipe>, Arc<Pipe>) {
     debug!("create a pipe");
     let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
-    let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone()));
-    let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone()));
+    let flags = match flags {
+        Some(flags) => flags,
+        None => OpenFlags::empty(),
+    };
+    let read_end = Arc::new(Pipe::new(flags | OpenFlags::RDONLY, buffer.clone()));
+    let write_end = Arc::new(Pipe::new(flags | OpenFlags::WRONLY, buffer.clone()));
+
     buffer.lock().set_write_end(&write_end);
     buffer.lock().set_read_end(&read_end);
     (read_end, write_end)

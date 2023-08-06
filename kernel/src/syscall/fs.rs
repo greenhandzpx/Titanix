@@ -686,9 +686,10 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     // }
 }
 
-pub fn sys_pipe(pipe: *mut i32) -> SyscallRet {
+pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SyscallRet {
     stack_trace!();
-    let (pipe_read, pipe_write) = make_pipe();
+    let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let (pipe_read, pipe_write) = make_pipe(Some(flags));
 
     let (read_fd, write_fd) = current_process().inner_handler(move |proc| {
         let read_fd = proc.fd_table.alloc_fd()?;

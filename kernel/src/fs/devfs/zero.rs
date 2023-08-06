@@ -94,7 +94,4 @@ impl File for ZeroFile {
         debug!("[sync_write] /dev/zero");
         Ok(buf.len())
     }
-    fn flags(&self) -> OpenFlags {
-        self.meta.inner.lock().flags
-    }
 }

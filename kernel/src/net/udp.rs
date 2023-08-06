@@ -233,10 +233,6 @@ impl File for UdpSocket {
         &self.file_meta
     }
 
-    fn flags(&self) -> crate::fs::OpenFlags {
-        self.file_meta.inner.lock().flags
-    }
-
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
         debug!("[Udp::pollin] {} enter", self.socket_handler);
         NET_INTERFACE.poll();

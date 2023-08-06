@@ -250,10 +250,6 @@ impl File for TtyFile {
         }
     }
 
-    fn flags(&self) -> OpenFlags {
-        self.metadata.inner.lock().flags
-    }
-
     fn ioctl(&self, command: usize, value: usize) -> SyscallRet {
         stack_trace!();
         log::info!(

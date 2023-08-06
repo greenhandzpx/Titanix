@@ -84,7 +84,4 @@ impl File for NullFile {
         debug!("[sync_write] /dev/null");
         Ok(buf.len())
     }
-    fn flags(&self) -> OpenFlags {
-        self.meta.inner.lock().flags
-    }
 }

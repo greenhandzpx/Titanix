@@ -95,14 +95,11 @@ impl File for UnixSocket {
     fn metadata(&self) -> &FileMeta {
         &self.file_meta
     }
-    fn flags(&self) -> OpenFlags {
-        self.file_meta.inner.lock().flags
-    }
 }
 
 pub fn make_unix_socket_pair() -> (Arc<UnixSocket>, Arc<UnixSocket>) {
-    let (read1, write1) = make_pipe();
-    let (read2, write2) = make_pipe();
+    let (read1, write1) = make_pipe(None);
+    let (read2, write2) = make_pipe(None);
     let socket1 = Arc::new(UnixSocket::new(read1, write2));
     let socket2 = Arc::new(UnixSocket::new(read2, write1));
     (socket1, socket2)
