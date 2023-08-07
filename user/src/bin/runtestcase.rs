@@ -12,12 +12,12 @@ extern crate user_lib;
 // const TESTCASES: [&str; 0] = [];
 
 const TESTCASES: [&str; 11] = [
+    "libctest_testcode.sh",
+    "lmbench_testcode.sh",
     "busybox_testcode.sh",
     "time-test",
     "iperf_testcode.sh",
     "netperf_testcode.sh",
-    "lmbench_testcode.sh",
-    "libctest_testcode.sh",
     "lua_testcode.sh",
     "iozone_testcode.sh",
     "libc-bench",
