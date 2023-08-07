@@ -161,10 +161,7 @@ impl UdpSocket {
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
             socket_handler,
-            file_meta: FileMeta::new(
-                // OpenFlags::CLOEXEC | OpenFlags::RDWR,
-                crate::fs::InodeMode::FileSOCK,
-            ),
+            file_meta: FileMeta::new(crate::fs::InodeMode::FileSOCK),
         }
     }
 }

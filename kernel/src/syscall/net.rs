@@ -53,9 +53,9 @@ pub fn sys_bind(sockfd: u32, addr: usize, addrlen: u32) -> SyscallRet {
                 let (_, sock) = res.unwrap();
                 proc.socket_table.insert(sockfd as usize, sock.clone());
                 stack_trace!();
-                proc.fd_table.take(sockfd as usize);
+                let old = proc.fd_table.take(sockfd as usize).unwrap();
                 proc.fd_table
-                    .put(sockfd as usize, FdInfo::new(sock, OpenFlags::all()));
+                    .put(sockfd as usize, FdInfo::new(sock, old.flags));
                 Ok(0)
             }
         }),
@@ -126,6 +126,7 @@ pub async fn sys_sendto(
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
 
+    info!("[sys_sendto] file filags: {:?}", socket_file.flags);
     let socket = current_process()
         .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
@@ -165,6 +166,7 @@ pub async fn sys_recvfrom(
         .ok_or(SyscallErr::EBADF)?;
     UserCheck::new().check_writable_slice(buf as *mut u8, len as usize)?;
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len as usize) };
+    info!("[sys_recvfrom] file filags: {:?}", socket_file.flags);
     let socket = current_process()
         .inner_handler(move |proc| proc.socket_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::ENOTSOCK)?;
@@ -314,10 +316,10 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     let (fd1, fd2) = current_process().inner_handler(move |proc| {
         let fd1 = proc.fd_table.alloc_fd()?;
         proc.fd_table
-            .put(fd1, FdInfo::new(socket1, OpenFlags::all()));
+            .put(fd1, FdInfo::new(socket1, OpenFlags::RDWR));
         let fd2 = proc.fd_table.alloc_fd()?;
         proc.fd_table
-            .put(fd2, FdInfo::new(socket2, OpenFlags::all()));
+            .put(fd2, FdInfo::new(socket2, OpenFlags::RDWR));
         Ok((fd1, fd2))
     })?;
 

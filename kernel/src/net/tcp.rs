@@ -1,6 +1,6 @@
 use super::{Mutex, Socket};
 use crate::{
-    fs::{FdInfo, File, FileMeta, OpenFlags},
+    fs::{FdInfo, File, FileMeta},
     net::{
         address::{self},
         config::NET_INTERFACE,
@@ -55,6 +55,7 @@ impl Socket for TcpSocket {
         self.inner.lock().local_endpoint = addr;
         Ok(0)
     }
+
     fn listen(&self) -> SyscallRet {
         let local = self.inner.lock().local_endpoint;
         info!("[Tcp::listen] listening: {:?}", local);
@@ -87,20 +88,20 @@ impl Socket for TcpSocket {
             current_process().inner_handler(|proc| {
                 let fd = proc.fd_table.alloc_fd()?;
                 log::debug!("[Socket::accept] get old sock");
-                let old_file = proc.fd_table.take(sockfd as usize);
+                let old_file = proc.fd_table.take(sockfd as usize).unwrap();
                 let old_socket: Option<Arc<dyn Socket>> =
                     proc.socket_table.get_ref(sockfd as usize).cloned();
                 // replace old
                 log::debug!("[Socket::accept] replace old sock to new");
                 proc.fd_table.put(
                     sockfd as usize,
-                    FdInfo::new(new_socket.clone(), OpenFlags::all()),
+                    FdInfo::new(new_socket.clone(), old_file.flags),
                 );
                 proc.socket_table
                     .insert(sockfd as usize, new_socket.clone());
                 // insert old to newfd
                 log::info!("[Socket::accept] insert old sock to newfd: {}", fd);
-                proc.fd_table.put(fd, old_file.unwrap());
+                proc.fd_table.put(fd, old_file);
                 proc.socket_table.insert(fd, old_socket.unwrap());
                 Ok(fd)
             })
@@ -133,6 +134,7 @@ impl Socket for TcpSocket {
                             "[Tcp::connect] {} connected, state {:?}",
                             self.socket_handler, state
                         );
+                        thread::yield_now().await;
                         return Ok(0);
                     }
                     _ => {
@@ -212,10 +214,7 @@ impl TcpSocket {
                 recvbuf_size: MAX_BUFFER_SIZE,
                 sendbuf_size: MAX_BUFFER_SIZE,
             }),
-            file_meta: FileMeta::new(
-                // OpenFlags::CLOEXEC | OpenFlags::RDWR,
-                crate::fs::InodeMode::FileSOCK,
-            ),
+            file_meta: FileMeta::new(crate::fs::InodeMode::FileSOCK),
         }
     }
 
