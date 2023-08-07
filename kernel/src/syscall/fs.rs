@@ -30,6 +30,7 @@ use crate::mm::user_check::UserCheck;
 use crate::process::thread;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
+use crate::stack_trace;
 use crate::sync::Event;
 use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
@@ -40,17 +41,19 @@ use crate::utils::async_utils::{Select2Futures, SelectOutput};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
-use crate::{stack_trace, timer};
 
 /// get current working directory
 pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
     let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+    info!("[sys_getcwd] cwd: {}", cwd);
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
     if len < cwd.len() {
         Err(SyscallErr::ERANGE)
     } else {
+        let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+        new_buf.fill(0 as u8);
         let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, cwd.len()) };
         new_buf.copy_from_slice(cwd.as_bytes());
         Ok(buf)
