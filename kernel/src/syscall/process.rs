@@ -259,6 +259,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
             }
         }
     }
+
     envs_vec.push("PATH=/:/bin:/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin:".to_string());
     envs_vec.push("LD_LIBRARY_PATH=/:/lib:/lib64/lp64d:/usr/lib:".to_string());
 

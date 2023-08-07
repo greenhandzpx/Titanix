@@ -178,6 +178,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             match scause.cause() {
                 Trap::Exception(Exception::StorePageFault) => {
                     if !map_perm.contains(MapPermission::W) {
+                        log::warn!("[MmapPageFaultHandler] invalid permission {:?}", map_perm);
                         return Err(SyscallErr::EFAULT);
                     }
                 }
@@ -187,7 +188,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
 
             let offset = backup_file.offset + (va.0 - VirtAddr::from(start_vpn).0);
             debug!(
-                "handle mmap page fault, offset {:#x}, backup file offset {:#x}, backup file name {}",
+                "[MmapPageFaultHandler] handle mmap page fault, offset {:#x}, backup file offset {:#x}, backup file name {}",
                 offset, backup_file.offset, backup_file.file.metadata().inner.lock().inode.as_ref().unwrap().metadata().name
             );
             let page = backup_file

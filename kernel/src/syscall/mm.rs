@@ -41,15 +41,15 @@ pub fn sys_mmap(
         // TODO: support shared memory(i.e. MAP_ANONYMOUS | MAP_SHARED)
         current_process().inner_handler(|proc| {
             let mut vma = {
-                if flags.contains(MmapFlags::MAP_FIXED) {
-                    proc.memory_space
-                        .allocate_spec_area(length, map_permission, addr.into(), VmAreaType::Mmap)?
-                        .ok_or(SyscallErr::ENOMEM)?
-                } else {
-                    proc.memory_space
-                        .allocate_area(length, map_permission, VmAreaType::Mmap)
-                        .ok_or(SyscallErr::ENOMEM)?
-                }
+                // if flags.contains(MmapFlags::MAP_FIXED) {
+                //     proc.memory_space
+                //         .allocate_spec_area(length, map_permission, addr.into(), VmAreaType::Mmap)?
+                //         .ok_or(SyscallErr::ENOMEM)?
+                // } else {
+                proc.memory_space
+                    .allocate_area(length, map_permission, VmAreaType::Mmap)
+                    .ok_or(SyscallErr::ENOMEM)?
+                // }
             };
             vma.map_perm = map_permission | MapPermission::U;
             vma.mmap_flags = Some(flags);
@@ -154,6 +154,9 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
         return Err(SyscallErr::EINVAL);
     }
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
+
+    let prot = MmapProt::all();
+
     let map_permission: MapPermission = prot.into();
     debug!(
         "[sys_mprotect]: addr {:#x} len {:#x}, prot {:?}",
@@ -187,7 +190,7 @@ pub fn sys_msync(addr: usize, len: usize, flags: i32) -> SyscallRet {
 
 pub fn sys_brk(addr: usize) -> SyscallRet {
     stack_trace!();
-    debug!("handle sys brk");
+    info!("[sys_brk] handle sys brk, addr {:#x}", addr);
     if addr == 0 {
         debug!("[sys_brk]: addr: 0");
         return Ok(
@@ -199,13 +202,16 @@ pub fn sys_brk(addr: usize) -> SyscallRet {
         let heap_start: VirtAddr = proc.memory_space.heap_range.unwrap().start();
         let current_heap_end: VirtAddr = proc.memory_space.heap_range.unwrap().end();
         let new_heap_end: VirtAddr = addr.into();
-        debug!(
+        info!(
             "[sys_brk]: old heap end: {:#x}, new heap end: {:#x}",
             current_heap_end.0, new_heap_end.0
         );
         if addr > current_heap_end.0 {
             // allocate memory lazily
-            if proc
+            if
+            // false
+            //     &&
+            proc
                 .memory_space
                 .check_vpn_range_conflict(heap_start.floor(), new_heap_end.ceil())
             {

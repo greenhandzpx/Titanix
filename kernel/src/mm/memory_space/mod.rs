@@ -554,7 +554,8 @@ impl MemorySpace {
         let ph_count = elf_header.pt2.ph_count();
 
         let mut max_end_vpn = offset.floor();
-        let mut head_va = 0;
+        let mut header_va = 0;
+        let mut has_found_header_va = false;
         info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
 
         let page_cache = match elf_file {
@@ -586,9 +587,13 @@ impl MemorySpace {
                 let start_va: VirtAddr = (ph.virtual_addr() as usize + offset.0).into();
                 let end_va: VirtAddr =
                     ((ph.virtual_addr() + ph.mem_size()) as usize + offset.0).into();
-                if head_va == 0 {
-                    head_va = start_va.0;
+                if !has_found_header_va {
+                    header_va = start_va.0;
+                    has_found_header_va = true;
                 }
+                // if head_va == 0 {
+                //     head_va = start_va.0;
+                // }
                 let mut map_perm = MapPermission::U;
                 let ph_flags = ph.flags();
                 if ph_flags.is_read() {
@@ -662,7 +667,7 @@ impl MemorySpace {
             }
         }
 
-        (max_end_vpn, head_va.into())
+        (max_end_vpn, header_va.into())
     }
 
     /// Include sections in elf and TrapContext and user stack,
@@ -759,7 +764,7 @@ impl MemorySpace {
         let (max_end_vpn, head_va) = memory_space.map_elf(&elf, elf_file, 0.into());
 
         let ph_head_addr = head_va.0 + elf.header.pt2.ph_offset() as usize;
-        debug!("[from_elf] AT_PHDR  ph_head_addr is {:X} ", ph_head_addr);
+        debug!("[from_elf] AT_PHDR  ph_head_addr is {:x} ", ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,
             value: ph_head_addr as usize,
@@ -839,19 +844,16 @@ impl MemorySpace {
             let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
             interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
             log::info!("[load_dl] interp {}", interp);
+
             let mut interps: Vec<String> = vec![interp.clone()];
 
             log::info!("interp {}", interp);
-            // #[cfg(not(feature = "submit"))]
+
             if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
                 // interp = "/lib/libc.so".to_string();
                 interps.push("/libc.so".to_string());
                 interps.push("/lib/libc.so".to_string());
             }
-            // #[cfg(feature = "submit")]
-            // if interp.eq("/lib/ld-musl-riscv64-sf.so.1") || interp.eq("/lib/ld-musl-riscv64.so.1") {
-            //     interp = "/libc.so".to_string();
-            // }
 
             let mut interp_inode = None;
             for interp in interps {
@@ -1088,7 +1090,7 @@ impl MemorySpace {
         // traverse reversely
         let length_rounded = (length - 1 + PAGE_SIZE) / PAGE_SIZE * PAGE_SIZE;
         for (start_vpn, vma) in self.areas.get_unchecked_mut().iter().rev() {
-            log::debug!(
+            log::trace!(
                 "key start {:#x}, start {:#x}, end {:#x}",
                 start_vpn.0,
                 vma.start_vpn().0,
