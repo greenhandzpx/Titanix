@@ -7,12 +7,14 @@ use crate::{
     utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet},
 };
 use alloc::{collections::BTreeMap, sync::Arc};
+use log::info;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
 pub mod address;
 pub mod config;
+mod dhcp;
 mod tcp;
 mod udp;
 mod unix;
@@ -71,13 +73,18 @@ impl dyn Socket {
         match domain as u16 {
             AF_INET | AF_INET6 => {
                 let socket_type = SocketType::from_bits(socket_type).ok_or(SyscallErr::EINVAL)?;
+                let flags = if socket_type.contains(SocketType::SOCK_CLOEXEC) {
+                    OpenFlags::RDWR | OpenFlags::CLOEXEC
+                } else {
+                    OpenFlags::RDWR
+                };
+                info!("[Socket::alloc] flags: {:?}", flags);
                 if socket_type.contains(SocketType::SOCK_DGRAM) {
                     let socket = UdpSocket::new();
                     let socket = Arc::new(socket);
                     current_process().inner_handler(|proc| {
                         let fd = proc.fd_table.alloc_fd()?;
-                        proc.fd_table
-                            .put(fd, FdInfo::new(socket.clone(), OpenFlags::all()));
+                        proc.fd_table.put(fd, FdInfo::new(socket.clone(), flags));
                         proc.socket_table.insert(fd, socket);
                         Ok(fd)
                     })
@@ -86,8 +93,7 @@ impl dyn Socket {
                     let socket = Arc::new(socket);
                     current_process().inner_handler(|proc| {
                         let fd = proc.fd_table.alloc_fd()?;
-                        proc.fd_table
-                            .put(fd, FdInfo::new(socket.clone(), OpenFlags::all()));
+                        proc.fd_table.put(fd, FdInfo::new(socket.clone(), flags));
                         proc.socket_table.insert(fd, socket);
                         Ok(fd)
                     })

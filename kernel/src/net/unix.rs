@@ -73,10 +73,7 @@ impl Socket for UnixSocket {
 impl UnixSocket {
     pub fn new(read_end: Arc<Pipe>, write_end: Arc<Pipe>) -> Self {
         Self {
-            file_meta: FileMeta::new(
-                // OpenFlags::CLOEXEC | OpenFlags::NONBLOCK | OpenFlags::RDWR,
-                crate::fs::InodeMode::FileSOCK,
-            ),
+            file_meta: FileMeta::new(crate::fs::InodeMode::FileSOCK),
             // buf: Mutex::new(VecDeque::new()),
             read_end,
             write_end,

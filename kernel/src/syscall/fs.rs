@@ -27,9 +27,9 @@ use crate::fs::{
 use crate::fs::{ffi::UTSNAME_SIZE, OpenFlags};
 use crate::fs::{resolve_path_ffi, FdInfo, HashKey, SeekFrom};
 use crate::mm::user_check::UserCheck;
+use crate::process::thread;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
-use crate::stack_trace;
 use crate::sync::Event;
 use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
@@ -40,6 +40,7 @@ use crate::utils::async_utils::{Select2Futures, SelectOutput};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
+use crate::{stack_trace, timer};
 
 /// get current working directory
 pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
@@ -552,7 +553,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-
+    info!("[sys_write] file filags: {:?}", fd_info.flags);
     let file = fd_info.file;
     if !fd_info.flags.writable() {
         return Err(SyscallErr::EPERM);
@@ -667,6 +668,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let fd_info = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
+    info!("[sys_read] file filags: {:?}", fd_info.flags);
     let file = fd_info.file;
     if !fd_info.flags.readable() {
         return Err(SyscallErr::EPERM);
@@ -1232,6 +1234,9 @@ pub async fn sys_ppoll(
     }
 }
 
+#[cfg(not(feature = "multi_hart"))]
+const MAX_PSELECT_TIMES: u8 = 5;
+
 pub async fn sys_pselect6(
     nfds: i32,
     readfds_ptr: usize,
@@ -1379,6 +1384,17 @@ pub async fn sys_pselect6(
 
     log::info!("[sys_pselect] concerned fds {:?}", fds);
 
+    #[cfg(not(feature = "multi_hart"))]
+    let times = {
+        let times = current_process().inner_handler(|proc| {
+            let times = proc.pselect_times;
+            proc.pselect_times += 1;
+            times
+        });
+        info!("[sys_pselect] current times: {}", times);
+        times
+    };
+
     let poll_future = IOMultiplexFuture::new(
         fds,
         IOMultiplexFormat::FdSets(RawFdSetRWE::new(readfds_ptr, writefds_ptr, exceptfds_ptr)),
@@ -1394,6 +1410,13 @@ pub async fn sys_pselect6(
                 } else {
                     info!("[sys_pselect]: ready");
                 }
+                #[cfg(not(feature = "multi_hart"))]
+                {
+                    if times == MAX_PSELECT_TIMES {
+                        current_process().inner_handler(|proc| proc.pselect_times = 0);
+                        thread::yield_now().await;
+                    }
+                }
                 return ret;
             }
             TimeoutTaskOutput::Timeout => {
@@ -1402,6 +1425,8 @@ pub async fn sys_pselect6(
                 } else {
                     debug!("[sys_pselect]: timeout!");
                 }
+                #[cfg(not(feature = "multi_hart"))]
+                current_process().inner_handler(|proc| proc.pselect_times = 0);
                 return Ok(0);
             }
         }
@@ -1419,10 +1444,19 @@ pub async fn sys_pselect6(
                 );
                 debug!("[sys_pselect] return, readfds ptr {:#x}", readfds_ptr);
                 debug!("[sys_pselect]: ready");
+                #[cfg(not(feature = "multi_hart"))]
+                {
+                    if times == MAX_PSELECT_TIMES {
+                        current_process().inner_handler(|proc| proc.pselect_times = 0);
+                        thread::yield_now().await;
+                    }
+                }
                 ret
             }
             SelectOutput::Output2(e) => {
                 info!("[sys_pselect] interrupt by event {:?}", e);
+                #[cfg(not(feature = "multi_hart"))]
+                current_process().inner_handler(|proc| proc.pselect_times = 0);
                 Err(SyscallErr::EINTR)
             }
         }

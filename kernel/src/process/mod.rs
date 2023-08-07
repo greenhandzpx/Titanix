@@ -93,6 +93,9 @@ pub struct ProcessInner {
     pub rlimit: RLimit,
     /// gid, the process group id
     pub pgid: usize,
+    /// pselect times
+    #[cfg(not(feature = "multi_hart"))]
+    pub pselect_times: u8,
 }
 
 impl ProcessInner {
@@ -254,6 +257,8 @@ impl Process {
                 timers: [ITimerval::default(); 3],
                 rlimit: RLimit::new(0, 0),
                 pgid: pid.0,
+                #[cfg(not(feature = "multi_hart"))]
+                pselect_times: 0,
             }),
         });
         let trap_context = TrapContext::app_init_context(entry_point, user_sp_top);
@@ -660,6 +665,8 @@ impl Process {
                     timers: [ITimerval::default(); 3],
                     rlimit: parent_inner.rlimit.clone(),
                     pgid: parent_inner.pgid,
+                    #[cfg(not(feature = "multi_hart"))]
+                    pselect_times: 0,
                 }),
             });
             debug!("fork: child cwd {}", parent_inner.cwd);
