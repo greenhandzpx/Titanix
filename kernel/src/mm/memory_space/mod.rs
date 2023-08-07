@@ -761,9 +761,9 @@ impl MemorySpace {
             value: 0x112d as usize,
         });
 
-        let (max_end_vpn, head_va) = memory_space.map_elf(&elf, elf_file, 0.into());
+        let (max_end_vpn, header_va) = memory_space.map_elf(&elf, elf_file, 0.into());
 
-        let ph_head_addr = head_va.0 + elf.header.pt2.ph_offset() as usize;
+        let ph_head_addr = header_va.0 + elf.header.pt2.ph_offset() as usize;
         debug!("[from_elf] AT_PHDR  ph_head_addr is {:x} ", ph_head_addr);
         auxv.push(AuxHeader {
             aux_type: AT_PHDR,

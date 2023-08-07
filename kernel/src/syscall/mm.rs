@@ -153,8 +153,10 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: i32) -> SyscallRet {
     if addr % PAGE_SIZE != 0 {
         return Err(SyscallErr::EINVAL);
     }
-    let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
 
+    let _prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
+
+    // TODO: just give all permissions here
     let prot = MmapProt::all();
 
     let map_permission: MapPermission = prot.into();

@@ -30,6 +30,7 @@ use crate::mm::user_check::UserCheck;
 use crate::process::thread;
 use crate::processor::{current_process, current_task, SumGuard};
 use crate::signal::SigSet;
+use crate::stack_trace;
 use crate::sync::Event;
 use crate::syscall::PollEvents;
 use crate::timer::io_multiplex::{IOMultiplexFormat, IOMultiplexFuture, RawFdSetRWE};
@@ -40,7 +41,6 @@ use crate::utils::async_utils::{Select2Futures, SelectOutput};
 use crate::utils::error::{SyscallErr, SyscallRet};
 use crate::utils::path;
 use crate::utils::string::c_str_to_string;
-use crate::{stack_trace, timer};
 
 /// get current working directory
 pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
