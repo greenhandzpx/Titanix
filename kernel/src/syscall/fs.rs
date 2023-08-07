@@ -47,10 +47,13 @@ pub fn sys_getcwd(buf: usize, len: usize) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
     let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
+    info!("[sys_getcwd] cwd: {}", cwd);
     UserCheck::new().check_writable_slice(buf as *mut u8, len)?;
     if len < cwd.len() {
         Err(SyscallErr::ERANGE)
     } else {
+        let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+        new_buf.fill(0 as u8);
         let new_buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, cwd.len()) };
         new_buf.copy_from_slice(cwd.as_bytes());
         Ok(buf)
