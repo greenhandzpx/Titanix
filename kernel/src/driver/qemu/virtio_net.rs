@@ -8,11 +8,15 @@ use smoltcp::{
 };
 use virtio_drivers::{DeviceType, VirtIOHeader, VirtIONet};
 
-use crate::{driver::NetDevice, sync::mutex::SpinNoIrqLock, utils::error::GeneralRet};
+use crate::{
+    driver::NetDevice,
+    sync::mutex::{SpinLock, SpinNoIrqLock},
+    utils::error::GeneralRet,
+};
 
-use super::virtio_blk::VirtioHal;
+use super::VirtioHal;
 
-type Mutex<T> = SpinNoIrqLock<T>;
+type Mutex<T> = SpinLock<T>;
 
 #[derive(Clone)]
 pub struct VirtIONetDriver(Arc<Mutex<VirtIONet<'static, VirtioHal>>>);

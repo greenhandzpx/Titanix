@@ -43,6 +43,7 @@ impl Drop for FrameTracker {
 trait FrameAllocator {
     fn alloc(&mut self) -> Option<PhysPageNum>;
     fn dealloc(&mut self, ppn: PhysPageNum);
+    fn alloc_contig(&mut self, num: usize) -> Vec<PhysPageNum>;
 }
 /// an implementation for frame allocator
 pub struct StackFrameAllocator {
@@ -62,11 +63,6 @@ impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
         self.end = r.0;
-        // println!("last {} Physical Frames.", self.end - self.current);
-        // println!(
-        //     "Physical Frames start {:#x}, end {:#x}",
-        //     self.current, self.end
-        // );
     }
 }
 impl FrameAllocator for StackFrameAllocator {
@@ -77,7 +73,6 @@ impl FrameAllocator for StackFrameAllocator {
             println!("cannot alloc!!!!!!! current {:#x}", self.current);
             None
         } else {
-            // log::error!("[FrameAllocator::alloc] current {:#x}", self.current);
             self.current += 1;
             Some((self.current - 1).into())
         }
@@ -91,6 +86,19 @@ impl FrameAllocator for StackFrameAllocator {
         }
         // recycle
         self.recycled.push(ppn);
+    }
+    fn alloc_contig(&mut self, num: usize) -> Vec<PhysPageNum> {
+        let mut ret = Vec::with_capacity(num);
+        for _ in 0..num {
+            if self.current == self.end {
+                println!("cannot alloc!!!!!!! current {:#x}", self.current);
+                panic!()
+            } else {
+                self.current += 1;
+                ret.push((self.current - 1).into());
+            }
+        }
+        ret
     }
 }
 
@@ -115,6 +123,15 @@ pub fn init_frame_allocator() {
 /// allocate a frame
 pub fn frame_alloc() -> Option<FrameTracker> {
     FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
+}
+/// allocate contiguous frames
+pub fn frame_alloc_contig(num: usize) -> Vec<FrameTracker> {
+    FRAME_ALLOCATOR
+        .lock()
+        .alloc_contig(num)
+        .iter()
+        .map(|p| FrameTracker::new(*p))
+        .collect()
 }
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {
