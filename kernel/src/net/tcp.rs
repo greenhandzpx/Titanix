@@ -1,6 +1,6 @@
 use super::{Mutex, Socket};
 use crate::{
-    fs::{FdInfo, File, FileMeta},
+    fs::{FdInfo, File, FileMeta, OpenFlags},
     net::{
         address::{self},
         config::NET_INTERFACE,
@@ -58,7 +58,10 @@ impl Socket for TcpSocket {
 
     fn listen(&self) -> SyscallRet {
         let local = self.inner.lock().local_endpoint;
-        info!("[Tcp::listen] listening: {:?}", local);
+        info!(
+            "[Tcp::listen] {} listening: {:?}",
+            self.socket_handler, local
+        );
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             let ret = socket.listen(local).ok().ok_or(SyscallErr::EADDRINUSE);
@@ -72,7 +75,12 @@ impl Socket for TcpSocket {
     fn accept(&self, sockfd: u32, addr: usize, addrlen: usize) -> crate::utils::error::AsyscallRet {
         Box::pin(async move {
             stack_trace!();
-            let peer_addr = self._accept().await?;
+            // get old socket
+            let old_file = current_process()
+                .inner_handler(|proc| proc.fd_table.get(sockfd as usize))
+                .unwrap();
+            let old_flags = old_file.flags;
+            let peer_addr = self._accept(old_flags).await?;
             log::info!("[Socket::accept] get peer_addr: {:?}", peer_addr);
             let local = self.loacl_endpoint();
             log::info!("[Socket::accept] new socket try bind to : {:?}", local);
@@ -87,7 +95,7 @@ impl Socket for TcpSocket {
             let new_socket = Arc::new(new_socket);
             current_process().inner_handler(|proc| {
                 let fd = proc.fd_table.alloc_fd()?;
-                log::debug!("[Socket::accept] get old sock");
+                log::debug!("[Socket::accept] take old sock");
                 let old_file = proc.fd_table.take(sockfd as usize).unwrap();
                 let old_socket: Option<Arc<dyn Socket>> =
                     proc.socket_table.get_ref(sockfd as usize).cloned();
@@ -177,7 +185,7 @@ impl Socket for TcpSocket {
     }
 
     fn shutdown(&self, how: u32) -> GeneralRet<()> {
-        log::info!("[TcpSocket::shutdown] how {}", how);
+        println!("[TcpSocket::shutdown] how {}", how);
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| match how {
             SHUT_WR => socket.close(),
             _ => socket.abort(),
@@ -192,6 +200,15 @@ impl Socket for TcpSocket {
         });
         Ok(0)
     }
+
+    fn set_keep_alive(&self, enabled: bool) -> SyscallRet {
+        if enabled {
+            NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+                socket.set_keep_alive(Some(Duration::from_secs(1).into()))
+            });
+        }
+        Ok(0)
+    }
 }
 
 impl TcpSocket {
@@ -201,7 +218,7 @@ impl TcpSocket {
         let rx_buf = socket::tcp::SocketBuffer::new(vec![0 as u8; MAX_BUFFER_SIZE]);
         let socket = socket::tcp::Socket::new(rx_buf, tx_buf);
         let socket_handler = NET_INTERFACE.add_socket(socket);
-        log::info!("[TcpSocket::new] new {}", socket_handler);
+        info!("[TcpSocket::new] new {}", socket_handler);
         NET_INTERFACE.poll();
         Self {
             socket_handler,
@@ -219,9 +236,9 @@ impl TcpSocket {
     }
 
     /// TODO: change to future
-    async fn _accept(&self) -> GeneralRet<IpEndpoint> {
+    async fn _accept(&self, flags: OpenFlags) -> GeneralRet<IpEndpoint> {
         match Select2Futures::new(
-            TcpAcceptFuture::new(self),
+            TcpAcceptFuture::new(self, flags),
             current_task().wait_for_events(Event::all()),
         )
         .await
@@ -261,17 +278,17 @@ impl TcpSocket {
 
 impl Drop for TcpSocket {
     fn drop(&mut self) {
-        log::info!(
+        info!(
             "[TcpSocket::drop] drop socket {}, localep {:?}",
             self.socket_handler,
             self.inner.lock().local_endpoint
         );
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
-            log::info!("[TcpSocket::drop] before state is {:?}", socket.state());
+            info!("[TcpSocket::drop] before state is {:?}", socket.state());
             if socket.is_open() {
                 socket.close();
             }
-            log::info!("[TcpSocket::drop] after state is {:?}", socket.state());
+            info!("[TcpSocket::drop] after state is {:?}", socket.state());
         });
         NET_INTERFACE.poll();
         NET_INTERFACE.remove(self.socket_handler);
@@ -371,11 +388,12 @@ impl File for TcpSocket {
 
 struct TcpAcceptFuture<'a> {
     socket: &'a TcpSocket,
+    flags: OpenFlags,
 }
 
 impl<'a> TcpAcceptFuture<'a> {
-    fn new(socket: &'a TcpSocket) -> Self {
-        Self { socket }
+    fn new(socket: &'a TcpSocket, flags: OpenFlags) -> Self {
+        Self { socket, flags }
     }
 }
 
@@ -402,6 +420,10 @@ impl<'a> Future for TcpAcceptFuture<'a> {
                 "[TcpAcceptFuture::poll] not syn yet, state {:?}",
                 socket.state()
             );
+            if self.flags.contains(OpenFlags::NONBLOCK) {
+                log::info!("[TcpAcceptFuture::poll] flags set nonblock");
+                return Poll::Ready(Err(SyscallErr::EAGAIN));
+            }
             socket.register_recv_waker(cx.waker());
             Poll::Pending
         });

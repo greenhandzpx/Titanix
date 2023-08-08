@@ -1094,11 +1094,10 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     }
 }
 
-pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
+pub fn sys_statfs(_path: *const u8, buf: *mut Statfs) -> SyscallRet {
     stack_trace!();
     UserCheck::new().check_writable_slice(buf as *mut u8, STATFS_SIZE)?;
     let _sum_guard = SumGuard::new();
-    let path = path::path_process(AT_FDCWD, path)?;
     let stfs = Statfs::new();
     // TODO: find the target fs
     unsafe {

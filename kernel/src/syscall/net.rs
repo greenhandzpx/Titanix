@@ -17,10 +17,11 @@ const SOL_SOCKET: u32 = 1;
 const SOL_TCP: u32 = 6;
 
 /// option name
+const TCP_NODELAY: u32 = 1;
 const TCP_MAXSEG: u32 = 2;
 const SO_SNDBUF: u32 = 7;
 const SO_RCVBUF: u32 = 8;
-const TCP_NODELAY: u32 = 1;
+const SO_KEEPALIVE: u32 = 9;
 
 pub fn sys_socket(domain: u32, socket_type: u32, protocol: u32) -> SyscallRet {
     stack_trace!();
@@ -276,6 +277,15 @@ pub fn sys_setsockopt(
             match enabled {
                 0 => socket.set_nagle_enabled(true)?,
                 _ => socket.set_nagle_enabled(false)?,
+            };
+        }
+        (SOL_SOCKET, SO_KEEPALIVE) => {
+            UserCheck::new().check_readable_slice(optval_ptr as *const u8, optlen as usize)?;
+            let enabled = unsafe { *(optval_ptr as *const u32) };
+            log::debug!("[sys_setsockopt] set socket KEEPALIVE: {}", enabled);
+            match enabled {
+                1 => socket.set_keep_alive(true)?,
+                _ => socket.set_keep_alive(false)?,
             };
         }
         _ => {

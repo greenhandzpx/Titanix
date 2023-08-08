@@ -68,6 +68,10 @@ impl Socket for UnixSocket {
     fn set_nagle_enabled(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
+
+    fn set_keep_alive(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
 }
 
 impl UnixSocket {

@@ -138,6 +138,10 @@ impl Socket for UdpSocket {
     fn set_nagle_enabled(&self, _enabled: bool) -> SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
+
+    fn set_keep_alive(&self, _enabled: bool) -> SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
 }
 
 impl UdpSocket {
