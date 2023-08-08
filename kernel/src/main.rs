@@ -29,6 +29,7 @@ mod board;
 mod config;
 #[macro_use]
 mod driver;
+mod benchmark;
 mod executor;
 mod fs;
 mod loader;
@@ -84,25 +85,25 @@ fn hart_start(hart_id: usize) {
     use crate::driver::sbi;
     use crate::processor::HARTS;
 
-    #[cfg(feature = "board_u740")]
-    {
-        let i = 2;
-        println!("[kernel] start to wake up hart {}...", i);
-        let status = sbi::hart_start(i, HART_START_ADDR);
-        println!(
-            "[kernel] start to wake up hart {} finished, status {}",
-            i, status
-        );
+    // #[cfg(feature = "board_u740")]
+    // {
+    //     let i = 2;
+    //     println!("[kernel] start to wake up hart {}...", i);
+    //     let status = sbi::hart_start(i, HART_START_ADDR);
+    //     println!(
+    //         "[kernel] start to wake up hart {} finished, status {}",
+    //         i, status
+    //     );
 
-        let i = 3;
-        println!("[kernel] start to wake up hart {}...", i);
-        let status = sbi::hart_start(i, HART_START_ADDR);
-        println!(
-            "[kernel] start to wake up hart {} finished, status {}",
-            i, status
-        );
-        return;
-    }
+    //     let i = 3;
+    //     println!("[kernel] start to wake up hart {}...", i);
+    //     let status = sbi::hart_start(i, HART_START_ADDR);
+    //     println!(
+    //         "[kernel] start to wake up hart {} finished, status {}",
+    //         i, status
+    //     );
+    //     return;
+    // }
 
     // only start two harts
     let mut has_another = false;
@@ -119,8 +120,14 @@ fn hart_start(hart_id: usize) {
             continue;
         }
         println!("[kernel] start to wake up hart {}...", i);
-        sbi::hart_start(i, HART_START_ADDR);
-        has_another = true;
+        let status = sbi::hart_start(i, HART_START_ADDR);
+        println!(
+            "[kernel] start to wake up hart {} finished, status {}",
+            i, status
+        );
+        if status == 0 {
+            has_another = true;
+        }
     }
 }
 
@@ -234,5 +241,8 @@ pub fn rust_main(hart_id: usize) {
         "[kernel] ---------- hart {} start to fetch task... ---------- ",
         hart_id
     );
+
+    benchmark::smp_cp_test(hart_id);
+
     executor::run_forever();
 }

@@ -5,7 +5,7 @@ _start:
     # pc = 0x80200000
 
     # set sp(each hart has one kstack)
-    slli t0, a0, 16  # t0 = hart_id << 16(4096 * 16)
+    slli t0, a0, 18  # t0 = hart_id << 18 (64 * 4K)
     la sp, boot_stack_top
     sub sp, sp, t0  # sp = stack top - hart_id * stack_size
 
@@ -29,7 +29,7 @@ _start:
     .globl boot_stack_lower_bound
 boot_stack_lower_bound:
 
-    .space 4096 * 16 * 8  # 8 CPUS at most
+    .space 4096 * 64 * 8  # 8 CPUS at most
 
     .globl boot_stack_top
 boot_stack_top:

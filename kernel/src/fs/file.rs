@@ -174,19 +174,15 @@ pub trait File: Send + Sync {
         // *buffer = vec![0u8; PAGE_SIZE];
         let mut idx = 0;
         loop {
-            stack_trace!();
             let len = self.sync_read(&mut buffer.as_mut_slice()[idx..idx + PAGE_SIZE])?;
             if len == 0 {
                 break;
             }
             idx += len;
-            stack_trace!();
             buffer.resize(idx + PAGE_SIZE, 0);
-            stack_trace!();
         }
         stack_trace!();
         self.seek(SeekFrom::Start(old_pos))?;
-        stack_trace!();
         Ok(())
     }
 
