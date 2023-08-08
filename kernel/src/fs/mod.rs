@@ -33,7 +33,6 @@ use log::warn;
 pub use page_cache::PageCache;
 
 use crate::driver::BLOCK_DEVICE;
-use crate::fs::inode::FAST_PATH_CACHE;
 use crate::loader::get_app_data_by_name;
 use crate::mm::MapPermission;
 use crate::stack_trace;
@@ -45,6 +44,7 @@ use crate::utils::path;
 use self::ffi::StatFlags;
 use self::file_system::FsDevice;
 use self::inode::INODE_CACHE;
+use self::inode::PATH_CACHE;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
@@ -59,6 +59,7 @@ fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
 
 pub fn init() {
     INODE_CACHE.init();
+    PATH_CACHE.init();
 
     // First we mount root fs
     #[cfg(feature = "tmpfs")]
@@ -190,8 +191,6 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("tmpfs init fail!");
-
-    FAST_PATH_CACHE.init();
 
     // list_rootfs();
 }

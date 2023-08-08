@@ -9,6 +9,7 @@ use crate::{
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
+    timer::current_time_duration,
 };
 
 use super::error::{GeneralRet, SyscallErr};
@@ -187,7 +188,14 @@ pub fn path_to_inode(
                     debug!("[path_to_inode] just for libc-test");
                     path = "/testshm".to_string();
                 }
+                let start_ts = current_time_duration();
                 let (target, parent) = <dyn Inode>::lookup_from_root(&path)?;
+                let end_ts = current_time_duration();
+                log::error!(
+                    "[path_to_inode] time consumed {:?}, path {}",
+                    end_ts - start_ts,
+                    path
+                );
                 Ok((target, path, parent))
             }
         }

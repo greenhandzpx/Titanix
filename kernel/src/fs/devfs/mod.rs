@@ -11,7 +11,7 @@ use self::urandom::UrandomInode;
 use self::{tty::TtyInode, zero::ZeroInode};
 use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
-use crate::fs::inode::INODE_CACHE;
+use crate::fs::inode::{INODE_CACHE, PATH_CACHE};
 use crate::utils::error::GeneralRet;
 use crate::utils::path;
 
@@ -46,8 +46,8 @@ impl Inode for DevRootInode {
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[DevRootInode::mknod]: mknod: {}", name);
         //        debug_assert!(dev_id.unwrap() < DEV_NAMES.len());
-        let creator = DEV_NAMES[dev_id.unwrap()].2;
-        let inode = creator(this.clone(), DEV_NAMES[dev_id.unwrap()].0);
+        let creator = DEV_PATHS[dev_id.unwrap()].2;
+        let inode = creator(this.clone(), DEV_PATHS[dev_id.unwrap()].0);
         this.metadata()
             .inner
             .lock()
@@ -82,7 +82,7 @@ impl DevRootInode {
 }
 
 /// TODO: resolve dtb instead of constant list
-const DEV_NAMES: [(
+const DEV_PATHS: [(
     &str,
     InodeMode,
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
@@ -133,22 +133,23 @@ impl DevFs {
     ) -> GeneralRet<Self> {
         let mut raw_root_inode = DevRootInode::new();
         raw_root_inode.root_init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
-        let root_inode = Arc::new(raw_root_inode);
+        let root_inode: Arc<dyn Inode> = Arc::new(raw_root_inode);
 
         let id_allocator = AtomicUsize::new(0);
 
         let parent_ino = root_inode.metadata().ino;
-        for (dev_name2, inode_mode, _) in DEV_NAMES {
+        for (dev_path, inode_mode, _) in DEV_PATHS {
+            let name = path::get_name(dev_path);
             let child = root_inode.mknod(
                 root_inode.clone(),
-                dev_name2,
+                name,
                 inode_mode,
                 Some(id_allocator.fetch_add(1, core::sync::atomic::Ordering::AcqRel)),
             )?;
-            let child_name = child.metadata().name.clone();
-            let key = HashKey::new(parent_ino, child_name);
+            let key = HashKey::new(parent_ino, name.to_string());
+            debug!("insert {:?} finished", key);
             INODE_CACHE.insert(key, child.clone());
-            debug!("insert {} finished", dev_name2);
+            PATH_CACHE.insert(dev_path.to_string(), Arc::downgrade(&child));
         }
 
         Ok(Self {

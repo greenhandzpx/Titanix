@@ -4,8 +4,13 @@ use alloc::{string::ToString, sync::Arc, vec::Vec};
 use log::debug;
 
 use crate::{
-    fs::{ffi::StatFlags, hash_key::HashKey, inode::INODE_CACHE, FileSystemType},
-    utils::error::GeneralRet,
+    fs::{
+        ffi::StatFlags,
+        hash_key::HashKey,
+        inode::{INODE_CACHE, PATH_CACHE},
+        FileSystemType,
+    },
+    utils::{error::GeneralRet, path},
 };
 
 use self::{meminfo::MeminfoInode, mounts::MountsInode};
@@ -28,13 +33,13 @@ impl Inode for ProcRootInode {
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[ProcRootInode mknod] mknod: {}", name);
         let mut index = 0;
-        for (i, proc) in PROC_NAME.into_iter().enumerate() {
+        for (i, proc) in PROC_PATH.into_iter().enumerate() {
             if proc.0.ends_with(name) {
                 index = i;
             }
         }
-        let creator = PROC_NAME[index].2;
-        let inode = creator(this.clone(), PROC_NAME[index].0);
+        let creator = PROC_PATH[index].2;
+        let inode = creator(this.clone(), PROC_PATH[index].0);
         this.metadata()
             .inner
             .lock()
@@ -65,7 +70,7 @@ impl ProcRootInode {
     }
 }
 
-const PROC_NAME: [(
+const PROC_PATH: [(
     &str,
     InodeMode,
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
@@ -99,17 +104,19 @@ impl ProcFs {
         let id_allocator = AtomicUsize::new(0);
 
         let parent_ino = root_inode.metadata().ino;
-        for (proc_name, inode_mode, _) in PROC_NAME {
+        for (proc_path, inode_mode, _) in PROC_PATH {
+            let name = path::get_name(proc_path);
             let child = root_inode.mknod(
                 root_inode.clone(),
-                proc_name,
+                name,
                 inode_mode,
                 Some(id_allocator.fetch_add(1, core::sync::atomic::Ordering::AcqRel)),
             )?;
             let child_name = child.metadata().name.clone();
             let key = HashKey::new(parent_ino, child_name);
-            INODE_CACHE.insert(key, child);
-            debug!("insert {} finished", proc_name);
+            debug!("insert {:?} finished", key);
+            INODE_CACHE.insert(key, child.clone());
+            PATH_CACHE.insert(proc_path.to_string(), Arc::downgrade(&child));
         }
 
         Ok(Self {

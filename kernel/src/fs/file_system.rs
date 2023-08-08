@@ -7,7 +7,10 @@ use alloc::{
 
 use crate::{
     driver::BlockDevice,
-    fs::{hash_key::HashKey, inode::INODE_CACHE},
+    fs::{
+        hash_key::HashKey,
+        inode::{INODE_CACHE, PATH_CACHE},
+    },
     sync::mutex::SpinNoIrqLock,
     utils::{
         async_utils::block_on,
@@ -255,6 +258,7 @@ impl FileSystemManager {
         // insert root inode into inode cache
         let meta = fs.metadata();
         INODE_CACHE.insert(key.clone(), Arc::clone(&meta.root_inode));
+        PATH_CACHE.insert(mount_point.to_string(), Arc::downgrade(&meta.root_inode));
         log::info!(
             "[mount] mount point {} inode ino {}",
             mount_point,
