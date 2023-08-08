@@ -199,34 +199,16 @@ pub fn sys_mount(
     }
     // Check and convert the arguments.
     let dev_name = path::path_process(AT_FDCWD, dev_name)?;
-    if dev_name.is_none() {
-        return Err(SyscallErr::EMFILE);
-    }
-    let dev_name = dev_name.unwrap();
 
     let target_path = path::path_process(AT_FDCWD, target_path)?;
-    if target_path.is_none() {
-        return Err(SyscallErr::ENOENT);
-    }
-    let target_path = target_path.unwrap();
+
     let target_inode = <dyn Inode>::lookup_from_root(&target_path)?.0;
     if target_inode.is_none() {
         return Err(SyscallErr::EACCES);
     }
 
     let ftype = path::path_process(AT_FDCWD, ftype)?;
-    let ftype = {
-        if ftype.is_some() {
-            let ftype = ftype.unwrap();
-            let ftype = FileSystemType::fs_type(&ftype);
-            if ftype.is_none() {
-                return Err(SyscallErr::ENODEV);
-            }
-            ftype.unwrap()
-        } else {
-            FileSystemType::fs_type("vfat").unwrap()
-        }
-    };
+    let ftype = FileSystemType::fs_type(&ftype);
 
     let dev = <dyn Inode>::lookup_from_root(&dev_name)?.0;
     let dev = match dev {
@@ -244,10 +226,6 @@ pub fn sys_mount(
 pub async fn sys_umount(target_path_ptr: usize, _flags: u32) -> SyscallRet {
     stack_trace!();
     let target_path = path::path_process(AT_FDCWD, target_path_ptr as *const u8)?;
-    if target_path.is_none() {
-        return Err(SyscallErr::ENOENT);
-    }
-    let target_path = target_path.unwrap();
     if target_path == "/" {
         return Err(SyscallErr::EPERM);
     }
@@ -344,7 +322,12 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(path)?;
     let path = &c_str_to_string(path);
-    let target_inode = <dyn Inode>::lookup_from_root(path)?.0;
+    log::info!("[sys_chdir] path {}", path);
+    let path = path::change_relative_to_absolute(
+        &path,
+        &current_process().inner_handler(move |proc| proc.cwd.clone()),
+    );
+    let target_inode = <dyn Inode>::lookup_from_root(&path)?.0;
     match target_inode {
         Some(target_inode) => {
             let mut inner_lock = target_inode.metadata().inner.lock();
@@ -1116,10 +1099,6 @@ pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
     UserCheck::new().check_writable_slice(buf as *mut u8, STATFS_SIZE)?;
     let _sum_guard = SumGuard::new();
     let path = path::path_process(AT_FDCWD, path)?;
-    if path.is_none() {
-        debug!("[sys_statfs] path does not exist");
-        return Err(SyscallErr::ENOENT);
-    }
     let stfs = Statfs::new();
     // TODO: find the target fs
     unsafe {

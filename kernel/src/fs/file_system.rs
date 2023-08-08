@@ -55,14 +55,14 @@ pub enum FileSystemType {
 }
 
 impl FileSystemType {
-    pub fn fs_type(ftype: &str) -> Option<Self> {
+    pub fn fs_type(ftype: &str) -> Self {
         match ftype {
-            "vfat" => Some(Self::VFAT),
-            "ext2" => Some(Self::EXT2),
-            "nfs" => Some(Self::NFS),
-            "proc" => Some(Self::Proc),
-            "devtmpfs" => Some(Self::DevTmpFS),
-            _ => None,
+            "vfat" => Self::VFAT,
+            "ext2" => Self::EXT2,
+            "nfs" => Self::NFS,
+            "proc" => Self::Proc,
+            "devtmpfs" => Self::DevTmpFS,
+            _ => todo!(),
         }
     }
     pub fn to_string(&self) -> String {
