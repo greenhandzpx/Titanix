@@ -16,6 +16,7 @@ pub type SpinNoIrqLock<T> = SpinMutex<T, SpinNoIrq>;
 /// SleepLock
 pub type SleepLock<T> = SleepMutex<T, SpinNoIrq>;
 /// ReentrantMutex
+#[allow(unused)]
 pub type ReentrantLock<T> = ReentrantMutex<T, SpinNoIrq>;
 
 /// Low-level support for mutex(spinlock, sleeplock, etc)

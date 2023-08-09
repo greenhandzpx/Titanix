@@ -2,10 +2,7 @@ use alloc::sync::Arc;
 
 use crate::{
     config::mm::PAGE_SIZE,
-    mm::{
-        memory_space::vm_area::VmAreaType, KernelAddr, MapPermission, Page, PageBuilder, PhysAddr,
-        VirtAddr,
-    },
+    mm::{memory_space::vm_area::VmAreaType, MapPermission, Page, PageBuilder, VirtAddr},
     process::Process,
     processor::SumGuard,
     trap::UserContext,

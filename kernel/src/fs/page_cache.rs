@@ -35,6 +35,7 @@ impl PageCache {
         self.pages.lock().get(&(offset >> PAGE_SIZE_BITS)).cloned()
     }
     /// Insert a new page
+    #[allow(unused)]
     pub fn insert(&self, offset: usize, page: Page) {
         debug_assert!(self
             .pages

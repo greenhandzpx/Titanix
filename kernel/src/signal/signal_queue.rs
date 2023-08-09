@@ -72,11 +72,6 @@ impl SigQueue {
         self.pending_sigs.add(signo);
     }
 
-    pub fn check_spec_signal(&self, signos: SigSet) -> bool {
-        stack_trace!();
-        self.pending_sigs.bitmap.intersects(signos)
-    }
-
     /// Return (signo, sig action, old blocked sigs)
     pub fn check_signal(&mut self) -> Option<(usize, KSigAction, SigSet)> {
         stack_trace!();
