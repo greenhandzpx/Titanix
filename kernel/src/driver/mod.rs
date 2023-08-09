@@ -15,6 +15,7 @@ use self::{
 pub mod fu740;
 pub mod qemu;
 pub mod sbi;
+pub mod plic;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
