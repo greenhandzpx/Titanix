@@ -10,7 +10,7 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, InodeMode, Mutex,
+        File, Inode, InodeMode, Mutex, OpenFlags,
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
@@ -132,7 +132,7 @@ pub struct MeminfoFile {
 }
 
 impl File for MeminfoFile {
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         log::info!("[MeminfoFile] read");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -152,7 +152,7 @@ impl File for MeminfoFile {
         })
     }
 
-    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, _buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         log::info!("[MeminfoFile] cannot write");
         Box::pin(async move { Err(SyscallErr::EACCES) })
     }

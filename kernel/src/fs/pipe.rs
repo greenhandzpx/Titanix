@@ -32,7 +32,7 @@ impl File for Pipe {
         Err(SyscallErr::ESPIPE)
     }
 
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         log::info!("[Pipe::read] start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
@@ -60,7 +60,7 @@ impl File for Pipe {
         )
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         log::info!("[Pipe::write] start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(async move {

@@ -29,7 +29,7 @@ pub async fn sys_getrandom(buf: usize, buflen: usize, _flags: u32) -> SyscallRet
     let inode = resolve_path(0, "/dev/urandom", OpenFlags::RDONLY)?;
     let file = inode.open(inode.clone())?;
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
-    let ret = file.read(buf).await?;
+    let ret = file.read(buf, OpenFlags::default()).await?;
     log::info!("[sys_read] read {} len", ret);
     Ok(ret)
 }

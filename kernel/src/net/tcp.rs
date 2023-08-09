@@ -123,6 +123,8 @@ impl Socket for TcpSocket {
     fn connect<'a>(&'a self, addr_buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
         Box::pin(async move {
             let remote_endpoint = address::endpoint(addr_buf)?;
+            #[cfg(not(feature = "multi_hart"))]
+            thread::yield_now().await;
             self._connect(remote_endpoint)?;
             loop {
                 NET_INTERFACE.poll();
@@ -185,7 +187,7 @@ impl Socket for TcpSocket {
     }
 
     fn shutdown(&self, how: u32) -> GeneralRet<()> {
-        println!("[TcpSocket::shutdown] how {}", how);
+        info!("[TcpSocket::shutdown] how {}", how);
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| match how {
             SHUT_WR => socket.close(),
             _ => socket.abort(),
@@ -297,19 +299,28 @@ impl Drop for TcpSocket {
 }
 
 impl File for TcpSocket {
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> crate::utils::error::AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
         log::info!("[Tcp::read] {} enter", self.socket_handler);
         Box::pin(async move {
             match Select2Futures::new(
-                TcpRecvFuture::new(self, buf),
+                TcpRecvFuture::new(self, buf, flags),
                 current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
             )
             .await
             {
-                SelectOutput::Output1(ret) => {
-                    ksleep(Duration::from_millis(3)).await;
-                    ret
-                }
+                SelectOutput::Output1(ret) => match ret {
+                    Ok(len) => {
+                        if len > MAX_BUFFER_SIZE / 2 {
+                            // need to be slow
+                            ksleep(Duration::from_millis(2)).await;
+                        } else {
+                            #[cfg(not(feature = "multi_hart"))]
+                            thread::yield_now().await;
+                        }
+                        ret
+                    }
+                    Err(_) => ret,
+                },
                 SelectOutput::Output2(intr) => {
                     log::info!("[TcpSocket::read] interrupt by event {:?}", intr);
                     Err(SyscallErr::EINTR)
@@ -318,19 +329,28 @@ impl File for TcpSocket {
         })
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
         log::info!("[Tcp::write] {} enter", self.socket_handler);
         Box::pin(async move {
             match Select2Futures::new(
-                TcpSendFuture::new(self, buf),
+                TcpSendFuture::new(self, buf, flags),
                 current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
             )
             .await
             {
-                SelectOutput::Output1(ret) => {
-                    ksleep(Duration::from_millis(3)).await;
-                    ret
-                }
+                SelectOutput::Output1(ret) => match ret {
+                    Ok(len) => {
+                        if len > MAX_BUFFER_SIZE / 2 {
+                            // need to be slow
+                            ksleep(Duration::from_millis(2)).await;
+                        } else {
+                            #[cfg(not(feature = "multi_hart"))]
+                            thread::yield_now().await;
+                        }
+                        ret
+                    }
+                    Err(_) => ret,
+                },
                 SelectOutput::Output2(intr) => {
                     log::info!("[TcpSocket::write] interrupt by event {:?}", intr);
                     Err(SyscallErr::EINTR)
@@ -435,16 +455,18 @@ impl<'a> Future for TcpAcceptFuture<'a> {
 struct TcpRecvFuture<'a> {
     socket: &'a TcpSocket,
     buf: ManagedSlice<'a, u8>,
+    flags: OpenFlags,
 }
 
 impl<'a> TcpRecvFuture<'a> {
-    fn new<S>(socket: &'a TcpSocket, buf: S) -> Self
+    fn new<S>(socket: &'a TcpSocket, buf: S, flags: OpenFlags) -> Self
     where
         S: Into<ManagedSlice<'a, u8>>,
     {
         Self {
             socket,
             buf: buf.into(),
+            flags,
         }
     }
 }
@@ -471,8 +493,12 @@ impl<'a> Future for TcpRecvFuture<'a> {
             }
             log::info!("[TcpRecvFuture::poll] state {:?}", socket.state());
             if !socket.can_recv() {
-                socket.register_recv_waker(cx.waker());
                 log::info!("[TcpRecvFuture::poll] cannot recv yet");
+                if self.flags.contains(OpenFlags::NONBLOCK) {
+                    log::info!("[TcpRecvFuture::poll] already set nonblock");
+                    return Poll::Ready(Err(SyscallErr::EAGAIN));
+                }
+                socket.register_recv_waker(cx.waker());
                 return Poll::Pending;
             }
             log::info!("[TcpRecvFuture::poll] start to recv...");
@@ -484,7 +510,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
             );
             Poll::Ready(match socket.recv_slice(&mut this.buf) {
                 Ok(nbytes) => {
-                    log::info!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
+                    info!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
                     Ok(nbytes)
                 }
                 Err(_) => Err(SyscallErr::ENOTCONN),
@@ -498,11 +524,12 @@ impl<'a> Future for TcpRecvFuture<'a> {
 struct TcpSendFuture<'a> {
     socket: &'a TcpSocket,
     buf: &'a [u8],
+    flags: OpenFlags,
 }
 
 impl<'a> TcpSendFuture<'a> {
-    fn new(socket: &'a TcpSocket, buf: &'a [u8]) -> Self {
-        Self { socket, buf }
+    fn new(socket: &'a TcpSocket, buf: &'a [u8], flags: OpenFlags) -> Self {
+        Self { socket, buf, flags }
     }
 }
 
@@ -520,8 +547,12 @@ impl<'a> Future for TcpSendFuture<'a> {
                 return Poll::Ready(Err(SyscallErr::ENOTCONN));
             }
             if !socket.can_send() {
-                socket.register_send_waker(cx.waker());
                 log::info!("[TcpSendFuture::poll] cannot send yet");
+                if self.flags.contains(OpenFlags::NONBLOCK) {
+                    log::info!("[TcpSendFuture::poll] already set nonblock");
+                    return Poll::Ready(Err(SyscallErr::EAGAIN));
+                }
+                socket.register_send_waker(cx.waker());
                 return Poll::Pending;
             }
             log::info!("[TcpSendFuture::poll] start to send...");
@@ -533,7 +564,7 @@ impl<'a> Future for TcpSendFuture<'a> {
             );
             Poll::Ready(match socket.send_slice(&mut this.buf) {
                 Ok(nbytes) => {
-                    log::info!("[TcpSendFuture::poll] send {} bytes", nbytes);
+                    info!("[TcpSendFuture::poll] send {} bytes", nbytes);
                     Ok(nbytes)
                 }
                 Err(_) => Err(SyscallErr::ENOTCONN),

@@ -3,7 +3,7 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, Mutex,
+        File, Inode, Mutex, OpenFlags,
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
@@ -68,7 +68,7 @@ impl File for RtcFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("read /dev/rtc");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -77,7 +77,7 @@ impl File for RtcFile {
             Ok(buf.len())
         })
     }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("write /dev/rtc");
         Box::pin(async move { Ok(buf.len()) })
     }

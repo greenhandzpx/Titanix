@@ -19,6 +19,9 @@ const SOL_TCP: u32 = 6;
 /// option name
 const TCP_NODELAY: u32 = 1;
 const TCP_MAXSEG: u32 = 2;
+#[allow(unused)]
+const TCP_INFO: u32 = 11;
+const TCP_CONGESTION: u32 = 13;
 const SO_SNDBUF: u32 = 7;
 const SO_RCVBUF: u32 = 8;
 const SO_KEEPALIVE: u32 = 9;
@@ -133,7 +136,7 @@ pub async fn sys_sendto(
         .ok_or(SyscallErr::ENOTSOCK)?;
     log::info!("[sys_sendto] get socket sockfd: {}", sockfd);
     let len = match socket.socket_type() {
-        SocketType::SOCK_STREAM => socket_file.file.write(buf).await?,
+        SocketType::SOCK_STREAM => socket_file.file.write(buf, socket_file.flags).await?,
         SocketType::SOCK_DGRAM => {
             info!("[sys_sendto] socket is udp");
             UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
@@ -145,7 +148,7 @@ pub async fn sys_sendto(
             let dest_addr =
                 unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
             socket.connect(dest_addr).await?;
-            socket_file.file.write(buf).await?
+            socket_file.file.write(buf, socket_file.flags).await?
         }
         _ => todo!(),
     };
@@ -174,14 +177,14 @@ pub async fn sys_recvfrom(
     info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
     match socket.socket_type() {
         SocketType::SOCK_STREAM => {
-            let len = socket_file.file.read(buf).await?;
+            let len = socket_file.file.read(buf, socket_file.flags).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
             Ok(len)
         }
         SocketType::SOCK_DGRAM => {
-            let len = socket_file.file.read(buf).await?;
+            let len = socket_file.file.read(buf, socket_file.flags).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
@@ -209,6 +212,18 @@ pub fn sys_getsockopt(
             unsafe {
                 *(optval_ptr as *mut u32) = TCP_MSS;
                 *(optlen as *mut u32) = len as u32;
+            }
+        }
+        (SOL_TCP, TCP_CONGESTION) => {
+            let congestion = "reno";
+            UserCheck::new().check_writable_slice(optval_ptr as *mut u8, congestion.len())?;
+            UserCheck::new()
+                .check_writable_slice(optlen as *mut u8, core::mem::size_of::<u32>())?;
+            let buf =
+                unsafe { core::slice::from_raw_parts_mut(optval_ptr as *mut u8, congestion.len()) };
+            buf.copy_from_slice(congestion.as_bytes());
+            unsafe {
+                *(optlen as *mut u32) = congestion.len() as u32;
             }
         }
         (SOL_SOCKET, SO_SNDBUF | SO_RCVBUF) => {

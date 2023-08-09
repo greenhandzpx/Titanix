@@ -630,7 +630,6 @@ impl Process {
     ) -> GeneralRet<Arc<Self>> {
         stack_trace!();
         let child = self.inner_handler(move |parent_inner| {
-            assert_eq!(parent_inner.thread_count(), 1);
             let pid = Arc::new(tid_alloc());
             debug!(
                 "fork: child's pid {}, parent's pid {} before",
