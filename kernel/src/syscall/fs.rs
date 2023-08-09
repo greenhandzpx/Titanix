@@ -551,7 +551,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    let ret = file.write(buf).await?;
+    let ret = file.write(buf, fd_info.flags).await?;
     trace!("[sys_write] write len {}", ret);
     // if ret > 0 {
     //     log::debug!("[sys_write] buf[0]: [{}]", buf[0]);
@@ -602,7 +602,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_len: {}", iov_len);
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
-        let write_ret = file.write(buf).await?;
+        let write_ret = file.write(buf, fd_info.flags).await?;
         ret += write_ret as usize;
     }
     trace!("[sys_writev] write {} len", ret);
@@ -641,7 +641,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_len: {}", iov_len);
         UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
-        let read_ret = file.read(buf).await?;
+        let read_ret = file.read(buf, fd_info.flags).await?;
         ret += read_ret as usize;
     }
     trace!("[sys_readv] read {} len", ret);
@@ -673,7 +673,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
-    let ret = file.read(buf).await?;
+    let ret = file.read(buf, fd_info.flags).await?;
     trace!("[sys_read] read len {}", ret);
     Ok(ret)
     // if buf.len() < 2 {
@@ -806,7 +806,7 @@ pub async fn sys_sendfile(
 
     let mut buf = vec![0 as u8; count];
     let nbytes = match offset_ptr {
-        0 => input_file.file.read(&mut buf).await?,
+        0 => input_file.file.read(&mut buf, input_file.flags).await?,
         _ => {
             UserCheck::new()
                 .check_readable_slice(offset_ptr as *const u8, core::mem::size_of::<usize>())?;
@@ -824,7 +824,10 @@ pub async fn sys_sendfile(
         }
     };
     info!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
-    let ret = output_file.file.write(&buf[0..nbytes as usize]).await;
+    let ret = output_file
+        .file
+        .write(&buf[0..nbytes as usize], output_file.flags)
+        .await;
     debug!("[sys_sendfile]: finished");
     ret
 }

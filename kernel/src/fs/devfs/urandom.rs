@@ -3,7 +3,7 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, Mutex,
+        File, Inode, Mutex, OpenFlags,
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
@@ -72,7 +72,7 @@ impl File for UrandomFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("[read] /dev/urandom");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -82,7 +82,7 @@ impl File for UrandomFile {
             Ok(buf.len())
         })
     }
-    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, _buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         todo!()
     }
 

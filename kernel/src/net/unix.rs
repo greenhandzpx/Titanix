@@ -2,7 +2,7 @@ use super::Socket;
 use crate::{
     fs::{
         pipe::{make_pipe, Pipe},
-        File, FileMeta,
+        File, FileMeta, OpenFlags,
     },
     utils::error::{AsyscallRet, SyscallErr},
 };
@@ -85,13 +85,13 @@ impl UnixSocket {
     }
 }
 impl File for UnixSocket {
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], flags: OpenFlags) -> AsyscallRet {
         log::info!("[UnixSocket::read] start to read {} bytes...", buf.len());
-        self.read_end.read(buf)
+        self.read_end.read(buf, flags)
     }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> AsyscallRet {
         log::info!("[UnixSocket::write] start to write {} bytes...", buf.len());
-        self.write_end.write(buf)
+        self.write_end.write(buf, flags)
     }
     fn metadata(&self) -> &FileMeta {
         &self.file_meta

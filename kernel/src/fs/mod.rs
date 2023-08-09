@@ -197,6 +197,12 @@ pub fn init() {
 }
 pub const AT_FDCWD: isize = -100;
 
+impl Default for OpenFlags {
+    fn default() -> Self {
+        Self::RDWR
+    }
+}
+
 bitflags! {
     /// Open file flags
     pub struct OpenFlags: u32 {
