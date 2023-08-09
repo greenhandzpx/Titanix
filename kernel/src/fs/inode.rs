@@ -92,7 +92,7 @@ impl PathCache {
                 // match prefix
                 let parent_path = path::get_parent_dir(&path);
                 info!(
-                    "[Path_Cache::get] parent_path: {:?}, absolute path: {}",
+                    "[PathCache::get] parent_path: {:?}, absolute path: {}",
                     parent_path, path
                 );
                 match parent_path {
@@ -108,22 +108,22 @@ impl PathCache {
                                 )
                             }
                             None => {
-                                let mut find = false;
-                                let mut parent_path = "";
-                                for p in FAST_PATH {
-                                    if path.starts_with(p) {
-                                        find = true;
-                                        parent_path = p;
-                                        break;
-                                    }
-                                }
-                                if find {
-                                    let parent = inner.get(parent_path).cloned();
-                                    let child_path = path::child_path(&path, parent_path);
-                                    return (None, parent.unwrap().upgrade(), Some(child_path));
-                                } else {
-                                    return (None, None, None);
-                                }
+                                // let mut find = false;
+                                // let mut parent_path = "";
+                                // for p in FAST_PATH {
+                                //     if path.starts_with(p) {
+                                //         find = true;
+                                //         parent_path = p;
+                                //         break;
+                                //     }
+                                // }
+                                // if find {
+                                //     let parent = inner.get(parent_path).cloned();
+                                //     let child_path = path::child_path(&path, parent_path);
+                                //     return (None, parent.unwrap().upgrade(), Some(child_path));
+                                // } else {
+                                return (None, None, None);
+                                // }
                             }
                         }
                     }
@@ -322,7 +322,7 @@ impl dyn Inode {
         log::info!("[mkdir_v] child ino: {}", child.metadata().ino);
         log::info!("[mkdir_v] insert {:?} into INODE_CACHE", key);
         INODE_CACHE.insert(key, child.clone());
-        // PATH_CACHE.insert(child.metadata().path.clone(), Arc::downgrade(&child));
+        PATH_CACHE.insert(child.metadata().path.clone(), Arc::downgrade(&child));
         Ok(child)
     }
 
@@ -343,7 +343,7 @@ impl dyn Inode {
         log::info!("[mkdir_v] child ino: {}", child.metadata().ino);
         log::info!("[mkdir_v] insert {:?} into INODE_CACHE", key);
         INODE_CACHE.insert(key, child.clone());
-        // PATH_CACHE.insert(child.metadata().path.clone(), Arc::downgrade(&child));
+        PATH_CACHE.insert(child.metadata().path.clone(), Arc::downgrade(&child));
         child.create_page_cache_if_needed();
         Ok(child)
     }
@@ -407,24 +407,23 @@ impl dyn Inode {
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
-        let mut path_names = path::split_path_string(path.to_string());
-
         let mut parent = self.clone();
 
-        let path = path::merge(&self.metadata().path, path);
-        let path = path::format(&path);
-        let (target, fa, child_path) = PATH_CACHE.get(path.clone());
-        if target.is_some() {
-            debug!("[lookup_from_current] find in fast path cache");
-            return Ok(target);
-        } else {
-            debug!("[lookup_from_current] mismatch in fast path cache");
-            if fa.is_some() {
-                debug!("[lookup_from_current] prefix matched");
-                parent = fa.unwrap();
-                path_names = path::split_path_string(child_path.unwrap());
-            }
-        }
+        let mut path_names = path::split_path_string(path.to_string());
+        // let path = path::merge(&self.metadata().path, path);
+        // let path = path::format(&path);
+        // let (target, fa, child_path) = PATH_CACHE.get(path.clone());
+        // if target.is_some() {
+        //     debug!("[lookup_from_current] find in fast path cache");
+        //     return Ok(target);
+        // } else {
+        //     debug!("[lookup_from_current] mismatch in fast path cache");
+        //     if fa.is_some() {
+        //         debug!("[lookup_from_current] prefix matched");
+        //         parent = fa.unwrap();
+        //         path_names = path::split_path_string(child_path.unwrap());
+        //     }
+        // }
 
         for (i, name) in path_names.clone().into_iter().enumerate() {
             debug!("[lookup_from_current] round: {}, name: {}", i, name);
@@ -486,13 +485,16 @@ impl dyn Inode {
         let path = path::format(path);
         let (target, fa, child_path) = PATH_CACHE.get(path.clone());
         if target.is_some() {
-            debug!("[lookup_from_root] find in fast path cache");
+            debug!("[lookup_from_root] get {} in path cache", path);
             return Ok((target, None));
         } else {
-            debug!("[lookup_from_root] mismatch in fast path cache");
+            debug!("[lookup_from_root] {} mismatch in path cache", path);
             if fa.is_some() {
-                debug!("[lookup_from_root] prefix matched");
                 parent = fa.unwrap();
+                debug!(
+                    "[lookup_from_root] prefix matched, get parent, name {}",
+                    parent.metadata().name
+                );
                 path_names = path::split_path_string(child_path.unwrap());
             }
         }
