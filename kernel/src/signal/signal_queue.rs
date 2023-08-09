@@ -38,6 +38,7 @@ impl PendingSigs {
         self.bitmap.contain_sig(signo)
     }
 
+    #[allow(unused)]
     pub fn is_empty(&self) -> bool {
         self.sigs.is_empty()
     }

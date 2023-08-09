@@ -32,17 +32,17 @@ mod driver;
 mod executor;
 mod fs;
 mod loader;
-pub mod mm;
+mod mm;
 mod net;
 mod panic;
-pub mod process;
+mod process;
 mod processor;
 mod signal;
 ///
-pub mod sync;
-pub mod syscall;
+mod sync;
+mod syscall;
 mod timer;
-pub mod trap;
+mod trap;
 mod utils;
 
 use core::{

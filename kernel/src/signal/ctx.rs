@@ -102,9 +102,9 @@ impl SignalTrampoline {
         })
     }
 
-    pub fn kernel_addr(&self) -> usize {
-        KernelAddr::from(PhysAddr::from(self.page.data_frame.ppn)).0
-    }
+    // pub fn kernel_addr(&self) -> usize {
+    //     KernelAddr::from(PhysAddr::from(self.page.data_frame.ppn)).0
+    // }
 
     pub fn user_addr(&self) -> usize {
         self.user_addr.0

@@ -185,6 +185,7 @@ pub async fn sys_clone(
         Ok(new_pid)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
+
         let current_process = current_process();
         let new_tid = current_process.create_thread(
             stack_ptr,
@@ -193,7 +194,7 @@ pub async fn sys_clone(
             chilren_tid_ptr,
             clone_flags,
         );
-        // thread::yield_now().await;
+        // process::thread::yield_now().await;
         log::info!("[sys_clone] clone a new thread, tid {:?}", new_tid);
         new_tid
     } else {

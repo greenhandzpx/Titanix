@@ -41,10 +41,6 @@ impl ProcessManager {
         self.0.lock().get(&INITPROC_PID).unwrap().upgrade().unwrap()
     }
 
-    pub fn init_proc_weak(&self) -> Weak<Process> {
-        self.0.lock().get(&INITPROC_PID).unwrap().clone()
-    }
-
     pub fn total_num(&self) -> usize {
         let mut cnt = 0;
         let mut pids: BTreeSet<usize> = BTreeSet::new();
