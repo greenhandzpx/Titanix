@@ -5,8 +5,14 @@
 
 ### redis benchmark 提前abort
 
-在测试benchmark的时候会在跑SET的测试的时候提前退出，但是如果多输出一些TCP的日志就可能顺利跑完，该问题可能是TCP close的问题，待修复
+在测试benchmark的时候会在跑SET的测试的时候提前退出，但是如果多输出一些TCP的日志就可能顺利跑完，该问题可能是TCP close的问题。
+
+发现是因为之前tcp设置了延迟以保证对于所有数据都可以完全发送到对端之后才返回，但是现在更改成只对大数据设置时延，小数据按照smoltcp的返回时刻返回，这样就可以顺利的跑完benchmark测试。
+我们猜测这是因为banchmark的测试对单个tcp的测试时间有限制，如果在指定时间内没有跑完指定数量的额tcp就会自动退出，redis会认为测试到了系统上限，后面的测试就没有必要进行了。
 
 ### 成果
 
 ![](fig/redis.png)
+
+![](fig/redis-benchmark-start.png)
+![](fig/redis-benchmark-end.png)

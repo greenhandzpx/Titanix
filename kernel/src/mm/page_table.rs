@@ -168,7 +168,6 @@ impl PageTable {
         }
     }
 
-
     /// Dump page table
     #[allow(unused)]
     pub fn dump(&self) {
