@@ -12,6 +12,7 @@ use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use super::PollFd;
+use crate::config::fs::PIPE_BUF_CAPACITY;
 use crate::config::mm::PAGE_SIZE;
 use crate::fs::ffi::{
     Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, SEEK_CUR, SEEK_END, SEEK_SET, STAT,
@@ -400,10 +401,9 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
         match dev {
             inode::InodeDevice::Device(dev) => {
                 kstat.st_dev = dev.dev_id as u64;
-            }
-            _ => {
-                return Err(SyscallErr::EBADF);
-            }
+            } // _ => {
+              //     return Err(SyscallErr::EBADF);
+              // }
         };
     } else {
         // TODO:
@@ -686,7 +686,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
 pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SyscallRet {
     stack_trace!();
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    let (pipe_read, pipe_write) = make_pipe(Some(flags));
+    let (pipe_read, pipe_write) = make_pipe::<PIPE_BUF_CAPACITY>(Some(flags));
 
     let (read_fd, write_fd) = current_process().inner_handler(move |proc| {
         let read_fd = proc.fd_table.alloc_fd()?;

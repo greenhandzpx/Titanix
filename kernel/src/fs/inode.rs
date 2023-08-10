@@ -27,7 +27,6 @@ use crate::{
 use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
-    pipe::Pipe,
     File, Mutex,
 };
 
@@ -641,7 +640,7 @@ impl InodeMeta {
 #[derive(Clone)]
 #[allow(unused)]
 pub enum InodeDevice {
-    Pipe(Arc<Pipe>),
+    // Pipe(Arc<Pipe>),
     Device(DevWrapper),
     // TODO: add more
 }

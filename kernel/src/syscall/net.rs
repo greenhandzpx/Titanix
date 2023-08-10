@@ -1,4 +1,5 @@
 use crate::{
+    config::mm::PAGE_SIZE,
     fs::{FdInfo, OpenFlags},
     mm::user_check::UserCheck,
     net::{
@@ -336,7 +337,7 @@ pub fn sys_socketpair(domain: u32, socket_type: u32, protocol: u32, sv: usize) -
     UserCheck::new().check_writable_slice(sv as *mut u8, len)?;
     let _sum_guard = SumGuard::new();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut u32, len) };
-    let (socket1, socket2) = make_unix_socket_pair();
+    let (socket1, socket2) = make_unix_socket_pair::<PAGE_SIZE>();
 
     let (fd1, fd2) = current_process().inner_handler(move |proc| {
         let fd1 = proc.fd_table.alloc_fd()?;

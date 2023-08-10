@@ -30,7 +30,7 @@ pub enum FsDevice {
 impl FsDevice {
     pub fn from_inode_device(dev: InodeDevice) -> Self {
         match dev {
-            InodeDevice::Pipe(_) => Self::None,
+            // InodeDevice::Pipe(_) => Self::None,
             InodeDevice::Device(d) => Self::BlockDevice(d.block_device),
         }
     }
