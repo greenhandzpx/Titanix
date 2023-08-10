@@ -120,7 +120,7 @@ impl File for Pipe {
 }
 
 impl Pipe {
-    pub fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+     fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
         let readable = flags.contains(OpenFlags::RDONLY);
         let writable = flags.contains(OpenFlags::WRONLY);
         let meta = FileMeta::new(super::InodeMode::FileFIFO);
@@ -167,7 +167,7 @@ enum RingBufferStatus {
     NORMAL,
 }
 
-pub struct PipeRingBuffer {
+ struct PipeRingBuffer {
     arr: [u8; PIPE_BUF_CAPACITY],
     head: usize,
     tail: usize,
@@ -179,7 +179,7 @@ pub struct PipeRingBuffer {
 }
 
 impl PipeRingBuffer {
-    pub fn new() -> Self {
+     fn new() -> Self {
         Self {
             arr: [0; PIPE_BUF_CAPACITY],
             head: 0,
@@ -192,15 +192,48 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
+     fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
         self.write_end = Some(Arc::downgrade(write_end));
     }
 
-    pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+     fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
         self.read_end = Some(Arc::downgrade(read_end));
     }
 
-    pub fn read_byte(&mut self) -> u8 {
+    fn read_range(&mut self, buf: &mut [u8]) -> usize {
+        self.status = RingBufferStatus::NORMAL;
+        let end = match self.tail > self.head {
+            true => self.tail,
+            false => PIPE_BUF_CAPACITY,
+        };
+        let ret = (end - self.head).min(buf.len());
+        let end = self.head + ret;
+        buf[..ret].copy_from_slice(&mut self.arr[self.head..end]);
+        self.head = end % PIPE_BUF_CAPACITY;
+        if self.head == self.tail {
+            self.status = RingBufferStatus::EMPTY;
+        }
+        ret
+    }
+
+    fn write_range(&mut self, buf: &[u8]) -> usize {
+        self.status = RingBufferStatus::NORMAL;
+        let end = match self.head > self.tail {
+            true => self.head,
+            false => PIPE_BUF_CAPACITY,
+        };
+        let ret = (end - self.tail).min(buf.len());
+        let end = self.tail + ret;
+        self.arr[self.tail..end].copy_from_slice(&buf[..ret]);
+        self.tail = end % PIPE_BUF_CAPACITY;
+        if self.tail == self.head {
+            self.status = RingBufferStatus::FULL;
+        }
+        ret
+    }
+
+    #[allow(unused)]
+    fn read_byte(&mut self) -> u8 {
         self.status = RingBufferStatus::NORMAL;
         let c = self.arr[self.head];
         self.head = (self.head + 1) % PIPE_BUF_CAPACITY;
@@ -210,7 +243,8 @@ impl PipeRingBuffer {
         c
     }
 
-    pub fn write_byte(&mut self, byte: u8) {
+    #[allow(unused)]
+    fn write_byte(&mut self, byte: u8) {
         self.status = RingBufferStatus::NORMAL;
         self.arr[self.tail] = byte;
         self.tail = (self.tail + 1) % PIPE_BUF_CAPACITY;
@@ -219,7 +253,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn available_read(&self) -> usize {
+     fn available_read(&self) -> usize {
         if self.status == RingBufferStatus::EMPTY {
             0
         } else {
@@ -231,7 +265,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn available_write(&self) -> usize {
+     fn available_write(&self) -> usize {
         if self.status == RingBufferStatus::FULL {
             0
         } else {
@@ -239,7 +273,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn all_write_ends_closed(&self) -> bool {
+     fn all_write_ends_closed(&self) -> bool {
         log::info!(
             "[all_write_end_closed] write end ref cnt {}",
             self.write_end.as_ref().unwrap().strong_count()
@@ -247,7 +281,7 @@ impl PipeRingBuffer {
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 
-    pub fn all_read_ends_closed(&self) -> bool {
+     fn all_read_ends_closed(&self) -> bool {
         debug!(
             "read end ref cnt {}",
             self.read_end.as_ref().unwrap().strong_count()
@@ -255,11 +289,11 @@ impl PipeRingBuffer {
         self.read_end.as_ref().unwrap().upgrade().is_none()
     }
 
-    pub fn wait_for_reading(&mut self, waker: Waker) {
+     fn wait_for_reading(&mut self, waker: Waker) {
         self.read_waiters.push(waker);
     }
 
-    pub fn wake(&mut self, for_reader: bool) {
+     fn wake(&mut self, for_reader: bool) {
         let queue = match for_reader {
             true => &mut self.read_waiters,
             false => &mut self.write_waiters,
@@ -271,7 +305,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn wait_for_writing(&mut self, waker: Waker) {
+     fn wait_for_writing(&mut self, waker: Waker) {
         self.write_waiters.push(waker);
     }
 }
@@ -359,13 +393,14 @@ impl Future for PipeFuture {
                         return Poll::Pending;
                     }
                 }
-                for _ in 0..loop_read {
-                    buf[this.already_put] = ring_buffer.read_byte();
-                    this.already_put += 1;
-                    if this.already_put == this.user_buf_len {
-                        break;
-                    }
-                }
+                this.already_put += ring_buffer.read_range(&mut buf[this.already_put..]);
+                // for _ in 0..loop_read {
+                //     buf[this.already_put] = ring_buffer.read_byte();
+                //     this.already_put += 1;
+                //     if this.already_put == this.user_buf_len {
+                //         break;
+                //     }
+                // }
                 ring_buffer.wake(false);
                 debug!("[PipeFuture::poll] read return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put));
@@ -390,13 +425,14 @@ impl Future for PipeFuture {
                     }
                 }
                 debug!("[PipeFuture::poll] available write {}", loop_write);
-                for _ in 0..loop_write {
-                    ring_buffer.write_byte(buf[this.already_put]);
-                    this.already_put += 1;
-                    if this.already_put == this.user_buf_len {
-                        break;
-                    }
-                }
+                this.already_put += ring_buffer.write_range(&buf[this.already_put..]);
+                // for _ in 0..loop_write {
+                //     ring_buffer.write_byte(buf[this.already_put]);
+                //     this.already_put += 1;
+                //     if this.already_put == this.user_buf_len {
+                //         break;
+                //     }
+                // }
                 ring_buffer.wake(true);
                 debug!("[PipeFuture::poll] write return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put));

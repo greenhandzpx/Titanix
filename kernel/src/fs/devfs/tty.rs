@@ -7,14 +7,13 @@ use crate::{
     mm::user_check::UserCheck,
     stack_trace,
     sync::mutex::SpinLock,
-    timer::{timeout_task::ksleep, POLL_QUEUE},
+    timer::{POLL_QUEUE},
     utils::error::{GeneralRet, SyscallRet},
 };
 use alloc::boxed::Box;
 use core::{
     sync::atomic::{AtomicU8, Ordering},
     task::Waker,
-    time::Duration,
 };
 
 use crate::{process, processor::SumGuard, sync::mutex::SleepLock, utils::error::AsyscallRet};
