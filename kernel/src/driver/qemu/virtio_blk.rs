@@ -33,6 +33,13 @@ impl BlockDevice for VirtIOBlock {
 impl VirtIOBlock {
     pub fn new() -> Self {
         unsafe {
+            log::info!(
+                "VIRTIO0: {:?}",
+                core::slice::from_raw_parts(
+                    VIRTIO0 as *const u8,
+                    core::mem::size_of::<VirtIOHeader>()
+                )
+            );
             let header = &mut *(VIRTIO0 as *mut VirtIOHeader);
             Self(SpinNoIrqLock::new(
                 VirtIOBlk::<VirtioHal>::new(header).unwrap(),

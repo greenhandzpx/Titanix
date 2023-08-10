@@ -44,6 +44,11 @@ impl<H: Hal> VirtQueue<'_, H> {
             return Err(Error::AlreadyUsed);
         }
         if !size.is_power_of_two() || header.max_queue_size() < size as u32 {
+            log::warn!(
+                "[VirtQueue] size {}, header max queue size {}",
+                size,
+                header.max_queue_size()
+            );
             return Err(Error::InvalidParam);
         }
         let layout = VirtQueueLayout::new(size);

@@ -15,7 +15,8 @@ pub const PERMISSION_RW: MapPermission = MapPermission::union(MapPermission::R, 
 
 pub const MMIO: &[(usize, usize, MapPermission)] = &[
     (0x10000000, 0x1000, PERMISSION_RW),   // UART
-    (0x10001000, 0x1000, PERMISSION_RW),   // VIRTIO
+    (0x10001000, 0x1000, PERMISSION_RW),   // VIRTIO0
+    (0x10004000, 0x1000, PERMISSION_RW),   // vIRTIO8
     (0x02000000, 0x10000, PERMISSION_RW),  // CLINT
     (0x0C000000, 0x400000, PERMISSION_RW), // PLIC
 ];

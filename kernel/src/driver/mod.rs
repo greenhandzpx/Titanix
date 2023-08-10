@@ -5,11 +5,14 @@ use core::{
     any::Any,
     fmt::{self, Write},
 };
-use smoltcp::wire::{EthernetAddress, IpAddress, IpEndpoint, Ipv4Address};
+use smoltcp::{
+    phy::{RxToken, TxToken},
+    wire::{EthernetAddress, IpAddress, IpEndpoint, Ipv4Address},
+};
 
 use self::{
     fu740::{sdcard::SDCardWrapper, uart::UartSerial},
-    qemu::{virtio_blk::VirtIOBlock, virtio_net::VirtIONetDriver},
+    qemu::{virtio_blk::VirtIOBlock, virtio_net::VirtIONetDevice},
     sbi::{console_putchar, SbiChar},
 };
 
@@ -35,26 +38,10 @@ pub trait CharDevice: Send + Sync {
     fn puts(&self, char: &[u8]);
 }
 
-// Net Device
-pub trait NetDevice: Send + Sync {
-    // get mac address for this device
-    fn get_mac(&self) -> EthernetAddress {
-        unimplemented!("not a net driver")
-    }
-    // manually trigger a poll, use it after sending packets
-    fn poll(&self) {
-        unimplemented!("not a net driver")
-    }
-
-    // send an ethernet frame, only use it when necessary
-    fn send(&self, _data: &[u8]) -> Option<usize> {
-        unimplemented!("not a net driver")
-    }
-}
-
 pub static BLOCK_DEVICE: Mutex<Option<Arc<dyn BlockDevice>>> = Mutex::new(None);
 pub static CHAR_DEVICE: Mutex<Option<Arc<dyn CharDevice>>> = Mutex::new(None);
-pub static NET_DEVICE: Mutex<Option<Arc<dyn NetDevice>>> = Mutex::new(None);
+#[cfg(not(feature = "board_u740"))]
+pub static NET_DEVICE: Mutex<Option<VirtIONetDevice>> = Mutex::new(None);
 
 fn init_block_device() {
     #[cfg(not(feature = "board_u740"))]
@@ -81,17 +68,18 @@ fn init_char_device() {
 fn init_net_device() {
     #[cfg(not(feature = "board_u740"))]
     {
-        // *NET_DEVICE.lock() = Some(Arc::new(::new()));
+        *NET_DEVICE.lock() = Some(VirtIONetDevice::new());
     }
     #[cfg(feature = "board_u740")]
     {
-        *CHAR_DEVICE.lock() = Some(Arc::new(SbiChar::new()));
+        *NET_DEVICE.lock() = Some(Arc::new(VirtIONetDevice::new()));
     }
 }
 
 pub fn init() {
     init_char_device();
     init_block_device();
+    // init_net_device();
     #[cfg(feature = "board_u740")]
     {
         fu740::plic::init_plic();

@@ -1,6 +1,7 @@
 use core::any::Any;
 
 use alloc::{format, string::String, sync::Arc};
+use log::info;
 use smoltcp::{
     phy::{self, DeviceCapabilities},
     time::Instant,
@@ -8,32 +9,18 @@ use smoltcp::{
 };
 use virtio_drivers::{DeviceType, VirtIOHeader, VirtIONet};
 
-use crate::{
-    driver::NetDevice,
-    sync::mutex::{SpinLock, SpinNoIrqLock},
-    utils::error::GeneralRet,
-};
+use crate::{sync::mutex::SpinLock, utils::error::GeneralRet};
 
-use super::VirtioHal;
+use super::{VirtioHal, VIRTIO8};
 
 type Mutex<T> = SpinLock<T>;
 
 #[derive(Clone)]
-pub struct VirtIONetDriver(Arc<Mutex<VirtIONet<'static, VirtioHal>>>);
+pub struct VirtIONetDevice(Arc<Mutex<VirtIONet<'static, VirtioHal>>>);
 
-impl NetDevice for VirtIONetDriver {
-    fn get_mac(&self) -> EthernetAddress {
-        EthernetAddress(self.0.lock().mac())
-    }
-
-    fn poll(&self) {
-        unimplemented!()
-    }
-}
-
-impl smoltcp::phy::Device for VirtIONetDriver {
-    type RxToken<'a> = VirtIONetDriver;
-    type TxToken<'a> = VirtIONetDriver;
+impl smoltcp::phy::Device for VirtIONetDevice {
+    type RxToken<'a> = VirtIONetDevice;
+    type TxToken<'a> = VirtIONetDevice;
 
     fn receive(&mut self, _ts: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         let net = self.0.lock();
@@ -61,7 +48,7 @@ impl smoltcp::phy::Device for VirtIONetDriver {
     }
 }
 
-impl phy::RxToken for VirtIONetDriver {
+impl phy::RxToken for VirtIONetDevice {
     fn consume<R, F>(self, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
@@ -73,7 +60,7 @@ impl phy::RxToken for VirtIONetDriver {
     }
 }
 
-impl phy::TxToken for VirtIONetDriver {
+impl phy::TxToken for VirtIONetDevice {
     fn consume<R, F>(self, len: usize, f: F) -> R
     where
         F: FnOnce(&mut [u8]) -> R,
@@ -86,7 +73,20 @@ impl phy::TxToken for VirtIONetDriver {
     }
 }
 
-pub fn init(header: &'static mut VirtIOHeader) {
-    let net = VirtIONet::new(header).expect("failed to create net driver");
-    let driver = Arc::new(VirtIONetDriver(Arc::new(Mutex::new(net))));
+impl VirtIONetDevice {
+    pub fn new() -> Self {
+        unsafe {
+            let header = &mut *(VIRTIO8 as *mut VirtIOHeader);
+            log::info!(
+                "VIRTIO8: {:?}",
+                core::slice::from_raw_parts(
+                    VIRTIO8 as *const u8,
+                    core::mem::size_of::<VirtIOHeader>()
+                )
+            );
+            let net = VirtIONet::<VirtioHal>::new(header).expect("failed to create net driver");
+            log::info!("VirtIONetDevice net header init");
+            Self(Arc::new(Mutex::new(net)))
+        }
+    }
 }

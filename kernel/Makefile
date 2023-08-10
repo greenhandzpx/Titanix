@@ -91,6 +91,7 @@ QFLAGS += -kernel $(KERNEL_BIN)
 # QFLAGS += -bios $(BOOTLOADER) 
 QFLAGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0 
 QFLAGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 
+QFLAGS += -device virtio-net-device,netdev=net0 -netdev user,id=net0
 
 
 
