@@ -14,7 +14,6 @@ type Mutex<T> = SpinNoIrqLock<T>;
 
 pub mod address;
 pub mod config;
-mod dhcp;
 mod tcp;
 mod udp;
 mod unix;
@@ -104,14 +103,6 @@ impl dyn Socket {
             }
             AF_UNIX => {
                 todo!()
-                // let socket = UnixSocket::new();
-                // let socket = Arc::new(Socket::UnixSocket(socket));
-                // current_process().inner_handler(|proc| {
-                //     let fd = proc.fd_table.alloc_fd()?;
-                //     proc.fd_table.put(fd, socket.clone());
-                //     proc.socket_table.insert(fd, socket);
-                //     Ok(fd)
-                // })
             }
             _ => Err(SyscallErr::EINVAL),
         }

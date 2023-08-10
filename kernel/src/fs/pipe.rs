@@ -19,7 +19,7 @@ use super::{Mutex, OpenFlags};
 pub struct Pipe {
     readable: bool,
     writable: bool,
-    buffer: Arc<Mutex<PipeRingBuffer>>,
+    buffers: Arc<[Mutex<PipeRingBuffer>; 2]>,
     meta: FileMeta,
 }
 
@@ -40,12 +40,7 @@ impl File for Pipe {
             async move {
                 // TODO: not sure event
                 match Select2Futures::new(
-                    PipeFuture::new(
-                        self.buffer.clone(),
-                        buf_addr,
-                        buf.len(),
-                        PipeOperation::Read,
-                    ),
+                    PipeFuture::new(&self.buffers, buf_addr, buf.len(), PipeOperation::Read),
                     current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
                 )
                 .await
@@ -66,12 +61,7 @@ impl File for Pipe {
         Box::pin(async move {
             // TODO: not sure event
             match Select2Futures::new(
-                PipeFuture::new(
-                    self.buffer.clone(),
-                    buf_addr,
-                    buf.len(),
-                    PipeOperation::Write,
-                ),
+                PipeFuture::new(&self.buffers, buf_addr, buf.len(), PipeOperation::Write),
                 current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
             )
             .await
@@ -87,53 +77,67 @@ impl File for Pipe {
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
         debug!("[Pipe::pollin] enter");
-        self.inner_handler(|ring_buffer| {
+        let f = |ring_buffer: &mut PipeRingBuffer| {
             if ring_buffer.available_read() > 0 {
                 Ok(true)
             } else if ring_buffer.all_write_ends_closed() {
                 Ok(true)
             } else {
-                debug!("[Pipe::pollin]: no available read");
-                if let Some(waker) = waker {
-                    ring_buffer.wait_for_reading(waker)
-                }
                 Ok(false)
             }
-        })
+        };
+        if !self.inner_handler0(f)? && !self.inner_handler1(f)? {
+            if let Some(waker) = waker {
+                self.inner_handler0(|ring_buffer| ring_buffer.wait_for_reading(waker))
+            }
+            debug!("[Pipe::pollin]: no available read");
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     }
 
     fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
-        self.inner_handler(|ring_buffer| {
+        let f = |ring_buffer: &mut PipeRingBuffer| {
             if ring_buffer.available_write() > 0 {
                 Ok(true)
             } else if ring_buffer.all_read_ends_closed() {
                 Ok(true)
             } else {
-                debug!("[Pipe::pollout]: no available write");
-                if let Some(waker) = waker {
-                    ring_buffer.wait_for_writing(waker)
-                }
                 Ok(false)
             }
-        })
+        };
+        if !self.inner_handler0(f)? && !self.inner_handler1(f)? {
+            if let Some(waker) = waker {
+                self.inner_handler0(|ring_buffer| ring_buffer.wait_for_writing(waker))
+            }
+            debug!("[Pipe::pollout]: no available write");
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     }
 }
 
 impl Pipe {
-    pub fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+    pub fn new(flags: OpenFlags, buffers: Arc<[Mutex<PipeRingBuffer>; 2]>) -> Self {
         let readable = flags.contains(OpenFlags::RDONLY);
         let writable = flags.contains(OpenFlags::WRONLY);
         let meta = FileMeta::new(super::InodeMode::FileFIFO);
         Self {
             readable,
             writable,
-            buffer,
+            buffers,
             meta,
         }
     }
 
-    fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
-        f(&mut self.buffer.lock())
+    fn inner_handler0<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
+        f(&mut self.buffers[0].lock())
+    }
+
+    fn inner_handler1<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
+        f(&mut self.buffers[1].lock())
     }
 }
 
@@ -143,24 +147,28 @@ impl Drop for Pipe {
         if self.writable {
             // Write end,
             // we should wake up all read waiters(if any)
-            let mut buffer = self.buffer.lock();
-            while !buffer.read_waiters.is_empty() {
-                let waker = buffer.read_waiters.pop().unwrap();
-                log::info!("[Pipe::drop] wake up");
-                waker.wake();
+            for buffer in self.buffers.iter() {
+                let mut buffer = buffer.lock();
+                while !buffer.read_waiters.is_empty() {
+                    let waker = buffer.read_waiters.pop().unwrap();
+                    log::info!("[Pipe::drop] wake up");
+                    waker.wake();
+                }
             }
         } else if self.readable {
-            let mut buffer = self.buffer.lock();
-            while !buffer.write_waiters.is_empty() {
-                let waker = buffer.write_waiters.pop().unwrap();
-                log::info!("[Pipe::drop] wake up");
-                waker.wake();
+            for buffer in self.buffers.iter() {
+                let mut buffer = buffer.lock();
+                while !buffer.write_waiters.is_empty() {
+                    let waker = buffer.write_waiters.pop().unwrap();
+                    log::info!("[Pipe::drop] wake up");
+                    waker.wake();
+                }
             }
         }
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum RingBufferStatus {
     FULL,
     EMPTY,
@@ -179,7 +187,7 @@ pub struct PipeRingBuffer {
 }
 
 impl PipeRingBuffer {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             arr: [0; PIPE_BUF_CAPACITY],
             head: 0,
@@ -192,15 +200,48 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
+    fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
         self.write_end = Some(Arc::downgrade(write_end));
     }
 
-    pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+    fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
         self.read_end = Some(Arc::downgrade(read_end));
     }
 
-    pub fn read_byte(&mut self) -> u8 {
+    fn read_range(&mut self, buf: &mut [u8]) -> usize {
+        self.status = RingBufferStatus::NORMAL;
+        let end = match self.tail > self.head {
+            true => self.tail,
+            false => PIPE_BUF_CAPACITY,
+        };
+        let ret = (end - self.head).min(buf.len());
+        let end = self.head + ret;
+        buf[..ret].copy_from_slice(&mut self.arr[self.head..end]);
+        self.head = end % PIPE_BUF_CAPACITY;
+        if self.head == self.tail {
+            self.status = RingBufferStatus::EMPTY;
+        }
+        ret
+    }
+
+    fn write_range(&mut self, buf: &[u8]) -> usize {
+        self.status = RingBufferStatus::NORMAL;
+        let end = match self.head > self.tail {
+            true => self.head,
+            false => PIPE_BUF_CAPACITY,
+        };
+        let ret = (end - self.tail).min(buf.len());
+        let end = self.tail + ret;
+        self.arr[self.tail..end].copy_from_slice(&buf[..ret]);
+        self.tail = end % PIPE_BUF_CAPACITY;
+        if self.tail == self.head {
+            self.status = RingBufferStatus::FULL;
+        }
+        ret
+    }
+
+    #[allow(unused)]
+    fn read_byte(&mut self) -> u8 {
         self.status = RingBufferStatus::NORMAL;
         let c = self.arr[self.head];
         self.head = (self.head + 1) % PIPE_BUF_CAPACITY;
@@ -210,7 +251,8 @@ impl PipeRingBuffer {
         c
     }
 
-    pub fn write_byte(&mut self, byte: u8) {
+    #[allow(unused)]
+    fn write_byte(&mut self, byte: u8) {
         self.status = RingBufferStatus::NORMAL;
         self.arr[self.tail] = byte;
         self.tail = (self.tail + 1) % PIPE_BUF_CAPACITY;
@@ -219,10 +261,16 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn available_read(&self) -> usize {
+    fn available_read(&self) -> usize {
         if self.status == RingBufferStatus::EMPTY {
             0
         } else {
+            log::debug!(
+                "[available_read] tail {}, head {}, status {:?}",
+                self.tail,
+                self.head,
+                self.status
+            );
             if self.tail > self.head {
                 self.tail - self.head
             } else {
@@ -231,7 +279,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn available_write(&self) -> usize {
+    fn available_write(&self) -> usize {
         if self.status == RingBufferStatus::FULL {
             0
         } else {
@@ -239,7 +287,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn all_write_ends_closed(&self) -> bool {
+    fn all_write_ends_closed(&self) -> bool {
         log::info!(
             "[all_write_end_closed] write end ref cnt {}",
             self.write_end.as_ref().unwrap().strong_count()
@@ -247,7 +295,7 @@ impl PipeRingBuffer {
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 
-    pub fn all_read_ends_closed(&self) -> bool {
+    fn all_read_ends_closed(&self) -> bool {
         debug!(
             "read end ref cnt {}",
             self.read_end.as_ref().unwrap().strong_count()
@@ -255,11 +303,11 @@ impl PipeRingBuffer {
         self.read_end.as_ref().unwrap().upgrade().is_none()
     }
 
-    pub fn wait_for_reading(&mut self, waker: Waker) {
+    fn wait_for_reading(&mut self, waker: Waker) {
         self.read_waiters.push(waker);
     }
 
-    pub fn wake(&mut self, for_reader: bool) {
+    fn wake(&mut self, for_reader: bool) {
         let queue = match for_reader {
             true => &mut self.read_waiters,
             false => &mut self.write_waiters,
@@ -271,7 +319,7 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn wait_for_writing(&mut self, waker: Waker) {
+    fn wait_for_writing(&mut self, waker: Waker) {
         self.write_waiters.push(waker);
     }
 }
@@ -279,16 +327,20 @@ impl PipeRingBuffer {
 /// Return (read_end, write_end)
 pub fn make_pipe(flags: Option<OpenFlags>) -> (Arc<Pipe>, Arc<Pipe>) {
     debug!("create a pipe");
-    let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
+    let buffer1 = Mutex::new(PipeRingBuffer::new());
+    let buffer2 = Mutex::new(PipeRingBuffer::new());
+    let buffers = Arc::new([buffer1, buffer2]);
     let flags = match flags {
         Some(flags) => flags,
         None => OpenFlags::empty(),
     };
-    let read_end = Arc::new(Pipe::new(flags | OpenFlags::RDONLY, buffer.clone()));
-    let write_end = Arc::new(Pipe::new(flags | OpenFlags::WRONLY, buffer.clone()));
+    let read_end = Arc::new(Pipe::new(flags | OpenFlags::RDONLY, buffers.clone()));
+    let write_end = Arc::new(Pipe::new(flags | OpenFlags::WRONLY, buffers.clone()));
 
-    buffer.lock().set_write_end(&write_end);
-    buffer.lock().set_read_end(&read_end);
+    buffers[0].lock().set_write_end(&write_end);
+    buffers[0].lock().set_read_end(&read_end);
+    buffers[1].lock().set_write_end(&write_end);
+    buffers[1].lock().set_read_end(&read_end);
     (read_end, write_end)
 }
 
@@ -298,24 +350,24 @@ enum PipeOperation {
     Write,
 }
 
-struct PipeFuture {
-    buffer: Arc<Mutex<PipeRingBuffer>>,
+struct PipeFuture<'a> {
+    buffers: &'a Arc<[Mutex<PipeRingBuffer>; 2]>,
     user_buf: usize,
     user_buf_len: usize,
     already_put: usize,
     operation: PipeOperation,
 }
 
-impl PipeFuture {
+impl<'a> PipeFuture<'a> {
     #[allow(unused)]
     pub fn new(
-        buffer: Arc<Mutex<PipeRingBuffer>>,
+        buffers: &'a Arc<[Mutex<PipeRingBuffer>; 2]>,
         user_buf: usize,
         user_buf_len: usize,
         operation: PipeOperation,
     ) -> Self {
         Self {
-            buffer,
+            buffers,
             user_buf,
             user_buf_len,
             already_put: 0,
@@ -324,84 +376,103 @@ impl PipeFuture {
     }
 }
 
-impl Future for PipeFuture {
+impl<'a> Future for PipeFuture<'a> {
     type Output = SyscallRet;
     fn poll(
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         stack_trace!();
-        // if current_task().is_zombie() {
-        //     return Poll::Ready(Ok(0));
-        // }
         let _sum_guard = SumGuard::new();
         if self.user_buf_len == 0 {
             return Poll::Ready(Ok(0));
         }
         let this = unsafe { self.get_unchecked_mut() };
-        let mut ring_buffer = this.buffer.lock();
         match this.operation {
             PipeOperation::Read => {
+                // let start_ts = current_time_duration();
                 debug!("[PipeFuture::poll] read");
                 let buf = unsafe {
                     core::slice::from_raw_parts_mut(this.user_buf as *mut u8, this.user_buf_len)
                 };
-                let loop_read = ring_buffer.available_read();
-                if loop_read == 0 {
-                    if ring_buffer.all_write_ends_closed() {
-                        // all of the buffer's write ends have
-                        // been closed, then just end reading
-                        log::info!("[PipeFuture::poll] all write ends has closed");
-                        return Poll::Ready(Ok(this.already_put));
-                    } else {
-                        ring_buffer.wait_for_reading(cx.waker().clone());
-                        log::info!("[PipeFuture::poll] nothing to read, wait...");
-                        return Poll::Pending;
-                    }
+                let mut buffer0 = this.buffers[0].lock();
+                let loop_read = buffer0.available_read();
+                if loop_read > 0 {
+                    this.already_put += buffer0.read_range(&mut buf[this.already_put..]);
                 }
-                for _ in 0..loop_read {
-                    buf[this.already_put] = ring_buffer.read_byte();
-                    this.already_put += 1;
-                    if this.already_put == this.user_buf_len {
-                        break;
+                debug!(
+                    "[PipeFuture::poll] read buffer0 finish, bytes {}, loop read {}",
+                    this.already_put, loop_read
+                );
+                buffer0.wake(false);
+                if this.already_put == this.user_buf_len {
+                    debug!("[PipeFuture::poll] read return {}", this.already_put);
+                    return Poll::Ready(Ok(this.already_put));
+                } else {
+                    drop(buffer0);
+                    let mut buffer1 = this.buffers[1].lock();
+                    let loop_read = buffer1.available_read();
+                    if loop_read == 0 && this.already_put == 0 {
+                        if buffer1.all_write_ends_closed() {
+                            // all of the buffer's write ends have
+                            // been closed, then just end reading
+                            log::info!("[PipeFuture::poll] all write ends has closed");
+                            return Poll::Ready(Ok(this.already_put));
+                        } else {
+                            this.buffers[0].lock().wait_for_reading(cx.waker().clone());
+                            log::info!("[PipeFuture::poll] nothing to read, wait...");
+                            return Poll::Pending;
+                        }
                     }
+                    if loop_read > 0 {
+                        this.already_put += buffer1.read_range(&mut buf[this.already_put..]);
+                    }
+                    debug!(
+                        "[PipeFuture::poll] read buffer1 finish, bytes {}",
+                        this.already_put
+                    );
+                    debug!("[PipeFuture::poll] read return {}", this.already_put);
+                    return Poll::Ready(Ok(this.already_put));
                 }
-                ring_buffer.wake(false);
-                debug!("[PipeFuture::poll] read return {}", this.already_put);
-                return Poll::Ready(Ok(this.already_put));
-                // ring_buffer.wait_for_reading(cx.waker().clone());
-                // return Poll::Pending;
             }
             PipeOperation::Write => {
                 debug!("[PipeFuture::poll] write");
+                // let start_ts = current_time_duration();
                 let buf = unsafe {
                     core::slice::from_raw_parts(this.user_buf as *const u8, this.user_buf_len)
                 };
-                let loop_write = ring_buffer.available_write();
-                if loop_write == 0 {
-                    if ring_buffer.all_read_ends_closed() {
-                        // all of the buffer's read ends have
-                        // been closed, then just end writing
-                        return Poll::Ready(Ok(this.already_put));
-                    } else {
-                        ring_buffer.wait_for_writing(cx.waker().clone());
-                        debug!("[PipeFuture::poll] no space to write, wait...");
-                        return Poll::Pending;
-                    }
+
+                let mut buffer0 = this.buffers[0].lock();
+                let loop_write = buffer0.available_write();
+                if loop_write > 0 {
+                    this.already_put += buffer0.write_range(&buf[this.already_put..]);
                 }
-                debug!("[PipeFuture::poll] available write {}", loop_write);
-                for _ in 0..loop_write {
-                    ring_buffer.write_byte(buf[this.already_put]);
-                    this.already_put += 1;
-                    if this.already_put == this.user_buf_len {
-                        break;
+                buffer0.wake(true);
+                if this.already_put == this.user_buf_len {
+                    debug!("[PipeFuture::poll] write return {}", this.already_put);
+                    return Poll::Ready(Ok(this.already_put));
+                } else {
+                    drop(buffer0);
+                    let mut buffer1 = this.buffers[1].lock();
+                    let loop_write = buffer1.available_write();
+                    if loop_write == 0 && this.already_put == 0 {
+                        if buffer1.all_read_ends_closed() {
+                            // all of the buffer's write ends have
+                            // been closed, then just end reading
+                            log::info!("[PipeFuture::poll] all read ends has closed");
+                            return Poll::Ready(Ok(this.already_put));
+                        } else {
+                            this.buffers[0].lock().wait_for_writing(cx.waker().clone());
+                            log::info!("[PipeFuture::poll] nothing to write, wait...");
+                            return Poll::Pending;
+                        }
                     }
+                    if loop_write > 0 {
+                        this.already_put += buffer1.write_range(&buf[this.already_put..]);
+                    }
+                    debug!("[PipeFuture::poll] write return {}", this.already_put);
+                    return Poll::Ready(Ok(this.already_put));
                 }
-                ring_buffer.wake(true);
-                debug!("[PipeFuture::poll] write return {}", this.already_put);
-                return Poll::Ready(Ok(this.already_put));
-                // ring_buffer.wait_for_writing(cx.waker().clone());
-                // return Poll::Pending;
             }
         }
     }
