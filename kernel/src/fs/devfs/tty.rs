@@ -7,7 +7,7 @@ use crate::{
     mm::user_check::UserCheck,
     stack_trace,
     sync::mutex::SpinLock,
-    timer::{POLL_QUEUE},
+    timer::POLL_QUEUE,
     utils::error::{GeneralRet, SyscallRet},
 };
 use alloc::boxed::Box;

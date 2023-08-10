@@ -120,7 +120,7 @@ impl File for Pipe {
 }
 
 impl Pipe {
-     fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+    fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
         let readable = flags.contains(OpenFlags::RDONLY);
         let writable = flags.contains(OpenFlags::WRONLY);
         let meta = FileMeta::new(super::InodeMode::FileFIFO);
@@ -167,7 +167,7 @@ enum RingBufferStatus {
     NORMAL,
 }
 
- struct PipeRingBuffer {
+struct PipeRingBuffer {
     arr: [u8; PIPE_BUF_CAPACITY],
     head: usize,
     tail: usize,
@@ -179,7 +179,7 @@ enum RingBufferStatus {
 }
 
 impl PipeRingBuffer {
-     fn new() -> Self {
+    fn new() -> Self {
         Self {
             arr: [0; PIPE_BUF_CAPACITY],
             head: 0,
@@ -192,11 +192,11 @@ impl PipeRingBuffer {
         }
     }
 
-     fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
+    fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
         self.write_end = Some(Arc::downgrade(write_end));
     }
 
-     fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+    fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
         self.read_end = Some(Arc::downgrade(read_end));
     }
 
@@ -253,7 +253,7 @@ impl PipeRingBuffer {
         }
     }
 
-     fn available_read(&self) -> usize {
+    fn available_read(&self) -> usize {
         if self.status == RingBufferStatus::EMPTY {
             0
         } else {
@@ -265,7 +265,7 @@ impl PipeRingBuffer {
         }
     }
 
-     fn available_write(&self) -> usize {
+    fn available_write(&self) -> usize {
         if self.status == RingBufferStatus::FULL {
             0
         } else {
@@ -273,7 +273,7 @@ impl PipeRingBuffer {
         }
     }
 
-     fn all_write_ends_closed(&self) -> bool {
+    fn all_write_ends_closed(&self) -> bool {
         log::info!(
             "[all_write_end_closed] write end ref cnt {}",
             self.write_end.as_ref().unwrap().strong_count()
@@ -281,7 +281,7 @@ impl PipeRingBuffer {
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 
-     fn all_read_ends_closed(&self) -> bool {
+    fn all_read_ends_closed(&self) -> bool {
         debug!(
             "read end ref cnt {}",
             self.read_end.as_ref().unwrap().strong_count()
@@ -289,11 +289,11 @@ impl PipeRingBuffer {
         self.read_end.as_ref().unwrap().upgrade().is_none()
     }
 
-     fn wait_for_reading(&mut self, waker: Waker) {
+    fn wait_for_reading(&mut self, waker: Waker) {
         self.read_waiters.push(waker);
     }
 
-     fn wake(&mut self, for_reader: bool) {
+    fn wake(&mut self, for_reader: bool) {
         let queue = match for_reader {
             true => &mut self.read_waiters,
             false => &mut self.write_waiters,
@@ -305,7 +305,7 @@ impl PipeRingBuffer {
         }
     }
 
-     fn wait_for_writing(&mut self, waker: Waker) {
+    fn wait_for_writing(&mut self, waker: Waker) {
         self.write_waiters.push(waker);
     }
 }
