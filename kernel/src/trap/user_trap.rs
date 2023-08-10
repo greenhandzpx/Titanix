@@ -168,6 +168,9 @@ pub async fn trap_handler() {
             // );
             thread::yield_now().await;
         }
+        Trap::Interrupt(Interrupt::SupervisorExternal) => {
+            crate::driver::intr_handler();
+        }
         _ => {
             panic!(
                 "Unsupported trap {:?}, stval = {:#x}!, sepc = {:#x}",

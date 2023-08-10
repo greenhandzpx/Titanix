@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{stack_trace, sync::mutex::SpinNoIrqLock};
+use crate::{println, processor::hart::local_hart, stack_trace, sync::mutex::SpinNoIrqLock};
 use alloc::sync::Arc;
 use core::{
     any::Any,
@@ -7,19 +7,40 @@ use core::{
 };
 
 use self::{
-    fu740::{sdcard::SDCardWrapper, uart::UartSerial},
+    fu740::{sdcard::SDCard, uart::UART},
+    plic::{initplic, PLIC},
     qemu::virtio_blk::VirtIOBlock,
     sbi::{console_putchar, SbiChar},
 };
 
 pub mod fu740;
+pub mod plic;
 pub mod qemu;
 pub mod sbi;
-pub mod plic;
 
 type Mutex<T> = SpinNoIrqLock<T>;
 
 static PRINT_MUTEX: Mutex<()> = Mutex::new(());
+
+pub fn intr_handler() {
+    let mut plic = PLIC::new(0xffff_ffc0_0c00_0000);
+    let hart_id = local_hart().hart_id();
+    let context_id = hart_id * 2;
+    let intr = plic.claim(context_id);
+    if intr != 0 {
+        #[cfg(feature = "board_u740")]
+        match intr {
+            39 => { // uart
+            }
+            _ => {
+                panic!("unexpected interrupt {}", intr);
+            }
+        }
+        #[cfg(feature = "board_qemu")]
+        match intr {}
+        plic.complete(context_id, intr);
+    }
+}
 
 // Block Device
 pub trait BlockDevice: Send + Sync + Any {
@@ -48,7 +69,7 @@ fn init_block_device() {
     }
     #[cfg(feature = "board_u740")]
     {
-        *BLOCK_DEVICE.lock() = Some(Arc::new(SDCardWrapper::new()));
+        *BLOCK_DEVICE.lock() = Some(Arc::new(SDCard::new(0xffff_ffc0_1005_0000)));
     }
 }
 
@@ -59,18 +80,14 @@ fn init_char_device() {
     }
     #[cfg(feature = "board_u740")]
     {
-        *CHAR_DEVICE.lock() = Some(Arc::new(SbiChar::new()));
+        *CHAR_DEVICE.lock() = Some(Arc::new(UART::new(0xffff_ffc0_1001_0000)));
     }
 }
 
 pub fn init() {
+    initplic(0xffff_ffc0_0c00_0000);
     init_char_device();
     init_block_device();
-    #[cfg(feature = "board_u740")]
-    {
-        fu740::plic::init_plic();
-        // fu740::prci::init_prci();
-    }
 }
 
 struct Stdout;

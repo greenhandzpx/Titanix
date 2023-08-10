@@ -1,5 +1,5 @@
-use core::{ops::BitAnd, panic};
 use alloc::sync::Arc;
+use core::{ops::BitAnd, panic};
 
 use crate::{driver::Mutex, println, sync::mutex::SpinNoIrqLock, utils::error::GeneralRet};
 
@@ -18,7 +18,9 @@ impl PLIC {
         unsafe { self.priority_ptr(intr_id).read_volatile() & 7 }
     }
     pub fn set_priority(&mut self, intr_id: usize, priority: u32) {
-        unsafe { self.priority_ptr(intr_id).write_volatile(priority & 7); }
+        unsafe {
+            self.priority_ptr(intr_id).write_volatile(priority & 7);
+        }
     }
     fn pending_ptr(&self, intr_id: usize) -> *mut u32 {
         (self.base_addr + 0x1000 + 4 * (intr_id / 32)) as *mut u32
@@ -30,7 +32,9 @@ impl PLIC {
         (self.base_addr + 0x2000 + 0x80 * context_id + 4 * (intr_id / 32)) as *mut u32
     }
     pub fn intr_enable(&self, intr_id: usize, context_id: usize) -> bool {
-        unsafe { ((self.intr_enable_ptr(intr_id, context_id).read_volatile() >> (intr_id % 32)) & 1) == 1 }
+        unsafe {
+            ((self.intr_enable_ptr(intr_id, context_id).read_volatile() >> (intr_id % 32)) & 1) == 1
+        }
     }
     pub fn set_intr_enable(&mut self, intr_id: usize, context_id: usize) {
         let ptr = self.intr_enable_ptr(intr_id, context_id);
@@ -53,16 +57,29 @@ impl PLIC {
         unsafe { self.threshold_ptr(context_id).read_volatile() & 7 }
     }
     pub fn set_threshold(&mut self, context_id: usize, threshold: u32) {
-        unsafe { self.threshold_ptr(context_id).write_volatile(threshold & 7); }
+        unsafe {
+            self.threshold_ptr(context_id).write_volatile(threshold & 7);
+        }
     }
     fn claim_complete_ptr(&self, context_id: usize) -> *mut u32 {
         (self.base_addr + 0x200000 + 0x1000 * context_id + 4) as *mut u32
     }
-    fn claim(&mut self, context_id: usize) -> usize {
+    pub fn claim(&mut self, context_id: usize) -> usize {
         unsafe { self.claim_complete_ptr(context_id).read_volatile() as usize }
     }
-    fn complete(&mut self, context_id: usize, intr_id: usize) {
-        unsafe { self.claim_complete_ptr(context_id).write_volatile(intr_id as u32); }
+    pub fn complete(&mut self, context_id: usize, intr_id: usize) {
+        unsafe {
+            self.claim_complete_ptr(context_id)
+                .write_volatile(intr_id as u32);
+        }
     }
-    
+}
+
+pub fn initplic(base_addr: usize) {
+    let mut plic = PLIC::new(base_addr);
+    for context in 0..=8 {
+        plic.set_intr_enable(39, context);
+        plic.set_threshold(context, 0);
+    }
+    plic.set_priority(39, 1);
 }
