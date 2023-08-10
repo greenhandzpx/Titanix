@@ -1,6 +1,5 @@
-use fu740_pac::uart0::rxctrl;
-
-use crate::{driver::CharDevice, println};
+#![allow(unused)]
+use crate::driver::CharDevice;
 
 pub struct UART {
     base_addr: usize,
@@ -8,7 +7,9 @@ pub struct UART {
 
 impl UART {
     pub fn new(base_addr: usize) -> Self {
-        Self { base_addr }
+        let ret = Self { base_addr };
+        ret.init();
+        ret
     }
     fn txdata_ptr(&self) -> *mut u32 {
         self.base_addr as *mut u32
@@ -37,8 +38,8 @@ impl UART {
             // set ie rxwm enable, num_entries > rxcnt
             // set ie txwm enable, num_entries < txcnt
             // when rx is not empty, send intr
-            // when tx is empty, send intr
-            self.ie_ptr().write_volatile(3);
+            // when tx is empty, send intr, why? close it!
+            self.ie_ptr().write_volatile(2);
             self.set_rxcnt(0);
             self.set_txcnt(1);
         }

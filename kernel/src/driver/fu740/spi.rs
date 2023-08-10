@@ -1,3 +1,4 @@
+#![allow(unused)]
 pub struct SPI {
     base_addr: usize,
 }
@@ -57,7 +58,7 @@ impl SPI {
     pub fn init(&self) {
         unsafe {
             // set ie txwm | rxwm
-            self.ie_ptr().write_volatile(3);
+            self.ie_ptr().write_volatile(2);
             // set delay0 cssck = 1, sckcs = 1
             self.delay0_ptr().write_volatile((1 << 16) | 1);
             // disable directly memory-mapped mode

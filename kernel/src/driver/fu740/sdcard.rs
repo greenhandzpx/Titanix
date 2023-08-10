@@ -1,3 +1,4 @@
+#![allow(unused)]
 use super::spi::SPI;
 use crate::{driver::BlockDevice, println, sync::mutex::SpinNoIrqLock};
 use async_task::spawn_unchecked;

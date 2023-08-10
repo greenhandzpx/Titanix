@@ -1,7 +1,11 @@
+#![allow(unused)]
+
 use alloc::sync::Arc;
 use core::{ops::BitAnd, panic};
 
 use crate::{driver::Mutex, println, sync::mutex::SpinNoIrqLock, utils::error::GeneralRet};
+
+use super::fu740::IntrSource;
 
 pub struct PLIC {
     base_addr: usize,
@@ -75,11 +79,17 @@ impl PLIC {
     }
 }
 
+#[cfg(feature = "board_u740")]
 pub fn initplic(base_addr: usize) {
     let mut plic = PLIC::new(base_addr);
     for context in 0..=8 {
-        plic.set_intr_enable(39, context);
         plic.set_threshold(context, 0);
+        plic.set_intr_enable(IntrSource::UART0 as usize, context);
+        plic.set_intr_enable(IntrSource::SPI2 as usize, context);
     }
-    plic.set_priority(39, 1);
+    plic.set_priority(IntrSource::UART0 as usize, 1);
+    plic.set_priority(IntrSource::SPI2 as usize, 1);
 }
+
+#[cfg(not(feature = "board_u740"))]
+pub fn initplic(base_addr: usize) {}

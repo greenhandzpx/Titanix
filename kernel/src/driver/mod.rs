@@ -7,7 +7,7 @@ use core::{
 };
 
 use self::{
-    fu740::{sdcard::SDCard, uart::UART},
+    fu740::{sdcard::SDCard, uart::UART, IntrSource},
     plic::{initplic, PLIC},
     qemu::virtio_blk::VirtIOBlock,
     sbi::{console_putchar, SbiChar},
@@ -29,8 +29,14 @@ pub fn intr_handler() {
     let intr = plic.claim(context_id);
     if intr != 0 {
         #[cfg(feature = "board_u740")]
-        match intr {
-            39 => { // uart
+        match From::<usize>::from(intr) {
+            IntrSource::UART0 => {
+                // uart
+                log::info!("receive uart0 intr");
+            }
+            IntrSource::SPI2 => {
+                // sdcard
+                log::info!("receive spi2 intr");
             }
             _ => {
                 panic!("unexpected interrupt {}", intr);
@@ -39,6 +45,8 @@ pub fn intr_handler() {
         #[cfg(feature = "board_qemu")]
         match intr {}
         plic.complete(context_id, intr);
+    } else {
+        log::info!("didn't claim any intr");
     }
 }
 
@@ -88,6 +96,9 @@ pub fn init() {
     initplic(0xffff_ffc0_0c00_0000);
     init_char_device();
     init_block_device();
+    unsafe {
+        riscv::register::sie::set_sext();
+    }
 }
 
 struct Stdout;
