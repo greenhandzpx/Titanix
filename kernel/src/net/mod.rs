@@ -14,7 +14,6 @@ type Mutex<T> = SpinNoIrqLock<T>;
 
 pub mod address;
 pub mod config;
-mod dhcp;
 mod tcp;
 mod udp;
 mod unix;

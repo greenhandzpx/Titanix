@@ -4,7 +4,7 @@ use crate::{driver::NET_DEVICE, sync::mutex::SpinNoIrqLock, timer::current_time_
 use alloc::vec;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
-    phy::{Device, Loopback, Medium},
+    phy::{Device, Medium},
     socket::{tcp, udp, AnySocket},
     time::Instant,
     wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address},

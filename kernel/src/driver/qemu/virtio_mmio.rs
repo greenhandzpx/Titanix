@@ -5,6 +5,7 @@ use crate::mm::memory_space::phys_to_virt;
 
 use super::VirtioHal;
 
+#[allow(unused)]
 pub fn virtio_probe(node: &Node) {
     let reg = match node.prop_raw("rag") {
         Some(reg) => reg,

@@ -6,7 +6,7 @@ use core::{
     fmt::{self, Write},
 };
 use smoltcp::{
-    phy::{RxToken, TxToken},
+    phy::{RxToken, TxToken, Loopback},
     wire::{EthernetAddress, IpAddress, IpEndpoint, Ipv4Address},
 };
 
@@ -43,6 +43,8 @@ pub static BLOCK_DEVICE: Mutex<Option<Arc<dyn BlockDevice>>> = Mutex::new(None);
 pub static CHAR_DEVICE: Mutex<Option<Arc<dyn CharDevice>>> = Mutex::new(None);
 #[cfg(not(feature = "board_u740"))]
 pub static NET_DEVICE: Mutex<Option<VirtIONetDevice>> = Mutex::new(None);
+#[cfg(feature = "board_u740")]
+pub static NET_DEVICE: Mutex<Option<Loopback>> = Mutex::new(None);
 
 fn init_block_device() {
     #[cfg(not(feature = "board_u740"))]
@@ -73,14 +75,10 @@ fn init_net_device() {
     }
     #[cfg(feature = "board_u740")]
     {
-        *NET_DEVICE.lock() = Some(Arc::new(VirtIONetDevice::new()));
+        *NET_DEVICE.lock() = Some(Arc::new(Loopback::new(smoltcp::phy::Medium::Ethernet)));
     }
 }
 
-struct DtbHeader {
-    magic: u32,
-    size: u32,
-}
 pub fn init(dtb: usize) {
     let dtb = phys_to_virt(dtb);
     device_tree::init(dtb);
