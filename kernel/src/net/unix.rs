@@ -2,20 +2,20 @@ use super::Socket;
 use crate::{
     fs::{
         pipe::{make_pipe, Pipe},
-        File, FileMeta,
+        File, FileMeta, OpenFlags,
     },
     utils::error::{AsyscallRet, SyscallErr},
 };
 use alloc::{boxed::Box, sync::Arc};
 use smoltcp::wire::IpEndpoint;
 
-pub struct UnixSocket {
+pub struct UnixSocket<const N: usize> {
     file_meta: FileMeta,
-    read_end: Arc<Pipe>,
-    write_end: Arc<Pipe>,
+    read_end: Arc<Pipe<N>>,
+    write_end: Arc<Pipe<N>>,
 }
 
-impl Socket for UnixSocket {
+impl<const N: usize> Socket for UnixSocket<N> {
     fn bind(&self, _addr: smoltcp::wire::IpListenEndpoint) -> crate::utils::error::SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
@@ -68,10 +68,14 @@ impl Socket for UnixSocket {
     fn set_nagle_enabled(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
+
+    fn set_keep_alive(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
+        Err(SyscallErr::EOPNOTSUPP)
+    }
 }
 
-impl UnixSocket {
-    pub fn new(read_end: Arc<Pipe>, write_end: Arc<Pipe>) -> Self {
+impl<const N: usize> UnixSocket<N> {
+    pub fn new(read_end: Arc<Pipe<N>>, write_end: Arc<Pipe<N>>) -> Self {
         Self {
             file_meta: FileMeta::new(crate::fs::InodeMode::FileSOCK),
             // buf: Mutex::new(VecDeque::new()),
@@ -80,21 +84,21 @@ impl UnixSocket {
         }
     }
 }
-impl File for UnixSocket {
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+impl<const N: usize> File for UnixSocket<N> {
+    fn read<'a>(&'a self, buf: &'a mut [u8], flags: OpenFlags) -> AsyscallRet {
         log::info!("[UnixSocket::read] start to read {} bytes...", buf.len());
-        self.read_end.read(buf)
+        self.read_end.read(buf, flags)
     }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> AsyscallRet {
         log::info!("[UnixSocket::write] start to write {} bytes...", buf.len());
-        self.write_end.write(buf)
+        self.write_end.write(buf, flags)
     }
     fn metadata(&self) -> &FileMeta {
         &self.file_meta
     }
 }
 
-pub fn make_unix_socket_pair() -> (Arc<UnixSocket>, Arc<UnixSocket>) {
+pub fn make_unix_socket_pair<const N: usize>() -> (Arc<UnixSocket<N>>, Arc<UnixSocket<N>>) {
     let (read1, write1) = make_pipe(None);
     let (read2, write2) = make_pipe(None);
     let socket1 = Arc::new(UnixSocket::new(read1, write2));

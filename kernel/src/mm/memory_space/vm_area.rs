@@ -199,6 +199,7 @@ impl VmArea {
     }
 
     /// Unmap a page
+    #[allow(unused)]
     pub fn unmap_one(&mut self, vpn: VirtPageNum) {
         stack_trace!();
         let page_table = self.page_table.get_unchecked_mut();
@@ -208,6 +209,7 @@ impl VmArea {
         page_table.unmap(vpn);
     }
     /// Some of the pages don't have correlated phyiscal frame
+    #[allow(unused)]
     pub fn unmap_one_lazily(&mut self, vpn: VirtPageNum) {
         stack_trace!();
         let page_table = self.page_table.get_unchecked_mut();
@@ -226,6 +228,7 @@ impl VmArea {
     }
 
     /// Unmap all pages this vma owns
+    #[allow(unused)]
     pub fn unmap(&mut self) {
         for vpn in self.vpn_range {
             self.unmap_one(vpn);
@@ -233,6 +236,7 @@ impl VmArea {
     }
 
     /// Some of the pages don't have correlated phyiscal frame
+    #[allow(unused)]
     pub fn unmap_lazily(&mut self) {
         for vpn in self.vpn_range {
             self.unmap_one_lazily(vpn);
@@ -274,6 +278,7 @@ impl VmArea {
     }
     /// Data: start-aligned but maybe with shorter length.
     /// Assume that all frames were cleared before.
+    #[allow(unused)]
     pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8]) {
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;

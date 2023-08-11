@@ -11,6 +11,7 @@ pub type AsyscallRet<'a> = SysFuture<'a, SyscallRet>;
 pub type AgeneralRet<'a, T> = SysFuture<'a, GeneralRet<T>>;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[allow(dead_code)]
 pub enum SyscallErr {
     EUNDEF = 0,
     EPERM = 1,

@@ -3,7 +3,7 @@ use alloc::{sync::Arc, vec::Vec};
 use crate::{
     config::process::INITPROC_PID,
     driver::getchar,
-    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex},
+    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
     mm::user_check::UserCheck,
     stack_trace,
     sync::mutex::SpinLock,
@@ -82,6 +82,8 @@ const TCSETAW: usize = 0x5407;
 /// Sets the serial port settings after flushing the input and output buffers.
 #[allow(unused)]
 const TCSETAF: usize = 0x5408;
+/// If the terminal is using asynchronous serial data transmission, and arg is zero, then send a break (a stream of zero bits) for between 0.25 and 0.5 seconds.
+const TCSBRK: usize = 0x5409;
 /// Get the process group ID of the foreground process group on this terminal.
 const TIOCGPGRP: usize = 0x540F;
 /// Set the foreground process group ID of this terminal.
@@ -167,7 +169,7 @@ impl File for TtyFile {
         &self.metadata
     }
 
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         // println!("[TtyFile::read] read...");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -182,6 +184,7 @@ impl File for TtyFile {
                         break;
                     }
                     c = getchar();
+                    // log::error!("stdin read a char {}", c);
                     // debug!("stdin read a char {}", c);
                     if c as i8 == -1 {
                         process::yield_now().await;
@@ -201,7 +204,7 @@ impl File for TtyFile {
         })
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         // println!("[TtyFile::write] buf {:?}...", buf);
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -308,6 +311,7 @@ impl File for TtyFile {
                 }
                 Ok(0)
             }
+            TCSBRK => Ok(0),
             _ => todo!(),
         }
     }

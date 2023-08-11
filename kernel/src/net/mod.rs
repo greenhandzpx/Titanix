@@ -14,7 +14,6 @@ type Mutex<T> = SpinNoIrqLock<T>;
 
 pub mod address;
 pub mod config;
-mod dhcp;
 mod tcp;
 mod udp;
 mod unix;
@@ -65,6 +64,7 @@ pub trait Socket: File {
     fn remote_endpoint(&self) -> Option<IpEndpoint>;
     fn shutdown(&self, how: u32) -> GeneralRet<()>;
     fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet;
+    fn set_keep_alive(&self, enabled: bool) -> SyscallRet;
 }
 
 impl dyn Socket {

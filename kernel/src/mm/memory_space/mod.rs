@@ -124,6 +124,7 @@ impl MemorySpace {
     }
 
     /// Get pagetable `root_ppn`
+    #[allow(unused)]
     pub fn token(&self) -> usize {
         self.page_table.get_unchecked_mut().token()
     }
@@ -292,6 +293,7 @@ impl MemorySpace {
     }
 
     /// Assume that no conflicts.
+    #[allow(unused)]
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr,
@@ -316,6 +318,7 @@ impl MemorySpace {
     }
 
     /// Insert framed area without allocating physical memory
+    #[allow(unused)]
     pub fn insert_framed_area_lazily(
         &mut self,
         start_va: VirtAddr,
@@ -340,12 +343,14 @@ impl MemorySpace {
     }
 
     ///Remove `VmArea` that starts with `start_vpn`
+    #[allow(unused)]
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some(area) = self.areas.get_unchecked_mut().get_mut(&start_vpn) {
             area.unmap_lazily();
             self.areas.get_unchecked_mut().remove(&start_vpn);
         }
     }
+
     /// Add the map area to memory set and map the map area(allocating physical frames)
     fn push(&mut self, mut vm_area: VmArea, data_offset: usize, data: Option<&[u8]>) {
         stack_trace!();
@@ -880,6 +885,7 @@ impl MemorySpace {
     }
 
     ///Clone a same `MemorySpace`
+    #[allow(unused)]
     pub fn from_existed_user(user_space: &Self) -> Self {
         stack_trace!();
         // let mut memory_space = Self::new_bare();
@@ -1002,7 +1008,9 @@ impl MemorySpace {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         unsafe { (*self.page_table.get()).translate(vpn) }
     }
+
     ///Remove all `VmArea`
+    #[allow(unused)]
     pub fn recycle_data_pages(&mut self) {
         //*self = Self::new_bare();
         self.areas.get_unchecked_mut().clear();
@@ -1143,6 +1151,7 @@ impl MemorySpace {
 /// map type for memory set: identical or framed
 pub enum MapType {
     /// vpn == ppn
+    #[allow(unused)]
     Identical,
     /// vpn == ppn + offset
     Direct,

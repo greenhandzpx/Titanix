@@ -12,6 +12,7 @@ use inode::InodeState;
 use log::{debug, info, trace, warn};
 
 use super::PollFd;
+use crate::config::fs::PIPE_BUF_CAPACITY;
 use crate::config::mm::PAGE_SIZE;
 use crate::fs::ffi::{
     Dirent, FdSet, StatFlags, Statfs, Sysinfo, FD_SET_LEN, SEEK_CUR, SEEK_END, SEEK_SET, STAT,
@@ -199,34 +200,16 @@ pub fn sys_mount(
     }
     // Check and convert the arguments.
     let dev_name = path::path_process(AT_FDCWD, dev_name)?;
-    if dev_name.is_none() {
-        return Err(SyscallErr::EMFILE);
-    }
-    let dev_name = dev_name.unwrap();
 
     let target_path = path::path_process(AT_FDCWD, target_path)?;
-    if target_path.is_none() {
-        return Err(SyscallErr::ENOENT);
-    }
-    let target_path = target_path.unwrap();
+
     let target_inode = <dyn Inode>::lookup_from_root(&target_path)?.0;
     if target_inode.is_none() {
         return Err(SyscallErr::EACCES);
     }
 
     let ftype = path::path_process(AT_FDCWD, ftype)?;
-    let ftype = {
-        if ftype.is_some() {
-            let ftype = ftype.unwrap();
-            let ftype = FileSystemType::fs_type(&ftype);
-            if ftype.is_none() {
-                return Err(SyscallErr::ENODEV);
-            }
-            ftype.unwrap()
-        } else {
-            FileSystemType::fs_type("vfat").unwrap()
-        }
-    };
+    let ftype = FileSystemType::fs_type(&ftype);
 
     let dev = <dyn Inode>::lookup_from_root(&dev_name)?.0;
     let dev = match dev {
@@ -244,10 +227,6 @@ pub fn sys_mount(
 pub async fn sys_umount(target_path_ptr: usize, _flags: u32) -> SyscallRet {
     stack_trace!();
     let target_path = path::path_process(AT_FDCWD, target_path_ptr as *const u8)?;
-    if target_path.is_none() {
-        return Err(SyscallErr::ENOENT);
-    }
-    let target_path = target_path.unwrap();
     if target_path == "/" {
         return Err(SyscallErr::EPERM);
     }
@@ -344,7 +323,12 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(path)?;
     let path = &c_str_to_string(path);
-    let target_inode = <dyn Inode>::lookup_from_root(path)?.0;
+    log::info!("[sys_chdir] path {}", path);
+    let path = path::change_relative_to_absolute(
+        &path,
+        &current_process().inner_handler(move |proc| proc.cwd.clone()),
+    );
+    let target_inode = <dyn Inode>::lookup_from_root(&path)?.0;
     match target_inode {
         Some(target_inode) => {
             let mut inner_lock = target_inode.metadata().inner.lock();
@@ -417,10 +401,9 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
         match dev {
             inode::InodeDevice::Device(dev) => {
                 kstat.st_dev = dev.dev_id as u64;
-            }
-            _ => {
-                return Err(SyscallErr::EBADF);
-            }
+            } // _ => {
+              //     return Err(SyscallErr::EBADF);
+              // }
         };
     } else {
         // TODO:
@@ -568,7 +551,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SyscallRet {
     UserCheck::new().check_readable_slice(buf as *const u8, len)?;
     let buf = unsafe { core::slice::from_raw_parts(buf as *const u8, len) };
     // debug!("[sys_write]: start to write file, fd {}, buf {:?}", fd, buf);
-    let ret = file.write(buf).await?;
+    let ret = file.write(buf, fd_info.flags).await?;
     trace!("[sys_write] write len {}", ret);
     // if ret > 0 {
     //     log::debug!("[sys_write] buf[0]: [{}]", buf[0]);
@@ -619,7 +602,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_len: {}", iov_len);
         UserCheck::new().check_readable_slice(iov_base as *const u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts(iov_base as *const u8, iov_len) };
-        let write_ret = file.write(buf).await?;
+        let write_ret = file.write(buf, fd_info.flags).await?;
         ret += write_ret as usize;
     }
     trace!("[sys_writev] write {} len", ret);
@@ -658,7 +641,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SyscallRet {
         trace!("get iov_len: {}", iov_len);
         UserCheck::new().check_writable_slice(iov_base as *mut u8, iov_len)?;
         let buf = unsafe { core::slice::from_raw_parts_mut(iov_base as *mut u8, iov_len) };
-        let read_ret = file.read(buf).await?;
+        let read_ret = file.read(buf, fd_info.flags).await?;
         ret += read_ret as usize;
     }
     trace!("[sys_readv] read {} len", ret);
@@ -690,7 +673,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
 
-    let ret = file.read(buf).await?;
+    let ret = file.read(buf, fd_info.flags).await?;
     trace!("[sys_read] read len {}", ret);
     Ok(ret)
     // if buf.len() < 2 {
@@ -703,7 +686,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallRet {
 pub fn sys_pipe2(pipe: *mut i32, flags: u32) -> SyscallRet {
     stack_trace!();
     let flags = OpenFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
-    let (pipe_read, pipe_write) = make_pipe(Some(flags));
+    let (pipe_read, pipe_write) = make_pipe::<PIPE_BUF_CAPACITY>(Some(flags));
 
     let (read_fd, write_fd) = current_process().inner_handler(move |proc| {
         let read_fd = proc.fd_table.alloc_fd()?;
@@ -823,7 +806,7 @@ pub async fn sys_sendfile(
 
     let mut buf = vec![0 as u8; count];
     let nbytes = match offset_ptr {
-        0 => input_file.file.read(&mut buf).await?,
+        0 => input_file.file.read(&mut buf, input_file.flags).await?,
         _ => {
             UserCheck::new()
                 .check_readable_slice(offset_ptr as *const u8, core::mem::size_of::<usize>())?;
@@ -841,7 +824,10 @@ pub async fn sys_sendfile(
         }
     };
     info!("[sys_sendfile]: read {} bytes from inputfile", nbytes);
-    let ret = output_file.file.write(&buf[0..nbytes as usize]).await;
+    let ret = output_file
+        .file
+        .write(&buf[0..nbytes as usize], output_file.flags)
+        .await;
     debug!("[sys_sendfile]: finished");
     ret
 }
@@ -1111,15 +1097,10 @@ pub fn sys_faccessat(dirfd: isize, pathname: *const u8, mode: u32, flags: u32) -
     }
 }
 
-pub fn sys_statfs(path: *const u8, buf: *mut Statfs) -> SyscallRet {
+pub fn sys_statfs(_path: *const u8, buf: *mut Statfs) -> SyscallRet {
     stack_trace!();
     UserCheck::new().check_writable_slice(buf as *mut u8, STATFS_SIZE)?;
     let _sum_guard = SumGuard::new();
-    let path = path::path_process(AT_FDCWD, path)?;
-    if path.is_none() {
-        debug!("[sys_statfs] path does not exist");
-        return Err(SyscallErr::ENOENT);
-    }
     let stfs = Statfs::new();
     // TODO: find the target fs
     unsafe {

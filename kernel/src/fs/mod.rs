@@ -197,6 +197,12 @@ pub fn init() {
 }
 pub const AT_FDCWD: isize = -100;
 
+impl Default for OpenFlags {
+    fn default() -> Self {
+        Self::RDWR
+    }
+}
+
 bitflags! {
     /// Open file flags
     pub struct OpenFlags: u32 {
@@ -260,17 +266,6 @@ bitflags! {
 }
 
 impl OpenFlags {
-    /// Do not check validity for simplicity
-    /// Return (readable, writable)
-    pub fn read_write(&self) -> (bool, bool) {
-        if self.is_empty() {
-            (true, false)
-        } else if self.contains(Self::WRONLY) {
-            (false, true)
-        } else {
-            (true, true)
-        }
-    }
     pub fn readable(&self) -> bool {
         self.contains(OpenFlags::RDONLY) || self.contains(OpenFlags::RDWR)
     }

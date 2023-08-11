@@ -2,7 +2,7 @@ use crate::{
     fs::{
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, Mutex,
+        File, Inode, Mutex, OpenFlags,
     },
     sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
@@ -61,11 +61,11 @@ impl File for NullFile {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
-    fn read<'a>(&'a self, _buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, _buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("[read] /dev/null");
         Box::pin(async move { Ok(0) })
     }
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("[write] /dev/null");
         Box::pin(async move { Ok(buf.len()) })
     }

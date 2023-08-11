@@ -6,7 +6,7 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, InodeMode, Mutex, FILE_SYSTEM_MANAGER,
+        File, Inode, InodeMode, Mutex, OpenFlags, FILE_SYSTEM_MANAGER,
     },
     processor::SumGuard,
     sync::mutex::SleepLock,
@@ -61,7 +61,7 @@ pub struct MountsFile {
 }
 
 impl File for MountsFile {
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("[MountsFile] read");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -79,7 +79,7 @@ impl File for MountsFile {
         })
     }
 
-    fn write<'a>(&'a self, _buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, _buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         debug!("[MountsFile] cannot write");
         Box::pin(async move { Err(SyscallErr::EACCES) })
     }
