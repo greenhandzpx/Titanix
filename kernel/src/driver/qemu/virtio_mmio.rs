@@ -1,7 +1,7 @@
 use device_tree::{util::SliceRead, Node};
 use virtio_drivers::{DeviceType, VirtIOHeader};
 
-use crate::{driver::qemu::VIRTIODEVICEADDR, mm::memory_space::phys_to_virt};
+use crate::mm::memory_space::phys_to_virt;
 
 use super::VirtioHal;
 
@@ -18,19 +18,19 @@ pub fn virtio_probe(node: &Node) {
         return;
     }
     log::info!(
-        "Detected virtio device with vendor id: {:#X}",
+        "Detected virtio device with vendor id: {:#x}",
         header.vendor_id()
     );
     log::info!("Device tree node {:?}", node);
-    let mut inner = VIRTIODEVICEADDR.0.lock();
-    let addr = inner.as_mut().unwrap();
-    match header.device_type() {
-        DeviceType::Block => {
-            addr.insert(header.device_type(), vaddr);
-        }
-        DeviceType::Network => {
-            addr.insert(header.device_type(), vaddr);
-        }
-        t => log::warn!("Unrecognized virtio device: {:?}", t),
-    }
+    // let mut inner = VIRTIODEVICEADDR.0.lock();
+    // let addr = inner.as_mut().unwrap();
+    // match header.device_type() {
+    //     DeviceType::Block => {
+    //         addr.insert(header.device_type(), vaddr);
+    //     }
+    //     DeviceType::Network => {
+    //         addr.insert(header.device_type(), vaddr);
+    //     }
+    //     t => log::warn!("Unrecognized virtio device: {:?}", t),
+    // }
 }

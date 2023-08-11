@@ -1,6 +1,6 @@
 use crate::config::mm::PAGE_SIZE_BITS;
 use crate::config::{mm::KERNEL_DIRECT_OFFSET, mm::PAGE_SIZE};
-use crate::driver::qemu::VIRTIODEVICEADDR;
+// use crate::driver::qemu::VIRTIODEVICEADDR;
 use crate::driver::BlockDevice;
 use crate::mm::{
     frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PhysAddr, PhysPageNum, StepByOne,
@@ -34,9 +34,10 @@ impl BlockDevice for VirtIOBlock {
 impl VirtIOBlock {
     pub fn new() -> Self {
         unsafe {
-            let inner = VIRTIODEVICEADDR.0.lock();
-            let vaddr = inner.as_ref().unwrap().get(&DeviceType::Network).unwrap();
-            let header = &mut *(*vaddr as *mut VirtIOHeader);
+            // let inner = VIRTIODEVICEADDR.0.lock();
+            // let vaddr = inner.as_ref().unwrap().get(&DeviceType::Network).unwrap();
+            let vaddr = VIRTIO0;
+            let header = &mut *(vaddr as *mut VirtIOHeader);
             // let header = &mut *(VIRTIO0 as *mut VirtIOHeader);
             Self(SpinNoIrqLock::new(
                 VirtIOBlk::<VirtioHal>::new(header).unwrap(),

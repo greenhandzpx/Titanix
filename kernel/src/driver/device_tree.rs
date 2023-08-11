@@ -12,7 +12,7 @@ const DEVICE_TREE_MAGIC: u32 = 0xd00dfeed;
 pub static DEVICE_TREE_REGISTRY: Mutex<BTreeMap<&'static str, fn(&Node)>> =
     Mutex::new(BTreeMap::new());
 
-fn walk_dt_node(dt: &Node) {
+fn walk_dt_node(dt: &Node, level: usize) {
     if let Ok(compatible) = dt.prop_str("compatible") {
         let registry = DEVICE_TREE_REGISTRY.lock();
         if let Some(f) = registry.get(compatible) {
@@ -20,7 +20,9 @@ fn walk_dt_node(dt: &Node) {
         }
     }
     for child in dt.children.iter() {
-        walk_dt_node(child);
+        log::error!("{} node name {}", level, child.name);
+
+        walk_dt_node(child, level + 1);
     }
 }
 
@@ -37,7 +39,7 @@ pub fn init(dtb: usize) {
         let dtb_data = unsafe { slice::from_raw_parts(dtb as *const u8, size as usize) };
         if let Ok(dt) = DeviceTree::load(dtb_data) {
             // find interrupt controller first
-            walk_dt_node(&dt.root);
+            walk_dt_node(&dt.root, 0);
         }
     }
 }

@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{stack_trace, sync::mutex::SpinNoIrqLock};
+use crate::{mm::memory_space::phys_to_virt, stack_trace, sync::mutex::SpinNoIrqLock};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use core::{
     any::Any,
@@ -12,7 +12,7 @@ use smoltcp::{
 
 use self::{
     fu740::{sdcard::SDCardWrapper, uart::UartSerial},
-    qemu::{init_virt_addr, virtio_blk::VirtIOBlock, virtio_net::VirtIONetDevice},
+    qemu::{virtio_blk::VirtIOBlock, virtio_net::VirtIONetDevice},
     sbi::{console_putchar, SbiChar},
 };
 
@@ -77,9 +77,16 @@ fn init_net_device() {
     }
 }
 
-pub fn init() {
+struct DtbHeader {
+    magic: u32,
+    size: u32,
+}
+pub fn init(dtb: usize) {
+    let dtb = phys_to_virt(dtb);
+    device_tree::init(dtb);
+
     #[cfg(not(feature = "board_u740"))]
-    init_virt_addr();
+    // init_virt_addr();
     init_char_device();
     init_block_device();
     init_net_device();

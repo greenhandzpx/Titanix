@@ -25,16 +25,16 @@ pub struct TitanixNetInterface<'a> {
 }
 
 pub struct TitanixNetInterfaceInner<'a> {
-    pub device: Loopback,
+    // pub device: Loopback,
     pub iface: Interface,
     pub sockets: SocketSet<'a>,
 }
 
 impl<'a> TitanixNetInterfaceInner<'a> {
     fn new() -> Self {
-        let mut device = Loopback::new(Medium::Ethernet);
-        // let mut device_lock = NET_DEVICE.lock();
-        // let device = device_lock.as_mut().unwrap();
+        // let mut device = Loopback::new(Medium::Ethernet);
+        let mut device_lock = NET_DEVICE.lock();
+        let device = device_lock.as_mut().unwrap();
         let iface = {
             let config = match device.capabilities().medium {
                 Medium::Ethernet => {
@@ -45,7 +45,7 @@ impl<'a> TitanixNetInterfaceInner<'a> {
 
             let mut iface = Interface::new(
                 config,
-                &mut device,
+                device,
                 Instant::from_millis(current_time_duration().as_millis() as i64),
             );
 
@@ -63,7 +63,7 @@ impl<'a> TitanixNetInterfaceInner<'a> {
             iface
         };
         Self {
-            device,
+            // device,
             iface,
             sockets: SocketSet::new(vec![]),
         }
@@ -115,8 +115,8 @@ impl<'a> TitanixNetInterface<'a> {
         self.inner_handler(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),
-                &mut inner.device,
-                // NET_DEVICE.lock().as_mut().unwrap(),
+                // &mut inner.device,
+                NET_DEVICE.lock().as_mut().unwrap(),
                 &mut inner.sockets,
             );
         });

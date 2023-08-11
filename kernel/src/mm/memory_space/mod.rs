@@ -520,6 +520,26 @@ impl MemorySpace {
             0,
             None,
         );
+
+        #[cfg(not(feature = "board_u740"))]
+        {
+            info!("[kernel]mapping dtb");
+            memory_space.push(
+                VmArea::new(
+                    (0x9f000000 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                    (0x9f010000 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS)).into(),
+                    MapType::Direct,
+                    MapPermission::R | MapPermission::W,
+                    None,
+                    None,
+                    memory_space.page_table.clone(),
+                    VmAreaType::MMIO,
+                ),
+                0,
+                None,
+            );
+        }
+
         info!("[kernel] mapping mmio registers");
         for pair in MMIO {
             info!("start va: {:#x}", (*pair).0);

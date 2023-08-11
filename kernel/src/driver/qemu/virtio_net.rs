@@ -9,7 +9,7 @@ use smoltcp::{
 };
 use virtio_drivers::{DeviceType, VirtIOHeader, VirtIONet};
 
-use crate::{driver::qemu::VIRTIODEVICEADDR, sync::mutex::SpinLock, utils::error::GeneralRet};
+use crate::{sync::mutex::SpinLock, utils::error::GeneralRet};
 
 use super::{VirtioHal, VIRTIO8};
 
@@ -75,13 +75,14 @@ impl phy::TxToken for VirtIONetDevice {
 
 impl VirtIONetDevice {
     pub fn new() -> Self {
-        unsafe {
-            let inner = VIRTIODEVICEADDR.0.lock();
-            let vaddr = inner.as_ref().unwrap().get(&DeviceType::Network).unwrap();
-            let header = &mut *(*vaddr as *mut VirtIOHeader);
+        // todo!()
+        let ret = unsafe {
+            let vaddr = VIRTIO8;
+            let header = &mut *(vaddr as *mut VirtIOHeader);
             let net = VirtIONet::<VirtioHal>::new(header).expect("failed to create net driver");
             log::info!("VirtIONetDevice net header init");
             Self(Arc::new(Mutex::new(net)))
-        }
+        };
+        ret
     }
 }

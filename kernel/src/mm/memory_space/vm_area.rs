@@ -108,10 +108,6 @@ impl VmArea {
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
-        // println!("start va {:#x}", start_va.0);
-        // println!("end va {:#x}", end_va.0);
-        // println!("start vpn {:#x}", start_vpn.0);
-        // println!("end vpn {:#x}", end_vpn.0);
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
             data_frames: SyncUnsafeCell::new(PageManager::new()),

@@ -126,12 +126,13 @@ fn hart_start(hart_id: usize) {
 
 ///
 #[no_mangle]
-pub fn fake_main(hart_id: usize) {
+pub fn fake_main(hart_id: usize, dtb: usize) {
     unsafe {
         asm!("add sp, sp, {}", in(reg) KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
         asm!("la t0, rust_main");
         asm!("add t0, t0, {}", in(reg) KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
         asm!("mv a0, {}", in(reg) hart_id);
+        asm!("mv a1, {}", in(reg) dtb);
         asm!("jalr zero, 0(t0)");
     }
 }
@@ -139,7 +140,7 @@ pub fn fake_main(hart_id: usize) {
 // TODO: We will add multi cores support in the future
 #[no_mangle]
 /// the rust entry-point of os
-pub fn rust_main(hart_id: usize) {
+pub fn rust_main(hart_id: usize, dtb: usize) {
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok()
@@ -165,7 +166,7 @@ pub fn rust_main(hart_id: usize) {
         mm::init();
         mm::remap_test();
         trap::init();
-        driver::init();
+        driver::init(dtb);
         executor::init();
         loader::init();
         fs::init();
