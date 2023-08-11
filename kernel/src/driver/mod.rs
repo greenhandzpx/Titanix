@@ -6,7 +6,7 @@ use core::{
     fmt::{self, Write},
 };
 use smoltcp::{
-    phy::{RxToken, TxToken, Loopback},
+    phy::{Loopback, RxToken, TxToken},
     wire::{EthernetAddress, IpAddress, IpEndpoint, Ipv4Address},
 };
 

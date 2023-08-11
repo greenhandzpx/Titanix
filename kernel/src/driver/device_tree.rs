@@ -20,7 +20,7 @@ fn walk_dt_node(dt: &Node, level: usize) {
         }
     }
     for child in dt.children.iter() {
-        log::error!("{} node name {}", level, child.name);
+        log::debug!("{} node name {}", level, child.name);
 
         walk_dt_node(child, level + 1);
     }

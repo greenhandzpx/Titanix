@@ -4,7 +4,7 @@ use crate::{driver::NET_DEVICE, sync::mutex::SpinNoIrqLock, timer::current_time_
 use alloc::vec;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
-    phy::{Device, Medium},
+    phy::{Device, Loopback, Medium},
     socket::{tcp, udp, AnySocket},
     time::Instant,
     wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address},
@@ -21,18 +21,51 @@ pub fn init() {
 }
 
 pub struct TitanixNetInterface<'a> {
-    inner: Mutex<Option<TitanixNetInterfaceInner<'a>>>,
+    dev: Mutex<Option<TitanixNetDevice>>,
+    loopback: Mutex<Option<TitanixLoopback>>,
+    sockets: Mutex<Option<SocketSet<'a>>>,
 }
 
-pub struct TitanixNetInterfaceInner<'a> {
-    // pub device: Loopback,
+pub struct TitanixNetDevice {
     pub iface: Interface,
-    pub sockets: SocketSet<'a>,
 }
 
-impl<'a> TitanixNetInterfaceInner<'a> {
+pub struct TitanixLoopback {
+    pub device: Loopback,
+    pub iface: Interface,
+}
+
+impl TitanixLoopback {
     fn new() -> Self {
-        // let mut device = Loopback::new(Medium::Ethernet);
+        let mut device = Loopback::new(Medium::Ip);
+        let iface = {
+            let config = match device.capabilities().medium {
+                Medium::Ethernet => {
+                    Config::new(EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]).into())
+                }
+                Medium::Ip => Config::new(smoltcp::wire::HardwareAddress::Ip),
+            };
+
+            let mut iface = Interface::new(
+                config,
+                &mut device,
+                Instant::from_millis(current_time_duration().as_millis() as i64),
+            );
+
+            iface.update_ip_addrs(|ip_addrs| {
+                ip_addrs
+                    .push(IpCidr::new(IpAddress::v4(127, 0, 0, 1), 8))
+                    .unwrap();
+            });
+
+            iface
+        };
+        Self { device, iface }
+    }
+}
+
+impl TitanixNetDevice {
+    fn new() -> Self {
         let mut device_lock = NET_DEVICE.lock();
         let device = device_lock.as_mut().unwrap();
         let iface = {
@@ -62,68 +95,72 @@ impl<'a> TitanixNetInterfaceInner<'a> {
 
             iface
         };
-        Self {
-            // device,
-            iface,
-            sockets: SocketSet::new(vec![]),
-        }
+        Self { iface }
     }
 }
 
 impl<'a> TitanixNetInterface<'a> {
     pub fn init(&self) {
-        *self.inner.lock() = Some(TitanixNetInterfaceInner::new());
+        *self.dev.lock() = Some(TitanixNetDevice::new());
+        *self.loopback.lock() = Some(TitanixLoopback::new());
+        *self.sockets.lock() = Some(SocketSet::new(vec![]));
     }
     pub const fn new() -> Self {
         Self {
-            inner: Mutex::new(None),
+            dev: Mutex::new(None),
+            loopback: Mutex::new(None),
+            sockets: Mutex::new(None),
         }
     }
     pub fn add_socket<T>(&self, socket: T) -> SocketHandle
     where
         T: AnySocket<'a>,
     {
-        self.inner.lock().as_mut().unwrap().sockets.add(socket)
+        self.sockets.lock().as_mut().unwrap().add(socket)
     }
 
     pub fn tcp_socket<T>(&self, handler: SocketHandle, f: impl FnOnce(&mut tcp::Socket) -> T) -> T {
         f(self
-            .inner
+            .sockets
             .lock()
             .as_mut()
             .unwrap()
-            .sockets
             .get_mut::<tcp::Socket>(handler))
     }
 
     pub fn udp_socket<T>(&self, handler: SocketHandle, f: impl FnOnce(&mut udp::Socket) -> T) -> T {
         f(self
-            .inner
+            .sockets
             .lock()
             .as_mut()
             .unwrap()
-            .sockets
             .get_mut::<udp::Socket>(handler))
     }
 
-    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TitanixNetInterfaceInner<'a>) -> T) -> T {
-        f(&mut self.inner.lock().as_mut().unwrap())
+    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TitanixLoopback) -> T) -> T {
+        f(&mut self.loopback.lock().as_mut().unwrap())
     }
 
     pub fn poll(&self) {
-        log::debug!("[TitanixNetInterface::poll] poll...");
+        log::debug!("[TitanixNetInterface::poll] poll loopback...");
         self.inner_handler(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),
-                // &mut inner.device,
+                &mut inner.device,
+                &mut self.sockets.lock().as_mut().unwrap(),
+            );
+        });
+        log::debug!("[TitanixNetInterface::poll] poll device...");
+        self.inner_handler(|inner| {
+            inner.iface.poll(
+                Instant::from_millis(current_time_duration().as_millis() as i64),
                 NET_DEVICE.lock().as_mut().unwrap(),
-                &mut inner.sockets,
+                &mut self.sockets.lock().as_mut().unwrap(),
             );
         });
     }
+
     pub fn remove(&self, handler: SocketHandle) {
-        self.inner_handler(|inner| {
-            inner.sockets.remove(handler);
-        });
+        self.sockets.lock().as_mut().unwrap().remove(handler);
     }
 }
