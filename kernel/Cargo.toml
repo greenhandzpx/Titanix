@@ -41,6 +41,7 @@ riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
 fu740-pac = { path = "../dependencies/fu740-pac" }
 fu740-hal = { path = "../dependencies/fu740-hal" }
+device_tree = { git = "https://github.com/rcore-os/device_tree-rs", rev = "2fa8411c" }
 
 
 [features]

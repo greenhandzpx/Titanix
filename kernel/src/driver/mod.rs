@@ -12,10 +12,11 @@ use smoltcp::{
 
 use self::{
     fu740::{sdcard::SDCardWrapper, uart::UartSerial},
-    qemu::{virtio_blk::VirtIOBlock, virtio_net::VirtIONetDevice},
+    qemu::{init_virt_addr, virtio_blk::VirtIOBlock, virtio_net::VirtIONetDevice},
     sbi::{console_putchar, SbiChar},
 };
 
+pub mod device_tree;
 pub mod fu740;
 pub mod qemu;
 pub mod sbi;
@@ -77,9 +78,11 @@ fn init_net_device() {
 }
 
 pub fn init() {
+    #[cfg(not(feature = "board_u740"))]
+    init_virt_addr();
     init_char_device();
     init_block_device();
-    // init_net_device();
+    init_net_device();
     #[cfg(feature = "board_u740")]
     {
         fu740::plic::init_plic();

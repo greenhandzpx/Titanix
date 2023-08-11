@@ -16,7 +16,10 @@ use crate::{
         mm::{MMAP_TOP, USER_STACK_SIZE},
     },
     fs::{resolve_path, File, OpenFlags, AT_FDCWD},
-    mm::memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
+    mm::{
+        memory_space::{page_fault_handler::SBrkPageFaultHandler, vm_area::BackupFile},
+        KernelAddr, PhysAddr,
+    },
     process::aux::*,
     processor::current_process,
     stack_trace,
@@ -1215,5 +1218,25 @@ pub async fn handle_page_fault(va: VirtAddr, scause: Scause) -> GeneralRet<()> {
             .await
     } else {
         Ok(())
+    }
+}
+
+/// convert physical addr to virtual addr
+pub fn phys_to_virt(addr: usize) -> usize {
+    log::debug!("phy2virt: addr {:#x}", addr);
+    KernelAddr::from(PhysAddr::from(addr)).0
+}
+
+/// convert virtual addr to physical addr
+pub fn virt_to_phys(vaddr: usize) -> usize {
+    unsafe {
+        (*KERNEL_SPACE
+            .as_ref()
+            .expect("KERENL SPACE not init yet")
+            .page_table
+            .get())
+        .translate_va(VirtAddr::from(vaddr))
+        .unwrap()
+        .0
     }
 }

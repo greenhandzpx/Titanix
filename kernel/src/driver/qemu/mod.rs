@@ -1,5 +1,5 @@
-use alloc::vec::Vec;
-use virtio_drivers::Hal;
+use alloc::{collections::BTreeMap, vec::Vec};
+use virtio_drivers::{DeviceType, Hal};
 
 use crate::{
     config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
@@ -12,12 +12,29 @@ use crate::{
 };
 
 pub mod virtio_blk;
+pub mod virtio_mmio;
 pub mod virtio_net;
 
 #[allow(unused)]
 const VIRTIO0: usize = 0x10001000 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
 #[allow(unused)]
 const VIRTIO8: usize = 0x10004000 + (KERNEL_DIRECT_OFFSET << PAGE_SIZE_BITS);
+
+static VIRTIODEVICEADDR: VirtioDeviceAddr = VirtioDeviceAddr::new();
+
+struct VirtioDeviceAddr(SpinNoIrqLock<Option<BTreeMap<DeviceType, usize>>>);
+impl VirtioDeviceAddr {
+    const fn new() -> Self {
+        Self(SpinNoIrqLock::new(None))
+    }
+    fn init(&self) {
+        *self.0.lock() = Some(BTreeMap::new());
+    }
+}
+
+pub fn init_virt_addr() {
+    VIRTIODEVICEADDR.init();
+}
 
 static QUEUE_FRAMES: SpinNoIrqLock<Vec<FrameTracker>> = SpinNoIrqLock::new(Vec::new());
 

@@ -328,7 +328,7 @@ const CONFIG_SPACE_OFFSET: usize = 0x100;
 
 /// Types of virtio devices.
 #[repr(u8)]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[allow(missing_docs)]
 pub enum DeviceType {
     Invalid = 0,
