@@ -39,8 +39,6 @@ async-task = { version = "4.4.0", default-features = false }
 managed = { version = "0.8", default-features = false, features = ["map"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
-fu740-pac = { path = "../dependencies/fu740-pac" }
-fu740-hal = { path = "../dependencies/fu740-hal" }
 
 
 [features]
