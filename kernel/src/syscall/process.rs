@@ -176,7 +176,7 @@ pub async fn sys_clone(
         let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
-        log::warn!(
+        log::info!(
             "[sys_clone] clone a new process, pid {}, clone flags {:?}",
             new_pid,
             clone_flags,

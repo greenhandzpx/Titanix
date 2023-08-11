@@ -84,26 +84,6 @@ fn hart_start(hart_id: usize) {
     use crate::driver::sbi;
     use crate::processor::HARTS;
 
-    #[cfg(feature = "board_u740")]
-    {
-        let i = 2;
-        println!("[kernel] start to wake up hart {}...", i);
-        let status = sbi::hart_start(i, HART_START_ADDR);
-        println!(
-            "[kernel] start to wake up hart {} finished, status {}",
-            i, status
-        );
-
-        let i = 3;
-        println!("[kernel] start to wake up hart {}...", i);
-        let status = sbi::hart_start(i, HART_START_ADDR);
-        println!(
-            "[kernel] start to wake up hart {} finished, status {}",
-            i, status
-        );
-        return;
-    }
-
     // only start two harts
     let mut has_another = false;
     let hart_num = unsafe { HARTS.len() };
@@ -118,9 +98,11 @@ fn hart_start(hart_id: usize) {
         if i == hart_id {
             continue;
         }
-        println!("[kernel] start to wake up hart {}...", i);
-        sbi::hart_start(i, HART_START_ADDR);
-        has_another = true;
+        let status = sbi::hart_start(i, HART_START_ADDR);
+        println!("[kernel] start to wake up hart {}... status {}", i, status);
+        if status == 0 {
+            has_another = true;
+        }
     }
 }
 
@@ -234,5 +216,20 @@ pub fn rust_main(hart_id: usize) {
         "[kernel] ---------- hart {} start to fetch task... ---------- ",
         hart_id
     );
-    executor::run_forever();
+    loop {
+        executor::run_until_idle();
+        #[cfg(feature = "multi_hart")]
+        {
+            use crate::timer::current_time_duration;
+            // core::hint::spin_loop();
+            let start_ts = current_time_duration();
+            loop {
+                let current_ts = current_time_duration();
+                if current_ts - start_ts > Duration::from_millis(2) {
+                    break;
+                }
+            }
+        }
+    }
+    // executor::run_forever();
 }

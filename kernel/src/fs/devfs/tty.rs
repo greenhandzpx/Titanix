@@ -184,6 +184,7 @@ impl File for TtyFile {
                         break;
                     }
                     c = getchar();
+                    // log::error!("stdin read a char {}", c);
                     // debug!("stdin read a char {}", c);
                     if c as i8 == -1 {
                         process::yield_now().await;
