@@ -45,6 +45,7 @@ virtio-drivers = { path = "../dependencies/virtio-drivers" }
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "tmpfs"]
 default = ["kernel_interrupt"]
+# default = ["kernel_interrupt", "board_u740"]
 stack_trace = []
 board_qemu = []
 board_u740 = []

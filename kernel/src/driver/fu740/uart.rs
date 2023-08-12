@@ -1,13 +1,26 @@
 #![allow(unused)]
-use crate::driver::CharDevice;
+use core::task::Waker;
+
+use alloc::boxed::Box;
+
+use crate::{driver::CharDevice, sync::mutex::SpinLock};
+
+type Callback = Box<dyn Fn(u8) + Send + Sync>;
+type Mutex<T> = SpinLock<T>;
 
 pub struct UART {
     base_addr: usize,
+    waker: Mutex<Option<Waker>>,
+    cb: Callback,
 }
 
 impl UART {
-    pub fn new(base_addr: usize) -> Self {
-        let ret = Self { base_addr };
+    pub fn new(base_addr: usize, cb: Callback) -> Self {
+        let ret = Self {
+            base_addr,
+            waker: Mutex::new(None),
+            cb,
+        };
         ret.init();
         ret
     }
@@ -86,6 +99,17 @@ impl CharDevice for UART {
             } else {
                 (ret & 0xff) as u8
             }
+        }
+    }
+    fn register_waker(&self, waker: core::task::Waker) {
+        *self.waker.lock() = Some(waker);
+    }
+    fn handle_irq(&self) {
+        let ch = self.getchar();
+        log::debug!("[UART::handle_irq] ch {}", ch);
+        (self.cb)(ch);
+        if let Some(w) = self.waker.lock().take() {
+            w.wake();
         }
     }
 }

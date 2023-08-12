@@ -1,4 +1,5 @@
 mod devfs;
+pub use devfs::TTY;
 pub mod fat32;
 mod fd_table;
 pub mod ffi;
@@ -58,6 +59,8 @@ fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
 }
 
 pub fn init() {
+    devfs::init();
+
     INODE_CACHE.init();
 
     // First we mount root fs

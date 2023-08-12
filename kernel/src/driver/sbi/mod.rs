@@ -78,4 +78,7 @@ impl CharDevice for SbiChar {
             console_putchar(*s as usize);
         }
     }
+    fn handle_irq(&self) {
+        todo!()
+    }
 }

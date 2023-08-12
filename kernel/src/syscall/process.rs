@@ -426,7 +426,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     if pid == 0 {
         let pgid = current_process().pgid();
-        info!("get pgid, pid {}, pgid {}", pid, pgid);
+        info!("[sys_getpgid] get pgid, pid {}, pgid {}", pid, pgid);
         Ok(pgid)
     } else {
         let proc = PROCESS_MANAGER.get(pid);
@@ -435,7 +435,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
         } else {
             let proc = proc.unwrap();
             let pgid = proc.pgid();
-            info!("get pgid, pid {}, pgid {}", pid, pgid);
+            info!("[sys_getpgid] get pgid, pid {}, pgid {}", pid, pgid);
             Ok(pgid)
         }
     }
