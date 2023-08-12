@@ -40,7 +40,7 @@ use crate::timer::{ffi::current_time_spec, UTIME_NOW};
 use crate::timer::{ffi::TimeSpec, UTIME_OMIT};
 use crate::utils::async_utils::{Select2Futures, SelectOutput};
 use crate::utils::error::{SyscallErr, SyscallRet};
-use crate::utils::path;
+use crate::utils::path::{self, is_relative_path};
 use crate::utils::string::c_str_to_string;
 
 /// get current working directory
@@ -324,10 +324,14 @@ pub fn sys_chdir(path: *const u8) -> SyscallRet {
     UserCheck::new().check_c_str(path)?;
     let path = &c_str_to_string(path);
     log::info!("[sys_chdir] path {}", path);
-    let path = path::change_relative_to_absolute(
-        &path,
-        &current_process().inner_handler(move |proc| proc.cwd.clone()),
-    );
+    let path = if is_relative_path(path) {
+        path::change_relative_to_absolute(
+            &path,
+            &current_process().inner_handler(move |proc| proc.cwd.clone()),
+        )
+    } else {
+        path.clone()
+    };
     let target_inode = <dyn Inode>::lookup_from_root(&path)?.0;
     match target_inode {
         Some(target_inode) => {
