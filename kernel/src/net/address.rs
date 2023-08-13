@@ -221,3 +221,10 @@ pub fn listen_endpoint(addr_buf: &[u8]) -> GeneralRet<IpListenEndpoint> {
         _ => return Err(SyscallErr::EINVAL),
     }
 }
+pub fn is_local(endpoint: IpEndpoint) -> bool {
+    if endpoint.addr.is_unicast() && endpoint.addr.as_bytes()[0] != 127 {
+        false
+    } else {
+        true
+    }
+}

@@ -21,7 +21,7 @@ pub fn init() {
 }
 
 pub struct TitanixNetInterface<'a> {
-    dev: Mutex<Option<TitanixNetDevice>>,
+    device: Mutex<Option<TitanixNetDevice>>,
     loopback: Mutex<Option<TitanixLoopback>>,
     sockets: Mutex<Option<SocketSet<'a>>>,
 }
@@ -101,13 +101,13 @@ impl TitanixNetDevice {
 
 impl<'a> TitanixNetInterface<'a> {
     pub fn init(&self) {
-        *self.dev.lock() = Some(TitanixNetDevice::new());
+        *self.device.lock() = Some(TitanixNetDevice::new());
         *self.loopback.lock() = Some(TitanixLoopback::new());
         *self.sockets.lock() = Some(SocketSet::new(vec![]));
     }
     pub const fn new() -> Self {
         Self {
-            dev: Mutex::new(None),
+            device: Mutex::new(None),
             loopback: Mutex::new(None),
             sockets: Mutex::new(None),
         }
@@ -137,21 +137,28 @@ impl<'a> TitanixNetInterface<'a> {
             .get_mut::<udp::Socket>(handler))
     }
 
-    pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TitanixLoopback) -> T) -> T {
+    pub fn loopback<T>(&self, f: impl FnOnce(&mut TitanixLoopback) -> T) -> T {
         f(&mut self.loopback.lock().as_mut().unwrap())
     }
 
-    pub fn poll(&self) {
+    pub fn device<T>(&self, f: impl FnOnce(&mut TitanixNetDevice) -> T) -> T {
+        f(&mut self.device.lock().as_mut().unwrap())
+    }
+
+    fn poll_loopback(&self) {
         log::debug!("[TitanixNetInterface::poll] poll loopback...");
-        self.inner_handler(|inner| {
+        self.loopback(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),
                 &mut inner.device,
                 &mut self.sockets.lock().as_mut().unwrap(),
             );
         });
+    }
+
+    fn poll_device(&self) {
         log::debug!("[TitanixNetInterface::poll] poll device...");
-        self.inner_handler(|inner| {
+        self.device(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),
                 NET_DEVICE.lock().as_mut().unwrap(),
@@ -159,6 +166,19 @@ impl<'a> TitanixNetInterface<'a> {
             );
         });
     }
+
+    pub fn poll(&self) {
+        log::debug!("[TitanixNetInterface::poll] poll all...");
+        self.poll_device();
+        self.poll_loopback();
+    }
+
+    // pub fn poll(&self, is_local: bool) {
+    //     match is_local {
+    //         true => self.poll_loopback(),
+    //         false => self.poll_device(),
+    //     }
+    // }
 
     pub fn remove(&self, handler: SocketHandle) {
         self.sockets.lock().as_mut().unwrap().remove(handler);

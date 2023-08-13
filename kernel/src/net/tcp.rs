@@ -241,23 +241,30 @@ impl TcpSocket {
             "[Tcp::connect] local: {:?}, remote: {:?}",
             local, remote_endpoint
         );
-        NET_INTERFACE.inner_handler(|inner| {
-            let ret = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
-                socket.connect(inner.iface.context(), remote_endpoint, local)
-            });
-            if ret.is_err() {
-                log::info!("[Tcp::connect] {} connect error occur", self.socket_handler);
-                match ret.err().unwrap() {
-                    tcp::ConnectError::Unaddressable => return Err(SyscallErr::EINVAL),
-                    tcp::ConnectError::InvalidState => return Err(SyscallErr::EISCONN),
-                }
+        let ret = if address::is_local(remote_endpoint) {
+            NET_INTERFACE.loopback(|inner| {
+                NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+                    socket.connect(inner.iface.context(), remote_endpoint, local)
+                })
+            })
+        } else {
+            NET_INTERFACE.device(|inner| {
+                NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
+                    socket.connect(inner.iface.context(), remote_endpoint, local)
+                })
+            })
+        };
+        if ret.is_err() {
+            log::info!("[Tcp::connect] {} connect error occur", self.socket_handler);
+            match ret.err().unwrap() {
+                tcp::ConnectError::Unaddressable => return Err(SyscallErr::EINVAL),
+                tcp::ConnectError::InvalidState => return Err(SyscallErr::EISCONN),
             }
-            info!(
-                "berfore poll socket state: {}",
-                NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.state())
-            );
-            Ok(())
-        })?;
+        }
+        info!(
+            "berfore poll socket state: {}",
+            NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.state())
+        );
         NET_INTERFACE.poll();
         Ok(())
     }
