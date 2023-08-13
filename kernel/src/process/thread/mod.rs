@@ -168,11 +168,6 @@ impl Thread {
         }
     }
 
-    /// We can get whatever we want in the inner by providing a handler
-    pub unsafe fn inner_handler<T>(&self, f: impl FnOnce(&mut ThreadInner) -> T) -> T {
-        f(&mut *self.inner.get())
-    }
-
     /// Wait for some events
     pub async fn wait_for_events(&self, events: Event) -> Event {
         self.mailbox.wait_for_events(events).await
@@ -254,12 +249,6 @@ impl Thread {
     /// Tid of this thread
     pub fn tid(&self) -> usize {
         self.tid.0
-    }
-
-    /// Wake up this thread.
-    /// This is called mostly because of signal
-    pub fn wake_up(&self) {
-        unsafe { (*self.inner.get()).waker.as_ref().unwrap().wake_by_ref() }
     }
 
     /// Set waker for this thread

@@ -48,6 +48,7 @@ impl SharedMemoryManager {
         shm.attach(addr)
     }
 
+    #[allow(unused)]
     pub fn detach() {
         todo!()
     }

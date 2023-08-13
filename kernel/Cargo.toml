@@ -39,14 +39,13 @@ async-task = { version = "4.4.0", default-features = false }
 managed = { version = "0.8", default-features = false, features = ["map"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 virtio-drivers = { path = "../dependencies/virtio-drivers" }
-fu740-pac = { path = "../dependencies/fu740-pac" }
-fu740-hal = { path = "../dependencies/fu740-hal" }
 
 
 [features]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "tmpfs"]
 default = ["kernel_interrupt"]
+# default = ["kernel_interrupt", "board_u740"]
 stack_trace = []
 board_qemu = []
 board_u740 = []

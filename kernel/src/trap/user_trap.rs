@@ -1,4 +1,4 @@
-use log::warn;
+use log::{error, warn};
 use riscv::register::{
     scause::{self, Exception, Interrupt, Trap},
     sepc,
@@ -167,6 +167,9 @@ pub async fn trap_handler() {
             //     current_trap_cx().sepc
             // );
             thread::yield_now().await;
+        }
+        Trap::Interrupt(Interrupt::SupervisorExternal) => {
+            crate::driver::intr_handler();
         }
         _ => {
             panic!(

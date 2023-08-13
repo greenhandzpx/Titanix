@@ -176,7 +176,7 @@ pub async fn sys_clone(
         let new_process = current_process.fork(stack, clone_flags)?;
         let new_pid = new_process.pid();
 
-        log::warn!(
+        log::info!(
             "[sys_clone] clone a new process, pid {}, clone flags {:?}",
             new_pid,
             clone_flags,
@@ -185,6 +185,7 @@ pub async fn sys_clone(
         Ok(new_pid)
     } else if clone_flags.contains(CloneFlags::CLONE_VM) {
         // clone(i.e. create a new thread)
+
         let current_process = current_process();
         let new_tid = current_process.create_thread(
             stack_ptr,
@@ -193,7 +194,7 @@ pub async fn sys_clone(
             chilren_tid_ptr,
             clone_flags,
         );
-        // thread::yield_now().await;
+        // process::thread::yield_now().await;
         log::info!("[sys_clone] clone a new thread, tid {:?}", new_tid);
         new_tid
     } else {
@@ -211,7 +212,7 @@ pub fn sys_execve(path: *const u8, mut args: *const usize, mut envs: *const usiz
     // enable kernel to visit user space
     let _sum_guard = SumGuard::new();
 
-    let mut path = path::path_process(AT_FDCWD, path as *const u8)?.unwrap();
+    let mut path = path::path_process(AT_FDCWD, path as *const u8)?;
     info!("[sys_execve] path {}", path);
 
     // transfer the cmd args
@@ -425,7 +426,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
     let _sum_guard = SumGuard::new();
     if pid == 0 {
         let pgid = current_process().pgid();
-        info!("get pgid, pid {}, pgid {}", pid, pgid);
+        info!("[sys_getpgid] get pgid, pid {}, pgid {}", pid, pgid);
         Ok(pgid)
     } else {
         let proc = PROCESS_MANAGER.get(pid);
@@ -434,7 +435,7 @@ pub fn sys_getpgid(pid: usize) -> SyscallRet {
         } else {
             let proc = proc.unwrap();
             let pgid = proc.pgid();
-            info!("get pgid, pid {}, pgid {}", pid, pgid);
+            info!("[sys_getpgid] get pgid, pid {}, pgid {}", pid, pgid);
             Ok(pgid)
         }
     }

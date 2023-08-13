@@ -113,10 +113,12 @@ pub fn sys_set_tid_address(tid_ptr: usize) -> SyscallRet {
     {
         return Ok(current_task().tid());
     }
-    let _sum_guard = SumGuard::new();
-    unsafe {
-        *(tid_ptr as *mut usize) = current_task().tid();
-    }
+
+    // let _sum_guard = SumGuard::new();
+    // unsafe {
+    //     *(tid_ptr as *mut usize) = current_task().tid();
+    // }
+
     let inner = unsafe { &mut (*current_task().inner.get()) };
     inner.tid_addr.clear_tid_address = Some(tid_ptr);
     Ok(current_task().tid())

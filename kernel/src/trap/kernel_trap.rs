@@ -14,10 +14,10 @@ pub fn kernel_trap_handler() {
     match scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             // error!("external interrrupt!!");
-            todo!()
+            crate::driver::intr_handler();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // log::error!("kernel timer interrupt!!");
+            // log::error!("timer interrrupt!!");
             handle_timeout_events();
             set_next_trigger();
         }

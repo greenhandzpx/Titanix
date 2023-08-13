@@ -6,7 +6,6 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use log::debug;
 
-use crate::config::fs::PIPE_BUF_CAPACITY;
 use crate::processor::{current_task, SumGuard};
 use crate::stack_trace;
 use crate::sync::Event;
@@ -16,14 +15,14 @@ use crate::utils::error::{AsyscallRet, GeneralRet, SyscallErr, SyscallRet};
 use super::file::{File, FileMeta, SeekFrom};
 use super::{Mutex, OpenFlags};
 
-pub struct Pipe {
+pub struct Pipe<const N: usize> {
     readable: bool,
     writable: bool,
-    buffer: Arc<Mutex<PipeRingBuffer>>,
+    buffer: Arc<Mutex<PipeRingBuffer<N>>>,
     meta: FileMeta,
 }
 
-impl File for Pipe {
+impl<const N: usize> File for Pipe<N> {
     fn metadata(&self) -> &FileMeta {
         &self.meta
     }
@@ -32,7 +31,7 @@ impl File for Pipe {
         Err(SyscallErr::ESPIPE)
     }
 
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         log::info!("[Pipe::read] start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
@@ -60,7 +59,7 @@ impl File for Pipe {
         )
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         log::info!("[Pipe::write] start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(async move {
@@ -119,8 +118,8 @@ impl File for Pipe {
     }
 }
 
-impl Pipe {
-    pub fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+impl<const N: usize> Pipe<N> {
+    fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer<N>>>) -> Self {
         let readable = flags.contains(OpenFlags::RDONLY);
         let writable = flags.contains(OpenFlags::WRONLY);
         let meta = FileMeta::new(super::InodeMode::FileFIFO);
@@ -132,12 +131,12 @@ impl Pipe {
         }
     }
 
-    fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer) -> T) -> T {
+    fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer<N>) -> T) -> T {
         f(&mut self.buffer.lock())
     }
 }
 
-impl Drop for Pipe {
+impl<const N: usize> Drop for Pipe<N> {
     fn drop(&mut self) {
         log::info!("[Pipe::drop] start drop..., writable {}", self.writable);
         if self.writable {
@@ -167,21 +166,24 @@ enum RingBufferStatus {
     NORMAL,
 }
 
-pub struct PipeRingBuffer {
-    arr: [u8; PIPE_BUF_CAPACITY],
+struct PipeRingBuffer<const N: usize> {
+    // arr: [u8; PIPE_BUF_CAPACITY],
+    arr: [u8; N],
+    // arr: Vec<u8>,
     head: usize,
     tail: usize,
     status: RingBufferStatus,
-    write_end: Option<Weak<Pipe>>,
-    read_end: Option<Weak<Pipe>>,
+    write_end: Option<Weak<Pipe<N>>>,
+    read_end: Option<Weak<Pipe<N>>>,
     read_waiters: Vec<Waker>,
     write_waiters: Vec<Waker>,
 }
 
-impl PipeRingBuffer {
-    pub fn new() -> Self {
+impl<const N: usize> PipeRingBuffer<N> {
+    fn new() -> Self {
+        // let arr = vec![0 as u8; buf_capcity];
         Self {
-            arr: [0; PIPE_BUF_CAPACITY],
+            arr: [0; N],
             head: 0,
             tail: 0,
             status: RingBufferStatus::EMPTY,
@@ -192,54 +194,88 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
+    fn set_write_end(&mut self, write_end: &Arc<Pipe<N>>) {
         self.write_end = Some(Arc::downgrade(write_end));
     }
 
-    pub fn set_read_end(&mut self, read_end: &Arc<Pipe>) {
+    fn set_read_end(&mut self, read_end: &Arc<Pipe<N>>) {
         self.read_end = Some(Arc::downgrade(read_end));
     }
 
-    pub fn read_byte(&mut self) -> u8 {
+    fn read_range(&mut self, buf: &mut [u8]) -> usize {
+        self.status = RingBufferStatus::NORMAL;
+        let end = match self.tail > self.head {
+            true => self.tail,
+            false => N,
+        };
+        let ret = (end - self.head).min(buf.len());
+        let end = self.head + ret;
+        buf[..ret].copy_from_slice(&mut self.arr[self.head..end]);
+        self.head = end % N;
+        if self.head == self.tail {
+            self.status = RingBufferStatus::EMPTY;
+        }
+        ret
+    }
+
+    fn write_range(&mut self, buf: &[u8]) -> usize {
+        self.status = RingBufferStatus::NORMAL;
+        let end = match self.head > self.tail {
+            true => self.head,
+            false => N,
+        };
+        let ret = (end - self.tail).min(buf.len());
+        let end = self.tail + ret;
+        self.arr[self.tail..end].copy_from_slice(&buf[..ret]);
+        self.tail = end % N;
+        if self.tail == self.head {
+            self.status = RingBufferStatus::FULL;
+        }
+        ret
+    }
+
+    #[allow(unused)]
+    fn read_byte(&mut self) -> u8 {
         self.status = RingBufferStatus::NORMAL;
         let c = self.arr[self.head];
-        self.head = (self.head + 1) % PIPE_BUF_CAPACITY;
+        self.head = (self.head + 1) % N;
         if self.head == self.tail {
             self.status = RingBufferStatus::EMPTY;
         }
         c
     }
 
-    pub fn write_byte(&mut self, byte: u8) {
+    #[allow(unused)]
+    fn write_byte(&mut self, byte: u8) {
         self.status = RingBufferStatus::NORMAL;
         self.arr[self.tail] = byte;
-        self.tail = (self.tail + 1) % PIPE_BUF_CAPACITY;
+        self.tail = (self.tail + 1) % N;
         if self.tail == self.head {
             self.status = RingBufferStatus::FULL;
         }
     }
 
-    pub fn available_read(&self) -> usize {
+    fn available_read(&self) -> usize {
         if self.status == RingBufferStatus::EMPTY {
             0
         } else {
             if self.tail > self.head {
                 self.tail - self.head
             } else {
-                self.tail + PIPE_BUF_CAPACITY - self.head
+                self.tail + N - self.head
             }
         }
     }
 
-    pub fn available_write(&self) -> usize {
+    fn available_write(&self) -> usize {
         if self.status == RingBufferStatus::FULL {
             0
         } else {
-            PIPE_BUF_CAPACITY - self.available_read()
+            N - self.available_read()
         }
     }
 
-    pub fn all_write_ends_closed(&self) -> bool {
+    fn all_write_ends_closed(&self) -> bool {
         log::info!(
             "[all_write_end_closed] write end ref cnt {}",
             self.write_end.as_ref().unwrap().strong_count()
@@ -247,7 +283,7 @@ impl PipeRingBuffer {
         self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 
-    pub fn all_read_ends_closed(&self) -> bool {
+    fn all_read_ends_closed(&self) -> bool {
         debug!(
             "read end ref cnt {}",
             self.read_end.as_ref().unwrap().strong_count()
@@ -255,11 +291,11 @@ impl PipeRingBuffer {
         self.read_end.as_ref().unwrap().upgrade().is_none()
     }
 
-    pub fn wait_for_reading(&mut self, waker: Waker) {
+    fn wait_for_reading(&mut self, waker: Waker) {
         self.read_waiters.push(waker);
     }
 
-    pub fn wake(&mut self, for_reader: bool) {
+    fn wake(&mut self, for_reader: bool) {
         let queue = match for_reader {
             true => &mut self.read_waiters,
             false => &mut self.write_waiters,
@@ -271,13 +307,13 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn wait_for_writing(&mut self, waker: Waker) {
+    fn wait_for_writing(&mut self, waker: Waker) {
         self.write_waiters.push(waker);
     }
 }
 
 /// Return (read_end, write_end)
-pub fn make_pipe(flags: Option<OpenFlags>) -> (Arc<Pipe>, Arc<Pipe>) {
+pub fn make_pipe<const N: usize>(flags: Option<OpenFlags>) -> (Arc<Pipe<N>>, Arc<Pipe<N>>) {
     debug!("create a pipe");
     let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
     let flags = match flags {
@@ -298,18 +334,18 @@ enum PipeOperation {
     Write,
 }
 
-struct PipeFuture {
-    buffer: Arc<Mutex<PipeRingBuffer>>,
+struct PipeFuture<const N: usize> {
+    buffer: Arc<Mutex<PipeRingBuffer<N>>>,
     user_buf: usize,
     user_buf_len: usize,
     already_put: usize,
     operation: PipeOperation,
 }
 
-impl PipeFuture {
+impl<const N: usize> PipeFuture<N> {
     #[allow(unused)]
     pub fn new(
-        buffer: Arc<Mutex<PipeRingBuffer>>,
+        buffer: Arc<Mutex<PipeRingBuffer<N>>>,
         user_buf: usize,
         user_buf_len: usize,
         operation: PipeOperation,
@@ -324,7 +360,7 @@ impl PipeFuture {
     }
 }
 
-impl Future for PipeFuture {
+impl<const N: usize> Future for PipeFuture<N> {
     type Output = SyscallRet;
     fn poll(
         self: core::pin::Pin<&mut Self>,
@@ -359,18 +395,10 @@ impl Future for PipeFuture {
                         return Poll::Pending;
                     }
                 }
-                for _ in 0..loop_read {
-                    buf[this.already_put] = ring_buffer.read_byte();
-                    this.already_put += 1;
-                    if this.already_put == this.user_buf_len {
-                        break;
-                    }
-                }
+                this.already_put += ring_buffer.read_range(&mut buf[this.already_put..]);
                 ring_buffer.wake(false);
                 debug!("[PipeFuture::poll] read return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put));
-                // ring_buffer.wait_for_reading(cx.waker().clone());
-                // return Poll::Pending;
             }
             PipeOperation::Write => {
                 debug!("[PipeFuture::poll] write");
@@ -390,18 +418,10 @@ impl Future for PipeFuture {
                     }
                 }
                 debug!("[PipeFuture::poll] available write {}", loop_write);
-                for _ in 0..loop_write {
-                    ring_buffer.write_byte(buf[this.already_put]);
-                    this.already_put += 1;
-                    if this.already_put == this.user_buf_len {
-                        break;
-                    }
-                }
+                this.already_put += ring_buffer.write_range(&buf[this.already_put..]);
                 ring_buffer.wake(true);
                 debug!("[PipeFuture::poll] write return {}", this.already_put);
                 return Poll::Ready(Ok(this.already_put));
-                // ring_buffer.wait_for_writing(cx.waker().clone());
-                // return Poll::Pending;
             }
         }
     }

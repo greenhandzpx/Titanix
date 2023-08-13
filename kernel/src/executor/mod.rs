@@ -17,7 +17,12 @@ impl TaskQueue {
         *self.queue.lock() = Some(VecDeque::new());
     }
     pub fn push(&self, runnable: Runnable) {
-        self.queue.lock().as_mut().unwrap().push_back(runnable);
+        // log::error!("push lock before");
+        let mut lock = self.queue.lock();
+        // log::error!("push before, queue len {}", lock.as_mut().unwrap().len());
+        lock.as_mut().unwrap().push_back(runnable);
+        // self.queue.lock().as_mut().unwrap().push_back(runnable);
+        // log::error!("push after");
     }
     pub fn push_preempt(&self, runnable: Runnable) {
         self.queue.lock().as_mut().unwrap().push_front(runnable);
@@ -43,6 +48,7 @@ where
         // TASK_QUEUE.push(runnable);
         if info.woken_while_running {
             // i.e `yield_now()`
+            // log::error!("yield now");
             TASK_QUEUE.push(runnable);
         } else {
             // i.e. woken up by some signal
@@ -53,7 +59,6 @@ where
 }
 
 /// Return the number of the tasks executed
-#[allow(unused)]
 pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
@@ -68,11 +73,10 @@ pub fn run_until_idle() -> usize {
     n
 }
 
+#[allow(unused)]
 pub fn run_forever() -> ! {
     loop {
-        // log::info!("fetch task");
         if let Some(task) = TASK_QUEUE.fetch() {
-            // info!("fetch a task");
             task.run();
         }
     }

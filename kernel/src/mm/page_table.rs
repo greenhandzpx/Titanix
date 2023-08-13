@@ -158,14 +158,6 @@ impl PageTable {
         }
     }
 
-    /// Temporarily used to get arguments from user space.
-    pub fn from_token(satp: usize) -> Self {
-        Self {
-            root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
-            frames: Vec::new(),
-        }
-    }
-
     /// Switch to this pagetable
     pub fn activate(&self) {
         // self.dump();
@@ -176,15 +168,8 @@ impl PageTable {
         }
     }
 
-    /// Clear user space ptes
-    pub fn clear_user_space(&mut self) {
-        let kernel_start_vpn = VirtPageNum::from(KERNEL_DIRECT_OFFSET);
-        let level_1_index = kernel_start_vpn.indices()[0];
-        log::debug!("[clear_user_space] level 1 index {}", level_1_index);
-        self.root_ppn.pte_array()[..level_1_index].fill(PageTableEntry::empty());
-    }
-
     /// Dump page table
+    #[allow(unused)]
     pub fn dump(&self) {
         info!("----- Dump page table -----");
         self._dump(self.root_ppn, 0);
