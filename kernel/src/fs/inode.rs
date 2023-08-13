@@ -24,12 +24,12 @@ use crate::{
     },
 };
 
-use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
     pipe::Pipe,
-    File, Mutex,
+    File,
 };
+use super::{Mutex, FILE_SYSTEM_MANAGER};
 
 /// Dcache: cache: (parent ino, child name) -> dentry.
 /// TODO: add max capacity limit and lru policy
@@ -77,7 +77,7 @@ impl PathCache {
     /// return (Option<target_inode>, Option<parent>, Option<child_path>)
     pub fn get(
         &self,
-        path: String,
+        path: &String,
     ) -> (
         Option<Arc<dyn Inode>>,
         Option<Arc<dyn Inode>>,
@@ -85,7 +85,8 @@ impl PathCache {
     ) {
         let mut lock = self.0.lock();
         let inner = lock.as_mut().unwrap();
-        let target = inner.get(&path).cloned();
+        // let target = inner.get(path).cloned();
+        let target: Option<Weak<dyn Inode>> = None;
         match target {
             Some(target) => return (target.upgrade(), None, None),
             None => {
@@ -412,7 +413,7 @@ impl dyn Inode {
         let mut path_names = path::split_path_string(path.to_string());
         // let path = path::merge(&self.metadata().path, path);
         // let path = path::format(&path);
-        // let (target, fa, child_path) = PATH_CACHE.get(path.clone());
+        // let (target, fa, child_path) = PATH_CACHE.get(&path);
         // if target.is_some() {
         //     debug!("[lookup_from_current] find in fast path cache");
         //     return Ok(target);
@@ -483,7 +484,10 @@ impl dyn Inode {
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
 
         let path = path::format(path);
-        let (target, fa, child_path) = PATH_CACHE.get(path.clone());
+
+        log::info!("[lookup_from_root] path {}", path);
+
+        let (target, fa, child_path) = PATH_CACHE.get(&path);
         if target.is_some() {
             debug!("[lookup_from_root] get {} in path cache", path);
             return Ok((target, None));
@@ -491,7 +495,7 @@ impl dyn Inode {
             debug!("[lookup_from_root] {} mismatch in path cache", path);
             if fa.is_some() {
                 parent = fa.unwrap();
-                debug!(
+                log::debug!(
                     "[lookup_from_root] prefix matched, get parent, name {}",
                     parent.metadata().name
                 );

@@ -37,6 +37,7 @@ use crate::loader::get_app_data_by_name;
 use crate::mm::MapPermission;
 use crate::stack_trace;
 use crate::sync::mutex::SpinNoIrqLock;
+use crate::utils::cell::SyncUnsafeCell;
 use crate::utils::error::GeneralRet;
 use crate::utils::error::SyscallErr;
 use crate::utils::path;
@@ -46,7 +47,11 @@ use self::file_system::FsDevice;
 use self::inode::INODE_CACHE;
 use self::inode::PATH_CACHE;
 
-type Mutex<T> = SpinNoIrqLock<T>;
+#[cfg(not(feature = "multi_hart"))]
+type Mutex<T> = SyncUnsafeCell<T>;
+#[cfg(feature = "multi_hart")]
+type Mutex<T> = SpinLock<T>;
+// type Mutex<T> = SpinNoIrqLock<T>;
 
 fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
     let inode = parent_inode

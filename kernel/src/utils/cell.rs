@@ -12,6 +12,12 @@ impl<T> SyncUnsafeCell<T> {
         unsafe { &mut *self.0.get() }
     }
 
+    /// This method is unsafe.
+    #[inline]
+    pub fn lock(&self) -> &mut T {
+        unsafe { &mut *self.0.get() }
+    }
+
     #[inline]
     pub const fn get(&self) -> *mut T {
         self.0.get()
