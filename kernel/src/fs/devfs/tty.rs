@@ -322,7 +322,7 @@ impl File for TtyFile {
         {
             Ok(true)
         }
-        #[cfg(not(feature = "submit"))]
+        #[cfg(all(not(feature = "submit"), feature = "board_u740"))]
         {
             if self.buf.load(Ordering::Acquire) != 255 {
                 return Ok(true);
@@ -342,6 +342,28 @@ impl File for TtyFile {
                     //     waker,
                     //     true,
                     // )
+                }
+                return Ok(false);
+            } else {
+                self.buf.store(c as u8, Ordering::Release);
+                return Ok(true);
+            }
+        }
+        #[cfg(all(not(feature = "submit"), not(feature = "board_u740")))]
+        {
+            if self.buf.load(Ordering::Acquire) != 255 {
+                return Ok(true);
+            }
+            let _sum_guard = SumGuard::new();
+            let c = getchar();
+            if c == 0xff {
+                if let Some(waker) = waker {
+                    POLL_QUEUE.register(
+                        self.metadata().inner.lock().file.as_ref().unwrap().clone(),
+                        waker,
+                        true,
+                    );
+                    log::debug!("[TtyFuture::pollin] nothing to read");
                 }
                 return Ok(false);
             } else {
