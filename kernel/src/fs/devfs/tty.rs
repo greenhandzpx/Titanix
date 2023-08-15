@@ -3,7 +3,7 @@ use alloc::{sync::Arc, vec::Vec};
 use crate::{
     config::process::INITPROC_PID,
     driver::{getchar, CHAR_DEVICE},
-    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
+    fs::{file::FileMetaInner, inode::InodeMeta, resolve_path, Inode, Mutex, OpenFlags, AT_FDCWD},
     mm::user_check::UserCheck,
     process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER},
     signal::SIGINT,
@@ -135,9 +135,16 @@ impl WinSize {
 }
 
 pub fn init() {
+    // let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty());
+    let tty_inode = <dyn Inode>::lookup_from_root("/dev/tty")
+        .unwrap()
+        .0
+        .unwrap();
+    // let tty_file = tty_inode.open(tty_inode.clone()).unwrap();
     let tty_file = Arc::new(TtyFile::new());
     let tty: Arc<dyn File> = tty_file.clone();
     tty_file.metadata().inner.lock().file = Some(Arc::downgrade(&tty));
+    tty_file.metadata().inner.lock().inode = Some(tty_inode);
     *TTY.get_unchecked_mut() = Some(tty_file);
 }
 
