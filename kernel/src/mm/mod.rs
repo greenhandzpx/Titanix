@@ -25,7 +25,9 @@ pub use address::VPNRange;
 pub use address::{
     KernelAddr, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, VA_WIDTH_SV39,
 };
-pub use allocator::frame_allocator::{frame_alloc, frame_dealloc, FrameTracker};
+pub use allocator::frame_allocator::{
+    frame_alloc, frame_alloc_contig, frame_dealloc, FrameTracker,
+};
 use log::info;
 pub use memory_space::remap_test;
 pub use memory_space::{MapPermission, MemorySpace, KERNEL_SPACE};

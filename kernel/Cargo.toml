@@ -38,7 +38,8 @@ smoltcp = { version = "0.10.0", default-features = false, features = [
 async-task = { version = "4.4.0", default-features = false }
 managed = { version = "0.8", default-features = false, features = ["map"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
-virtio-drivers = { path = "../dependencies/virtio-drivers" }
+# virtio-drivers = { path = "../dependencies/virtio-drivers" }
+virtio-drivers = { version = "0.6.0" }
 
 
 [features]
@@ -53,8 +54,8 @@ kernel_interrupt = []
 strace = []
 multi_hart = []
 submit = []
-async_flush = []               # flush dirty blocks to disk asynchronously
-tmpfs = []                     # rootfs is tmpfs
+async_flush = []      # flush dirty blocks to disk asynchronously
+tmpfs = []            # rootfs is tmpfs
 preliminary = []
 
 [profile.release]
