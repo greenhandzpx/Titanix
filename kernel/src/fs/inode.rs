@@ -27,7 +27,6 @@ use crate::{
 use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
-    pipe::Pipe,
     File, Mutex,
 };
 
@@ -153,6 +152,7 @@ pub const FAST_PATH: [&str; 8] = [
 ];
 
 #[derive(PartialEq, Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum InodeMode {
     FileSOCK = 0xC000, /* socket */
     FileLNK = 0xA000,  /* symbolic link */
@@ -658,8 +658,9 @@ impl InodeMeta {
 }
 
 #[derive(Clone)]
+#[allow(unused)]
 pub enum InodeDevice {
-    Pipe(Arc<Pipe>),
+    // Pipe(Arc<Pipe>),
     Device(DevWrapper),
     // TODO: add more
 }

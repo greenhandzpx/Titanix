@@ -1,6 +1,4 @@
-//! A single global instance of [`PidAllocator`] called `PID_ALLOCATOR` allocates
-//! pid for user apps.
-//!
+///
 
 ///
 pub mod thread;
@@ -120,13 +118,6 @@ impl Process {
         self.inner.lock().threads.get(&self.pid()).cloned()
     }
 
-    /// Main thread's trap context
-    pub fn trap_context_main(&self) -> &mut TrapContext {
-        let inner = self.inner.lock();
-        assert!(inner.thread_count() > 0);
-        unsafe { (*inner.threads.get(&self.pid.0).unwrap().as_ptr()).trap_context_mut() }
-    }
-
     /// Get the process's pid
     pub fn pid(&self) -> usize {
         self.pid.0
@@ -148,23 +139,8 @@ impl Process {
     }
 
     ///
-    pub fn set_zombie(&self) {
-        self.inner.lock().is_zombie = true;
-    }
-
-    ///
     pub fn exit_code(&self) -> i8 {
         self.inner.lock().exit_code
-    }
-
-    ///
-    pub fn set_exit_code(&self, exit_code: i8) {
-        self.inner.lock().exit_code = exit_code;
-    }
-
-    ///
-    pub fn alloc_fd(&self) -> GeneralRet<usize> {
-        self.inner.lock().fd_table.alloc_fd()
     }
 
     /// Send signal to this process
@@ -202,17 +178,6 @@ impl Process {
             }
         });
         Ok(())
-    }
-
-    /// Close file
-    pub fn close_file(&self, fd: usize) -> SyscallRet {
-        let mut inner = self.inner.lock();
-        if inner.fd_table.take(fd).is_none() {
-            Err(SyscallErr::EBADF)
-        } else {
-            debug!("close fd {}", fd);
-            Ok(0)
-        }
     }
 }
 
@@ -569,13 +534,13 @@ impl Process {
             // unsafe {
             //     *(child_tid_ptr as *mut usize) = tid;
             // }
-            unsafe {
-                *(child_tid_ptr as *mut usize) = 0;
-            }
+            // unsafe {
+            //     *(child_tid_ptr as *mut usize) = 0;
+            // }
             log::info!(
-                "[clone_thread] CLONE_CHILD_CLEARTID: child tid ptr {:#x}, tid {}",
+                "[clone_thread] CLONE_CHILD_CLEARTID: child tid ptr {:#x}, val {:#x}",
                 child_tid_ptr,
-                tid
+                unsafe { *(child_tid_ptr as *const usize) }
             );
         }
         if flags.contains(CloneFlags::CLONE_CHILD_SETTID) {
@@ -586,9 +551,9 @@ impl Process {
                 *(child_tid_ptr as *mut usize) = tid;
             }
             log::info!(
-                "[clone_thread] CLONE_CHILD_SETTID: child tid ptr {:#x}, tid {}",
+                "[clone_thread] CLONE_CHILD_SETTID: child tid ptr {:#x}, val {:#x}",
                 child_tid_ptr,
-                tid
+                unsafe { *(child_tid_ptr as *const usize) }
             );
         }
         if flags.contains(CloneFlags::CLONE_PARENT_SETTID) {
@@ -598,9 +563,9 @@ impl Process {
                 *(parent_tid_ptr as *mut usize) = tid;
             }
             log::info!(
-                "[clone_thread] CLONE_PARENT_SETTID: parent tid ptr {:#x}, tid {}",
+                "[clone_thread] CLONE_PARENT_SETTID: parent tid ptr {:#x}, val {:#x}",
                 parent_tid_ptr,
-                tid
+                unsafe { *(parent_tid_ptr as *const usize) }
             );
         }
         // if flags.contains(CloneFlags::CLONE_SIGHAND) {
@@ -630,7 +595,6 @@ impl Process {
     ) -> GeneralRet<Arc<Self>> {
         stack_trace!();
         let child = self.inner_handler(move |parent_inner| {
-            assert_eq!(parent_inner.thread_count(), 1);
             let pid = Arc::new(tid_alloc());
             debug!(
                 "fork: child's pid {}, parent's pid {} before",

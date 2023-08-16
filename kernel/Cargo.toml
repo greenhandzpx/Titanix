@@ -38,16 +38,15 @@ smoltcp = { version = "0.10.0", default-features = false, features = [
 async-task = { version = "4.4.0", default-features = false }
 managed = { version = "0.8", default-features = false, features = ["map"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
-virtio-drivers = { path = "../dependencies/virtio-drivers" }
-fu740-pac = { path = "../dependencies/fu740-pac" }
-fu740-hal = { path = "../dependencies/fu740-hal" }
+# virtio-drivers = { path = "../dependencies/virtio-drivers" }
+virtio-drivers = { version = "0.6.0" }
 device_tree = { git = "https://github.com/rcore-os/device_tree-rs", rev = "2fa8411c" }
-
 
 [features]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "tmpfs"]
 default = ["kernel_interrupt"]
+# default = ["kernel_interrupt", "board_u740"]
 stack_trace = []
 board_qemu = []
 board_u740 = []
@@ -55,8 +54,8 @@ kernel_interrupt = []
 strace = []
 multi_hart = []
 submit = []
-async_flush = []               # flush dirty blocks to disk asynchronously
-tmpfs = []                     # rootfs is tmpfs
+async_flush = []      # flush dirty blocks to disk asynchronously
+tmpfs = []            # rootfs is tmpfs
 preliminary = []
 
 [profile.release]

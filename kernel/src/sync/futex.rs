@@ -98,25 +98,25 @@ impl FutexQueue {
         ret + nval_rq
     }
 
-    /// Wake up one waiter.
-    /// Returns the waiter's tid.
-    pub fn wake_one(&mut self, addr: VirtAddr) -> Option<usize> {
-        if let Some(waiters) = self.0.get_mut(&addr) {
-            log::info!(
-                "[FutexQueue::wake_one] addr {:#x} waiters len {}",
-                addr.0,
-                waiters.len()
-            );
-            if let Some((tid, waiter)) = waiters.pop_first() {
-                waiter.wake();
-                Some(tid)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
+    // /// Wake up one waiter.
+    // /// Returns the waiter's tid.
+    // pub fn wake_one(&mut self, addr: VirtAddr) -> Option<usize> {
+    //     if let Some(waiters) = self.0.get_mut(&addr) {
+    //         log::info!(
+    //             "[FutexQueue::wake_one] addr {:#x} waiters len {}",
+    //             addr.0,
+    //             waiters.len()
+    //         );
+    //         if let Some((tid, waiter)) = waiters.pop_first() {
+    //             waiter.wake();
+    //             Some(tid)
+    //         } else {
+    //             None
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // }
 }
 
 pub struct FutexWaiter {
@@ -179,7 +179,13 @@ impl Future for FutexFuture {
                 }
 
                 // Check the value in case that someone change that value before waking us up.
-                if unsafe { atomic_load_acquire(addr.0 as *const u32) } != self.expected_val {
+                let val = unsafe { atomic_load_acquire(addr.0 as *const u32) };
+                log::debug!(
+                    "[FutexFuture::poll] val {:#x}, expected val {:#x}",
+                    val,
+                    self.expected_val
+                );
+                if val != self.expected_val {
                     return Poll::Ready(());
                 } else {
                     return Poll::Pending;

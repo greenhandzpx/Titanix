@@ -10,7 +10,7 @@ use crate::{
     utils::error::{GeneralRet, SyscallErr, SyscallRet},
 };
 
-use super::{file::File, resolve_path, Inode, OpenFlags, AT_FDCWD};
+use super::{file::File, Inode, OpenFlags, TTY};
 
 pub type Fd = usize;
 
@@ -34,20 +34,20 @@ impl FdInfo {
 
 impl FdTable {
     pub fn new() -> Self {
-        let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty())
-            .ok()
-            .unwrap();
+        // let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty())
+        // .ok()
+        // .unwrap();
         // .unwrap();
         let stdin = FdInfo::new(
-            tty_inode.open(tty_inode.clone()).unwrap(),
+            TTY.get_unchecked_mut().as_ref().unwrap().clone(),
             OpenFlags::RDONLY,
         );
         let stdout = FdInfo::new(
-            tty_inode.open(tty_inode.clone()).unwrap(),
+            TTY.get_unchecked_mut().as_ref().unwrap().clone(),
             OpenFlags::WRONLY,
         );
         let stderr = FdInfo::new(
-            tty_inode.open(tty_inode.clone()).unwrap(),
+            TTY.get_unchecked_mut().as_ref().unwrap().clone(),
             OpenFlags::WRONLY,
         );
         Self {

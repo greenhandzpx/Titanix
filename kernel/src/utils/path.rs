@@ -70,7 +70,7 @@ pub fn format(src: &str) -> String {
     }
     vec.join("/")
 }
-pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<String> {
+pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> String {
     let absolute_path_vec = split_path(cwd);
     let relative_path_vec = split_path(relative_path);
     debug!("absolute path: {:?}", absolute_path_vec);
@@ -85,7 +85,7 @@ pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<Str
             ".." => {
                 if let Some(check) = res.pop() {
                     if check == "" {
-                        return None;
+                        return "/".to_string();
                     }
                 }
             }
@@ -95,7 +95,7 @@ pub fn change_relative_to_absolute(relative_path: &str, cwd: &str) -> Option<Str
             }
         }
     }
-    Some(res.join("/"))
+    res.join("/")
 }
 
 /// return (target_inode, absolute_path, parent_inode)
@@ -157,8 +157,7 @@ pub fn path_to_inode(
                                 if check_double_dot(&path) {
                                     // path has ..
                                     // parent is not sure, return None
-                                    let path =
-                                        change_relative_to_absolute(&path, &proc.cwd).unwrap();
+                                    let path = change_relative_to_absolute(&path, &proc.cwd);
                                     let (target, parent) = <dyn Inode>::lookup_from_root(&path)?;
                                     Ok((target, path, parent))
                                 } else {
@@ -166,7 +165,7 @@ pub fn path_to_inode(
                                     // inode is the parent which should be returned
                                     let path = remove_dot(&path);
                                     let absolute_path =
-                                        change_relative_to_absolute(&path, &proc.cwd).unwrap();
+                                        change_relative_to_absolute(&path, &proc.cwd);
                                     let target = inode.lookup_from_current(&path)?;
                                     Ok((target, absolute_path, Some(inode)))
                                 }
@@ -177,7 +176,7 @@ pub fn path_to_inode(
                 } else {
                     debug!("[path_to_inode] path is releative and dirfd is AT_FDCWD");
                     return current_process().inner_handler(|proc| {
-                        let path = change_relative_to_absolute(&path, &proc.cwd).unwrap();
+                        let path = change_relative_to_absolute(&path, &proc.cwd);
                         let (target, parent) = <dyn Inode>::lookup_from_root(&path)?;
                         Ok((target, path, parent))
                     });
@@ -225,7 +224,7 @@ pub fn path_to_inode_ffi(
 }
 
 /// Return absolute path
-pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>> {
+pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<String> {
     debug!("[path_process] dirfd: {}", dirfd);
     let _sum_guard = SumGuard::new();
     let path = match path as usize {
@@ -233,27 +232,21 @@ pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>>
             debug!("[path_process] path is null");
             if dirfd != AT_FDCWD {
                 debug!("[path_process] dirfd is a normal fd");
-                let absolute_path = path_with_dirfd(dirfd, ".".to_string());
-                if absolute_path.is_none() {
-                    return Err(SyscallErr::EBADF);
-                } else {
-                    return Ok(absolute_path);
-                }
+                path_with_dirfd(dirfd, ".")
             } else {
                 debug!("[path_process] dirfd is AT_FDCWD");
                 let cwd = current_process().inner_handler(move |proc| proc.cwd.clone());
                 debug!("[path_process] cwd {}", cwd);
-                let absolute_path = change_relative_to_absolute(".", &cwd);
-                return Ok(absolute_path);
+                Ok(change_relative_to_absolute(".", &cwd))
             }
         }
         _ => {
             debug!("[path_process] path is not null");
             UserCheck::new().check_c_str(path)?;
             let path = c_str_to_string(path);
-            format(&path)
+            Ok(format(&path))
         }
-    };
+    }?;
     debug!("[path_process] dirfd {}, path name {}", dirfd, path);
     let absolute_path;
     if is_relative_path(&path) {
@@ -265,29 +258,27 @@ pub fn path_process(dirfd: isize, path: *const u8) -> GeneralRet<Option<String>>
             absolute_path = change_relative_to_absolute(&path, &cwd);
         } else {
             debug!("[path_process] dirfd is a normal fd");
-            absolute_path = path_with_dirfd(dirfd, path);
+            absolute_path = path_with_dirfd(dirfd, &path)?
         }
     } else {
         debug!("[path_process] An absolute path");
-        absolute_path = Some(path.clone());
+        absolute_path = path;
     }
     Ok(absolute_path)
 }
-pub fn path_with_dirfd(dirfd: isize, path: String) -> Option<String> {
-    let absolute_path = current_process().inner_handler(|proc| {
-        let wd_file = proc.fd_table.get_ref(dirfd as usize);
-        match wd_file {
-            Some(wd_file) => {
-                let inner = wd_file.file.metadata().inner.lock();
-                let inode = inner.inode.as_ref().clone();
-                let wd = inode.unwrap().metadata().path.clone();
-                debug!("wd: {}", wd);
-                change_relative_to_absolute(&path, &wd)
-            }
-            None => None,
-        }
-    });
-    absolute_path
+
+fn path_with_dirfd(dirfd: isize, path: &str) -> GeneralRet<String> {
+    current_process().inner_handler(|proc| {
+        let wd_file = proc
+            .fd_table
+            .get_ref(dirfd as usize)
+            .ok_or(SyscallErr::EBADF)?;
+        let inner = wd_file.file.metadata().inner.lock();
+        let inode = inner.inode.as_ref().clone();
+        let wd = inode.unwrap().metadata().path.clone();
+        debug!("wd: {}", wd);
+        Ok(change_relative_to_absolute(&path, &wd))
+    })
 }
 
 pub fn child_path(absolute: &str, parent: &str) -> String {

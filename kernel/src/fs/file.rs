@@ -22,7 +22,7 @@ use crate::{
     },
 };
 
-use super::{inode::Inode, InodeMode, Mutex};
+use super::{inode::Inode, InodeMode, Mutex, OpenFlags};
 
 pub struct FileMeta {
     /// Mutable,
@@ -79,16 +79,16 @@ pub trait File: Send + Sync {
     /// For default file, data must be read from page cache first.
     /// Note that only guarantee the safety of the first PAGE_SIZE bytes
 
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet;
+    fn read<'a>(&'a self, buf: &'a mut [u8], flags: OpenFlags) -> AsyscallRet;
     /// For default file, data must be written to page cache first.
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet;
+    fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> AsyscallRet;
 
     fn pread<'a>(&'a self, buf: &'a mut [u8], off: usize) -> AsyscallRet {
         Box::pin(async move {
             self.metadata().prw_lock.lock().await;
             let old_off = self.seek(SeekFrom::Current(0))?;
             self.seek(SeekFrom::Start(off))?;
-            let ret = self.read(buf).await;
+            let ret = self.read(buf, OpenFlags::default()).await;
             self.seek(SeekFrom::Start(old_off as usize))?;
             ret
         })
@@ -99,7 +99,8 @@ pub trait File: Send + Sync {
             self.metadata().prw_lock.lock().await;
             let old_off = self.seek(SeekFrom::Current(0))?;
             self.seek(SeekFrom::Start(off))?;
-            let ret = self.write(buf).await;
+            // TODO: need to changed with actual flags
+            let ret = self.write(buf, OpenFlags::default()).await;
             self.seek(SeekFrom::Start(old_off as usize))?;
             ret
         })
@@ -120,12 +121,12 @@ pub trait File: Send + Sync {
 
     /// For default file, data must be read from page cache first
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
-        block_on(self.read(buf))
+        block_on(self.read(buf, OpenFlags::default()))
     }
 
     /// For default file, data must be written to page cache first
     fn sync_write(&self, buf: &[u8]) -> SyscallRet {
-        block_on(self.write(buf))
+        block_on(self.write(buf, OpenFlags::default()))
     }
 
     /// Return the new offset
@@ -226,7 +227,7 @@ pub trait File: Send + Sync {
                 let buf = vec![0 as u8; len - old_data_len];
                 stack_trace!();
                 self.seek(SeekFrom::Start(old_data_len))?;
-                self.write(&buf).await?;
+                self.write(&buf, OpenFlags::default()).await?;
                 self.seek(SeekFrom::Start(old_pos))?;
             }
             Ok(())
@@ -258,7 +259,7 @@ impl File for DefaultFile {
 
     /// For default file, data must be read from page cache first
     /// TODO: change to real async
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         Box::pin(async move {
             stack_trace!();
             let _sum_guard = SumGuard::new();
@@ -315,7 +316,7 @@ impl File for DefaultFile {
     }
 
     /// For default file, data must be written to page cache first
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         Box::pin(async move {
             stack_trace!();
             let _sum_guard = SumGuard::new();

@@ -38,6 +38,7 @@ impl PendingSigs {
         self.bitmap.contain_sig(signo)
     }
 
+    #[allow(unused)]
     pub fn is_empty(&self) -> bool {
         self.sigs.is_empty()
     }
@@ -69,11 +70,6 @@ impl SigQueue {
     }
     pub fn recv_signal(&mut self, signo: usize) {
         self.pending_sigs.add(signo);
-    }
-
-    pub fn check_spec_signal(&self, signos: SigSet) -> bool {
-        stack_trace!();
-        self.pending_sigs.bitmap.intersects(signos)
     }
 
     /// Return (signo, sig action, old blocked sigs)

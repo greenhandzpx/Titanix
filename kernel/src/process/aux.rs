@@ -12,8 +12,10 @@ pub struct AuxHeader {
 /// end of vector
 pub const AT_NULL: usize = 0;
 /// entry should be ignored
+#[allow(unused)]
 pub const AT_IGNORE: usize = 1;
 /// file descriptor of program
+#[allow(unused)]
 pub const AT_EXECFD: usize = 2; /* file descriptor of program */
 /// program headers for program
 pub const AT_PHDR: usize = 3; /* program headers for program */
@@ -49,16 +51,20 @@ pub const AT_CLKTCK: usize = 17; /* frequency at which times() increments */
 /// secure mode boolean
 pub const AT_SECURE: usize = 23; /* secure mode boolean */
 /// string identifying real platform, may differ from AT_PLATFORM.
+#[allow(unused)]
 pub const AT_BASE_PLATFORM: usize = 24; /* string identifying real platform, may
                                          * differ from AT_PLATFORM. */
 /// address of 16 random bytes
 pub const AT_RANDOM: usize = 25; /* address of 16 random bytes */
 /// extension of AT_HWCAP
+#[allow(unused)]
 pub const AT_HWCAP2: usize = 26; /* extension of AT_HWCAP */
 /// filename of program
 pub const AT_EXECFN: usize = 31; /* filename of program */
 /// Pointer to the global system page used for system calls and other
 /// nice things.  
+#[allow(unused)]
 pub const AT_SYSINFO: usize = 32;
 ///
+#[allow(unused)]
 pub const AT_SYSINFO_EHDR: usize = 33;

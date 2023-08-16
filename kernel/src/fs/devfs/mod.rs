@@ -31,6 +31,8 @@ mod tty;
 mod urandom;
 mod zero;
 
+pub use tty::TTY;
+
 /// i.e. /dev
 pub struct DevRootInode {
     metadata: Option<InodeMeta>,
@@ -174,4 +176,8 @@ impl FileSystem for DevFs {
     }
 
     // fn sync_fs(&self) {}
+}
+
+pub fn init() {
+    tty::init();
 }

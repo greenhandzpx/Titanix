@@ -2,18 +2,25 @@ use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
     config::process::INITPROC_PID,
-    driver::getchar,
-    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex},
+    driver::{getchar, CHAR_DEVICE},
+    fs::{file::FileMetaInner, inode::InodeMeta, Inode, Mutex, OpenFlags},
     mm::user_check::UserCheck,
+    process::{PROCESS_GROUP_MANAGER, PROCESS_MANAGER},
+    signal::SIGINT,
     stack_trace,
     sync::mutex::SpinLock,
     timer::POLL_QUEUE,
-    utils::error::{GeneralRet, SyscallRet},
+    utils::{
+        cell::SyncUnsafeCell,
+        error::{GeneralRet, SyscallRet},
+    },
 };
 use alloc::boxed::Box;
 use core::{
+    future::Future,
+    pin::Pin,
     sync::atomic::{AtomicU8, Ordering},
-    task::Waker,
+    task::{Poll, Waker},
 };
 
 use crate::{process, processor::SumGuard, sync::mutex::SleepLock, utils::error::AsyscallRet};
@@ -31,10 +38,11 @@ impl TtyInode {
 }
 
 impl Inode for TtyInode {
-    fn open(&self, this: alloc::sync::Arc<dyn Inode>) -> GeneralRet<Arc<dyn crate::fs::File>> {
-        let file: Arc<dyn File> = Arc::new(TtyFile::new(this));
-        file.metadata().inner.lock().file = Some(Arc::downgrade(&file));
-        Ok(file)
+    fn open(&self, _this: alloc::sync::Arc<dyn Inode>) -> GeneralRet<Arc<dyn crate::fs::File>> {
+        Ok(TTY.get_unchecked_mut().as_ref().unwrap().clone())
+        // let file: Arc<dyn File> = Arc::new(TtyFile::new());
+        // file.metadata().inner.lock().file = Some(Arc::downgrade(&file));
+        // Ok(file)
     }
     fn metadata(&self) -> &crate::fs::inode::InodeMeta {
         &self.metadata
@@ -54,8 +62,6 @@ impl Inode for TtyInode {
 }
 
 const PRINT_LOCKED: bool = false;
-
-// static PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
 
 static PRINT_MUTEX: SleepLock<bool> = SleepLock::new(false);
 
@@ -82,6 +88,8 @@ const TCSETAW: usize = 0x5407;
 /// Sets the serial port settings after flushing the input and output buffers.
 #[allow(unused)]
 const TCSETAF: usize = 0x5408;
+/// If the terminal is using asynchronous serial data transmission, and arg is zero, then send a break (a stream of zero bits) for between 0.25 and 0.5 seconds.
+const TCSBRK: usize = 0x5409;
 /// Get the process group ID of the foreground process group on this terminal.
 const TIOCGPGRP: usize = 0x540F;
 /// Set the foreground process group ID of this terminal.
@@ -126,6 +134,17 @@ impl WinSize {
     }
 }
 
+pub fn init() {
+    let tty_file = Arc::new(TtyFile::new());
+    let tty: Arc<dyn File> = tty_file.clone();
+    tty_file.metadata().inner.lock().file = Some(Arc::downgrade(&tty));
+    *TTY.get_unchecked_mut() = Some(tty_file);
+}
+
+const CTRL_C: u8 = 3;
+
+pub static TTY: SyncUnsafeCell<Option<Arc<TtyFile>>> = SyncUnsafeCell::new(None);
+
 pub struct TtyFile {
     /// Temporarily save poll in data
     buf: AtomicU8,
@@ -140,12 +159,12 @@ struct TtyInner {
 }
 
 impl TtyFile {
-    pub fn new(this: Arc<dyn Inode>) -> Self {
+    pub fn new() -> Self {
         Self {
             buf: AtomicU8::new(255),
             metadata: FileMeta {
                 inner: Mutex::new(FileMetaInner {
-                    inode: Some(this),
+                    inode: None,
                     mode: crate::fs::InodeMode::FileCHR,
                     pos: 0,
                     dirent_index: 0,
@@ -160,6 +179,28 @@ impl TtyFile {
             }),
         }
     }
+
+    pub fn handle_irq(&self, ch: u8) {
+        log::debug!("[TtyFile::handle_irq] handle irq, ch {}", ch);
+        self.buf.store(ch, Ordering::Release);
+        if ch == CTRL_C {
+            let pids = PROCESS_GROUP_MANAGER.get_group_by_pgid(self.inner.lock().fg_pgid as usize);
+            log::debug!("[TtyFile::handle_irq] fg pid {}", self.inner.lock().fg_pgid);
+            for pid in pids {
+                let process = PROCESS_MANAGER.get(pid);
+                if let Some(p) = process {
+                    p.inner_handler(|proc| {
+                        for (_, thread) in proc.threads.iter() {
+                            if let Some(t) = thread.upgrade() {
+                                log::debug!("[TtyFile::handle_irq] kill tid {}", t.tid());
+                                t.recv_signal(SIGINT);
+                            }
+                        }
+                    })
+                }
+            }
+        }
+    }
 }
 
 impl File for TtyFile {
@@ -167,41 +208,100 @@ impl File for TtyFile {
         &self.metadata
     }
 
-    fn read<'a>(&'a self, buf: &'a mut [u8]) -> AsyscallRet {
+    fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         // println!("[TtyFile::read] read...");
-        Box::pin(async move {
-            let _sum_guard = SumGuard::new();
-            let mut c: u8;
-            let mut cnt = 0;
-            loop {
+        #[cfg(not(feature = "board_u740"))]
+        {
+            Box::pin(async move {
+                let _sum_guard = SumGuard::new();
+                let mut c: u8;
+                let mut cnt = 0;
                 loop {
-                    let self_buf = self.buf.load(Ordering::Acquire);
-                    if self_buf != 255 {
-                        self.buf.store(255, Ordering::Release);
-                        c = self_buf;
-                        break;
+                    loop {
+                        let self_buf = self.buf.load(Ordering::Acquire);
+                        if self_buf != 255 {
+                            self.buf.store(255, Ordering::Release);
+                            c = self_buf;
+                            break;
+                        }
+                        c = getchar();
+                        // log::error!("stdin read a char {}", c);
+                        // debug!("stdin read a char {}", c);
+                        if c as i8 == -1 {
+                            process::yield_now().await;
+                        } else {
+                            break;
+                        }
                     }
-                    c = getchar();
-                    // debug!("stdin read a char {}", c);
-                    if c as i8 == -1 {
-                        process::yield_now().await;
-                    } else {
+                    let ch = c;
+                    buf[cnt] = ch;
+                    cnt += 1;
+                    if cnt == buf.len() {
                         break;
                     }
                 }
-                let ch = c;
-                buf[cnt] = ch;
-                cnt += 1;
-                if cnt == buf.len() {
-                    break;
+                // println!("[TtyFile::read] read finished");
+                Ok(buf.len())
+            })
+        }
+
+        #[cfg(feature = "board_u740")]
+        {
+            struct TtyFuture<'a> {
+                tty_file: &'a TtyFile,
+                buf: &'a mut [u8],
+                cnt: usize,
+            }
+            impl<'a> Future for TtyFuture<'a> {
+                type Output = SyscallRet;
+                fn poll(
+                    self: core::pin::Pin<&mut Self>,
+                    cx: &mut core::task::Context<'_>,
+                ) -> core::task::Poll<Self::Output> {
+                    let _sum_guard = SumGuard::new();
+                    let ch: u8;
+                    let self_buf = self.tty_file.buf.load(Ordering::Acquire);
+                    if self_buf != 0xff {
+                        self.tty_file.buf.store(0xff, Ordering::Release);
+                        ch = self_buf;
+                    } else {
+                        ch = getchar();
+                        if ch == 0xff {
+                            CHAR_DEVICE
+                                .get_unchecked_mut()
+                                .as_ref()
+                                .unwrap()
+                                .register_waker(cx.waker().clone());
+                            log::debug!("[TtyFuture::poll] nothing to read");
+                            return Poll::Pending;
+                        }
+                    }
+                    log::debug!(
+                        "[TtyFuture::poll] recv ch {}, cnt {}, len {}",
+                        ch,
+                        self.cnt,
+                        self.buf.len()
+                    );
+                    let this = unsafe { Pin::get_unchecked_mut(self) };
+                    this.buf[this.cnt] = ch;
+
+                    this.cnt += 1;
+                    if this.cnt == this.buf.len() {
+                        Poll::Ready(Ok(this.buf.len()))
+                    } else {
+                        Poll::Pending
+                    }
                 }
             }
-            // println!("[TtyFile::read] read finished");
-            Ok(buf.len())
-        })
+            Box::pin(TtyFuture {
+                tty_file: self,
+                buf,
+                cnt: 0,
+            })
+        }
     }
 
-    fn write<'a>(&'a self, buf: &'a [u8]) -> AsyscallRet {
+    fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
         // println!("[TtyFile::write] buf {:?}...", buf);
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -222,20 +322,48 @@ impl File for TtyFile {
         {
             Ok(true)
         }
-        #[cfg(not(feature = "submit"))]
+        #[cfg(all(not(feature = "submit"), feature = "board_u740"))]
         {
             if self.buf.load(Ordering::Acquire) != 255 {
                 return Ok(true);
             }
             let _sum_guard = SumGuard::new();
             let c = getchar();
-            if c as i8 == -1 {
+            if c == 0xff {
+                if let Some(waker) = waker {
+                    CHAR_DEVICE
+                        .get_unchecked_mut()
+                        .as_ref()
+                        .unwrap()
+                        .register_waker(waker);
+                    log::debug!("[TtyFuture::pollin] nothing to read");
+                    // POLL_QUEUE.register(
+                    //     self.metadata().inner.lock().file.as_ref().unwrap().clone(),
+                    //     waker,
+                    //     true,
+                    // )
+                }
+                return Ok(false);
+            } else {
+                self.buf.store(c as u8, Ordering::Release);
+                return Ok(true);
+            }
+        }
+        #[cfg(all(not(feature = "submit"), not(feature = "board_u740")))]
+        {
+            if self.buf.load(Ordering::Acquire) != 255 {
+                return Ok(true);
+            }
+            let _sum_guard = SumGuard::new();
+            let c = getchar();
+            if c == 0xff {
                 if let Some(waker) = waker {
                     POLL_QUEUE.register(
                         self.metadata().inner.lock().file.as_ref().unwrap().clone(),
                         waker,
                         true,
-                    )
+                    );
+                    log::debug!("[TtyFuture::pollin] nothing to read");
                 }
                 return Ok(false);
             } else {
@@ -278,6 +406,7 @@ impl File for TtyFile {
                     .check_writable_slice(value as *mut u8, core::mem::size_of::<Pid>())?;
                 unsafe {
                     *(value as *mut Pid) = self.inner.lock().fg_pgid;
+                    log::info!("[TtyFile::ioctl] get fg pgid {}", *(value as *const Pid));
                 }
                 Ok(0)
             }
@@ -286,6 +415,7 @@ impl File for TtyFile {
                 UserCheck::new()
                     .check_readable_slice(value as *const u8, core::mem::size_of::<Pid>())?;
                 unsafe {
+                    log::info!("[TtyFile::ioctl] set fg pgid {}", *(value as *const Pid));
                     self.inner.lock().fg_pgid = *(value as *const Pid);
                 }
                 Ok(0)
@@ -308,6 +438,7 @@ impl File for TtyFile {
                 }
                 Ok(0)
             }
+            TCSBRK => Ok(0),
             _ => todo!(),
         }
     }

@@ -223,8 +223,20 @@ pub async fn sys_nanosleep(time_val_ptr: usize) -> SyscallRet {
         let time_val = unsafe { &(*time_val_ptr) };
         time_val.sec * 1000 + time_val.nsec / 1000000
     };
-    ksleep(Duration::from_millis(sleep_ms as u64)).await;
-    Ok(0)
+    match Select2Futures::new(
+        ksleep(Duration::from_millis(sleep_ms as u64)),
+        current_task().wait_for_events(Event::all()),
+    )
+    .await
+    {
+        SelectOutput::Output1(_) => Ok(0),
+        SelectOutput::Output2(intr) => {
+            log::info!("[sys_nanosleep] interrupt by event {:?}", intr);
+            Err(SyscallErr::EINTR)
+        }
+    }
+    // ksleep().await;
+    // Ok(0)
 }
 
 const ITIMER_REAL: i32 = 0;
