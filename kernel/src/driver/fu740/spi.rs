@@ -63,6 +63,7 @@ impl SPI {
             self.delay0_ptr().write_volatile((1 << 16) | 1);
             // disable directly memory-mapped mode
             self.fctrl_ptr().write_volatile(0);
+            self.switch_cs(false);
         }
     }
     pub fn configure(&self, protocol: u32, endian: u32, csdef: u32, csid: u32) {
@@ -89,16 +90,15 @@ impl SPI {
             }
         }
     }
-    pub fn switch_cs(&self, csmode_hold: bool, csid: u32) {
+    pub fn switch_cs(&self, csmode_hold: bool) {
         unsafe {
             self.csmode_ptr()
                 .write_volatile(if csmode_hold { 2 } else { 0 });
-            self.csid_ptr().write_volatile(csid);
         }
     }
     pub fn send_data(&self, csid: u32, tx: &[u8]) {
         self.set_direction(true);
-        self.switch_cs(true, csid);
+        self.switch_cs(true);
         const CHUNK_LEN: usize = 8;
         for s in tx.chunks(CHUNK_LEN) {
             let n = s.len();
@@ -112,11 +112,11 @@ impl SPI {
                 }
             }
         }
-        self.switch_cs(false, csid);
+        self.switch_cs(false);
     }
     pub fn recv_data(&self, csid: u32, rx: &mut [u8]) {
         self.set_direction(false);
-        self.switch_cs(true, csid);
+        self.switch_cs(true);
         const CHUNK_LEN: usize = 8;
         for s in rx.chunks_mut(CHUNK_LEN) {
             let n = s.len();
@@ -133,6 +133,6 @@ impl SPI {
                 }
             }
         }
-        self.switch_cs(false, csid);
+        self.switch_cs(false);
     }
 }
