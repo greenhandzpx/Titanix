@@ -62,13 +62,11 @@ impl Socket for TcpSocket {
             "[Tcp::listen] {} listening: {:?}",
             self.socket_handler, local
         );
-        NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             let ret = socket.listen(local).ok().ok_or(SyscallErr::EADDRINUSE);
             self.inner.lock().last_state = socket.state();
             ret
         })?;
-        NET_INTERFACE.poll();
         Ok(0)
     }
 
@@ -221,7 +219,6 @@ impl TcpSocket {
         let socket = socket::tcp::Socket::new(rx_buf, tx_buf);
         let socket_handler = NET_INTERFACE.add_socket(socket);
         info!("[TcpSocket::new] new {}", socket_handler);
-        NET_INTERFACE.poll();
         Self {
             socket_handler,
             inner: Mutex::new(TcpSocketInner {
@@ -434,7 +431,6 @@ impl<'a> Future for TcpAcceptFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> Poll<Self::Output> {
-        NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.is_open() {
                 log::info!("[TcpAcceptFuture::poll] this socket is not open");

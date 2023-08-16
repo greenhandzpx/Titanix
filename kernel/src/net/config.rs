@@ -169,8 +169,8 @@ impl<'a> TitanixNetInterface<'a> {
 
     pub fn poll(&self) {
         log::debug!("[TitanixNetInterface::poll] poll all...");
-        self.poll_device();
         self.poll_loopback();
+        self.poll_device();
     }
 
     // pub fn poll(&self, is_local: bool) {

@@ -41,11 +41,9 @@ struct UdpSocketInner {
 impl Socket for UdpSocket {
     fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
         log::info!("[Udp::bind] bind to {:?}", addr);
-        NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
             socket.bind(addr).ok().ok_or(SyscallErr::EINVAL)
         })?;
-        NET_INTERFACE.poll();
         Ok(0)
     }
 
@@ -59,7 +57,6 @@ impl Socket for UdpSocket {
             log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
             let mut inner = self.inner.lock();
             inner.remote_endpoint = Some(remote_endpoint);
-            NET_INTERFACE.poll();
             NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
                 let local = socket.endpoint();
                 info!("[Udp::connect] local: {:?}", local);
@@ -86,7 +83,6 @@ impl Socket for UdpSocket {
                     Ok(())
                 }
             })?;
-            NET_INTERFACE.poll();
             Ok(0)
         })
     }
@@ -121,9 +117,7 @@ impl Socket for UdpSocket {
     }
 
     fn loacl_endpoint(&self) -> IpListenEndpoint {
-        NET_INTERFACE.poll();
         let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
-        NET_INTERFACE.poll();
         local
     }
 
@@ -158,7 +152,6 @@ impl UdpSocket {
         let socket = socket::udp::Socket::new(rx_buf, tx_buf);
         let socket_handler = NET_INTERFACE.add_socket(socket);
         log::info!("[UdpSocket::new] new {}", socket_handler);
-        NET_INTERFACE.poll();
         Self {
             inner: Mutex::new(UdpSocketInner {
                 remote_endpoint: None,
