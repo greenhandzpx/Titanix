@@ -85,10 +85,10 @@ pub fn initplic(base_addr: usize) {
     for context in 0..=8 {
         plic.set_threshold(context, 0);
         plic.set_intr_enable(IntrSource::UART0 as usize, context);
-        plic.set_intr_enable(IntrSource::SPI2 as usize, context);
+        //    plic.set_intr_enable(IntrSource::SPI2 as usize, context);
     }
     plic.set_priority(IntrSource::UART0 as usize, 1);
-    plic.set_priority(IntrSource::SPI2 as usize, 1);
+    // plic.set_priority(IntrSource::SPI2 as usize, 1);
 }
 
 #[cfg(not(feature = "board_u740"))]
