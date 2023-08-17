@@ -180,6 +180,75 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
     }
 }
 
+/// mknod() attempts to create a directory named pathname.
+/// Return zero on sucess.
+pub fn sys_mknodat(dirfd: isize, pathname: *const u8, mode: usize, dev: usize) -> SyscallRet {
+    stack_trace!();
+    log::info!("[sys_mknodat] dirfd {}", dirfd);
+    let (target, path, parent) = path::path_to_inode_ffi(dirfd, pathname)?;
+    if target.is_some() {
+        log::info!("[sys_mknodat] already exists");
+        return Err(SyscallErr::EEXIST);
+    } else {
+        // if have inode, the path also would be have
+        let parent = match parent {
+            Some(parent) => parent,
+            None => {
+                let parent_path = path::get_parent_dir(&path).unwrap();
+                debug!("[sys_mknodat] get parent path: {}", parent_path);
+                <dyn Inode>::lookup_from_root(&parent_path)?.0.unwrap()
+            }
+        };
+        log::info!("[sys_mknodat] parent inode name {}", parent.metadata().name);
+        match parent.metadata().mode {
+            InodeMode::FileDIR => {
+                let mut inner_lock = parent.metadata().inner.lock();
+                // change the time
+                inner_lock.st_atim = current_time_spec();
+                inner_lock.st_mtim = current_time_spec();
+                // change state
+                match inner_lock.state {
+                    InodeState::Synced => {
+                        inner_lock.state = InodeState::DirtyInode;
+                    }
+                    InodeState::DirtyData => {
+                        inner_lock.state = InodeState::DirtyAll;
+                    }
+                    _ => {}
+                }
+                // TODO: add to dirty list, should add inode to the target fs which is include this inode
+                drop(inner_lock);
+                stack_trace!();
+                let child_name = path::get_name(&path);
+                let mode = if mode == 0 || mode == (InodeMode::FileREG as usize) {
+                    Ok(InodeMode::FileREG)
+                } else if mode == (InodeMode::FileBLK as usize) {
+                    Ok(InodeMode::FileBLK)
+                } else if mode == (InodeMode::FileCHR as usize) {
+                    Ok(InodeMode::FileCHR)
+                } else if mode == (InodeMode::FileFIFO as usize) {
+                    Ok(InodeMode::FileFIFO)
+                } else if mode == (InodeMode::FileSOCK as usize) {
+                    Ok(InodeMode::FileSOCK)
+                } else {
+                    Err(SyscallErr::EINVAL)
+                }?;
+                let dev = if mode == InodeMode::FileBLK || mode == InodeMode::FileCHR {
+                    Some(dev)
+                } else {
+                    None
+                };
+                parent.mknod_v(child_name, mode, dev)?;
+                Ok(0)
+            }
+            _ => {
+                debug!("[sys_mknodat] parent isn't a dir");
+                return Err(SyscallErr::ENOTDIR);
+            }
+        }
+    }
+}
+
 /// you should insert the target_path and filesystem into the FILE_SYSTEM_MANAGER.
 /// the filesystem should be converted from block_dev which is associated with the dev_name.
 pub fn sys_mount(

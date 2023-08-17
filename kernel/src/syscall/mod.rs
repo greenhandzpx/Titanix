@@ -6,6 +6,7 @@ const SYSCALL_DUP3: usize = 24;
 const SYSCALL_FCNTL: usize = 25;
 const SYSCALL_IOCTL: usize = 29;
 const SYSCALL_UNLINK: usize = 35;
+const SYSCALL_MKNOD: usize = 33;
 const SYSCALL_MKDIR: usize = 34;
 const SYSCALL_UMOUNT: usize = 39;
 const SYSCALL_MOUNT: usize = 40;
@@ -174,6 +175,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_UNLINK => sys_handler!(
             sys_unlinkat,
             (args[0] as isize, args[1] as *const u8, args[2] as u32)
+        ),
+        SYSCALL_MKNOD => sys_handler!(
+            sys_mknodat,
+            (args[0] as isize, args[1] as *const u8, args[2], args[3])
         ),
         SYSCALL_MKDIR => sys_handler!(
             sys_mkdirat,
