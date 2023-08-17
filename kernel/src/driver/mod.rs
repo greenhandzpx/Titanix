@@ -26,6 +26,41 @@ type Mutex<T> = SpinNoIrqLock<T>;
 
 static PRINT_MUTEX: Mutex<()> = Mutex::new(());
 
+#[cfg(not(feature = "board_u740"))]
+pub fn intr_handler() {
+    let mut plic = PLIC::new(0xffff_ffc0_0c00_0000);
+    let hart_id = local_hart().hart_id();
+    let context_id = hart_id * 2;
+    let intr = plic.claim(context_id);
+    use qemu::IntrSource;
+    if intr != 0 {
+        match intr.into() {
+            IntrSource::UART0 => {
+                // uart
+                log::info!("receive uart0 intr");
+                CHAR_DEVICE
+                    .get_unchecked_mut()
+                    .as_ref()
+                    .unwrap()
+                    .handle_irq();
+            }
+            IntrSource::VIRTIO0 => {
+                // sdcard
+                log::info!("receive virtio0 intr");
+            }
+            _ => {
+                panic!("unexpected interrupt {}", intr);
+            }
+        }
+        // #[cfg(feature = "board_qemu")]
+        // match intr {}
+        plic.complete(context_id, intr);
+    } else {
+        log::info!("didn't claim any intr");
+    }
+}
+
+#[cfg(feature = "board_u740")]
 pub fn intr_handler() {
     let mut plic = PLIC::new(0xffff_ffc0_0c00_0000);
     let hart_id = local_hart().hart_id();
@@ -97,11 +132,16 @@ fn init_block_device() {
 fn init_char_device() {
     #[cfg(not(feature = "board_u740"))]
     {
-        *CHAR_DEVICE.get_unchecked_mut() = Some(Box::new(SbiChar::new()));
+        *CHAR_DEVICE.get_unchecked_mut() = Some(Box::new(qemu::uart::UART::new(
+            0xffff_ffc0_1000_0000,
+            Box::new(|ch| {
+                TTY.get_unchecked_mut().as_ref().unwrap().handle_irq(ch);
+            }),
+        )));
     }
     #[cfg(feature = "board_u740")]
     {
-        *CHAR_DEVICE.get_unchecked_mut() = Some(Box::new(UART::new(
+        *CHAR_DEVICE.get_unchecked_mut() = Some(Box::new(fu740::uart::UART::new(
             0xffff_ffc0_1001_0000,
             Box::new(|ch| {
                 TTY.get_unchecked_mut().as_ref().unwrap().handle_irq(ch);

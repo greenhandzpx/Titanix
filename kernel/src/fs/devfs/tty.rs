@@ -210,95 +210,57 @@ impl File for TtyFile {
 
     fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
         // println!("[TtyFile::read] read...");
-        #[cfg(not(feature = "board_u740"))]
-        {
-            Box::pin(async move {
+        struct TtyFuture<'a> {
+            tty_file: &'a TtyFile,
+            buf: &'a mut [u8],
+            cnt: usize,
+        }
+        impl<'a> Future for TtyFuture<'a> {
+            type Output = SyscallRet;
+            fn poll(
+                self: core::pin::Pin<&mut Self>,
+                cx: &mut core::task::Context<'_>,
+            ) -> core::task::Poll<Self::Output> {
                 let _sum_guard = SumGuard::new();
-                let mut c: u8;
-                let mut cnt = 0;
-                loop {
-                    loop {
-                        let self_buf = self.buf.load(Ordering::Acquire);
-                        if self_buf != 255 {
-                            self.buf.store(255, Ordering::Release);
-                            c = self_buf;
-                            break;
-                        }
-                        c = getchar();
-                        // log::error!("stdin read a char {}", c);
-                        // debug!("stdin read a char {}", c);
-                        if c as i8 == -1 {
-                            process::yield_now().await;
-                        } else {
-                            break;
-                        }
-                    }
-                    let ch = c;
-                    buf[cnt] = ch;
-                    cnt += 1;
-                    if cnt == buf.len() {
-                        break;
+                let ch: u8;
+                let self_buf = self.tty_file.buf.load(Ordering::Acquire);
+                if self_buf != 0xff {
+                    self.tty_file.buf.store(0xff, Ordering::Release);
+                    ch = self_buf;
+                } else {
+                    ch = getchar();
+                    if ch == 0xff {
+                        CHAR_DEVICE
+                            .get_unchecked_mut()
+                            .as_ref()
+                            .unwrap()
+                            .register_waker(cx.waker().clone());
+                        log::debug!("[TtyFuture::poll] nothing to read");
+                        return Poll::Pending;
                     }
                 }
-                // println!("[TtyFile::read] read finished");
-                Ok(buf.len())
-            })
-        }
+                log::debug!(
+                    "[TtyFuture::poll] recv ch {}, cnt {}, len {}",
+                    ch,
+                    self.cnt,
+                    self.buf.len()
+                );
+                let this = unsafe { Pin::get_unchecked_mut(self) };
+                this.buf[this.cnt] = ch;
 
-        #[cfg(feature = "board_u740")]
-        {
-            struct TtyFuture<'a> {
-                tty_file: &'a TtyFile,
-                buf: &'a mut [u8],
-                cnt: usize,
-            }
-            impl<'a> Future for TtyFuture<'a> {
-                type Output = SyscallRet;
-                fn poll(
-                    self: core::pin::Pin<&mut Self>,
-                    cx: &mut core::task::Context<'_>,
-                ) -> core::task::Poll<Self::Output> {
-                    let _sum_guard = SumGuard::new();
-                    let ch: u8;
-                    let self_buf = self.tty_file.buf.load(Ordering::Acquire);
-                    if self_buf != 0xff {
-                        self.tty_file.buf.store(0xff, Ordering::Release);
-                        ch = self_buf;
-                    } else {
-                        ch = getchar();
-                        if ch == 0xff {
-                            CHAR_DEVICE
-                                .get_unchecked_mut()
-                                .as_ref()
-                                .unwrap()
-                                .register_waker(cx.waker().clone());
-                            log::debug!("[TtyFuture::poll] nothing to read");
-                            return Poll::Pending;
-                        }
-                    }
-                    log::debug!(
-                        "[TtyFuture::poll] recv ch {}, cnt {}, len {}",
-                        ch,
-                        self.cnt,
-                        self.buf.len()
-                    );
-                    let this = unsafe { Pin::get_unchecked_mut(self) };
-                    this.buf[this.cnt] = ch;
-
-                    this.cnt += 1;
-                    if this.cnt == this.buf.len() {
-                        Poll::Ready(Ok(this.buf.len()))
-                    } else {
-                        Poll::Pending
-                    }
+                this.cnt += 1;
+                if this.cnt == this.buf.len() {
+                    Poll::Ready(Ok(this.buf.len()))
+                } else {
+                    Poll::Pending
                 }
             }
-            Box::pin(TtyFuture {
-                tty_file: self,
-                buf,
-                cnt: 0,
-            })
         }
+        Box::pin(TtyFuture {
+            tty_file: self,
+            buf,
+            cnt: 0,
+        })
     }
 
     fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {

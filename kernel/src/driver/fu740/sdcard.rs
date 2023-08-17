@@ -59,7 +59,6 @@ impl SDCardSPI {
         self.spi.recv_data(0, data);
     }
     fn send_cmd(&self, cmd: SDCardCMD, arg: u32, crc: u8) {
-        self.spi.switch_cs(true, 0);
         self.write_data(&[
             ((cmd as u8) | 0x40),
             (arg >> 24) as u8,
@@ -81,7 +80,6 @@ impl SDCardSPI {
         0xFF
     }
     fn end_cmd(&self) {
-        self.spi.switch_cs(false, 0);
         self.write_data(&[0xff]);
     }
     fn acmd_resp(&self, acmd: SDCardCMD, arg: u32, crc: u8) -> u8 {
@@ -99,9 +97,6 @@ impl SDCardSPI {
         }
         let sector = if self.hc { sector } else { sector << 9 };
         // send CMD17
-        self.end_cmd();
-        self.end_cmd();
-        self.write_data(&[0xff; 10]);
         self.send_cmd(SDCardCMD::CMD17, sector as u32, 0);
         let resp = self.get_resp();
         if resp != 0x00 {
@@ -217,14 +212,12 @@ impl SDCardSPI {
         };
         ret.spi.init();
         ret.spi.set_clk_rate(3000);
-        ret.spi.switch_cs(false, 0);
         ret.spi.configure(0, 0, 1, 0);
         ret.write_data(&[0xff; 10]);
         ret.software_reset()?;
         ret.check_voltage_range()?;
-        ret.spi.switch_cs(false, 0);
         ret.write_data(&[0xff; 10]);
-        ret.spi.set_clk_rate(3);
+        ret.spi.set_clk_rate(2);
         Ok(ret)
     }
 }
