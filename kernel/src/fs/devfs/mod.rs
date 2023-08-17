@@ -9,6 +9,7 @@ use self::null::NullInode;
 use self::rtc::RtcInode;
 use self::urandom::UrandomInode;
 use self::{tty::TtyInode, zero::ZeroInode};
+use crate::fs::devfs::r#loop::LoopInode;
 use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
 use crate::fs::inode::INODE_CACHE;
@@ -25,6 +26,7 @@ use super::{
 
 mod block_device;
 mod cpu_dma_latency;
+pub mod r#loop;
 mod null;
 mod rtc;
 mod tty;
@@ -47,9 +49,15 @@ impl Inode for DevRootInode {
         dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
         debug!("[DevRootInode::mknod]: mknod: {}", name);
-        //        debug_assert!(dev_id.unwrap() < DEV_NAMES.len());
-        let creator = DEV_NAMES[dev_id.unwrap()].2;
-        let inode = creator(this.clone(), DEV_NAMES[dev_id.unwrap()].0);
+        let dev_id = dev_id.unwrap();
+        let inode = if dev_id < DEV_NAMES.len() {
+            let creator = DEV_NAMES[dev_id].2;
+            creator(this.clone(), DEV_NAMES[dev_id].0)
+        } else {
+            // loop device
+            let path = this.metadata().path.clone() + "/" + name;
+            Arc::new(LoopInode::new(this.clone(), &path, dev_id))
+        };
         this.metadata()
             .inner
             .lock()

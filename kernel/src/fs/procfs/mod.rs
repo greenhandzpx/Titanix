@@ -8,10 +8,11 @@ use crate::{
     utils::error::GeneralRet,
 };
 
-use self::{meminfo::MeminfoInode, mounts::MountsInode};
+use self::{filesystems::FilesystemsInode, meminfo::MeminfoInode, mounts::MountsInode};
 
 use super::{file_system::FileSystemMeta, inode::InodeMeta, FileSystem, Inode, InodeMode};
 
+mod filesystems;
 mod meminfo;
 mod mounts;
 pub struct ProcRootInode {
@@ -69,12 +70,15 @@ const PROC_NAME: [(
     &str,
     InodeMode,
     fn(parent: Arc<dyn Inode>, path: &str) -> Arc<dyn Inode>,
-); 2] = [
+); 3] = [
     ("/proc/mounts", InodeMode::FileREG, |parent, path| {
         Arc::new(MountsInode::new(parent, path))
     }),
     ("/proc/meminfo", InodeMode::FileREG, |parent, path| {
         Arc::new(MeminfoInode::new(parent, path))
+    }),
+    ("/proc/filesystems", InodeMode::FileREG, |parent, path| {
+        Arc::new(FilesystemsInode::new(parent, path))
     }),
 ];
 

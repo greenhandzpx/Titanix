@@ -212,7 +212,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 /// Return zero on sucess.
 pub fn sys_mknodat(dirfd: isize, pathname: *const u8, mode: usize, dev: usize) -> SyscallRet {
     stack_trace!();
-    log::info!("[sys_mknodat] dirfd {}", dirfd);
+    log::info!("[sys_mknodat] dirfd {}, mode {}, dev {}", dirfd, mode, dev);
     let (target, path, parent) = path::path_to_inode_ffi(dirfd, pathname)?;
     if target.is_some() {
         log::info!("[sys_mknodat] already exists");
@@ -248,6 +248,7 @@ pub fn sys_mknodat(dirfd: isize, pathname: *const u8, mode: usize, dev: usize) -
                 drop(inner_lock);
                 stack_trace!();
                 let child_name = path::get_name(&path);
+                let mode = mode & 0xfffff000;
                 let mode = if mode == 0 || mode == (InodeMode::FileREG as usize) {
                     Ok(InodeMode::FileREG)
                 } else if mode == (InodeMode::FileBLK as usize) {
@@ -287,7 +288,8 @@ pub fn sys_mount(
     _data: *const u8,
 ) -> SyscallRet {
     stack_trace!();
-    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let flags = StatFlags::from_bits(flags & 511).ok_or(SyscallErr::EINVAL)?;
+    println!("flags = {:?}", flags);
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(dev_name)?;
     UserCheck::new().check_c_str(target_path)?;
@@ -305,7 +307,8 @@ pub fn sys_mount(
         return Err(SyscallErr::EACCES);
     }
 
-    let ftype = path::path_process(AT_FDCWD, ftype)?;
+    UserCheck::new().check_c_str(ftype)?;
+    let ftype = c_str_to_string(ftype);
     let ftype = FileSystemType::fs_type(&ftype);
 
     let dev = <dyn Inode>::lookup_from_root(&dev_name)?.0;
@@ -502,6 +505,9 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
         match dev {
             inode::InodeDevice::Device(dev) => {
                 kstat.st_dev = dev.dev_id as u64;
+            }
+            inode::InodeDevice::LoopDevice(_dev) => {
+                kstat.st_dev = 0;
             } // _ => {
               //     return Err(SyscallErr::EBADF);
               // }

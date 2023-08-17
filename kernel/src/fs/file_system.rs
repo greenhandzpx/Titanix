@@ -32,6 +32,7 @@ impl FsDevice {
         match dev {
             // InodeDevice::Pipe(_) => Self::None,
             InodeDevice::Device(d) => Self::BlockDevice(d.block_device),
+            InodeDevice::LoopDevice(d) => Self::BlockDevice(d),
         }
     }
 
@@ -62,7 +63,7 @@ impl FileSystemType {
             "nfs" => Self::NFS,
             "proc" => Self::Proc,
             "devtmpfs" => Self::DevTmpFS,
-            _ => todo!(),
+            _ => panic!("fstype {} not valid!", ftype),
         }
     }
     pub fn to_string(&self) -> String {
