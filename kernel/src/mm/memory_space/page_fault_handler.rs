@@ -250,10 +250,10 @@ impl PageFaultHandler for MmapPageFaultHandler {
                     .insert(va.floor(), page);
             });
 
-            let _sum_guard = SumGuard::new();
-            debug!("[MmapPageFaultHandler] value {:#x}", unsafe {
-                *(va.0 as *const usize)
-            });
+            // let _sum_guard = SumGuard::new();
+            // debug!("[MmapPageFaultHandler] value {:#x}", unsafe {
+            //     *(va.0 as *const usize)
+            // });
 
             Ok(())
         })

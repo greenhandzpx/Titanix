@@ -129,7 +129,10 @@ pub fn path_to_inode(
                                     )),
                                 }
                             }
-                            None => Err(SyscallErr::EBADF),
+                            None => {
+                                log::info!("[path_to_inode] no file for fd {}", dirfd);
+                                Err(SyscallErr::EBADF)
+                            }
                         }
                     });
                 }
@@ -204,7 +207,12 @@ pub fn path_to_inode_ffi(
     } else {
         UserCheck::new().check_c_str(path)?;
         stack_trace!();
-        Some(c_str_to_string(path))
+        let path = c_str_to_string(path).trim().to_string();
+        if path.eq("") {
+            None
+        } else {
+            Some(path)
+        }
     };
     path_to_inode(dirfd, {
         let ref this = path;

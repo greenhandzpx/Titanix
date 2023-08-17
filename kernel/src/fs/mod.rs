@@ -59,8 +59,6 @@ fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
 }
 
 pub fn init() {
-    devfs::init();
-
     INODE_CACHE.init();
 
     // First we mount root fs
@@ -163,6 +161,7 @@ pub fn init() {
             StatFlags::ST_NOSUID,
         )
         .expect("devfs init fail!");
+    devfs::init();
 
     FILE_SYSTEM_MANAGER
         .mount(
@@ -242,9 +241,10 @@ bitflags! {
     pub struct FcntlFlags: u32 {
         const FD_CLOEXEC = 1;
         const AT_EMPTY_PATH = 1 << 0;
-        const AT_NO_AUTOMOUNT = 1 << 11;
         const AT_SYMLINK_NOFOLLOW = 1 << 8;
         const AT_EACCESS = 1 << 9;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_DUMMY = 1 << 12;
     }
 
     /// renameat flag

@@ -184,6 +184,7 @@ impl MemorySpace {
 
     /// Find the immutable ref of map area by the given vpn
     pub fn find_vm_area_by_vpn(&self, vpn: VirtPageNum) -> Option<&VmArea> {
+        stack_trace!();
         // Range query to find the map area that this vpn belongs to
         // debug!("len before {}", self.areas.len());
         if let Some((_, vm_area)) = self.areas.get_unchecked_mut().range(..=vpn).next_back() {
