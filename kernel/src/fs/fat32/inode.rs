@@ -141,6 +141,10 @@ impl Inode for FAT32Inode {
         let fat = Arc::clone(&content.fat);
         let mut dentry_content = FAT32DentryContent::new(&mut content);
         while let Some(dentry) = FAT32DirEntry::read_dentry(&mut dentry_content) {
+            let fname = dentry.fname();
+            if fname == "." || fname == ".." {
+                continue;
+            }
             let inode = FAT32Inode::from_dentry(Arc::clone(&fat), Some(Arc::clone(&this)), &dentry);
             let inode_rc: Arc<dyn Inode> = Arc::new(inode);
             inode_rc.create_page_cache_if_needed();

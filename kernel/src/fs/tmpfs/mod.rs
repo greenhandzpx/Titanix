@@ -22,6 +22,7 @@ impl TmpFs {
         flags: StatFlags,
         fa_inode: Option<Arc<dyn Inode>>,
         covered_inode: Option<Arc<dyn Inode>>,
+        covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
         let mut root_inode = TmpInode::new(
             fa_inode.clone(),
@@ -39,6 +40,7 @@ impl TmpFs {
                 root_inode,
                 fa_inode,
                 covered_inode,
+                covered_fs,
                 s_dirty: Vec::new(),
             },
         })

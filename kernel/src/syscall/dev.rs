@@ -15,7 +15,8 @@ pub fn sys_ioctl(fd: usize, request: usize, arg: usize) -> SyscallRet {
     let file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(fd).cloned())
         .ok_or(SyscallErr::EBADF)?;
-    if file.file.metadata().inner.lock().mode != InodeMode::FileCHR {
+    let mode = file.file.metadata().inner.lock().mode;
+    if mode != InodeMode::FileCHR && mode != InodeMode::FileBLK {
         debug!("[sys_ioctl] not a character device");
         return Err(SyscallErr::ENOTTY);
     }

@@ -24,6 +24,7 @@ use crate::{
     },
 };
 
+use super::devfs::r#loop::FileBlockDeviceWrapper;
 use super::FILE_SYSTEM_MANAGER;
 use super::{
     file::{DefaultFile, FileMeta, FileMetaInner},
@@ -306,9 +307,9 @@ impl dyn Inode {
         self: &Arc<Self>,
         name: &str,
         mode: InodeMode,
-        _dev_id: Option<usize>,
+        dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
-        let child = self.mknod(self.clone(), name, mode, None)?;
+        let child = self.mknod(self.clone(), name, mode, dev_id)?;
         self.metadata()
             .inner
             .lock()
@@ -642,6 +643,7 @@ impl InodeMeta {
 pub enum InodeDevice {
     // Pipe(Arc<Pipe>),
     Device(DevWrapper),
+    LoopDevice(Arc<FileBlockDeviceWrapper>),
     // TODO: add more
 }
 
