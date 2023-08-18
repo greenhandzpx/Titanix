@@ -150,14 +150,22 @@ impl FileSystemManager {
         let mut res = "".to_string();
         let fs_mgr = self.fs_mgr.lock();
         for (mount_point, fs) in fs_mgr.iter() {
-            res += fs.metadata().dev_name.as_str();
-            res += " ";
-            res += mount_point.as_str();
-            res += " ";
-            res += fs.metadata().fstype.to_string().as_str();
-            res += " ";
-            res += fs.metadata().flags.to_string().as_str();
-            res += " 0 0\n";
+            let mut fs_ptr = fs.clone();
+            loop {
+                res += fs_ptr.metadata().dev_name.as_str();
+                res += " ";
+                res += mount_point.as_str();
+                res += " ";
+                res += fs_ptr.metadata().fstype.to_string().as_str();
+                res += " ";
+                res += fs_ptr.metadata().flags.to_string().as_str();
+                res += " 0 0\n";
+                if fs_ptr.metadata().covered_fs.is_some() {
+                    fs_ptr = fs_ptr.metadata().covered_fs.as_ref().unwrap().clone();
+                } else {
+                    break;
+                }
+            }
         }
         res
     }
