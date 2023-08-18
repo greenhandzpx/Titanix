@@ -102,7 +102,8 @@ impl dyn Socket {
                 }
             }
             AF_UNIX => {
-                todo!()
+                Ok(4)
+                // todo!()
                 // let socket = UnixSocket::new();
                 // let socket = Arc::new(Socket::UnixSocket(socket));
                 // current_process().inner_handler(|proc| {

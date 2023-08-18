@@ -73,6 +73,7 @@ const SYSCALL_GETPID: usize = 172;
 const SYSCALL_GETPPID: usize = 173;
 const SYSCALL_GETUID: usize = 174;
 const SYSCALL_GETEUID: usize = 175;
+const SYSCALL_GETGID: usize = 176;
 const SYSCALL_GETEGID: usize = 177;
 const SYSCALL_GETTID: usize = 178;
 const SYSCALL_SYSINFO: usize = 179;
@@ -347,6 +348,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_GETUID => sys_handler!(sys_getuid, ()),
         SYSCALL_GETEUID => sys_handler!(sys_geteuid, ()),
         SYSCALL_GETEGID => sys_handler!(sys_getegid, ()),
+        SYSCALL_GETGID => sys_handler!(sys_getgid, ()),
         SYSCALL_GETTID => sys_handler!(sys_gettid, ()),
         SYSCALL_SYSINFO => sys_handler!(sys_sysinfo, (args[0])),
         SYSCALL_SHMGET => sys_handler!(sys_shmget, (args[0], args[1], args[2] as u32)),

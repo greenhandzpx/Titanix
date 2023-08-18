@@ -487,6 +487,11 @@ pub fn sys_getegid() -> SyscallRet {
     Ok(0)
 }
 
+pub fn sys_getgid() -> SyscallRet {
+    stack_trace!();
+    Ok(0)
+}
+
 pub fn sys_gettid() -> SyscallRet {
     stack_trace!();
     let tid = current_task().tid();
