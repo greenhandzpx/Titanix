@@ -123,7 +123,7 @@ fn init_net_device() {
     }
     #[cfg(feature = "board_u740")]
     {
-        *NET_DEVICE.lock() = Some(Arc::new(Loopback::new(smoltcp::phy::Medium::Ethernet)));
+        *NET_DEVICE.lock() = Some(Loopback::new(smoltcp::phy::Medium::Ethernet));
     }
 }
 

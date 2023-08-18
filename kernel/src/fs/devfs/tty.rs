@@ -217,31 +217,26 @@ impl File for TtyFile {
                 let mut c: u8;
                 let mut cnt = 0;
                 loop {
-                    loop {
-                        let self_buf = self.buf.load(Ordering::Acquire);
-                        if self_buf != 255 {
-                            self.buf.store(255, Ordering::Release);
-                            c = self_buf;
-                            break;
-                        }
-                        c = getchar();
-                        // log::error!("stdin read a char {}", c);
-                        // debug!("stdin read a char {}", c);
-                        if c as i8 == -1 {
-                            process::yield_now().await;
-                        } else {
-                            break;
-                        }
+                    let self_buf = self.buf.load(Ordering::Acquire);
+                    if self_buf != 255 {
+                        self.buf.store(255, Ordering::Release);
+                        c = self_buf;
+                        break;
                     }
-                    let ch = c;
-                    buf[cnt] = ch;
-                    cnt += 1;
-                    if cnt == buf.len() {
+                    c = getchar();
+                    // log::error!("stdin read a char {}", c);
+                    if c as i8 == -1 {
+                        process::yield_now().await;
+                    } else {
                         break;
                     }
                 }
-                // println!("[TtyFile::read] read finished");
-                Ok(buf.len())
+                let ch = c;
+                buf[cnt] = ch;
+                cnt += 1;
+                log::debug!("stdin read a char {}", ch as char);
+                return Ok(cnt);
+                // Ok(buf.len())
             })
         }
 
@@ -250,7 +245,7 @@ impl File for TtyFile {
             struct TtyFuture<'a> {
                 tty_file: &'a TtyFile,
                 buf: &'a mut [u8],
-                cnt: usize,
+                // cnt: usize,
             }
             impl<'a> Future for TtyFuture<'a> {
                 type Output = SyscallRet;
@@ -276,27 +271,16 @@ impl File for TtyFile {
                             return Poll::Pending;
                         }
                     }
-                    log::debug!(
-                        "[TtyFuture::poll] recv ch {}, cnt {}, len {}",
-                        ch,
-                        self.cnt,
-                        self.buf.len()
-                    );
+                    log::debug!("[TtyFuture::poll] recv ch {}", ch,);
                     let this = unsafe { Pin::get_unchecked_mut(self) };
-                    this.buf[this.cnt] = ch;
+                    this.buf[0] = ch;
 
-                    this.cnt += 1;
-                    if this.cnt == this.buf.len() {
-                        Poll::Ready(Ok(this.buf.len()))
-                    } else {
-                        Poll::Pending
-                    }
+                    Poll::Ready(Ok(1))
                 }
             }
             Box::pin(TtyFuture {
                 tty_file: self,
                 buf,
-                cnt: 0,
             })
         }
     }
