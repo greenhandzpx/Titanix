@@ -120,6 +120,8 @@ pub struct FileSystemMeta {
     pub fa_inode: Option<Arc<dyn Inode>>,
     /// covered_inode of root
     pub covered_inode: Option<Arc<dyn Inode>>,
+    /// covered_fs
+    pub covered_fs: Option<Arc<dyn FileSystem>>,
     /// list of dirty inodes
     pub s_dirty: Vec<Arc<dyn Inode>>,
 }
@@ -173,6 +175,7 @@ impl FileSystemManager {
         let mount_point_name = path::get_name(mount_point);
         let fa_inode;
         let covered_inode;
+        let covered_fs;
         let fa_ino;
         if let Some(mount_point_fa) = mount_point_fa {
             (fa_inode, _) = <dyn Inode>::lookup_from_root(&mount_point_fa)?;
@@ -186,6 +189,7 @@ impl FileSystemManager {
             let fa_inode_unwrap = Arc::clone(fa_inode.as_ref().unwrap());
             fa_ino = fa_inode_unwrap.metadata().ino;
             let maybe_covered_inode = fa_inode_unwrap.lookup(mount_point_name)?;
+            covered_fs = self.fs_mgr.lock().get(mount_point).cloned();
             if maybe_covered_inode.is_none() {
                 return Err(SyscallErr::EEXIST);
             }
@@ -193,6 +197,7 @@ impl FileSystemManager {
         } else {
             fa_inode = None;
             covered_inode = None;
+            covered_fs = None;
             fa_ino = 0;
         }
         let key = HashKey::new(fa_ino, mount_point_name.to_string());
@@ -214,6 +219,7 @@ impl FileSystemManager {
                     flags,
                     fa_inode,
                     covered_inode,
+                    covered_fs,
                 )?;
                 Arc::new(ret)
             }
@@ -226,6 +232,7 @@ impl FileSystemManager {
                     flags,
                     fa_inode,
                     covered_inode,
+                    covered_fs,
                 )?;
                 Arc::new(ret)
             }
@@ -237,6 +244,7 @@ impl FileSystemManager {
                     flags,
                     fa_inode,
                     covered_inode,
+                    covered_fs,
                 )?;
                 Arc::new(ret)
             }
@@ -248,6 +256,7 @@ impl FileSystemManager {
                     flags,
                     fa_inode,
                     covered_inode,
+                    covered_fs,
                 )?;
                 Arc::new(ret)
             }
@@ -334,6 +343,12 @@ impl FileSystemManager {
         self.fs_mgr.lock().remove(mount_point);
         if meta.covered_inode.is_some() {
             INODE_CACHE.insert(key, Arc::clone(&meta.covered_inode.as_ref().unwrap()));
+        }
+        if meta.covered_fs.is_some() {
+            self.fs_mgr.lock().insert(
+                mount_point.to_string(),
+                meta.covered_fs.as_ref().unwrap().clone(),
+            );
         }
         Ok(())
         // fs will be dropped automatically because Arc = 0

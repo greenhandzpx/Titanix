@@ -17,12 +17,12 @@ use crate::utils::error::GeneralRet;
 use crate::utils::path;
 
 use super::tmpfs::inode::TmpInode;
-use super::FileSystemType;
 use super::{
     file_system::{FileSystem, FileSystemMeta},
     inode::{InodeMeta, InodeMode},
     Inode,
 };
+use super::{File, FileSystemType};
 
 mod block_device;
 mod cpu_dma_latency;
@@ -140,6 +140,7 @@ impl DevFs {
         flags: StatFlags,
         fa_inode: Option<Arc<dyn Inode>>,
         covered_inode: Option<Arc<dyn Inode>>,
+        covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
         let mut raw_root_inode = DevRootInode::new();
         raw_root_inode.root_init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
@@ -170,6 +171,7 @@ impl DevFs {
                 root_inode,
                 fa_inode,
                 covered_inode,
+                covered_fs,
                 s_dirty: Vec::new(),
             },
             // id_allocator: id_allocator,

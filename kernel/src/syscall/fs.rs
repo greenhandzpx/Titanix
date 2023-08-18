@@ -289,7 +289,6 @@ pub fn sys_mount(
 ) -> SyscallRet {
     stack_trace!();
     let flags = StatFlags::from_bits(flags & 511).ok_or(SyscallErr::EINVAL)?;
-    println!("flags = {:?}", flags);
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(dev_name)?;
     UserCheck::new().check_c_str(target_path)?;
