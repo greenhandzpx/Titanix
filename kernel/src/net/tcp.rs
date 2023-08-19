@@ -444,19 +444,27 @@ impl File for TcpSocket {
                 Ok(true)
             } else {
                 log::info!("[Tcp::pollin] nothing to read, state {:?}", socket.state());
-                if let Some(waker) = waker.clone() {
-                    socket.register_recv_waker(&waker);
-                }
+                // if let Some(waker) = waker.clone() {
+                //     socket.register_recv_waker(&waker);
+                // }
                 Ok(false)
             }
         };
-        NET_INTERFACE.poll_all();
-
-        Ok(NET_INTERFACE.tcp_socket_loop(self.handler_loop, |socket| {
-            poll_f(socket, self.inner.lock().last_state_loop)
-        })? || NET_INTERFACE.tcp_socket_dev(self.handler_dev, |socket| {
-            poll_f(socket, self.inner.lock().last_state_dev)
-        })?)
+        let mut stall = 0;
+        loop {
+            NET_INTERFACE.poll_all();
+            let loop_ret = NET_INTERFACE.tcp_socket_loop(self.handler_loop, |socket| {
+                poll_f(socket, self.inner.lock().last_state_loop)
+            })?;
+            let dev_ret = NET_INTERFACE.tcp_socket_dev(self.handler_dev, |socket| {
+                poll_f(socket, self.inner.lock().last_state_dev)
+            })?;
+            if loop_ret || dev_ret {
+                return Ok(true);
+            }
+            stall += 1;
+            Box::pin(async move { ksleep(Duration::from_secs(stall)).await });
+        }
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
