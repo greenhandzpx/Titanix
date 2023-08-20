@@ -11,7 +11,7 @@ extern crate user_lib;
 
 // const TESTCASES: [&str; 0] = [];
 
-const TESTCASES: [&str; 11] = [
+const TESTCASES: [&str; 17] = [
     "cyclictest_testcode.sh",
     "busybox_testcode.sh",
     "time-test",
@@ -23,6 +23,12 @@ const TESTCASES: [&str; 11] = [
     "unixbench_testcode.sh",
     "netperf_testcode.sh",
     "iperf_testcode.sh",
+    "interrupts-test-1",
+    "interrupts-test-2",
+    "copy-file-range-test-1",
+    "copy-file-range-test-2",
+    "copy-file-range-test-3",
+    "copy-file-range-test-4",
 ];
 
 #[no_mangle]
