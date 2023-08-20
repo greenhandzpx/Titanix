@@ -1635,3 +1635,136 @@ pub fn sys_fchmodat() -> SyscallRet {
     stack_trace!();
     Ok(0)
 }
+
+pub async fn sys_copy_file_range(
+    fd_in: usize,
+    off_in: usize,
+    fd_out: usize,
+    off_out: usize,
+    len: u32,
+    flags: u32,
+) -> SyscallRet {
+    stack_trace!();
+    log::info!(
+        "[sys_copy_file_range] fd_in: {}, fd_out: {}, off_in: {}, off_out: {}, len: {}",
+        fd_in,
+        fd_out,
+        off_in,
+        off_out,
+        len
+    );
+    if flags != 0 {
+        return Err(SyscallErr::EINVAL);
+    }
+
+    let in_off = if off_in != 0 {
+        UserCheck::new()
+            .check_readable_slice(off_in as *const u8, core::mem::size_of::<usize>())?;
+        Some(unsafe { *(off_in as *const usize) })
+    } else {
+        None
+    };
+
+    let out_off = if off_out != 0 {
+        UserCheck::new()
+            .check_readable_slice(off_out as *const u8, core::mem::size_of::<usize>())?;
+        Some(unsafe { *(off_out as *const usize) })
+    } else {
+        None
+    };
+
+    let fd_info_in = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd_in).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+
+    let fd_info_out = current_process()
+        .inner_handler(move |proc| proc.fd_table.get_ref(fd_out).cloned())
+        .ok_or(SyscallErr::EBADF)?;
+
+    if !fd_info_in.flags.readable() {
+        return Err(SyscallErr::EPERM);
+    }
+    if !fd_info_out.flags.writable() {
+        return Err(SyscallErr::EPERM);
+    }
+
+    let file_in = fd_info_in.file;
+    let file_out = fd_info_out.file;
+
+    let file_in_data_len = file_in
+        .metadata()
+        .inner
+        .lock()
+        .inode
+        .as_ref()
+        .unwrap()
+        .metadata()
+        .inner
+        .lock()
+        .data_len;
+
+    log::info!(
+        "[sys_copy_file_range] file in data len: {}",
+        file_in_data_len
+    );
+
+    let old_in_off = file_in.seek(SeekFrom::Current(0))?;
+    let old_out_off = file_out.seek(SeekFrom::Current(0))?;
+
+    if len == 0 {
+        log::info!("[sys_copy_file_range] len is 0");
+        return Ok(0);
+    } else if len as usize > PAGE_SIZE * 64 {
+        log::warn!("[sys_copy_file_range] buf too large");
+    }
+
+    let mut buf = vec![0 as u8; file_in_data_len.min(len as usize)];
+    let read_len = match in_off {
+        None => {
+            log::info!(
+                "[sys_copy_file_range] off_in is null, copy from {}",
+                old_in_off
+            );
+            file_in.read(&mut buf, OpenFlags::RDWR).await?
+        }
+        Some(in_off) => {
+            if in_off > file_in_data_len {
+                return Ok(0);
+            }
+            file_in.seek(SeekFrom::Start(in_off))?;
+            let len = file_in.read(&mut buf, OpenFlags::RDWR).await?;
+            file_in.seek(SeekFrom::Start(old_in_off))?;
+            UserCheck::new()
+                .check_writable_slice(off_in as *mut u8, core::mem::size_of::<usize>())?;
+            Some(unsafe { *(off_in as *mut usize) = in_off + len as usize });
+            len
+        }
+    };
+    let write_buf = if read_len < len as usize {
+        buf.as_slice()[0..read_len].as_ref()
+    } else {
+        buf.as_slice()
+    };
+    let write_len = match out_off {
+        None => {
+            log::info!(
+                "[sys_copy_file_range] off_out is null, copy from {}",
+                old_out_off
+            );
+            file_out.write(write_buf, OpenFlags::RDWR).await?
+        }
+        Some(out_off) => {
+            file_in.seek(SeekFrom::Start(out_off))?;
+            let len = file_in.write(write_buf, OpenFlags::RDWR).await?;
+            file_in.seek(SeekFrom::Start(old_out_off))?;
+            UserCheck::new()
+                .check_writable_slice(off_out as *mut u8, core::mem::size_of::<usize>())?;
+            Some(unsafe { *(off_out as *mut usize) = out_off + len as usize });
+            len
+        }
+    };
+
+    log::info!("[sys_copy_file_range] ret {}", write_len);
+
+    Ok(write_len as usize)
+}
