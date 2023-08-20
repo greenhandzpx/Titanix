@@ -62,6 +62,9 @@ impl Inode for ProcRootInode {
     fn delete_child(&self, _child_name: &str) {
         // todo!()
     }
+    fn child_removeable(&self) -> GeneralRet<()> {
+        Err(crate::utils::error::SyscallErr::EPERM)
+    }
 }
 
 impl ProcRootInode {

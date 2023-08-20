@@ -57,6 +57,9 @@ impl Inode for LatencyInode {
     fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation delete")
     }
+    fn child_removeable(&self) -> GeneralRet<()> {
+        Err(crate::utils::error::SyscallErr::EPERM)
+    }
 }
 
 pub struct LatencyFile {

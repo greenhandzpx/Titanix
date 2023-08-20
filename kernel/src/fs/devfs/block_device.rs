@@ -7,7 +7,7 @@ use crate::{
         inode::{DevWrapper, InodeDevice, InodeMeta},
         File, Inode,
     },
-    utils::error::GeneralRet,
+    utils::error::{GeneralRet, SyscallErr},
 };
 
 pub struct BlockDeviceInode {
@@ -30,6 +30,10 @@ impl Inode for BlockDeviceInode {
     }
     fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation delete")
+    }
+
+    fn child_removeable(&self) -> GeneralRet<()> {
+        Err(SyscallErr::EPERM)
     }
 }
 

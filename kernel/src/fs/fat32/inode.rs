@@ -202,4 +202,7 @@ impl Inode for FAT32Inode {
     fn delete_child(&self, _child_name: &str) {
         // self.metadata().inner.lock().children.remove(child_name);
     }
+    fn child_removeable(&self) -> GeneralRet<()> {
+        Ok(())
+    }
 }

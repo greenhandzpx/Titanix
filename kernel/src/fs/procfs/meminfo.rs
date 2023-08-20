@@ -125,6 +125,9 @@ impl Inode for MeminfoInode {
     fn delete_child(&self, _child_name: &str) {
         panic!("Unsupported operation")
     }
+    fn child_removeable(&self) -> GeneralRet<()> {
+        Err(crate::utils::error::SyscallErr::EPERM)
+    }
 }
 
 pub struct MeminfoFile {

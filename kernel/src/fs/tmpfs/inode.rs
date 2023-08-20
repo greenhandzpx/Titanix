@@ -75,4 +75,7 @@ impl Inode for TmpInode {
         let child_inode = TmpInode::new(Some(this), name, mode);
         Ok(Arc::new(child_inode))
     }
+    fn child_removeable(&self) -> crate::utils::error::GeneralRet<()> {
+        Ok(())
+    }
 }

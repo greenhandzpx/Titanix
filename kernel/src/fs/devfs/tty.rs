@@ -59,6 +59,9 @@ impl Inode for TtyInode {
     fn delete_child(&self, _child_name: &str) {
         panic!()
     }
+    fn child_removeable(&self) -> GeneralRet<()> {
+        Err(crate::utils::error::SyscallErr::EPERM)
+    }
 }
 
 const PRINT_LOCKED: bool = false;

@@ -258,6 +258,8 @@ pub trait Inode: Send + Sync {
     fn iter_children(&self) -> Option<Arc<dyn Inode>> {
         todo!()
     }
+
+    fn child_removeable(&self) -> GeneralRet<()>;
 }
 
 impl dyn Inode {
@@ -331,6 +333,7 @@ impl dyn Inode {
 
     /// This method will delete the inode in cache (which means deleting inode in parent's children list).
     pub fn remove_child(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
+        self.child_removeable()?;
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         log::info!(
             "[Inode::remove_child] remove child {}",
@@ -346,6 +349,7 @@ impl dyn Inode {
     /// Unlink the child.
     /// This method will delete the inode in inode cache and call delete() function to delete inode in disk.
     pub fn unlink(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
+        self.child_removeable()?;
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         log::info!("[Inode::unlink] unlink child {}", child.metadata().name);
         debug!("Try to delete child in INODE_CACHE");
