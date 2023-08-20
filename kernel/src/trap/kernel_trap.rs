@@ -4,7 +4,10 @@ use riscv::register::{
     sepc, stval,
 };
 
-use crate::timer::{handle_timeout_events, set_next_trigger};
+use crate::{
+    irq_count::IRQ_COUNTER,
+    timer::{handle_timeout_events, set_next_trigger},
+};
 
 /// Kernel trap handler
 #[no_mangle]
@@ -17,7 +20,8 @@ pub fn kernel_trap_handler() {
             crate::driver::intr_handler();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            // log::error!("timer interrrupt!!");
+            // log::error!("kernel timer interrrupt!!");
+            IRQ_COUNTER.add1(1);
             handle_timeout_events();
             set_next_trigger();
         }

@@ -99,7 +99,7 @@ impl SPI {
     pub fn send_data(&self, csid: u32, tx: &[u8]) {
         self.set_direction(true);
         self.switch_cs(true);
-        const CHUNK_LEN: usize = 8;
+        const CHUNK_LEN: usize = 4;
         for s in tx.chunks(CHUNK_LEN) {
             let n = s.len();
             unsafe {
@@ -117,7 +117,7 @@ impl SPI {
     pub fn recv_data(&self, csid: u32, rx: &mut [u8]) {
         self.set_direction(false);
         self.switch_cs(true);
-        const CHUNK_LEN: usize = 8;
+        const CHUNK_LEN: usize = 4;
         for s in rx.chunks_mut(CHUNK_LEN) {
             let n = s.len();
             unsafe {

@@ -17,7 +17,7 @@ impl IrqCounter {
     pub fn add1(&self, id: usize) {
         let mut array = self.array.lock();
         if array.len() <= id {
-            for i in 0..=(id - array.len()) {
+            for _ in 0..=(id - array.len()) {
                 array.push(0);
             }
         }

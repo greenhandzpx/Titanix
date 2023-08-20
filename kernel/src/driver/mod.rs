@@ -32,7 +32,6 @@ pub fn intr_handler() {
     let hart_id = local_hart().hart_id();
     let context_id = hart_id * 2;
     let intr = plic.claim(context_id);
-    IRQ_COUNTER.add1(intr);
     use crate::irq_count::IRQ_COUNTER;
     use qemu::IntrSource;
     if intr != 0 {
@@ -69,7 +68,7 @@ pub fn intr_handler() {
     let context_id = hart_id * 2;
     let intr = plic.claim(context_id);
     if intr != 0 {
-        // #[cfg(feature = "board_u740")]
+        crate::irq_count::IRQ_COUNTER.add1(intr);
         match intr.into() {
             IntrSource::UART0 => {
                 // uart
