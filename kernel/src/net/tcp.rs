@@ -43,6 +43,7 @@ pub struct TcpSocket {
 #[allow(unused)]
 struct TcpSocketInner {
     local_endpoint: IpListenEndpoint,
+    remote_endpoint: Option<IpEndpoint>,
     last_state: tcp::State,
     recvbuf_size: usize,
     sendbuf_size: usize,
@@ -62,13 +63,11 @@ impl Socket for TcpSocket {
             "[Tcp::listen] {} listening: {:?}",
             self.socket_handler, local
         );
-        NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             let ret = socket.listen(local).ok().ok_or(SyscallErr::EADDRINUSE);
             self.inner.lock().last_state = socket.state();
             ret
         })?;
-        NET_INTERFACE.poll();
         Ok(0)
     }
 
@@ -229,6 +228,7 @@ impl TcpSocket {
                     addr: None,
                     port: unsafe { RNG.positive_u32() as u16 },
                 },
+                remote_endpoint: None,
                 last_state: tcp::State::Closed,
                 recvbuf_size: MAX_BUFFER_SIZE,
                 sendbuf_size: MAX_BUFFER_SIZE,
@@ -254,7 +254,7 @@ impl TcpSocket {
     }
 
     fn _connect(&self, remote_endpoint: IpEndpoint) -> GeneralRet<()> {
-        NET_INTERFACE.poll();
+        self.inner.lock().remote_endpoint = Some(remote_endpoint);
         let local = self.inner.lock().local_endpoint;
         info!(
             "[Tcp::connect] local: {:?}, remote: {:?}",
@@ -273,7 +273,6 @@ impl TcpSocket {
             info!("berfore poll socket state: {}", socket.state());
             Ok(())
         })?;
-        NET_INTERFACE.poll();
         Ok(())
     }
 }
