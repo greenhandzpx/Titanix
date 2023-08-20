@@ -8,7 +8,6 @@ use crate::{
     fs::{Inode, AT_FDCWD, K_COV_INODE},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
-    stack_trace,
 };
 
 use super::error::{GeneralRet, SyscallErr};
@@ -153,7 +152,6 @@ pub fn path_to_inode(
                 ));
             };
             debug!("[path_to_inode] path is: {}", path);
-            stack_trace!();
             if is_relative_path(&path) {
                 if dirfd != AT_FDCWD {
                     debug!("[path_to_inode] path is releative and dirfd isn't AT_FDCWD");
@@ -216,7 +214,6 @@ pub fn path_to_inode_ffi(
         None
     } else {
         UserCheck::new().check_c_str(path)?;
-        stack_trace!();
         let path = c_str_to_string(path).trim().to_string();
         if path.eq("") {
             None
