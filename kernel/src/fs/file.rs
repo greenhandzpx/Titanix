@@ -6,7 +6,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use log::{debug, trace};
+use log::{debug, info, trace};
 
 use crate::{
     config::mm::PAGE_SIZE,
@@ -134,6 +134,7 @@ pub trait File: Send + Sync {
         let mut meta = self.metadata().inner.lock();
         match pos {
             SeekFrom::Current(off) => {
+                info!("[DefaultFile::seek] off: {}, pos: {}", off, meta.pos);
                 if off < 0 {
                     meta.pos -= off.abs() as usize;
                 } else {
@@ -219,6 +220,13 @@ pub trait File: Send + Sync {
             // }
             let old_data_len = inode.metadata().inner.lock().data_len;
             if len < old_data_len {
+                inode.metadata().inner.lock().data_len = len;
+                // fill with \0
+                let buf = vec![0 as u8; old_data_len - len];
+                stack_trace!();
+                self.seek(SeekFrom::Start(len))?;
+                self.write(&buf, OpenFlags::default()).await?;
+                self.seek(SeekFrom::Start(len))?;
                 inode.metadata().inner.lock().data_len = len;
             } else if len > old_data_len {
                 stack_trace!();
@@ -310,7 +318,11 @@ impl File for DefaultFile {
             }
 
             self.metadata().inner.lock().pos = file_offset;
-            trace!("[DefaultFile::read]: read {} bytes", res);
+            log::info!(
+                "[DefaultFile::read]: read {} bytes, off {}",
+                res,
+                file_offset
+            );
             Ok(res)
         })
     }
