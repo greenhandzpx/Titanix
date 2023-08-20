@@ -66,6 +66,7 @@ pub static mut KERNEL_SPACE: Option<MemorySpace> = None;
 
 ///
 pub fn init_kernel_space() {
+    stack_trace!();
     info!("start to init kernel space...");
     unsafe {
         KERNEL_SPACE = Some(MemorySpace::new_kernel());
@@ -102,6 +103,7 @@ pub struct MemorySpace {
 impl MemorySpace {
     ///Create an empty `MemorySpace`
     pub fn new_bare() -> Self {
+        stack_trace!();
         let page_table = Arc::new(SyncUnsafeCell::new(PageTable::new()));
         Self {
             page_table,
@@ -113,6 +115,7 @@ impl MemorySpace {
 
     ///Create an empty `MemorySpace` but owns the global kernel mapping
     pub fn new_from_global() -> Self {
+        stack_trace!();
         let new_page_table = PageTable::from_global();
         let page_table = Arc::new(SyncUnsafeCell::new(new_page_table));
         Self {
@@ -126,6 +129,7 @@ impl MemorySpace {
     /// Get pagetable `root_ppn`
     #[allow(unused)]
     pub fn token(&self) -> usize {
+        stack_trace!();
         self.page_table.get_unchecked_mut().token()
     }
 
@@ -179,6 +183,7 @@ impl MemorySpace {
 
     /// Remove vma by start vpn
     pub fn remove_vm_area(&mut self, start_vpn: VirtPageNum) -> Option<VmArea> {
+        stack_trace!();
         self.areas.get_unchecked_mut().remove(&start_vpn)
     }
 
@@ -206,6 +211,7 @@ impl MemorySpace {
 
     /// Find the mutable ref of map area by the given vpn
     pub fn find_vm_area_mut_by_vpn(&mut self, vpn: VirtPageNum) -> Option<&mut VmArea> {
+        stack_trace!();
         if let Some(vma) = self.find_vm_area_mut_by_vpn_included(vpn) {
             if vma.end_vpn().0 == vpn.0 {
                 None
@@ -219,6 +225,7 @@ impl MemorySpace {
 
     /// Find the mutable ref of map area by the given vpn(including end vpn)
     pub fn find_vm_area_mut_by_vpn_included(&mut self, vpn: VirtPageNum) -> Option<&mut VmArea> {
+        stack_trace!();
         // Range query to find the map area that this vpn belongs to
         // debug!("len before {}", self.areas.len());
         if let Some((_, vm_area)) = self.areas.get_mut().range_mut(..=vpn).next_back() {
@@ -289,6 +296,7 @@ impl MemorySpace {
 
     /// Insert vm area lazily
     pub fn insert_area(&mut self, vma: VmArea) {
+        stack_trace!();
         log::debug!("[insert_area] vpn range {:?}", vma.vpn_range);
         self.push_lazily(vma, None);
     }
@@ -302,6 +310,7 @@ impl MemorySpace {
         permission: MapPermission,
         vma_type: VmAreaType,
     ) {
+        stack_trace!();
         self.push(
             VmArea::new(
                 start_va,
@@ -328,6 +337,7 @@ impl MemorySpace {
         handler: Option<Arc<dyn PageFaultHandler>>,
         vma_type: VmAreaType,
     ) {
+        stack_trace!();
         self.push_lazily(
             VmArea::new(
                 start_va,
@@ -346,6 +356,7 @@ impl MemorySpace {
     ///Remove `VmArea` that starts with `start_vpn`
     #[allow(unused)]
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
+        stack_trace!();
         if let Some(area) = self.areas.get_unchecked_mut().get_mut(&start_vpn) {
             area.unmap_lazily();
             self.areas.get_unchecked_mut().remove(&start_vpn);
@@ -363,6 +374,7 @@ impl MemorySpace {
     }
     /// Only add the map area to memory set (without allocating physical frames)
     fn push_lazily(&self, vm_area: VmArea, _: Option<&[u8]>) {
+        stack_trace!();
         self.areas
             .get_unchecked_mut()
             .insert(vm_area.start_vpn(), vm_area);
@@ -371,6 +383,7 @@ impl MemorySpace {
 
     /// Create a kernel space
     pub fn new_kernel() -> Self {
+        stack_trace!();
         let mut memory_space = Self::new_bare();
         info!("[kernel] trampoline {:#x}", sigreturn_trampoline as usize);
         // // map trampoline
@@ -683,6 +696,7 @@ impl MemorySpace {
         elf_data: &[u8],
         elf_file: Option<&Arc<dyn File>>,
     ) -> (Self, usize, usize, Vec<AuxHeader>) {
+        stack_trace!();
         let mut memory_space = Self::new_from_global();
 
         // map program headers of elf, with U flag
@@ -832,6 +846,7 @@ impl MemorySpace {
     /// if so, load the dl interpreter.
     /// Return the interpreter's entry point(at the base of DL_INTERP_OFFSET) if so.
     fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> Option<usize> {
+        stack_trace!();
         let elf_header = elf.header;
         let ph_count = elf_header.pt2.ph_count();
 
@@ -915,6 +930,7 @@ impl MemorySpace {
     }
     ///Clone a same `MemorySpace`
     pub fn from_existed_user_lazily(user_space: &mut Self) -> Self {
+        stack_trace!();
         // TODO: optimize: no need to new a CowPageManager
         let mut memory_space = Self::new_from_global();
         // SAFETY: the process inner has been locked when invoking this function
@@ -1003,16 +1019,19 @@ impl MemorySpace {
     }
     ///Refresh TLB with `sfence.vma`
     pub fn activate(&self) {
+        stack_trace!();
         self.page_table.get_unchecked_mut().activate()
     }
     ///Translate throuth pagetable
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
+        stack_trace!();
         unsafe { (*self.page_table.get()).translate(vpn) }
     }
 
     ///Remove all `VmArea`
     #[allow(unused)]
     pub fn recycle_data_pages(&mut self) {
+        stack_trace!();
         //*self = Self::new_bare();
         self.areas.get_unchecked_mut().clear();
     }
@@ -1026,6 +1045,7 @@ impl MemorySpace {
         start_va: VirtAddr,
         vma_type: VmAreaType,
     ) -> GeneralRet<Option<VmArea>> {
+        stack_trace!();
         if length == 0 {
             return Ok(None);
         }
@@ -1092,6 +1112,7 @@ impl MemorySpace {
         map_permission: MapPermission,
         vma_type: VmAreaType,
     ) -> Option<VmArea> {
+        stack_trace!();
         if length == 0 {
             return None;
         }
@@ -1129,6 +1150,7 @@ impl MemorySpace {
     /// Check whether the given vpn range conflicts with other vma.
     /// Note that the start_vpn must have been in memory set.
     pub fn check_vpn_range_conflict(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> bool {
+        stack_trace!();
         for vma in self.areas.get_unchecked_mut().iter() {
             if *vma.0 == start_vpn {
                 continue;
@@ -1179,6 +1201,7 @@ bitflags! {
 #[allow(unused)]
 ///Check PageTable running correctly
 pub fn remap_test() {
+    stack_trace!();
     // todo!();
     info!("remap_test start...");
     let kernel_space = unsafe { KERNEL_SPACE.as_ref().unwrap() };

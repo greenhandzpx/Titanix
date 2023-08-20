@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
 
+use crate::stack_trace;
+
 /// Used for allocating pid & tid
 pub struct RecycleAllocator {
     current: usize,
@@ -17,6 +19,7 @@ impl RecycleAllocator {
     }
     ///Allocate an id
     pub fn alloc(&mut self) -> usize {
+        stack_trace!();
         if let Some(id) = self.recycled.pop() {
             id
         } else {
@@ -26,6 +29,7 @@ impl RecycleAllocator {
     }
     ///Recycle an id
     pub fn dealloc(&mut self, id: usize) {
+        stack_trace!();
         assert!(id < self.current);
         assert!(
             !self.recycled.iter().any(|iid| *iid == id),

@@ -53,6 +53,7 @@ impl Drop for UserCheck {
 impl UserCheck {
     /// Create a new UserCheck
     pub fn new() -> Self {
+        stack_trace!();
         let ret = Self {
             _sum_guard: SumGuard::new(),
             _sie_guard: SieGuard::new(),
@@ -131,6 +132,7 @@ impl UserCheck {
     }
 
     fn check_c_str_end(&self, va: VirtAddr) -> bool {
+        stack_trace!();
         let end: VirtAddr = VirtAddr::from(VirtAddr::from(va.floor()).0 + PAGE_SIZE);
         for addr in va.0..end.0 {
             let ch: u8 = unsafe { *(addr as *const u8) };
@@ -143,6 +145,7 @@ impl UserCheck {
 
     /// return `scause` if page fault
     fn try_read_u8(&self, user_addr: usize) -> Option<Scause> {
+        stack_trace!();
         // debug!("satp(2) {:#x}", satp::read().bits());
         // debug!("try read u8, addr {:#x}", user_addr);
         let ret = unsafe { __try_read_user_u8(user_addr) };
@@ -153,6 +156,7 @@ impl UserCheck {
     }
 
     fn try_write_u8(&self, user_addr: usize) -> Option<Scause> {
+        stack_trace!();
         let ret = unsafe { __try_write_user_u8(user_addr) };
         match ret.is_err {
             0 => None,

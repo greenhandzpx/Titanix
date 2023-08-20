@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 
 use crate::{
     mm::{page_table::PTEFlags, PageTable, VirtAddr},
-    utils::{cell::SyncUnsafeCell, error::GeneralRet},
+    utils::{cell::SyncUnsafeCell, error::GeneralRet}, stack_trace,
 };
 
 use super::{CowPageFaultHandler, PageFaultHandler, PageManager, VmArea};
@@ -14,6 +14,7 @@ pub struct CowPageManager {
 
 impl CowPageManager {
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             page_mgr: SyncUnsafeCell::new(PageManager::new()),
             page_fault_handler: CowPageFaultHandler {}.arc_clone(),
@@ -21,6 +22,7 @@ impl CowPageManager {
     }
 
     pub fn from_another(another: &Self, page_table: Arc<SyncUnsafeCell<PageTable>>) -> Self {
+        stack_trace!();
         // TODO: optimize: only need to map the leaf page
         let page_mgr = SyncUnsafeCell::new(another.page_mgr.get_unchecked_mut().clone());
         for (vpn, page) in another.page_mgr.get_unchecked_mut().0.iter() {
@@ -48,11 +50,13 @@ impl CowPageManager {
         &self,
         _va: VirtAddr,
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&VmArea>)> {
+        stack_trace!();
         Ok((self.page_fault_handler.clone(), None))
     }
 
     #[allow(unused)]
     pub fn clear(&mut self) {
+        stack_trace!();
         self.page_mgr.get_mut().0.clear()
     }
 }

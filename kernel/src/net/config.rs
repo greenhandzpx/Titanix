@@ -1,4 +1,4 @@
-use crate::{sync::mutex::SpinNoIrqLock, timer::current_time_duration};
+use crate::{stack_trace, sync::mutex::SpinNoIrqLock, timer::current_time_duration};
 use alloc::vec;
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
@@ -28,6 +28,7 @@ pub struct TitanixNetInterfaceInner<'a> {
 
 impl<'a> TitanixNetInterfaceInner<'a> {
     fn new() -> Self {
+        stack_trace!();
         let mut device = Loopback::new(Medium::Ethernet);
         let iface = {
             let config = match device.capabilities().medium {
@@ -62,6 +63,7 @@ impl<'a> TitanixNetInterfaceInner<'a> {
 
 impl<'a> TitanixNetInterface<'a> {
     pub fn init(&self) {
+        stack_trace!();
         *self.inner.lock() = Some(TitanixNetInterfaceInner::new());
     }
     pub const fn new() -> Self {
@@ -73,10 +75,12 @@ impl<'a> TitanixNetInterface<'a> {
     where
         T: AnySocket<'a>,
     {
+        stack_trace!();
         self.inner.lock().as_mut().unwrap().sockets.add(socket)
     }
 
     pub fn tcp_socket<T>(&self, handler: SocketHandle, f: impl FnOnce(&mut tcp::Socket) -> T) -> T {
+        stack_trace!();
         f(self
             .inner
             .lock()
@@ -87,6 +91,7 @@ impl<'a> TitanixNetInterface<'a> {
     }
 
     pub fn udp_socket<T>(&self, handler: SocketHandle, f: impl FnOnce(&mut udp::Socket) -> T) -> T {
+        stack_trace!();
         f(self
             .inner
             .lock()
@@ -97,10 +102,12 @@ impl<'a> TitanixNetInterface<'a> {
     }
 
     pub fn inner_handler<T>(&self, f: impl FnOnce(&mut TitanixNetInterfaceInner<'a>) -> T) -> T {
+        stack_trace!();
         f(&mut self.inner.lock().as_mut().unwrap())
     }
 
     pub fn poll(&self) {
+        stack_trace!();
         log::debug!("[TitanixNetInterface::poll] poll...");
         self.inner_handler(|inner| {
             inner.iface.poll(
@@ -111,6 +118,7 @@ impl<'a> TitanixNetInterface<'a> {
         });
     }
     pub fn remove(&self, handler: SocketHandle) {
+        stack_trace!();
         self.inner_handler(|inner| {
             inner.sockets.remove(handler);
         });

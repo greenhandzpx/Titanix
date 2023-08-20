@@ -4,7 +4,7 @@ use core::{
     ptr::NonNull,
 };
 
-use crate::{config::mm::KERNEL_HEAP_SIZE, sync::mutex::SpinNoIrqLock};
+use crate::{config::mm::KERNEL_HEAP_SIZE, sync::mutex::SpinNoIrqLock, stack_trace};
 use buddy_system_allocator::Heap;
 use log::{debug, error, info};
 
@@ -45,6 +45,7 @@ unsafe impl GlobalAlloc for GlobalHeap {
 static mut HEAP_SPACE: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
 /// initiate heap allocator
 pub fn init_heap() {
+        stack_trace!();
     unsafe {
         let start = HEAP_SPACE.as_ptr() as usize;
         HEAP_ALLOCATOR.0.lock().init(start, KERNEL_HEAP_SIZE);
@@ -59,6 +60,7 @@ pub fn init_heap() {
 ///
 #[allow(unused)]
 pub fn heap_test() {
+        stack_trace!();
     info!("heap_test start...");
     use alloc::boxed::Box;
     use alloc::vec::Vec;

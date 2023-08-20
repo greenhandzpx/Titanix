@@ -36,6 +36,7 @@ pub struct BackupFile {
 impl BackupFile {
     /// Construct a backup file
     pub fn new(offset: usize, file: Arc<dyn File>) -> Self {
+        stack_trace!();
         Self { offset, file }
     }
 }
@@ -85,6 +86,7 @@ pub struct VmArea {
 
 impl Drop for VmArea {
     fn drop(&mut self) {
+        stack_trace!();
         log::debug!(
             "[VmArea::drop] drop vma, [{:#x}, {:#x}]",
             self.start_vpn().0,
@@ -106,6 +108,7 @@ impl VmArea {
         page_table: Arc<SyncUnsafeCell<PageTable>>,
         vma_type: VmAreaType,
     ) -> Self {
+        stack_trace!();
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
         // println!("start va {:#x}", start_va.0);
@@ -127,6 +130,7 @@ impl VmArea {
     /// Construct a vma from another vma.
     /// Note that we won't copy the physical data frames.
     pub fn from_another(another: &Self, page_table: Arc<SyncUnsafeCell<PageTable>>) -> Self {
+        stack_trace!();
         Self {
             vpn_range: VPNRange::new(another.vpn_range.start(), another.vpn_range.end()),
             data_frames: SyncUnsafeCell::new(PageManager::new()),
@@ -145,11 +149,13 @@ impl VmArea {
 
     /// Start vpn
     pub fn start_vpn(&self) -> VirtPageNum {
+        stack_trace!();
         self.vpn_range.start()
     }
 
     /// End vpn
     pub fn end_vpn(&self) -> VirtPageNum {
+        stack_trace!();
         self.vpn_range.end()
     }
 
@@ -159,6 +165,7 @@ impl VmArea {
         va: VirtAddr,
         // page_table: &mut PageTable,
     ) -> GeneralRet<(Arc<dyn PageFaultHandler>, Option<&Self>)> {
+        stack_trace!();
         if let Some(handler) = self.handler.as_ref() {
             Ok((handler.clone(), Some(self)))
         } else {
@@ -222,6 +229,7 @@ impl VmArea {
     }
     /// Map all pages this vma owns
     pub fn map(&mut self) {
+        stack_trace!();
         for vpn in self.vpn_range {
             self.map_one(vpn, None);
         }
@@ -230,6 +238,7 @@ impl VmArea {
     /// Unmap all pages this vma owns
     #[allow(unused)]
     pub fn unmap(&mut self) {
+        stack_trace!();
         for vpn in self.vpn_range {
             self.unmap_one(vpn);
         }
@@ -238,6 +247,7 @@ impl VmArea {
     /// Some of the pages don't have correlated phyiscal frame
     #[allow(unused)]
     pub fn unmap_lazily(&mut self) {
+        stack_trace!();
         for vpn in self.vpn_range {
             self.unmap_one_lazily(vpn);
         }
@@ -280,6 +290,7 @@ impl VmArea {
     /// Assume that all frames were cleared before.
     #[allow(unused)]
     pub fn copy_data(&mut self, page_table: &mut PageTable, data: &[u8]) {
+        stack_trace!();
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;
         let mut current_vpn = self.vpn_range.start();
@@ -305,6 +316,7 @@ impl VmArea {
     /// which means the removed vpn range must have at least
     /// one bound that equals to the old vpn range.
     fn do_unmap_area(&mut self, removed_vpn_range: VPNRange) {
+        stack_trace!();
         stack_trace!();
         trace!("[do_unmap_area] removed vpn range {:?}", removed_vpn_range);
         // Free phyical page frames
@@ -350,6 +362,7 @@ impl VmArea {
 
     /// Clip the vm area.
     pub fn clip(&mut self, new_vpn_range: VPNRange) {
+        stack_trace!();
         log::debug!(
             "[VmArea::clip] old range {:?}, new range {:?}",
             self.vpn_range,

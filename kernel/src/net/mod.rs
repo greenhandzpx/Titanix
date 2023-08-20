@@ -69,6 +69,7 @@ pub trait Socket: File {
 
 impl dyn Socket {
     pub fn alloc(domain: u32, socket_type: u32) -> GeneralRet<usize> {
+        stack_trace!();
         log::info!("[Socket::new] domain: {}", domain);
         match domain as u16 {
             AF_INET | AF_INET6 => {
@@ -141,15 +142,19 @@ impl SocketTable {
         Self(BTreeMap::new())
     }
     pub fn insert(&mut self, key: Fd, value: Arc<dyn Socket>) {
+        stack_trace!();
         self.0.insert(key, value);
     }
     pub fn get_ref(&self, fd: Fd) -> Option<&Arc<dyn Socket>> {
+        stack_trace!();
         self.0.get(&fd)
     }
     pub fn take(&mut self, fd: Fd) -> Option<Arc<dyn Socket>> {
+        stack_trace!();
         self.0.remove(&fd)
     }
     pub fn from_another(socket_table: &SocketTable) -> GeneralRet<Self> {
+        stack_trace!();
         let mut ret = BTreeMap::new();
         for (sockfd, socket) in socket_table.0.iter() {
             ret.insert(*sockfd, socket.clone());
@@ -157,6 +162,7 @@ impl SocketTable {
         Ok(Self(ret))
     }
     pub fn can_bind(&self, endpoint: IpListenEndpoint) -> Option<(Fd, Arc<dyn Socket>)> {
+        stack_trace!();
         for (sockfd, socket) in self.0.clone() {
             if socket.socket_type().contains(SocketType::SOCK_DGRAM) {
                 if socket.loacl_endpoint().eq(&endpoint) {
