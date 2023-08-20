@@ -1645,6 +1645,7 @@ pub async fn sys_copy_file_range(
     flags: u32,
 ) -> SyscallRet {
     stack_trace!();
+    let _sum_guard = SumGuard::new();
     log::info!(
         "[sys_copy_file_range] fd_in: {}, fd_out: {}, off_in: {}, off_out: {}, len: {}",
         fd_in,
