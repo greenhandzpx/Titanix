@@ -90,6 +90,7 @@ impl Thread {
         // user_specified_stack: bool,
         tid: Option<Arc<TidHandle>>,
     ) -> Self {
+        stack_trace!();
         let sig_trampoline = SignalTrampoline::new(process.clone());
         let tid = match tid {
             Some(tid) => tid,
@@ -131,6 +132,7 @@ impl Thread {
         flags: CloneFlags,
     ) -> Self {
         stack_trace!();
+        stack_trace!();
         let sig_trampoline = SignalTrampoline::new(new_process.clone());
         let tid = match tid {
             Some(tid) => tid,
@@ -170,11 +172,13 @@ impl Thread {
 
     /// Wait for some events
     pub async fn wait_for_events(&self, events: Event) -> Event {
+        stack_trace!();
         self.mailbox.wait_for_events(events).await
     }
 
     /// Register for some event
     pub fn register_event_waiter(&self, events: Event, waker: Waker) -> bool {
+        stack_trace!();
         self.mailbox.register_event_waiter(events, waker)
     }
 
@@ -208,31 +212,37 @@ impl Thread {
 
     /// Get the ref of signal context
     pub fn signal_context(&self) -> &SignalContext {
+        stack_trace!();
         self.sig_trampoline.signal_context()
     }
 
     /// Set the signal context for the current thread
     pub fn set_signal_context(&self, signal_context: SignalContext) {
+        stack_trace!();
         self.sig_trampoline.set_signal_context(signal_context)
     }
 
     /// Get the copied trap context
     pub fn trap_context(&self) -> TrapContext {
+        stack_trace!();
         unsafe { (*self.inner.get()).trap_context }
     }
 
     /// Get the mutable ref of trap context
     pub fn trap_context_mut(&self) -> &mut TrapContext {
+        stack_trace!();
         unsafe { &mut (*self.inner.get()).trap_context }
     }
 
     /// Get the ref of trap context
     pub fn trap_context_ref(&self) -> &TrapContext {
+        stack_trace!();
         unsafe { &(*self.inner.get()).trap_context }
     }
 
     /// Terminate this thread
     pub fn terminate(&self) {
+        stack_trace!();
         let inner = unsafe { &mut (*self.inner.get()) };
         inner.terminated = true;
         // .store(true, core::sync::atomic::Ordering::Release)
@@ -240,6 +250,7 @@ impl Thread {
 
     /// Whether this thread has been terminated or not
     pub fn is_zombie(&self) -> bool {
+        stack_trace!();
         unsafe {
             (*self.inner.get()).terminated
             // .load(core::sync::atomic::Ordering::Acquire)
@@ -248,11 +259,13 @@ impl Thread {
 
     /// Tid of this thread
     pub fn tid(&self) -> usize {
+        stack_trace!();
         self.tid.0
     }
 
     /// Set waker for this thread
     pub fn set_waker(&self, waker: Waker) {
+        stack_trace!();
         unsafe {
             (*self.inner.get()).waker = Some(waker);
         }

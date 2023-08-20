@@ -42,6 +42,7 @@ pub struct MailboxInner {
 impl Mailbox {
     /// Construct a mailbox
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             inner: Mutex::new(MailboxInner {
                 events: Event::empty(),
@@ -79,6 +80,7 @@ impl Mailbox {
 
     /// Wait for some event
     pub async fn wait_for_events(&self, events: Event) -> Event {
+        stack_trace!();
         WaitForEventFuture::new(events, self).await
     }
 
@@ -113,6 +115,7 @@ struct WaitForEventFuture<'a> {
 
 impl<'a> WaitForEventFuture<'a> {
     pub fn new(events: Event, mailbox: &'a Mailbox) -> Self {
+        stack_trace!();
         Self {
             mailbox,
             events,

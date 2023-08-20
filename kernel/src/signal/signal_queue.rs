@@ -11,6 +11,7 @@ pub struct PendingSigs {
 
 impl PendingSigs {
     fn new() -> Self {
+        stack_trace!();
         Self {
             sigs: VecDeque::new(),
             bitmap: SigSet::empty(),
@@ -18,6 +19,7 @@ impl PendingSigs {
     }
 
     pub fn add(&mut self, signo: usize) {
+        stack_trace!();
         if !self.bitmap.contain_sig(signo) {
             self.bitmap.add_sig(signo);
             self.sigs.push_back(signo);
@@ -25,6 +27,7 @@ impl PendingSigs {
     }
 
     fn pop(&mut self) -> Option<usize> {
+        stack_trace!();
         if let Some(sig) = self.sigs.pop_front() {
             self.bitmap.remove_sig(sig);
             Some(sig)
@@ -35,11 +38,13 @@ impl PendingSigs {
 
     #[allow(unused)]
     fn contains(&self, signo: usize) -> bool {
+        stack_trace!();
         self.bitmap.contain_sig(signo)
     }
 
     #[allow(unused)]
     pub fn is_empty(&self) -> bool {
+        stack_trace!();
         self.sigs.is_empty()
     }
 }
@@ -55,6 +60,7 @@ pub struct SigQueue {
 
 impl SigQueue {
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             pending_sigs: PendingSigs::new(),
             blocked_sigs: SigSet::empty(),
@@ -62,6 +68,7 @@ impl SigQueue {
         }
     }
     pub fn from_another(sig_queue: &SigQueue) -> Self {
+        stack_trace!();
         Self {
             pending_sigs: PendingSigs::new(),
             blocked_sigs: SigSet::empty(),
@@ -69,6 +76,7 @@ impl SigQueue {
         }
     }
     pub fn recv_signal(&mut self, signo: usize) {
+        stack_trace!();
         self.pending_sigs.add(signo);
     }
 

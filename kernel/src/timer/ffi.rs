@@ -1,5 +1,7 @@
 use core::time::Duration;
 
+use crate::stack_trace;
+
 use super::{current_time_duration, current_time_ms};
 
 #[repr(C)]
@@ -34,6 +36,7 @@ pub struct TimeSpec {
 
 impl TimeSpec {
     pub fn new() -> Self {
+        stack_trace!();
         // new a time spec with machine time
         let current_time = current_time_ms();
         Self {
@@ -68,6 +71,7 @@ pub struct Tms {
 
 /// get current time as TimeSpec
 pub fn current_time_spec() -> TimeSpec {
+    stack_trace!();
     current_time_duration().into()
 }
 

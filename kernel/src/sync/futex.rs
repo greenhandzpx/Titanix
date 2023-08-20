@@ -21,6 +21,7 @@ pub struct FutexQueue(pub BTreeMap<VirtAddr, BTreeMap<usize, FutexWaiter>>);
 impl FutexQueue {
     /// Construct a futex queue
     pub fn new() -> Self {
+        stack_trace!();
         Self(BTreeMap::new())
     }
 
@@ -31,12 +32,14 @@ impl FutexQueue {
         tid: usize,
         waker: Waker,
     ) {
+        stack_trace!();
         let waiter = FutexWaiter::new(tid, addr, waker);
         self.add_waiter(waiter);
     }
 
     ///
     fn add_waiter(&mut self, waiter: FutexWaiter) {
+        stack_trace!();
         let addr = waiter.addr.get_unchecked_mut().clone();
         if let Some(queue) = self.0.get_mut(&addr) {
             queue.insert(waiter.tid, waiter);
@@ -48,6 +51,7 @@ impl FutexQueue {
     }
 
     fn remove_waiter(&mut self, addr: VirtAddr, tid: usize) {
+        stack_trace!();
         if let Some(queue) = self.0.get_mut(&addr) {
             queue.remove(&tid);
         }
@@ -55,6 +59,7 @@ impl FutexQueue {
 
     /// Wake up `nval` waiters.
     pub fn wake(&mut self, addr: VirtAddr, nval: usize) -> usize {
+        stack_trace!();
         if let Some(waiters) = self.0.get_mut(&addr) {
             for i in 0..nval {
                 if waiters.is_empty() {
@@ -81,6 +86,7 @@ impl FutexQueue {
         nval_wake: usize,
         nval_rq: usize,
     ) -> usize {
+        stack_trace!();
         if old_addr.0 == new_addr.0 {
             return 0;
         }
@@ -127,13 +133,16 @@ pub struct FutexWaiter {
 
 impl FutexWaiter {
     fn new(tid: usize, addr: Arc<SyncUnsafeCell<VirtAddr>>, waker: Waker) -> Self {
+        stack_trace!();
         Self { tid, addr, waker }
     }
     fn wake(self) {
+        stack_trace!();
         self.waker.wake();
     }
     #[allow(unused)]
     fn wake_by_ref(&self) {
+        stack_trace!();
         self.waker.wake_by_ref();
     }
 }
@@ -152,6 +161,7 @@ pub struct FutexFuture {
 impl FutexFuture {
     /// Construct a futex future
     pub fn new(addr: VirtAddr, expected_val: u32) -> Self {
+        stack_trace!();
         Self {
             addr: Arc::new(SyncUnsafeCell::new(addr)),
             expected_val,
@@ -163,6 +173,7 @@ impl FutexFuture {
 impl Future for FutexFuture {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        stack_trace!();
         // Add waiter before we try to load the value.
         // Because If the waker wakes up us after we load the value and
         // before we add the waiter, then we will sleep forever.

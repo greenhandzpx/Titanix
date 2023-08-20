@@ -10,7 +10,9 @@ pub mod inode;
 mod page_cache;
 pub mod pipe;
 mod procfs;
+mod sysfs;
 pub mod tmpfs;
+pub use sysfs::K_COVERAGE;
 
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -195,6 +197,7 @@ pub fn init() {
 
     FAST_PATH_CACHE.init();
 
+    sysfs::init();
     // list_rootfs();
 }
 pub const AT_FDCWD: isize = -100;

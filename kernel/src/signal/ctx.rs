@@ -5,6 +5,7 @@ use crate::{
     mm::{memory_space::vm_area::VmAreaType, MapPermission, Page, PageBuilder, VirtAddr},
     process::Process,
     processor::SumGuard,
+    stack_trace,
     trap::UserContext,
 };
 
@@ -19,6 +20,7 @@ struct SignalStack {
 
 impl SignalStack {
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             sp: 0,
             flags: 0,
@@ -51,6 +53,7 @@ pub struct SignalContext {
 
 impl SignalContext {
     pub fn new(blocked_sigs: SigSet, user_context: UserContext) -> Self {
+        stack_trace!();
         Self {
             flags: 0,
             link_ptr: 0,
@@ -70,6 +73,7 @@ pub struct SignalTrampoline {
 
 impl SignalTrampoline {
     pub fn new(process: Arc<Process>) -> Self {
+        stack_trace!();
         let page = Arc::new(
             PageBuilder::new()
                 .permission(MapPermission::R | MapPermission::W | MapPermission::U)
@@ -104,16 +108,19 @@ impl SignalTrampoline {
     // }
 
     pub fn user_addr(&self) -> usize {
+        stack_trace!();
         self.user_addr.0
     }
 
     pub fn set_signal_context(&self, signal_context: SignalContext) {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         let sig_ctx: &mut SignalContext = self.page.reinterpret_mut();
         *sig_ctx = signal_context;
     }
 
     pub fn signal_context(&self) -> &SignalContext {
+        stack_trace!();
         self.page.reinterpret()
     }
 }

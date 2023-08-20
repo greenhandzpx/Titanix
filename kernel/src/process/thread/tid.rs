@@ -14,6 +14,7 @@ pub struct TidHandle(pub usize);
 
 impl Drop for TidHandle {
     fn drop(&mut self) {
+        stack_trace!();
         debug!("drop pid {}", self.0);
         // println!("\u{1B}[33m drop pid {} \u{1B}[0m", self.0);
         TID_ALLOCATOR.lock().dealloc(self.0);
@@ -21,6 +22,7 @@ impl Drop for TidHandle {
 }
 ///Allocate a pid from PID_ALLOCATOR
 pub fn tid_alloc() -> TidHandle {
+    stack_trace!();
     TidHandle(TID_ALLOCATOR.lock().alloc())
 }
 
@@ -35,6 +37,7 @@ pub struct TidAddress {
 impl TidAddress {
     ///
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             set_tid_address: None,
             clear_tid_address: None,

@@ -1,4 +1,6 @@
-use crate::{config::mm::USER_STACK_SIZE, processor::current_process, utils::error::SyscallRet};
+use crate::{
+    config::mm::USER_STACK_SIZE, processor::current_process, stack_trace, utils::error::SyscallRet,
+};
 
 /// Infinity for RLimit
 pub const RLIM_INFINITY: usize = usize::MAX;
@@ -48,6 +50,7 @@ pub struct RLimit {
 impl RLimit {
     /// New a RLimit
     pub fn new(cur: usize, max: usize) -> Self {
+        stack_trace!();
         Self {
             rlim_cur: cur,
             rlim_max: max,
@@ -55,6 +58,7 @@ impl RLimit {
     }
     /// Set RLimit
     pub fn set_rlimit(resource: u32, rlimit: &RLimit) -> SyscallRet {
+        stack_trace!();
         log::info!("[set_rlimit] try to set limit: {:?}", resource);
         match resource {
             RLIMIT_NOFILE => {
@@ -66,6 +70,7 @@ impl RLimit {
     }
     /// Get RLimit
     pub fn get_rlimit(resource: u32) -> Self {
+        stack_trace!();
         match resource {
             RLIMIT_STACK => Self::new(USER_STACK_SIZE, RLIM_INFINITY),
             RLIMIT_NOFILE => current_process().inner_handler(|proc| proc.fd_table.rlimit()),
@@ -92,6 +97,7 @@ impl CpuSet {
     /// alloc a cpu set
     /// you should pass the max number of cpus which you want to set
     pub fn new(cpus: usize) -> Self {
+        stack_trace!();
         Self {
             set: (1 << cpus - 1),
             dummy: [0; 15],

@@ -88,6 +88,7 @@ pub fn handle_exit(thread: &Arc<Thread>) {
 /// Exit and terminate all threads of the current process.
 /// Note that the caller cannot hold the process inner's lock
 pub fn exit_and_terminate_all_threads(exit_code: i8) {
+    stack_trace!();
     debug!("exit and terminate all threads, exit code {}", exit_code);
     let threads = current_process().inner_handler(|proc| {
         let mut threads: Vec<Arc<Thread>> = Vec::new();
@@ -109,6 +110,7 @@ pub fn exit_and_terminate_all_threads(exit_code: i8) {
 /// Terminate all threads of the current process except main thread(i.e. idx = 0).
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_all_threads_except_main() {
+    stack_trace!();
     let threads = current_process().inner_handler(|proc| {
         let mut threads: Vec<Arc<Thread>> = Vec::new();
         for (i, (_, thread)) in proc.threads.iter_mut().enumerate() {
@@ -128,6 +130,7 @@ pub fn terminate_all_threads_except_main() {
 /// Terminate the given thread
 /// Note that the caller cannot hold the process inner's lock
 pub fn terminate_given_thread(tid: usize, exit_code: i8) {
+    stack_trace!();
     if let Some(thread) = current_process().inner_handler(|proc| {
         proc.exit_code = exit_code;
         // let mut idx: Option<usize> = None;

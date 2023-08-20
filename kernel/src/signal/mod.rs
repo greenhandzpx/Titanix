@@ -3,6 +3,7 @@ use log::{debug, info};
 use crate::{
     config::signal::SIG_NUM,
     processor::{current_task, current_trap_cx},
+    stack_trace,
     trap::UserContext,
 };
 
@@ -94,14 +95,17 @@ bitflags! {
 
 impl SigSet {
     pub fn add_sig(&mut self, signo: usize) {
+        stack_trace!();
         self.insert(SigSet::from_bits(1 << (signo - 1)).unwrap());
     }
 
     pub fn contain_sig(&self, signo: usize) -> bool {
+        stack_trace!();
         self.contains(SigSet::from_bits(1 << (signo - 1)).unwrap())
     }
 
     pub fn remove_sig(&mut self, signo: usize) {
+        stack_trace!();
         self.remove(SigSet::from_bits(1 << (signo - 1)).unwrap())
     }
 }
@@ -113,12 +117,14 @@ pub struct SigHandlerManager {
 
 impl SigHandlerManager {
     pub fn new() -> Self {
+        stack_trace!();
         let sigactions: [KSigAction; SIG_NUM + 1] =
             core::array::from_fn(|signo| KSigAction::new(signo, false));
         Self { sigactions }
     }
 
     pub fn get(&self, signo: Signal) -> Option<&KSigAction> {
+        stack_trace!();
         if signo <= SIG_NUM {
             Some(&self.sigactions[signo])
         } else {
@@ -127,6 +133,7 @@ impl SigHandlerManager {
     }
 
     pub fn set_sigaction(&mut self, signo: Signal, sigaction: KSigAction) {
+        stack_trace!();
         if signo <= SIG_NUM {
             self.sigactions[signo] = sigaction;
         }
@@ -145,6 +152,7 @@ pub struct SigAction {
 
 impl SigAction {
     pub fn new(signo: usize) -> Self {
+        stack_trace!();
         let sa_handler = match signo {
             SIGHUP => term_sig_handler,
             SIGINT => term_sig_handler,
@@ -178,6 +186,7 @@ pub struct KSigAction {
 impl KSigAction {
     /// Construct a default handler
     pub fn new(signo: Signal, is_user_defined: bool) -> Self {
+        stack_trace!();
         Self {
             is_user_defined,
             sig_action: SigAction::new(signo),
@@ -188,6 +197,7 @@ impl KSigAction {
 /// Note that we handle only one pending signal every time.
 /// Return true if there is a user-defined pending sig to handle.
 pub fn check_signal_for_current_task() -> bool {
+    stack_trace!();
     // TODO: handle nesting sig handle:
     // Do we need to save trap contexts like a stack?
     if let Some((signo, sig_action, old_blocked_sigs)) =
@@ -208,6 +218,7 @@ extern "C" {
 
 /// Return true if there is a user-defined pending sig to handle
 fn handle_signal(signo: Signal, sig_action: KSigAction, old_blocked_sigs: SigSet) -> bool {
+    stack_trace!();
     info!(
         "[handle_signal] signo {}, handler {:#x}",
         signo, sig_action.sig_action.sa_handler as *const usize as usize
@@ -246,6 +257,7 @@ fn handle_signal(signo: Signal, sig_action: KSigAction, old_blocked_sigs: SigSet
 }
 
 fn save_context_for_sig_handler(blocked_sigs: SigSet) {
+    stack_trace!();
     // Save old sig mask
     // and save old user trap context
     log::debug!(

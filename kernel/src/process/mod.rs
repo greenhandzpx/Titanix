@@ -99,6 +99,7 @@ pub struct ProcessInner {
 impl ProcessInner {
     ///
     pub fn thread_count(&self) -> usize {
+        stack_trace!();
         self.threads.len()
     }
 }
@@ -115,31 +116,37 @@ pub struct Process {
 impl Process {
     /// Main thread
     pub fn main_thread(&self) -> Option<Weak<Thread>> {
+        stack_trace!();
         self.inner.lock().threads.get(&self.pid()).cloned()
     }
 
     /// Get the process's pid
     pub fn pid(&self) -> usize {
+        stack_trace!();
         self.pid.0
     }
 
     /// Get the process's gid
     pub fn pgid(&self) -> usize {
+        stack_trace!();
         self.inner.lock().pgid
     }
 
     /// We can get whatever we want in the inner by providing a handler
     pub fn inner_handler<T>(&self, f: impl FnOnce(&mut ProcessInner) -> T) -> T {
+        stack_trace!();
         f(&mut self.inner.lock())
     }
 
     /// True when all threads have exited
     pub fn is_zombie(&self) -> bool {
+        stack_trace!();
         self.inner.lock().is_zombie
     }
 
     ///
     pub fn exit_code(&self) -> i8 {
+        stack_trace!();
         self.inner.lock().exit_code
     }
 
@@ -166,6 +173,7 @@ impl Process {
 
     /// Set sigaction for all threads in this process
     pub fn set_sigaction(&self, signo: Signal, sigaction: KSigAction) -> GeneralRet<()> {
+        stack_trace!();
         self.inner_handler(|proc| {
             for (_, thread) in proc.threads.iter() {
                 if let Some(thread) = thread.upgrade() {
@@ -183,6 +191,7 @@ impl Process {
 
 impl Drop for Process {
     fn drop(&mut self) {
+        stack_trace!();
         let inner = self.inner.lock();
         for (fd, file) in inner.fd_table.fd_table.iter().enumerate() {
             if file.is_some() {
@@ -200,6 +209,7 @@ impl Drop for Process {
 impl Process {
     /// Create a new process
     pub fn new_initproc(elf_data: &[u8], elf_file: Option<&Arc<dyn File>>) -> Arc<Self> {
+        stack_trace!();
         let (memory_space, user_sp_top, entry_point, _auxv) =
             MemorySpace::from_elf(elf_data, elf_file);
 
@@ -256,6 +266,7 @@ impl Process {
         stack: Option<usize>,
         flags: CloneFlags,
     ) -> GeneralRet<Arc<Self>> {
+        stack_trace!();
         self.clone_process(stack, flags)
     }
 
@@ -475,6 +486,7 @@ impl Process {
         child_tid_ptr: usize,
         flags: CloneFlags,
     ) -> SyscallRet {
+        stack_trace!();
         self.clone_thread(stack, tls_ptr, parent_tid_ptr, child_tid_ptr, flags)
     }
 
