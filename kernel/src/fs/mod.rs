@@ -52,6 +52,7 @@ use self::inode::INODE_CACHE;
 type Mutex<T> = SpinNoIrqLock<T>;
 
 fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
+    stack_trace!();
     let inode = parent_inode
         .mknod_v(name, InodeMode::FileREG, None)
         .unwrap();
@@ -61,6 +62,7 @@ fn create_mem_file(parent_inode: &Arc<dyn Inode>, name: &str) {
 }
 
 pub fn init() {
+    stack_trace!();
     INODE_CACHE.init();
 
     // First we mount root fs
@@ -273,15 +275,18 @@ bitflags! {
 
 impl OpenFlags {
     pub fn readable(&self) -> bool {
+        stack_trace!();
         self.contains(OpenFlags::RDONLY) || self.contains(OpenFlags::RDWR)
     }
     pub fn writable(&self) -> bool {
+        stack_trace!();
         self.contains(OpenFlags::WRONLY) || self.contains(OpenFlags::RDWR)
     }
 }
 
 impl From<MapPermission> for OpenFlags {
     fn from(perm: MapPermission) -> Self {
+        stack_trace!();
         let mut res = OpenFlags::from_bits(0).unwrap();
         if perm.contains(MapPermission::R) && perm.contains(MapPermission::W) {
             res |= OpenFlags::RDWR;
@@ -296,12 +301,14 @@ impl From<MapPermission> for OpenFlags {
 
 #[allow(unused)]
 pub fn print_dir_tree() {
+    stack_trace!();
     info!("------------ dir tree: ------------");
     let parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
     print_dir_recursively(parent, 1);
 }
 
 fn print_dir_recursively(inode: Arc<dyn Inode>, level: usize) {
+    stack_trace!();
     let children = inode.metadata().inner.lock().children.clone();
     for child in children {
         for _ in 0..level {

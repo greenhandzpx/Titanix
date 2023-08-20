@@ -7,6 +7,7 @@ use crate::{
         inode::{DevWrapper, InodeDevice, InodeMeta},
         File, Inode,
     },
+    stack_trace,
     utils::error::{GeneralRet, SyscallErr},
 };
 
@@ -16,23 +17,29 @@ pub struct BlockDeviceInode {
 
 impl Inode for BlockDeviceInode {
     fn open(&self, _this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
+        stack_trace!();
         todo!()
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
 
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.metadata
     }
     fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        stack_trace!();
         panic!("Unsupported operation")
     }
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         panic!("Unsupported operation delete")
     }
 
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(SyscallErr::EPERM)
     }
 }
@@ -45,6 +52,7 @@ impl BlockDeviceInode {
         block_device: Arc<dyn BlockDevice>,
         dev_id: usize,
     ) -> Self {
+        stack_trace!();
         let metadata = InodeMeta::new(
             Some(parent),
             path,

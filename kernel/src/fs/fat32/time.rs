@@ -1,7 +1,7 @@
 use alloc::vec;
 
+use crate::stack_trace;
 use crate::timer::ffi::TimeSpec;
-
 #[derive(Copy, Clone, Default)]
 pub struct FAT32Timestamp {
     pub date: u16,
@@ -24,14 +24,17 @@ const DAY_PER_400YEAR: i64 = DAY_PER_YEAR * 400 + 97;
 const DAY_PER_MONTH: [i64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 fn leap_year(year: i64) -> bool {
+    stack_trace!();
     year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 fn leap_year_cnt(year: i64) -> i64 {
+    stack_trace!();
     assert!(year >= 1);
     year / 4 - year / 100 + year / 400
 }
 
 fn year_to_day_count(year: i64) -> i64 {
+    stack_trace!();
     let leap_year = leap_year_cnt(year - 1) - leap_year_cnt(1970 - 1);
     leap_year + (year - 1970) * DAY_PER_YEAR
 }
@@ -41,6 +44,7 @@ fn year_to_day_count(year: i64) -> i64 {
 #[allow(non_snake_case)]
 #[allow(unused)]
 pub fn unix_time_to_FAT32(unix_time: i64) -> FAT32Timestamp {
+    stack_trace!();
     let day_count: i64 = unix_time / MILLISEC_PER_DAY;
     let maybe_year: i64 = 1970 + day_count * 400 / (DAY_PER_400YEAR);
     let maybe_years = vec![maybe_year, maybe_year - 1, maybe_year + 1];
@@ -88,6 +92,7 @@ pub fn unix_time_to_FAT32(unix_time: i64) -> FAT32Timestamp {
 }
 
 fn month_to_day_count(month: i64, leap: bool) -> i64 {
+    stack_trace!();
     let mut ret: i64 = 0;
     for i in 0..month {
         ret += DAY_PER_MONTH[i as usize]
@@ -103,6 +108,7 @@ fn month_to_day_count(month: i64, leap: bool) -> i64 {
 /// unix_time: 19700101 00:00:00 to now (millisecond)
 #[allow(non_snake_case)]
 pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
+    stack_trace!();
     let year = (1980 + (fat32_time.date >> 9)) as i64;
     let month = (((fat32_time.date >> 5) & 0x0F) - 1) as i64;
     let day = ((fat32_time.date & 0x1F) - 1) as i64;
@@ -117,6 +123,7 @@ pub fn FAT32_to_unix_time(fat32_time: FAT32Timestamp) -> i64 {
 }
 
 pub fn unix_time_to_timespec(unix_time: i64) -> TimeSpec {
+    stack_trace!();
     if unix_time < 0 {
         TimeSpec { sec: 0, nsec: 0 }
     //    TimeSpec { sec: (unix_time + 1) / 1000 - 1, nsec: (unix_time + 1) % 1000 + 999 }

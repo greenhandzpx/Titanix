@@ -28,12 +28,14 @@ pub struct FdInfo {
 
 impl FdInfo {
     pub fn new(file: Arc<dyn File>, flags: OpenFlags) -> Self {
+        stack_trace!();
         Self { file, flags }
     }
 }
 
 impl FdTable {
     pub fn new() -> Self {
+        stack_trace!();
         // let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty())
         // .ok()
         // .unwrap();
@@ -70,6 +72,7 @@ impl FdTable {
     /// Return file descriptor.
     pub fn open(&mut self, inode: Arc<dyn Inode>, flags: OpenFlags) -> SyscallRet {
         stack_trace!();
+        stack_trace!();
         let mut inner_lock = inode.metadata().inner.lock();
         inner_lock.st_atim = current_time_spec();
         match inner_lock.state {
@@ -94,6 +97,7 @@ impl FdTable {
     }
 
     pub fn from_another(fd_table: &FdTable) -> GeneralRet<Self> {
+        stack_trace!();
         // if fd_table.fd_table.len() >= MAX_FD.load(core::sync::atomic::Ordering::Relaxed) {
         //     return Err(SyscallErr::EMFILE);
         // }
@@ -113,6 +117,7 @@ impl FdTable {
 
     /// Get a ref of the given fd
     pub fn get_ref(&self, fd: Fd) -> Option<&FdInfo> {
+        stack_trace!();
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -127,6 +132,7 @@ impl FdTable {
 
     /// Get the ownership of the given fd by clone
     pub fn get(&self, fd: Fd) -> Option<FdInfo> {
+        stack_trace!();
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -136,6 +142,7 @@ impl FdTable {
 
     /// Get the ownership of the given fd by clone
     pub fn get_mut(&mut self, fd: Fd) -> Option<&mut FdInfo> {
+        stack_trace!();
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -145,6 +152,7 @@ impl FdTable {
 
     /// Take the ownership of the given fd
     pub fn take(&mut self, fd: Fd) -> Option<FdInfo> {
+        stack_trace!();
         if fd >= self.fd_table.len() {
             None
         } else {
@@ -153,12 +161,14 @@ impl FdTable {
     }
 
     pub fn put(&mut self, fd: Fd, fd_info: FdInfo) {
+        stack_trace!();
         assert!(fd < self.fd_table.len());
         assert!(self.fd_table[fd].is_none());
         self.fd_table[fd] = Some(fd_info);
     }
 
     pub fn alloc_fd(&mut self) -> GeneralRet<usize> {
+        stack_trace!();
         if let Some(fd) = self.free_slot() {
             Ok(fd)
         } else {
@@ -171,6 +181,7 @@ impl FdTable {
         }
     }
     pub fn alloc_fd_lower_bound(&mut self, bound: Fd) -> GeneralRet<usize> {
+        stack_trace!();
         if let Some(fd) =
             (0..self.fd_table.len()).find(|fd| *fd >= bound && self.fd_table[*fd].is_none())
         {
@@ -192,6 +203,7 @@ impl FdTable {
     }
 
     pub fn alloc_spec_fd(&mut self, newfd: Fd) -> GeneralRet<usize> {
+        stack_trace!();
         if newfd >= self.rlimit.rlim_cur {
             return Err(SyscallErr::EMFILE);
         }
@@ -202,6 +214,7 @@ impl FdTable {
     }
 
     pub fn close_on_exec(&mut self) {
+        stack_trace!();
         for (_fd, file) in self.fd_table.iter_mut().enumerate() {
             if let Some(f) = file {
                 if f.flags.contains(OpenFlags::CLOEXEC) {
@@ -213,14 +226,17 @@ impl FdTable {
     }
 
     pub fn set_rlimit(&mut self, rlimit: RLimit) {
+        stack_trace!();
         self.rlimit = rlimit;
     }
 
     pub fn rlimit(&self) -> RLimit {
+        stack_trace!();
         self.rlimit
     }
 
     fn free_slot(&self) -> Option<usize> {
+        stack_trace!();
         (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none())
     }
 }

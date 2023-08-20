@@ -2,6 +2,7 @@ use alloc::{sync::Arc, vec::Vec};
 use core::cmp::{max, min};
 
 use super::{fat::FileAllocTable, SECTOR_SIZE};
+use crate::stack_trace;
 
 pub struct FAT32File {
     pub fat: Arc<FileAllocTable>,
@@ -11,6 +12,7 @@ pub struct FAT32File {
 
 impl FAT32File {
     pub fn new(fat: Arc<FileAllocTable>, first_cluster: usize, size: Option<usize>) -> Self {
+        stack_trace!();
         let mut clusters_vec = Vec::new();
         if first_cluster != 0 {
             clusters_vec.push(first_cluster);
@@ -24,6 +26,7 @@ impl FAT32File {
 
     #[allow(unused)]
     pub fn first_cluster(&self) -> u32 {
+        stack_trace!();
         if self.clusters.is_empty() == false {
             self.clusters[0] as u32
         } else {
@@ -32,6 +35,7 @@ impl FAT32File {
     }
 
     fn get_clusters(&mut self) {
+        stack_trace!();
         if self.clusters.is_empty() == false {
             loop {
                 let nxt_cluster = self.fat.read_fat(*self.clusters.last().unwrap()).unwrap();
@@ -47,6 +51,7 @@ impl FAT32File {
     }
 
     pub fn modify_size(&mut self, delta: isize) -> usize {
+        stack_trace!();
         self.get_clusters();
         if delta < 0 && (self.size.unwrap() as isize) + delta >= 0 {
             let new_sz = ((self.size.unwrap() as isize) + delta) as usize;
@@ -84,6 +89,7 @@ impl FAT32File {
     }
 
     pub fn read(&mut self, data: &mut [u8], offset: usize) -> usize {
+        stack_trace!();
         self.get_clusters();
         let st = min(offset, self.size.unwrap());
         let ed = min(offset + data.len(), self.size.unwrap());
@@ -118,6 +124,7 @@ impl FAT32File {
     }
 
     pub fn write(&mut self, data: &[u8], offset: usize) -> usize {
+        stack_trace!();
         self.get_clusters();
         let st = min(offset, self.size.unwrap());
         let ed = offset + data.len();

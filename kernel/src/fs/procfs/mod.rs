@@ -5,6 +5,7 @@ use log::debug;
 
 use crate::{
     fs::{ffi::StatFlags, hash_key::HashKey, inode::INODE_CACHE, FileSystemType},
+    stack_trace,
     utils::error::GeneralRet,
 };
 
@@ -31,6 +32,7 @@ impl Inode for ProcRootInode {
         _mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         debug!("[ProcRootInode mknod] mknod: {}", name);
         let mut index = 0;
         for (i, proc) in PROC_NAME.into_iter().enumerate() {
@@ -48,27 +50,33 @@ impl Inode for ProcRootInode {
         Ok(inode)
     }
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.metadata.as_ref().unwrap()
     }
 
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = Some(meta);
     }
 
     fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        stack_trace!();
         debug!("[ProcRootInode::load_children_from_disk]: there is nothing we should do.");
     }
 
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         // todo!()
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(crate::utils::error::SyscallErr::EPERM)
     }
 }
 
 impl ProcRootInode {
     pub fn new() -> Self {
+        stack_trace!();
         Self { metadata: None }
     }
 }
@@ -107,6 +115,7 @@ impl ProcFs {
         covered_inode: Option<Arc<dyn Inode>>,
         covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
+        stack_trace!();
         let mut raw_root_inode = ProcRootInode::new();
         raw_root_inode.root_init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
         let root_inode = Arc::new(raw_root_inode);
@@ -146,6 +155,7 @@ impl ProcFs {
 
 impl FileSystem for ProcFs {
     fn metadata(&self) -> &FileSystemMeta {
+        stack_trace!();
         &self.metadata
     }
 

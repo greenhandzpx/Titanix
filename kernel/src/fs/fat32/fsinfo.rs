@@ -1,8 +1,8 @@
+use super::util::*;
 use crate::fs::fat32::{
     FSI_LEADSIG, FSI_RESERVED1_SIZE, FSI_RESERVED2_SIZE, FSI_STRUCSIG, FSI_TRAILSIG,
 };
-
-use super::util::*;
+use crate::stack_trace;
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, Default)]
 pub struct FSInfo {
@@ -17,12 +17,14 @@ pub struct FSInfo {
 
 impl FSInfo {
     pub fn new(src: &[u8; 512]) -> Self {
+        stack_trace!();
         let mut ret: Self = Self::default();
         ret.load(src);
         ret
     }
 
     pub fn load(&mut self, src: &[u8; 512]) {
+        stack_trace!();
         let mut offset: usize = 0;
         macro_rules! load {
             ($v: expr) => {
@@ -40,6 +42,7 @@ impl FSInfo {
 
     #[allow(unused)]
     pub fn store(&mut self, dest: &mut [u8; 512]) {
+        stack_trace!();
         let mut offset: usize = 0;
         macro_rules! store {
             ($v: expr) => {

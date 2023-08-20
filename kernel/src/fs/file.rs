@@ -33,9 +33,11 @@ pub struct FileMeta {
 
 impl FileMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut FileMetaInner) -> T) -> T {
+        stack_trace!();
         f(&mut self.inner.lock())
     }
     pub fn new(mode: InodeMode) -> Self {
+        stack_trace!();
         Self {
             inner: Mutex::new(FileMetaInner {
                 // flags,
@@ -84,6 +86,7 @@ pub trait File: Send + Sync {
     fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> AsyscallRet;
 
     fn pread<'a>(&'a self, buf: &'a mut [u8], off: usize) -> AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             self.metadata().prw_lock.lock().await;
             let old_off = self.seek(SeekFrom::Current(0))?;
@@ -95,6 +98,7 @@ pub trait File: Send + Sync {
     }
 
     fn pwrite<'a>(&'a self, buf: &'a [u8], off: usize) -> AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             self.metadata().prw_lock.lock().await;
             let old_off = self.seek(SeekFrom::Current(0))?;
@@ -107,6 +111,7 @@ pub trait File: Send + Sync {
     }
 
     fn pollin(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
+        stack_trace!();
         // TODO: optimize
         debug!("[File::pollin] enter default");
         Ok(true)
@@ -114,6 +119,7 @@ pub trait File: Send + Sync {
     }
 
     fn pollout(&self, _waker: Option<Waker>) -> GeneralRet<bool> {
+        stack_trace!();
         debug!("[File::pollout] enter default");
         Ok(true)
         // todo!()
@@ -121,16 +127,19 @@ pub trait File: Send + Sync {
 
     /// For default file, data must be read from page cache first
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
+        stack_trace!();
         block_on(self.read(buf, OpenFlags::default()))
     }
 
     /// For default file, data must be written to page cache first
     fn sync_write(&self, buf: &[u8]) -> SyscallRet {
+        stack_trace!();
         block_on(self.write(buf, OpenFlags::default()))
     }
 
     /// Return the new offset
     fn seek(&self, pos: SeekFrom) -> SyscallRet {
+        stack_trace!();
         let mut meta = self.metadata().inner.lock();
         match pos {
             SeekFrom::Current(off) => {
@@ -194,6 +203,7 @@ pub trait File: Send + Sync {
 
     // TODO: not sure the args
     fn mmap(&self) -> GeneralRet<VmArea> {
+        stack_trace!();
         todo!()
     }
 
@@ -204,6 +214,7 @@ pub trait File: Send + Sync {
     // }
 
     fn truncate(&self, len: usize) -> AgeneralRet<()> {
+        stack_trace!();
         Box::pin(async move {
             stack_trace!();
             let (old_pos, inode) = self.metadata().inner_get(|inner| {
@@ -243,6 +254,7 @@ pub trait File: Send + Sync {
     }
 
     fn ioctl(&self, _command: usize, _value: usize) -> SyscallRet {
+        stack_trace!();
         log::warn!("[File::ioctl] unsupported");
         Ok(0)
     }
@@ -255,6 +267,7 @@ pub struct DefaultFile {
 
 impl DefaultFile {
     pub fn new(metadata: FileMeta) -> Self {
+        stack_trace!();
         Self { metadata }
     }
 }
@@ -262,12 +275,14 @@ impl DefaultFile {
 // #[async_trait]
 impl File for DefaultFile {
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.metadata
     }
 
     /// For default file, data must be read from page cache first
     /// TODO: change to real async
     fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             stack_trace!();
             let _sum_guard = SumGuard::new();
@@ -329,6 +344,7 @@ impl File for DefaultFile {
 
     /// For default file, data must be written to page cache first
     fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             stack_trace!();
             let _sum_guard = SumGuard::new();

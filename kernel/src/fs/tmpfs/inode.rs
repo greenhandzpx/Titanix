@@ -2,6 +2,7 @@ use alloc::{boxed::Box, string::ToString, sync::Arc};
 
 use crate::{
     fs::{inode::InodeMeta, Inode, InodeMode},
+    stack_trace,
     utils::path,
 };
 
@@ -11,6 +12,7 @@ pub struct TmpInode {
 
 impl TmpInode {
     pub fn new(parent: Option<Arc<dyn Inode>>, name: &str, mode: InodeMode) -> Self {
+        stack_trace!();
         let path = match parent {
             Some(ref parent) => path::merge(&parent.metadata().path.clone(), name),
             None => name.to_string(),
@@ -24,10 +26,12 @@ impl TmpInode {
 
 impl Inode for TmpInode {
     fn metadata(&self) -> &crate::fs::inode::InodeMeta {
+        stack_trace!();
         &self.metadata
     }
 
     fn set_metadata(&mut self, meta: crate::fs::inode::InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
 
@@ -36,6 +40,7 @@ impl Inode for TmpInode {
         _offset: usize,
         _buf: &'a mut [u8],
     ) -> crate::utils::error::AgeneralRet<usize> {
+        stack_trace!();
         Box::pin(async move { Ok(0) })
     }
 
@@ -44,14 +49,17 @@ impl Inode for TmpInode {
         _offset: usize,
         _buf: &'a [u8],
     ) -> crate::utils::error::AgeneralRet<usize> {
+        stack_trace!();
         Box::pin(async move { Ok(0) })
     }
 
     fn load_children_from_disk(&self, _this: alloc::sync::Arc<dyn Inode>) {
+        stack_trace!();
         // There is nothing we should do
     }
 
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         // There is nothing we should do
     }
 
@@ -61,6 +69,7 @@ impl Inode for TmpInode {
         name: &str,
         mode: crate::fs::InodeMode,
     ) -> crate::utils::error::GeneralRet<alloc::sync::Arc<dyn Inode>> {
+        stack_trace!();
         let child_inode = TmpInode::new(Some(this), name, mode);
         Ok(Arc::new(child_inode))
     }
@@ -72,10 +81,12 @@ impl Inode for TmpInode {
         mode: crate::fs::InodeMode,
         _dev_id: Option<usize>,
     ) -> crate::utils::error::GeneralRet<alloc::sync::Arc<dyn Inode>> {
+        stack_trace!();
         let child_inode = TmpInode::new(Some(this), name, mode);
         Ok(Arc::new(child_inode))
     }
     fn child_removeable(&self) -> crate::utils::error::GeneralRet<()> {
+        stack_trace!();
         Ok(())
     }
 }

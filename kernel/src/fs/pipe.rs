@@ -24,14 +24,17 @@ pub struct Pipe<const N: usize> {
 
 impl<const N: usize> File for Pipe<N> {
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.meta
     }
 
     fn seek(&self, _pos: SeekFrom) -> SyscallRet {
+        stack_trace!();
         Err(SyscallErr::ESPIPE)
     }
 
     fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         log::info!("[Pipe::read] start to pipe read {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(
@@ -60,6 +63,7 @@ impl<const N: usize> File for Pipe<N> {
     }
 
     fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         log::info!("[Pipe::write] start to pipe write {} bytes", buf.len());
         let buf_addr = buf.as_ptr() as usize;
         Box::pin(async move {
@@ -85,6 +89,7 @@ impl<const N: usize> File for Pipe<N> {
     }
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        stack_trace!();
         debug!("[Pipe::pollin] enter");
         self.inner_handler(|ring_buffer| {
             if ring_buffer.available_read() > 0 {
@@ -102,6 +107,7 @@ impl<const N: usize> File for Pipe<N> {
     }
 
     fn pollout(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        stack_trace!();
         self.inner_handler(|ring_buffer| {
             if ring_buffer.available_write() > 0 {
                 Ok(true)
@@ -120,6 +126,7 @@ impl<const N: usize> File for Pipe<N> {
 
 impl<const N: usize> Pipe<N> {
     fn new(flags: OpenFlags, buffer: Arc<Mutex<PipeRingBuffer<N>>>) -> Self {
+        stack_trace!();
         let readable = flags.contains(OpenFlags::RDONLY);
         let writable = flags.contains(OpenFlags::WRONLY);
         let meta = FileMeta::new(super::InodeMode::FileFIFO);
@@ -132,12 +139,14 @@ impl<const N: usize> Pipe<N> {
     }
 
     fn inner_handler<T>(&self, f: impl FnOnce(&mut PipeRingBuffer<N>) -> T) -> T {
+        stack_trace!();
         f(&mut self.buffer.lock())
     }
 }
 
 impl<const N: usize> Drop for Pipe<N> {
     fn drop(&mut self) {
+        stack_trace!();
         log::info!("[Pipe::drop] start drop..., writable {}", self.writable);
         if self.writable {
             // Write end,
@@ -181,6 +190,7 @@ struct PipeRingBuffer<const N: usize> {
 
 impl<const N: usize> PipeRingBuffer<N> {
     fn new() -> Self {
+        stack_trace!();
         // let arr = vec![0 as u8; buf_capcity];
         Self {
             arr: [0; N],
@@ -195,14 +205,17 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn set_write_end(&mut self, write_end: &Arc<Pipe<N>>) {
+        stack_trace!();
         self.write_end = Some(Arc::downgrade(write_end));
     }
 
     fn set_read_end(&mut self, read_end: &Arc<Pipe<N>>) {
+        stack_trace!();
         self.read_end = Some(Arc::downgrade(read_end));
     }
 
     fn read_range(&mut self, buf: &mut [u8]) -> usize {
+        stack_trace!();
         self.status = RingBufferStatus::NORMAL;
         let end = match self.tail > self.head {
             true => self.tail,
@@ -219,6 +232,7 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn write_range(&mut self, buf: &[u8]) -> usize {
+        stack_trace!();
         self.status = RingBufferStatus::NORMAL;
         let end = match self.head > self.tail {
             true => self.head,
@@ -236,6 +250,7 @@ impl<const N: usize> PipeRingBuffer<N> {
 
     #[allow(unused)]
     fn read_byte(&mut self) -> u8 {
+        stack_trace!();
         self.status = RingBufferStatus::NORMAL;
         let c = self.arr[self.head];
         self.head = (self.head + 1) % N;
@@ -247,6 +262,7 @@ impl<const N: usize> PipeRingBuffer<N> {
 
     #[allow(unused)]
     fn write_byte(&mut self, byte: u8) {
+        stack_trace!();
         self.status = RingBufferStatus::NORMAL;
         self.arr[self.tail] = byte;
         self.tail = (self.tail + 1) % N;
@@ -256,6 +272,7 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn available_read(&self) -> usize {
+        stack_trace!();
         if self.status == RingBufferStatus::EMPTY {
             0
         } else {
@@ -268,6 +285,7 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn available_write(&self) -> usize {
+        stack_trace!();
         if self.status == RingBufferStatus::FULL {
             0
         } else {
@@ -276,6 +294,7 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn all_write_ends_closed(&self) -> bool {
+        stack_trace!();
         log::info!(
             "[all_write_end_closed] write end ref cnt {}",
             self.write_end.as_ref().unwrap().strong_count()
@@ -284,6 +303,7 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn all_read_ends_closed(&self) -> bool {
+        stack_trace!();
         debug!(
             "read end ref cnt {}",
             self.read_end.as_ref().unwrap().strong_count()
@@ -292,10 +312,12 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn wait_for_reading(&mut self, waker: Waker) {
+        stack_trace!();
         self.read_waiters.push(waker);
     }
 
     fn wake(&mut self, for_reader: bool) {
+        stack_trace!();
         let queue = match for_reader {
             true => &mut self.read_waiters,
             false => &mut self.write_waiters,
@@ -308,12 +330,14 @@ impl<const N: usize> PipeRingBuffer<N> {
     }
 
     fn wait_for_writing(&mut self, waker: Waker) {
+        stack_trace!();
         self.write_waiters.push(waker);
     }
 }
 
 /// Return (read_end, write_end)
 pub fn make_pipe<const N: usize>(flags: Option<OpenFlags>) -> (Arc<Pipe<N>>, Arc<Pipe<N>>) {
+    stack_trace!();
     debug!("create a pipe");
     let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
     let flags = match flags {
@@ -350,6 +374,7 @@ impl<const N: usize> PipeFuture<N> {
         user_buf_len: usize,
         operation: PipeOperation,
     ) -> Self {
+        stack_trace!();
         Self {
             buffer,
             user_buf,

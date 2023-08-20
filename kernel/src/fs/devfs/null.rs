@@ -4,6 +4,7 @@ use crate::{
         inode::InodeMeta,
         File, Inode, Mutex, OpenFlags,
     },
+    stack_trace,
     sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
@@ -17,6 +18,7 @@ pub struct NullInode {
 
 impl NullInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        stack_trace!();
         let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
         Self { metadata }
     }
@@ -24,6 +26,7 @@ impl NullInode {
 
 impl Inode for NullInode {
     fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
+        stack_trace!();
         Ok(Arc::new(NullFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
@@ -39,6 +42,7 @@ impl Inode for NullInode {
         }))
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
     fn metadata(&self) -> &InodeMeta {

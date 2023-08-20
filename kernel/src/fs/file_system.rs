@@ -8,6 +8,7 @@ use alloc::{
 use crate::{
     driver::BlockDevice,
     fs::{hash_key::HashKey, inode::INODE_CACHE},
+    stack_trace,
     sync::mutex::SpinNoIrqLock,
     utils::{
         async_utils::block_on,
@@ -29,6 +30,7 @@ pub enum FsDevice {
 
 impl FsDevice {
     pub fn from_inode_device(dev: InodeDevice) -> Self {
+        stack_trace!();
         match dev {
             // InodeDevice::Pipe(_) => Self::None,
             InodeDevice::Device(d) => Self::BlockDevice(d.block_device),
@@ -37,6 +39,7 @@ impl FsDevice {
     }
 
     pub fn block_device(&self) -> Option<&Arc<dyn BlockDevice>> {
+        stack_trace!();
         if let FsDevice::BlockDevice(ret) = &self {
             Some(ret)
         } else {
@@ -57,6 +60,7 @@ pub enum FileSystemType {
 
 impl FileSystemType {
     pub fn fs_type(ftype: &str) -> Self {
+        stack_trace!();
         match ftype {
             "vfat" => Self::VFAT,
             "ext2" => Self::EXT2,
@@ -67,6 +71,7 @@ impl FileSystemType {
         }
     }
     pub fn to_string(&self) -> String {
+        stack_trace!();
         match self {
             Self::VFAT => "vfat".to_string(),
             Self::EXT2 => "ext2".to_string(),
@@ -81,6 +86,7 @@ impl FileSystemType {
 /// concrete fs must implement `Drop` if sync disk is needed.
 pub trait FileSystem: Send + Sync {
     fn mounts_info(&self) -> String {
+        stack_trace!();
         let meta = self.metadata();
         let dev_name = meta.dev_name.to_string();
         let mount_point = meta.mount_point.as_str();
@@ -100,6 +106,7 @@ pub trait FileSystem: Send + Sync {
     fn metadata(&self) -> &FileSystemMeta;
 
     fn sync_fs<'a>(&self) -> AgeneralRet<'a, ()> {
+        stack_trace!();
         self.metadata().root_inode.clone().sync()
     }
 }
@@ -139,14 +146,17 @@ impl FileSystemManager {
     }
 
     pub fn root_fs(&self) -> Arc<dyn FileSystem> {
+        stack_trace!();
         Arc::clone(&self.fs_mgr.lock().get("/").unwrap())
     }
 
     pub fn root_inode(&self) -> Arc<dyn Inode> {
+        stack_trace!();
         Arc::clone(&self.root_fs().metadata().root_inode)
     }
 
     pub fn mounts_info(&self) -> String {
+        stack_trace!();
         let mut res = "".to_string();
         let fs_mgr = self.fs_mgr.lock();
         for (mount_point, fs) in fs_mgr.iter() {
@@ -178,6 +188,7 @@ impl FileSystemManager {
         fstype: FileSystemType,
         flags: StatFlags,
     ) -> GeneralRet<Arc<dyn FileSystem>> {
+        stack_trace!();
         // find covered inode, fa inode, etc
         let mount_point_fa = path::get_parent_dir(mount_point);
         let mount_point_name = path::get_name(mount_point);
@@ -306,6 +317,7 @@ impl FileSystemManager {
 
     /// TODO: change into async
     pub fn unmount(&self, mount_point: &str) -> GeneralRet<()> {
+        stack_trace!();
         // find fs
         let fs = {
             let fs_mgr = self.fs_mgr.lock();

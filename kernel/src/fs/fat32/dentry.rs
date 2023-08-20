@@ -4,6 +4,7 @@ use log::info;
 use super::{
     file::FAT32File, time::FAT32Timestamp, util::shortname_checksum, LNAME_MAXLEN, SNAME_LEN,
 };
+use crate::stack_trace;
 
 // const ATTR_READ_ONLY: u8 = 0x01;
 // const ATTR_HIDDEN: u8 = 0x02;
@@ -29,17 +30,20 @@ pub struct FAT32DentryContent<'a> {
 
 impl<'a> FAT32DentryContent<'a> {
     pub fn new(file: &'a mut FAT32File) -> Self {
+        stack_trace!();
         Self { file, offset: 0 }
     }
 
     #[allow(unused)]
     pub fn seek(&mut self, offset: usize) {
+        stack_trace!();
         self.offset = offset
     }
 }
 
 impl DentryReader for FAT32DentryContent<'_> {
     fn read_dentry(&mut self, data: &mut [u8]) -> usize {
+        stack_trace!();
         let ret = self.file.read(data, self.offset);
         self.offset += ret;
         ret
@@ -48,6 +52,7 @@ impl DentryReader for FAT32DentryContent<'_> {
 
 impl DentryWriter for FAT32DentryContent<'_> {
     fn write_dentry(&mut self, data: &[u8]) {
+        stack_trace!();
         let ret = self.file.write(data, self.offset);
         self.offset += ret;
     }
@@ -66,6 +71,7 @@ pub struct FAT32DirEntry {
 
 impl FAT32DirEntry {
     pub fn fname(&self) -> String {
+        stack_trace!();
         let mut lname_len = 0;
         while lname_len < LNAME_MAXLEN && self.lname[lname_len] != 0 {
             lname_len += 1;
@@ -94,6 +100,7 @@ impl FAT32DirEntry {
     }
 
     pub fn read_dentry(reader: &mut dyn DentryReader) -> Option<Self> {
+        stack_trace!();
         let mut read_buf: [u8; DENTRY_SIZE] = [0; DENTRY_SIZE];
         let mut next_id: Option<u8> = None;
         let mut s_chksum: Option<u8> = None;
@@ -228,6 +235,7 @@ impl FAT32DirEntry {
 
     #[allow(unused)]
     fn write_dentry(&self, writer: &mut dyn DentryWriter) {
+        stack_trace!();
         let mut lname_len = 0;
         while lname_len < LNAME_MAXLEN && self.lname[lname_len] != 0 {
             lname_len += 1;

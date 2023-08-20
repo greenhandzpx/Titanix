@@ -4,6 +4,7 @@ use crate::{
         inode::{Inode, InodeMeta, InodeMode},
         Mutex,
     },
+    stack_trace,
     utils::{
         error::{GeneralRet, SyscallErr},
         path,
@@ -33,6 +34,7 @@ impl FAT32Inode {
         path: &str,
         first_cluster: usize,
     ) -> Self {
+        stack_trace!();
         let mode = InodeMode::FileDIR;
         let meta = InodeMeta::new(fa_inode, path, mode, 0, None);
         let file = FAT32File::new(Arc::clone(&fat), first_cluster, None);
@@ -48,6 +50,7 @@ impl FAT32Inode {
         fa_inode: Option<Arc<dyn Inode>>,
         dentry: &FAT32DirEntry,
     ) -> Self {
+        stack_trace!();
         let mode = if (dentry.attr & ATTR_DIRECTORY) == ATTR_DIRECTORY {
             InodeMode::FileDIR
         } else {
@@ -92,6 +95,7 @@ impl FAT32Inode {
         name: &str,
         mode: InodeMode,
     ) -> Self {
+        stack_trace!();
         let parent_path = fa_inode.metadata().path.clone();
         let path = path::merge(&parent_path, name);
         log::debug!(
@@ -119,14 +123,17 @@ impl FAT32Inode {
 
 impl Inode for FAT32Inode {
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.meta.as_ref().unwrap()
     }
 
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.meta = Some(meta);
     }
 
     fn load_children_from_disk(&self, this: Arc<dyn Inode>) {
+        stack_trace!();
         if self.meta.is_none() {
             info!("meta is none!");
             return;
@@ -159,6 +166,7 @@ impl Inode for FAT32Inode {
         _offset: usize,
         _buf: &'a mut [u8],
     ) -> crate::utils::error::AgeneralRet<usize> {
+        stack_trace!();
         Box::pin(async move { Ok(self.file.lock().read(_buf, _offset)) })
     }
 
@@ -167,6 +175,7 @@ impl Inode for FAT32Inode {
         _offset: usize,
         _buf: &'a [u8],
     ) -> crate::utils::error::AgeneralRet<usize> {
+        stack_trace!();
         Box::pin(async move { Ok(self.file.lock().write(_buf, _offset)) })
     }
 
@@ -176,6 +185,7 @@ impl Inode for FAT32Inode {
         name: &str,
         mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -191,6 +201,7 @@ impl Inode for FAT32Inode {
         mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -200,9 +211,11 @@ impl Inode for FAT32Inode {
     }
 
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         // self.metadata().inner.lock().children.remove(child_name);
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Ok(())
     }
 }

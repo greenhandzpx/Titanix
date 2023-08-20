@@ -1,4 +1,5 @@
 use super::bpb::BootSector;
+use crate::stack_trace;
 
 #[derive(Copy, Clone, Default)]
 pub struct FAT32Info {
@@ -16,6 +17,7 @@ pub struct FAT32Info {
 
 impl FAT32Info {
     pub fn new(bs: BootSector) -> Self {
+        stack_trace!();
         let start_sector = (bs.BPB_ReservedSectorCount as usize)
             + (bs.BPB_NumFATs as usize) * (bs.BPB_FATsize32 as usize);
         let cluster_count =
@@ -35,6 +37,7 @@ impl FAT32Info {
     }
 
     pub fn cid_to_sid(&self, cluster_id: usize) -> Option<usize> {
+        stack_trace!();
         if cluster_id < 2 {
             return None;
         }
