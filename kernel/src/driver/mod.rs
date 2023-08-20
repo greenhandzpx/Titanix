@@ -32,6 +32,8 @@ pub fn intr_handler() {
     let hart_id = local_hart().hart_id();
     let context_id = hart_id * 2;
     let intr = plic.claim(context_id);
+    IRQ_COUNTER.add1(intr);
+    use crate::irq_count::IRQ_COUNTER;
     use qemu::IntrSource;
     if intr != 0 {
         match intr.into() {

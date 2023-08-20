@@ -31,6 +31,7 @@ mod config;
 mod driver;
 mod executor;
 mod fs;
+mod irq_count;
 mod loader;
 mod mm;
 mod net;

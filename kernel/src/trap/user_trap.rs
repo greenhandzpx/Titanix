@@ -7,6 +7,7 @@ use riscv::register::{
 };
 
 use crate::{
+    irq_count::{IrqCounter, IRQ_COUNTER},
     mm::{memory_space, VirtAddr, VA_WIDTH_SV39},
     process::thread::{self, exit_and_terminate_all_threads},
     processor::{
@@ -160,6 +161,7 @@ pub async fn trap_handler() {
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // log::error!("user timer interrupt!!");
+            IRQ_COUNTER.add1(1);
             handle_timeout_events();
             set_next_trigger();
             // log::debug!(
