@@ -12,7 +12,7 @@ use crate::{
     sync::Event,
     timer::timeout_task::ksleep,
     utils::{
-        async_utils::{Select2Futures, SelectOutput},
+        async_utils::{block_on, Select2Futures, SelectOutput},
         error::{GeneralRet, SyscallErr, SyscallRet},
         random::RNG,
     },
@@ -356,12 +356,10 @@ impl File for TcpSocket {
             self.handler_dev
         );
         Box::pin(async move {
-            match Select2Futures::new(
+            match block_on(Select2Futures::new(
                 TcpRecvFuture::new(self, buf, flags),
                 current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
-            )
-            .await
-            {
+            )) {
                 SelectOutput::Output1(ret) => match ret {
                     Ok(len) => {
                         if len > MAX_BUFFER_SIZE / 2 {
@@ -421,7 +419,7 @@ impl File for TcpSocket {
         &self.file_meta
     }
 
-    fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
+    fn pollin(&self, _waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
         info!(
             "[Tcp::pollin] ({}, {}) enter",
             self.handler_loop, self.handler_dev
@@ -450,7 +448,6 @@ impl File for TcpSocket {
                 Ok(false)
             }
         };
-        let mut stall = 0;
         loop {
             NET_INTERFACE.poll_all();
             let loop_ret = NET_INTERFACE.tcp_socket_loop(self.handler_loop, |socket| {
@@ -462,8 +459,6 @@ impl File for TcpSocket {
             if loop_ret || dev_ret {
                 return Ok(true);
             }
-            stall += 1;
-            Box::pin(async move { ksleep(Duration::from_secs(stall)).await });
         }
     }
 
@@ -512,7 +507,7 @@ impl<'a> Future for TcpAcceptFuture<'a> {
     type Output = GeneralRet<IpEndpoint>;
     fn poll(
         self: core::pin::Pin<&mut Self>,
-        cx: &mut core::task::Context<'_>,
+        _cx: &mut core::task::Context<'_>,
     ) -> Poll<Self::Output> {
         let poll_f = |socket: &mut smoltcp::socket::tcp::Socket<'_>| {
             if !socket.is_open() {
@@ -532,24 +527,28 @@ impl<'a> Future for TcpAcceptFuture<'a> {
                 log::info!("[TcpAcceptFuture::poll] state become {:?}", socket.state());
                 return Poll::Ready(Ok(socket.remote_endpoint().unwrap()));
             }
-            log::info!(
-                "[TcpAcceptFuture::poll] not syn yet, state {:?}",
-                socket.state()
-            );
+            // log::info!(
+            //     "[TcpAcceptFuture::poll] not syn yet, state {:?}",
+            //     socket.state()
+            // );
             if self.flags.contains(OpenFlags::NONBLOCK) {
                 log::info!("[TcpAcceptFuture::poll] flags set nonblock");
                 return Poll::Ready(Err(SyscallErr::EAGAIN));
             }
-            socket.register_recv_waker(cx.waker());
+            // socket.register_recv_waker(cx.waker());
             Poll::Pending
         };
-        NET_INTERFACE.poll_all();
-        let ret1 = NET_INTERFACE.tcp_socket_loop(self.socket.handler_loop, poll_f);
-        if ret1.is_ready() {
-            return ret1;
+        loop {
+            NET_INTERFACE.poll_all();
+            let ret1 = NET_INTERFACE.tcp_socket_loop(self.socket.handler_loop, poll_f);
+            if ret1.is_ready() {
+                return ret1;
+            }
+            let ret2 = NET_INTERFACE.tcp_socket_dev(self.socket.handler_dev, poll_f);
+            if ret2.is_ready() {
+                return ret2;
+            }
         }
-        let ret2 = NET_INTERFACE.tcp_socket_dev(self.socket.handler_dev, poll_f);
-        ret2
     }
 }
 
@@ -614,7 +613,10 @@ impl<'a> Future for TcpRecvFuture<'a> {
                 );
                 Poll::Ready(match socket.recv_slice(&mut this.buf) {
                     Ok(nbytes) => {
-                        info!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
+                        info!(
+                            "[TcpRecvFuture::poll] recv {} bytes, buf[0] {}",
+                            nbytes, this.buf[0] as char
+                        );
                         Ok(nbytes)
                     }
                     Err(_) => Err(SyscallErr::ENOTCONN),
@@ -653,7 +655,10 @@ impl<'a> Future for TcpRecvFuture<'a> {
                 );
                 Poll::Ready(match socket.recv_slice(&mut this.buf) {
                     Ok(nbytes) => {
-                        info!("[TcpRecvFuture::poll] recv {} bytes", nbytes);
+                        info!(
+                            "[TcpRecvFuture::poll] recv {} bytes, buf[0] {}",
+                            nbytes, this.buf[0] as char
+                        );
                         Ok(nbytes)
                     }
                     Err(_) => Err(SyscallErr::ENOTCONN),

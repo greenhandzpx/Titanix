@@ -185,7 +185,7 @@ impl<'a> TitanixNetInterface<'a> {
     }
 
     fn poll_loopback(&self) {
-        log::debug!("[TitanixNetInterface::poll] poll loopback...");
+        // log::debug!("[TitanixNetInterface::poll] poll loopback...");
         self.loopback(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),
@@ -196,7 +196,7 @@ impl<'a> TitanixNetInterface<'a> {
     }
 
     fn poll_device(&self) {
-        log::debug!("[TitanixNetInterface::poll] poll device...");
+        // log::debug!("[TitanixNetInterface::poll] poll device...");
         self.device(|inner| {
             inner.iface.poll(
                 Instant::from_millis(current_time_duration().as_millis() as i64),
@@ -215,7 +215,7 @@ impl<'a> TitanixNetInterface<'a> {
     }
 
     pub fn poll_all(&self) {
-        log::debug!("[TitanixNetInterface::poll] poll all...");
+        // log::debug!("[TitanixNetInterface::poll] poll all...");
         self.poll_loopback();
         self.poll_device();
     }

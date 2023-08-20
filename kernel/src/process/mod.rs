@@ -486,6 +486,7 @@ impl Process {
         child_tid_ptr: usize,
         flags: CloneFlags,
     ) -> SyscallRet {
+        stack_trace!();
         // Note that the user mode code will put the `func` and `arg` in
         // 0(stack) and 8(stack)
 

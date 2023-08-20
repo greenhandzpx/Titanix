@@ -84,6 +84,11 @@ impl UserCheck {
     /// Check wether the given user addr is writable or not
     pub fn check_writable_slice(&self, buf: *mut u8, len: usize) -> GeneralRet<()> {
         stack_trace!();
+        log::debug!(
+            "[check_writable_slice] buf addr {:#x} len {:#x}",
+            buf as usize,
+            len
+        );
         let buf_start: VirtAddr = VirtAddr::from(buf as usize).floor().into();
         let buf_end: VirtAddr = VirtAddr::from(buf as usize + len).ceil().into();
         let mut va = buf_start;
