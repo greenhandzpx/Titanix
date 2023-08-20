@@ -160,7 +160,7 @@ pub async fn trap_handler() {
             // process::yield_now().await
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            log::error!("user timer interrupt!!");
+            // log::error!("user timer interrupt!!");
             IRQ_COUNTER.add1(1);
             handle_timeout_events();
             set_next_trigger();
