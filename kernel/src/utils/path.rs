@@ -143,6 +143,13 @@ pub fn path_to_inode(
             debug!("[path_to_inode] get path: {}", path);
             let mut path = format(&path);
             debug!("[path_to_inode] get format path: {}", path);
+            path = if path.eq("/sys/kernel/debug/kcov") {
+                log::info!("[path_to_inode] match /sys/kernel/debug/kcov change to /sys/kcov");
+                "/sys/kcov".to_string()
+            } else {
+                path
+            };
+            debug!("[path_to_inode] path is: {}", path);
             stack_trace!();
             if is_relative_path(&path) {
                 if dirfd != AT_FDCWD {

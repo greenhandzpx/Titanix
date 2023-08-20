@@ -52,12 +52,14 @@ struct TcpSocketInner {
 
 impl Socket for TcpSocket {
     fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
+        stack_trace!();
         info!("[tcp::bind] bind to: {:?}", addr);
         self.inner.lock().local_endpoint = addr;
         Ok(0)
     }
 
     fn listen(&self) -> SyscallRet {
+        stack_trace!();
         let local = self.inner.lock().local_endpoint;
         info!(
             "[Tcp::listen] {} listening: {:?}",
@@ -72,6 +74,7 @@ impl Socket for TcpSocket {
     }
 
     fn accept(&self, sockfd: u32, addr: usize, addrlen: usize) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             stack_trace!();
             // get old socket
@@ -116,10 +119,12 @@ impl Socket for TcpSocket {
     }
 
     fn socket_type(&self) -> super::SocketType {
+        stack_trace!();
         super::SocketType::SOCK_STREAM
     }
 
     fn connect<'a>(&'a self, addr_buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             let remote_endpoint = address::endpoint(addr_buf)?;
             #[cfg(not(feature = "multi_hart"))]
@@ -159,26 +164,32 @@ impl Socket for TcpSocket {
     }
 
     fn recv_buf_size(&self) -> usize {
+        stack_trace!();
         self.inner.lock().recvbuf_size
     }
 
     fn send_buf_size(&self) -> usize {
+        stack_trace!();
         self.inner.lock().sendbuf_size
     }
 
     fn set_recv_buf_size(&self, size: usize) {
+        stack_trace!();
         self.inner.lock().recvbuf_size = size;
     }
 
     fn set_send_buf_size(&self, size: usize) {
+        stack_trace!();
         self.inner.lock().sendbuf_size = size;
     }
 
     fn loacl_endpoint(&self) -> IpListenEndpoint {
+        stack_trace!();
         self.inner.lock().local_endpoint
     }
 
     fn remote_endpoint(&self) -> Option<IpEndpoint> {
+        stack_trace!();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket_handler, |socket| socket.remote_endpoint());
         NET_INTERFACE.poll();
@@ -186,6 +197,7 @@ impl Socket for TcpSocket {
     }
 
     fn shutdown(&self, how: u32) -> GeneralRet<()> {
+        stack_trace!();
         info!("[TcpSocket::shutdown] how {}", how);
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| match how {
             SHUT_WR => socket.close(),
@@ -196,6 +208,7 @@ impl Socket for TcpSocket {
     }
 
     fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet {
+        stack_trace!();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
             socket.set_nagle_enabled(enabled)
         });
@@ -203,6 +216,7 @@ impl Socket for TcpSocket {
     }
 
     fn set_keep_alive(&self, enabled: bool) -> SyscallRet {
+        stack_trace!();
         if enabled {
             NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
                 socket.set_keep_alive(Some(Duration::from_secs(1).into()))
@@ -239,6 +253,7 @@ impl TcpSocket {
 
     /// TODO: change to future
     async fn _accept(&self, flags: OpenFlags) -> GeneralRet<IpEndpoint> {
+        stack_trace!();
         match Select2Futures::new(
             TcpAcceptFuture::new(self, flags),
             current_task().wait_for_events(Event::all()),
@@ -254,6 +269,7 @@ impl TcpSocket {
     }
 
     fn _connect(&self, remote_endpoint: IpEndpoint) -> GeneralRet<()> {
+        stack_trace!();
         self.inner.lock().remote_endpoint = Some(remote_endpoint);
         let local = self.inner.lock().local_endpoint;
         info!(
@@ -279,6 +295,7 @@ impl TcpSocket {
 
 impl Drop for TcpSocket {
     fn drop(&mut self) {
+        stack_trace!();
         info!(
             "[TcpSocket::drop] drop socket {}, localep {:?}",
             self.socket_handler,
@@ -299,6 +316,7 @@ impl Drop for TcpSocket {
 
 impl File for TcpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         log::info!("[Tcp::read] {} enter", self.socket_handler);
         Box::pin(async move {
             match Select2Futures::new(
@@ -329,6 +347,7 @@ impl File for TcpSocket {
     }
 
     fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         log::info!("[Tcp::write] {} enter", self.socket_handler);
         Box::pin(async move {
             match Select2Futures::new(
@@ -359,10 +378,12 @@ impl File for TcpSocket {
     }
 
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.file_meta
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
+        stack_trace!();
         info!("[Tcp::pollin] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
@@ -389,6 +410,7 @@ impl File for TcpSocket {
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
+        stack_trace!();
         info!("[Tcp::pollout] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.tcp_socket(self.socket_handler, |socket| {
@@ -422,6 +444,7 @@ impl<'a> Future for TcpAcceptFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> Poll<Self::Output> {
+        stack_trace!();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
             if !socket.is_open() {
@@ -476,6 +499,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {
@@ -538,6 +562,7 @@ impl<'a> Future for TcpSendFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.tcp_socket(self.socket.socket_handler, |socket| {

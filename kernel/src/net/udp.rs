@@ -4,6 +4,7 @@ use crate::{
     net::address,
     process::thread,
     processor::{current_task, SumGuard},
+    stack_trace,
     sync::Event,
     timer::timeout_task::ksleep,
     utils::{
@@ -40,6 +41,7 @@ struct UdpSocketInner {
 
 impl Socket for UdpSocket {
     fn bind(&self, addr: IpListenEndpoint) -> SyscallRet {
+        stack_trace!();
         log::info!("[Udp::bind] bind to {:?}", addr);
         NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
@@ -50,10 +52,12 @@ impl Socket for UdpSocket {
     }
 
     fn listen(&self) -> SyscallRet {
+        stack_trace!();
         Err(SyscallErr::EOPNOTSUPP)
     }
 
     fn connect<'a>(&'a self, addr_buf: &'a [u8]) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         Box::pin(async move {
             let remote_endpoint = address::endpoint(addr_buf)?;
             log::info!("[Udp::connect] connect to {:?}", remote_endpoint);
@@ -97,30 +101,37 @@ impl Socket for UdpSocket {
         _addr: usize,
         _addrlen: usize,
     ) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         Box::pin(async move { Err(SyscallErr::EOPNOTSUPP) })
     }
 
     fn socket_type(&self) -> super::SocketType {
+        stack_trace!();
         super::SocketType::SOCK_DGRAM
     }
 
     fn recv_buf_size(&self) -> usize {
+        stack_trace!();
         self.inner.lock().recvbuf_size
     }
 
     fn set_recv_buf_size(&self, size: usize) {
+        stack_trace!();
         self.inner.lock().recvbuf_size = size;
     }
 
     fn send_buf_size(&self) -> usize {
+        stack_trace!();
         self.inner.lock().sendbuf_size
     }
 
     fn set_send_buf_size(&self, size: usize) {
+        stack_trace!();
         self.inner.lock().sendbuf_size = size;
     }
 
     fn loacl_endpoint(&self) -> IpListenEndpoint {
+        stack_trace!();
         NET_INTERFACE.poll();
         let local = NET_INTERFACE.udp_socket(self.socket_handler, |socket| socket.endpoint());
         NET_INTERFACE.poll();
@@ -128,25 +139,30 @@ impl Socket for UdpSocket {
     }
 
     fn remote_endpoint(&self) -> Option<IpEndpoint> {
+        stack_trace!();
         self.inner.lock().remote_endpoint
     }
 
     fn shutdown(&self, how: u32) -> GeneralRet<()> {
+        stack_trace!();
         log::info!("[UdpSocket::shutdown] how {}", how);
         Ok(())
     }
 
     fn set_nagle_enabled(&self, _enabled: bool) -> SyscallRet {
+        stack_trace!();
         Err(SyscallErr::EOPNOTSUPP)
     }
 
     fn set_keep_alive(&self, _enabled: bool) -> SyscallRet {
+        stack_trace!();
         Err(SyscallErr::EOPNOTSUPP)
     }
 }
 
 impl UdpSocket {
     pub fn new() -> Self {
+        stack_trace!();
         let tx_buf = socket::udp::PacketBuffer::new(
             vec![PacketMetadata::EMPTY, PacketMetadata::EMPTY],
             vec![0 as u8; MAX_BUFFER_SIZE],
@@ -173,6 +189,7 @@ impl UdpSocket {
 
 impl Drop for UdpSocket {
     fn drop(&mut self) {
+        stack_trace!();
         log::info!(
             "[UdpSocket::drop] drop socket {}, remoteep {:?}",
             self.socket_handler,
@@ -190,6 +207,7 @@ impl Drop for UdpSocket {
 
 impl File for UdpSocket {
     fn read<'a>(&'a self, buf: &'a mut [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         log::info!("[Ucp::read] {} enter", self.socket_handler);
         Box::pin(async move {
             match Select2Futures::new(
@@ -220,6 +238,7 @@ impl File for UdpSocket {
     }
 
     fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
+        stack_trace!();
         log::info!("[Udp::write] {} enter", self.socket_handler);
         Box::pin(async move {
             match Select2Futures::new(
@@ -250,10 +269,12 @@ impl File for UdpSocket {
     }
 
     fn metadata(&self) -> &crate::fs::FileMeta {
+        stack_trace!();
         &self.file_meta
     }
 
     fn pollin(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
+        stack_trace!();
         debug!("[Udp::pollin] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
@@ -270,6 +291,7 @@ impl File for UdpSocket {
     }
 
     fn pollout(&self, waker: Option<core::task::Waker>) -> crate::utils::error::GeneralRet<bool> {
+        stack_trace!();
         debug!("[Udp::pollout] {} enter", self.socket_handler);
         NET_INTERFACE.poll();
         NET_INTERFACE.udp_socket(self.socket_handler, |socket| {
@@ -311,6 +333,7 @@ impl<'a> Future for UdpRecvFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {
@@ -365,6 +388,7 @@ impl<'a> Future for UdpSendFuture<'a> {
         self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         NET_INTERFACE.poll();
         let ret = NET_INTERFACE.udp_socket(self.socket.socket_handler, |socket| {

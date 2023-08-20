@@ -83,6 +83,7 @@ impl PageFaultHandler for UStackPageFaultHandler {
     }
 
     fn is_legal(&self, scause: Scause) -> bool {
+        stack_trace!();
         if scause.bits() == 13 || scause.bits() == 15 {
             debug!("ustack page fault is legal");
             true
@@ -91,6 +92,7 @@ impl PageFaultHandler for UStackPageFaultHandler {
         }
     }
     fn arc_clone(&self) -> Arc<dyn PageFaultHandler> {
+        stack_trace!();
         Arc::new(self.clone())
     }
 }
@@ -131,6 +133,7 @@ impl PageFaultHandler for SBrkPageFaultHandler {
     }
 
     fn arc_clone(&self) -> Arc<dyn PageFaultHandler> {
+        stack_trace!();
         Arc::new(self.clone())
     }
 }
@@ -146,6 +149,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
         _memory_space: &MemorySpace,
         _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
+        stack_trace!();
         debug!("handle mmap page fault, va {:#x}", va.0);
         Ok(false)
     }
@@ -156,6 +160,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
         process: &'static Arc<Process>,
         scause: Scause,
     ) -> AgeneralRet<()> {
+        stack_trace!();
         Box::pin(async move {
             stack_trace!();
             debug!("handle mmap page fault asynchronously");
@@ -260,6 +265,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
     }
 
     fn arc_clone(&self) -> Arc<dyn PageFaultHandler> {
+        stack_trace!();
         Arc::new(self.clone())
     }
 }
@@ -386,6 +392,7 @@ impl PageFaultHandler for CowPageFaultHandler {
     }
 
     fn is_legal(&self, scause: Scause) -> bool {
+        stack_trace!();
         // todo!();
         if scause.bits() == 15 {
             debug!("fork(cow) page fault is legal");
@@ -395,6 +402,7 @@ impl PageFaultHandler for CowPageFaultHandler {
         }
     }
     fn arc_clone(&self) -> Arc<dyn PageFaultHandler> {
+        stack_trace!();
         Arc::new(self.clone())
     }
     // fn handle_pte(&self, pte: Option<&mut PageTableEntry>, ppn: Option<) {
@@ -412,10 +420,12 @@ impl PageFaultHandler for ElfPageFaultHandler {
         _memory_space: &MemorySpace,
         _vma: Option<&VmArea>,
     ) -> GeneralRet<bool> {
+        stack_trace!();
         todo!()
     }
 
     fn arc_clone(&self) -> Arc<dyn PageFaultHandler> {
+        stack_trace!();
         Arc::new(self.clone())
     }
 }

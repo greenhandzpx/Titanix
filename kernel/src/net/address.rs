@@ -21,6 +21,7 @@ pub struct SocketAddrv4 {
 impl SocketAddrv4 {
     /// user check first
     pub fn new(buf: &[u8]) -> Self {
+        stack_trace!();
         let addr = Self {
             sin_port: buf[2..4].try_into().expect("ipv4 port len err"),
             sin_addr: buf[4..8].try_into().expect("ipv4 addr len err"),
@@ -29,6 +30,7 @@ impl SocketAddrv4 {
         addr
     }
     pub fn fill(&self, addr_buf: &mut [u8], addrlen: usize) {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         addr_buf.fill(0);
         addr_buf[0..2].copy_from_slice(u16::to_ne_bytes(AF_INET).as_slice());
@@ -42,6 +44,7 @@ impl SocketAddrv4 {
 
 impl From<IpEndpoint> for SocketAddrv4 {
     fn from(value: IpEndpoint) -> Self {
+        stack_trace!();
         Self {
             sin_port: value.port.to_be_bytes(),
             sin_addr: value
@@ -55,6 +58,7 @@ impl From<IpEndpoint> for SocketAddrv4 {
 
 impl From<SocketAddrv4> for IpEndpoint {
     fn from(value: SocketAddrv4) -> Self {
+        stack_trace!();
         // big end
         let port = u16::from_be_bytes(value.sin_port);
         Self::new(IpAddress::Ipv4(Ipv4Address(value.sin_addr)), port)
@@ -63,6 +67,8 @@ impl From<SocketAddrv4> for IpEndpoint {
 
 impl From<SocketAddrv4> for IpListenEndpoint {
     fn from(value: SocketAddrv4) -> Self {
+        stack_trace!();
+
         // big end
         let port = u16::from_be_bytes(value.sin_port);
         let addr = Ipv4Address(value.sin_addr);
@@ -95,6 +101,7 @@ pub struct SocketAddrv6 {
 impl SocketAddrv6 {
     /// user check first
     pub fn new(buf: &[u8]) -> Self {
+        stack_trace!();
         log::debug!("[SocketAddrv6::new] buf: {:?}", buf);
         let addr = Self {
             sin6_port: buf[2..4].try_into().expect("ipv6 port len err"),
@@ -105,6 +112,7 @@ impl SocketAddrv6 {
         addr
     }
     pub fn fill(&self, addr_buf: &mut [u8], addrlen: usize) {
+        stack_trace!();
         let _sum_guard = SumGuard::new();
         addr_buf.fill(0);
         addr_buf[0..2].copy_from_slice(u16::to_ne_bytes(AF_INET6).as_slice());
@@ -119,6 +127,7 @@ impl SocketAddrv6 {
 
 impl From<IpEndpoint> for SocketAddrv6 {
     fn from(value: IpEndpoint) -> Self {
+        stack_trace!();
         Self {
             sin6_port: value.port.to_be_bytes(),
             sin6_flowinfo: [0 as u8; 4],
@@ -133,6 +142,7 @@ impl From<IpEndpoint> for SocketAddrv6 {
 
 impl From<SocketAddrv6> for IpEndpoint {
     fn from(value: SocketAddrv6) -> Self {
+        stack_trace!();
         // big end
         let port = u16::from_be_bytes(value.sin6_port);
         Self::new(IpAddress::Ipv6(Ipv6Address(value.sin6_addr)), port)
@@ -141,6 +151,7 @@ impl From<SocketAddrv6> for IpEndpoint {
 
 impl From<SocketAddrv6> for IpListenEndpoint {
     fn from(value: SocketAddrv6) -> Self {
+        stack_trace!();
         // big end
         let port = u16::from_be_bytes(value.sin6_port);
         let addr = Ipv6Address(value.sin6_addr);
@@ -162,6 +173,7 @@ impl From<SocketAddrv6> for IpListenEndpoint {
     }
 }
 pub fn to_endpoint(listen_endpoint: IpListenEndpoint) -> IpEndpoint {
+    stack_trace!();
     let addr = if listen_endpoint.addr.is_none() {
         IpAddress::v4(127, 0, 0, 1)
     } else {
@@ -170,6 +182,7 @@ pub fn to_endpoint(listen_endpoint: IpListenEndpoint) -> IpEndpoint {
     IpEndpoint::new(addr, listen_endpoint.port)
 }
 pub fn endpoint(addr_buf: &[u8]) -> GeneralRet<IpEndpoint> {
+    stack_trace!();
     let listen_endpoint = listen_endpoint(addr_buf)?;
     let addr = if listen_endpoint.addr.is_none() {
         IpAddress::v4(127, 0, 0, 1)
