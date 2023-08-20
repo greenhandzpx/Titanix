@@ -95,7 +95,7 @@ pub fn intr_handler() {
 }
 
 // Block Device
-pub trait BlockDevice: Send + Sync + Any {
+pub trait BlockDevice: Send + Sync {
     ///Read data form block to buffer
     fn read_block(&self, block_id: usize, buf: &mut [u8]);
     ///Write data from buffer to block

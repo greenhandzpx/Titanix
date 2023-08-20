@@ -44,6 +44,7 @@ impl FAT32FileSystem {
         flags: StatFlags,
         fa_inode: Option<Arc<dyn Inode>>,
         covered_inode: Option<Arc<dyn Inode>>,
+        covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
         let mut bs_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
         block_device.read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
@@ -76,6 +77,7 @@ impl FAT32FileSystem {
             root_inode,
             fa_inode,
             covered_inode,
+            covered_fs,
             s_dirty: Vec::new(),
         };
         let ret = Self { meta };

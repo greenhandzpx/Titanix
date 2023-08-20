@@ -96,17 +96,45 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallRet {
     })
 }
 
-pub fn sys_unlinkat(dirfd: isize, path: *const u8, _flags: u32) -> SyscallRet {
+pub fn sys_unlinkat(dirfd: isize, path: *const u8, flags: u32) -> SyscallRet {
     stack_trace!();
     let (target_inode, _, _) = path::path_to_inode_ffi(dirfd, path)?;
     stack_trace!();
+    const AT_REMOVEDIR: u32 = 0x200;
     if target_inode.is_none() {
         return Err(SyscallErr::ENOENT);
     }
     let target_inode = target_inode.unwrap();
     if target_inode.metadata().mode == InodeMode::FileDIR {
         debug!("target_inode is dir");
-        Err(SyscallErr::EISDIR)
+        if (flags & AT_REMOVEDIR) == AT_REMOVEDIR {
+            let empty = target_inode
+                .clone()
+                .metadata()
+                .inner
+                .lock()
+                .children
+                .is_empty();
+            if empty {
+                let parent = target_inode.clone().metadata().inner.lock().parent.clone();
+                match parent {
+                    Some(parent) => {
+                        let parent = parent.upgrade().unwrap();
+                        debug!("Have a parent: {}", parent.metadata().name);
+                        parent.unlink(target_inode)?;
+                        Ok(0)
+                    }
+                    None => {
+                        debug!("Have no parent, this inode is a root node which cannot be unlink");
+                        Err(SyscallErr::EPERM)
+                    }
+                }
+            } else {
+                Err(SyscallErr::ENOTEMPTY)
+            }
+        } else {
+            Err(SyscallErr::EISDIR)
+        }
     } else {
         let mut inner = target_inode.metadata().inner.lock();
         inner.st_atim = Duration::ZERO.into();
@@ -184,7 +212,7 @@ pub fn sys_mkdirat(dirfd: isize, pathname: *const u8, _mode: usize) -> SyscallRe
 /// Return zero on sucess.
 pub fn sys_mknodat(dirfd: isize, pathname: *const u8, mode: usize, dev: usize) -> SyscallRet {
     stack_trace!();
-    log::info!("[sys_mknodat] dirfd {}", dirfd);
+    log::info!("[sys_mknodat] dirfd {}, mode {}, dev {}", dirfd, mode, dev);
     let (target, path, parent) = path::path_to_inode_ffi(dirfd, pathname)?;
     if target.is_some() {
         log::info!("[sys_mknodat] already exists");
@@ -220,6 +248,7 @@ pub fn sys_mknodat(dirfd: isize, pathname: *const u8, mode: usize, dev: usize) -
                 drop(inner_lock);
                 stack_trace!();
                 let child_name = path::get_name(&path);
+                let mode = mode & 0xfffff000;
                 let mode = if mode == 0 || mode == (InodeMode::FileREG as usize) {
                     Ok(InodeMode::FileREG)
                 } else if mode == (InodeMode::FileBLK as usize) {
@@ -259,7 +288,7 @@ pub fn sys_mount(
     _data: *const u8,
 ) -> SyscallRet {
     stack_trace!();
-    let flags = StatFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
+    let flags = StatFlags::from_bits(flags & 511).ok_or(SyscallErr::EINVAL)?;
     let _sum_guard = SumGuard::new();
     UserCheck::new().check_c_str(dev_name)?;
     UserCheck::new().check_c_str(target_path)?;
@@ -277,7 +306,8 @@ pub fn sys_mount(
         return Err(SyscallErr::EACCES);
     }
 
-    let ftype = path::path_process(AT_FDCWD, ftype)?;
+    UserCheck::new().check_c_str(ftype)?;
+    let ftype = c_str_to_string(ftype);
     let ftype = FileSystemType::fs_type(&ftype);
 
     let dev = <dyn Inode>::lookup_from_root(&dev_name)?.0;
@@ -474,6 +504,9 @@ fn _fstat(inode: Arc<dyn Inode>, stat_buf: usize) -> SyscallRet {
         match dev {
             inode::InodeDevice::Device(dev) => {
                 kstat.st_dev = dev.dev_id as u64;
+            }
+            inode::InodeDevice::LoopDevice(_dev) => {
+                kstat.st_dev = 0;
             } // _ => {
               //     return Err(SyscallErr::EBADF);
               // }
