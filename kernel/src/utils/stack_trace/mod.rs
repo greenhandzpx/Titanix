@@ -7,6 +7,11 @@ pub mod stack_tracker;
 #[cfg(feature = "stack_trace")]
 macro_rules! stack_trace {
     () => {
+        let pc: usize;
+        unsafe {
+            core::arch::asm!("auipc {}, 0", out(reg) pc);
+        }
+        $crate::fs::K_COVERAGE.add(pc);
         let _stack_info_guard = $crate::utils::stack_trace::stack_tracker::StackInfoGuard::new(
             $crate::utils::stack_trace::Msg::None,
             file!(),
@@ -42,13 +47,7 @@ macro_rules! stack_trace {
 #[macro_export]
 #[cfg(not(feature = "stack_trace"))]
 macro_rules! stack_trace {
-    () => {
-        let pc: usize;
-        unsafe {
-            core::arch::asm!("auipc {}, 0", out(reg) pc);
-        }
-        $crate::fs::K_COVERAGE.add(pc);
-    };
+    () => {};
     ($msg: literal) => {}; // // stack_trace!(123456)
 }
 

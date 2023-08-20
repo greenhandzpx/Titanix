@@ -15,7 +15,7 @@ struct KCoverageInner {
 }
 
 pub fn init() {
-    let dft_file = DefaultFile::new(FileMeta::new(super::InodeMode::FileREG));
+    let dft_file = DefaultFile::new(FileMeta::new(super::InodeMode::FileCHR));
     let file: Arc<dyn File> = Arc::new(KCovFile::new(dft_file));
     let inode: Arc<dyn Inode> = Arc::new(KCovInode::new());
     inode.create_page_cache_if_needed();
@@ -70,7 +70,7 @@ impl KCoverage {
 
 pub static K_COVERAGE: KCoverage = KCoverage::new();
 
-static K_COV_INODE: SyncUnsafeCell<Option<Arc<dyn Inode>>> = SyncUnsafeCell::new(None);
+pub static K_COV_INODE: SyncUnsafeCell<Option<Arc<dyn Inode>>> = SyncUnsafeCell::new(None);
 
 pub struct KCovInode {
     metadata: InodeMeta,
@@ -82,7 +82,7 @@ impl KCovInode {
             metadata: InodeMeta::new(
                 None,
                 "/sys/kernel/debug/kcov",
-                super::InodeMode::FileREG,
+                super::InodeMode::FileCHR,
                 8,
                 None,
             ),
@@ -134,7 +134,7 @@ impl KCovFile {
     }
 }
 
-const KCOV_ENABLE: usize = 0;
+const KCOV_ENABLE: usize = 18446744071562617601;
 const KCOV_DISABLE: usize = 1;
 
 impl File for KCovFile {
@@ -161,9 +161,12 @@ impl File for KCovFile {
     fn ioctl(&self, command: usize, _value: usize) -> crate::utils::error::SyscallRet {
         match command {
             KCOV_ENABLE => {
+                log::debug!("start kcov..");
                 K_COVERAGE.start();
+                log::debug!("start kcov finished");
             }
             KCOV_DISABLE => {
+                log::debug!("stop kcov..");
                 K_COVERAGE.stop();
             }
             _ => {

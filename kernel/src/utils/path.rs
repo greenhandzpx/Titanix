@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use crate::{
-    fs::{Inode, AT_FDCWD},
+    fs::{Inode, AT_FDCWD, K_COV_INODE},
     mm::user_check::UserCheck,
     processor::{current_process, SumGuard},
     stack_trace,
@@ -143,11 +143,14 @@ pub fn path_to_inode(
             debug!("[path_to_inode] get path: {}", path);
             let mut path = format(&path);
             debug!("[path_to_inode] get format path: {}", path);
-            path = if path.eq("/sys/kernel/debug/kcov") {
+            if path.eq("/sys/kernel/debug/kcov") {
                 log::info!("[path_to_inode] match /sys/kernel/debug/kcov change to /sys/kcov");
-                "/sys/kcov".to_string()
-            } else {
-                path
+                // let path = "/sys/kcov".to_string();
+                return Ok((
+                    Some(K_COV_INODE.get_unchecked_mut().as_ref().unwrap().clone()),
+                    path,
+                    None,
+                ));
             };
             debug!("[path_to_inode] path is: {}", path);
             stack_trace!();

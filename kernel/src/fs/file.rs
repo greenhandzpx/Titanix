@@ -318,7 +318,7 @@ impl File for DefaultFile {
             }
 
             self.metadata().inner.lock().pos = file_offset;
-            log::info!(
+            log::trace!(
                 "[DefaultFile::read]: read {} bytes, off {}",
                 res,
                 file_offset

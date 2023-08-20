@@ -13,6 +13,7 @@ mod procfs;
 mod sysfs;
 pub mod tmpfs;
 pub use sysfs::K_COVERAGE;
+pub use sysfs::K_COV_INODE;
 
 use alloc::string::String;
 use alloc::sync::Arc;
