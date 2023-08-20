@@ -586,17 +586,17 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: u8) -> SyscallRet {
     match whence {
         SEEK_SET => {
             let off = file.seek(SeekFrom::Start(offset as usize))?;
-            trace!("[sys_lseek] return off: {}", off);
+            info!("[sys_lseek] return off: {}", off);
             Ok(off)
         }
         SEEK_CUR => {
             let off = file.seek(SeekFrom::Current(offset))?;
-            trace!("[sys_lseek] return off: {}", off);
+            info!("[sys_lseek] return off: {}", off);
             Ok(off)
         }
         SEEK_END => {
             let off = file.seek(SeekFrom::End(offset))?;
-            trace!("[sys_lseek] return off: {}", off);
+            info!("[sys_lseek] return off: {}", off);
             Ok(off)
         }
         _ => Err(SyscallErr::EINVAL),
@@ -1647,7 +1647,7 @@ pub async fn sys_copy_file_range(
     stack_trace!();
     let _sum_guard = SumGuard::new();
     log::info!(
-        "[sys_copy_file_range] fd_in: {}, fd_out: {}, off_in: {}, off_out: {}, len: {}",
+        "[sys_copy_file_range] fd_in: {}, fd_out: {}, off_in: {:#x}, off_out: {:#x}, len: {}",
         fd_in,
         fd_out,
         off_in,
@@ -1729,6 +1729,7 @@ pub async fn sys_copy_file_range(
             file_in.read(&mut buf, OpenFlags::RDWR).await?
         }
         Some(in_off) => {
+            log::info!("[sys_copy_file_range] off_in is {}", in_off);
             if in_off > file_in_data_len {
                 return Ok(0);
             }
@@ -1755,9 +1756,10 @@ pub async fn sys_copy_file_range(
             file_out.write(write_buf, OpenFlags::RDWR).await?
         }
         Some(out_off) => {
-            file_in.seek(SeekFrom::Start(out_off))?;
-            let len = file_in.write(write_buf, OpenFlags::RDWR).await?;
-            file_in.seek(SeekFrom::Start(old_out_off))?;
+            log::info!("[sys_copy_file_range] off_out is {}", out_off);
+            file_out.seek(SeekFrom::Start(out_off))?;
+            let len = file_out.write(write_buf, OpenFlags::RDWR).await?;
+            file_out.seek(SeekFrom::Start(old_out_off))?;
             UserCheck::new()
                 .check_writable_slice(off_out as *mut u8, core::mem::size_of::<usize>())?;
             Some(unsafe { *(off_out as *mut usize) = out_off + len as usize });
