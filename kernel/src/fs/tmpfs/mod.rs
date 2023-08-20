@@ -1,8 +1,8 @@
 use alloc::{string::ToString, sync::Arc, vec::Vec};
 
-use crate::utils::{error::GeneralRet, path};
-
 use self::inode::TmpInode;
+use crate::stack_trace;
+use crate::utils::{error::GeneralRet, path};
 
 use super::{
     ffi::StatFlags, file_system::FileSystemMeta, FileSystem, FileSystemType, Inode, InodeMode,
@@ -24,6 +24,7 @@ impl TmpFs {
         covered_inode: Option<Arc<dyn Inode>>,
         covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
+        stack_trace!();
         let mut root_inode = TmpInode::new(
             fa_inode.clone(),
             path::get_name(mount_point),
@@ -49,6 +50,7 @@ impl TmpFs {
 
 impl FileSystem for TmpFs {
     fn metadata(&self) -> &super::file_system::FileSystemMeta {
+        stack_trace!();
         &self.metadata
     }
 }

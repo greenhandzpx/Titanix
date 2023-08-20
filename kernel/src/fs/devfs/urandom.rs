@@ -6,6 +6,7 @@ use crate::{
         File, Inode, Mutex, OpenFlags,
     },
     processor::SumGuard,
+    stack_trace,
     sync::mutex::SleepLock,
     utils::{
         error::{AsyscallRet, GeneralRet, SyscallRet},
@@ -23,6 +24,7 @@ pub struct UrandomInode {
 
 impl UrandomInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        stack_trace!();
         let metadata = InodeMeta::new(
             Some(parent),
             path,
@@ -36,6 +38,7 @@ impl UrandomInode {
 
 impl Inode for UrandomInode {
     fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
+        stack_trace!();
         Ok(Arc::new(UrandomFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
@@ -50,18 +53,23 @@ impl Inode for UrandomInode {
         }))
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.metadata
     }
     fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        stack_trace!();
         panic!("Unsupported operation load_children")
     }
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         panic!("Unsupported operation delete")
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(crate::utils::error::SyscallErr::EPERM)
     }
 }
@@ -73,9 +81,11 @@ pub struct UrandomFile {
 // #[async_trait]
 impl File for UrandomFile {
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.meta
     }
     fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         debug!("[read] /dev/urandom");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -86,10 +96,12 @@ impl File for UrandomFile {
         })
     }
     fn write<'a>(&'a self, _buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         todo!()
     }
 
     fn sync_read(&self, buf: &mut [u8]) -> SyscallRet {
+        stack_trace!();
         debug!("[sync_read] /dev/urandom");
         let _sum_guard = SumGuard::new();
         unsafe {
@@ -99,6 +111,7 @@ impl File for UrandomFile {
     }
 
     fn sync_write(&self, _buf: &[u8]) -> SyscallRet {
+        stack_trace!();
         todo!()
     }
 }

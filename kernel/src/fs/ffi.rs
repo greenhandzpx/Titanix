@@ -2,13 +2,13 @@ use core::mem::size_of;
 
 use super::fat32::SECTOR_SIZE;
 use super::Inode;
+use crate::stack_trace;
 use crate::timer::current_time_duration;
 use crate::timer::ffi::TimeSpec;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use log::debug;
-
 /// STAT
 
 pub const STAT_SIZE: usize = size_of::<STAT>() as usize;
@@ -35,6 +35,7 @@ pub struct STAT {
 
 impl STAT {
     pub fn new() -> Self {
+        stack_trace!();
         STAT {
             st_dev: 0,
             st_ino: 0,
@@ -95,6 +96,7 @@ pub struct UtsName {
 
 impl UtsName {
     pub fn get_utsname() -> Self {
+        stack_trace!();
         UtsName {
             sysname: str_to_array_65(SYSNAME),
             nodename: str_to_array_65(NODENAME),
@@ -130,6 +132,7 @@ pub struct Dirent {
 
 impl Dirent {
     pub fn get_dirents(inode: Arc<dyn Inode>, start_index: usize) -> Vec<Self> {
+        stack_trace!();
         debug!("[dirent] start_index: {}", start_index);
         let inode_meta = inode.metadata();
         let child = inode_meta.inner.lock().children.clone();
@@ -162,6 +165,7 @@ impl Dirent {
 
     #[allow(unused)]
     fn station_debug(&self) {
+        stack_trace!();
         debug!("station d_ino: {:#x}", &self.d_ino as *const usize as usize);
         debug!("station d_off: {:#x}", &self.d_off as *const usize as usize);
         debug!(
@@ -215,6 +219,7 @@ pub struct Statfs {
 
 impl Statfs {
     pub fn new() -> Self {
+        stack_trace!();
         Statfs {
             f_type: Magic::ExfatSuperMagic as i64,
             f_bsize: SECTOR_SIZE as i64,
@@ -260,6 +265,7 @@ bitflags! {
 
 impl StatFlags {
     pub fn to_string(&self) -> String {
+        stack_trace!();
         let mut res = "".to_string();
         if self.contains(StatFlags::ST_RDONLY) {
             res += "ro";

@@ -1,5 +1,5 @@
+use crate::stack_trace;
 use alloc::string::String;
-
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct HashKey {
     pub parent_ino: usize,
@@ -8,6 +8,7 @@ pub struct HashKey {
 
 impl HashKey {
     pub fn new(parent_ino: usize, child_name: String) -> Self {
+        stack_trace!();
         Self {
             parent_ino,
             child_name,

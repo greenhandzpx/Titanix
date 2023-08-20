@@ -17,6 +17,7 @@ use crate::{
     driver::BlockDevice,
     fs::HashKey,
     fs::PageCache,
+    stack_trace,
     timer::ffi::TimeSpec,
     utils::{
         error::{AgeneralRet, GeneralRet},
@@ -43,18 +44,22 @@ impl InodeCache {
     }
 
     pub fn init(&self) {
+        stack_trace!();
         *self.0.lock() = Some(HashMap::new());
     }
 
     pub fn get(&self, key: &HashKey) -> Option<Arc<dyn Inode>> {
+        stack_trace!();
         self.0.lock().as_ref().unwrap().get(key).cloned()
     }
 
     pub fn insert(&self, key: HashKey, inode: Arc<dyn Inode>) {
+        stack_trace!();
         self.0.lock().as_mut().unwrap().insert(key, inode);
     }
 
     pub fn remove(&self, key: &HashKey) -> Option<Arc<dyn Inode>> {
+        stack_trace!();
         self.0.lock().as_mut().unwrap().remove(key)
     }
 }
@@ -69,6 +74,7 @@ impl FastPathCache {
     }
 
     pub fn init(&self) {
+        stack_trace!();
         let mut map = HashMap::new();
         for path in FAST_PATH {
             let (inode, _) = <dyn Inode>::lookup_from_root(path).ok().unwrap();
@@ -88,6 +94,7 @@ impl FastPathCache {
         Option<Arc<dyn Inode>>,
         Option<String>,
     ) {
+        stack_trace!();
         let inner = self.0.lock();
         if inner.is_none() {
             return (None, None, None);
@@ -172,6 +179,7 @@ pub trait Inode: Send + Sync {
         mode: InodeMode,
         data_len: usize,
     ) -> GeneralRet<()> {
+        stack_trace!();
         debug!("start to init inode...");
         let meta = InodeMeta::new(parent, path, mode, data_len, None);
         self.set_metadata(meta);
@@ -181,6 +189,7 @@ pub trait Inode: Send + Sync {
 
     /// Default operation is to open the default file(i.e. file from disk)
     fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
+        stack_trace!();
         debug!("[inode] open");
         let file_meta = FileMeta {
             inner: Mutex::new(FileMetaInner {
@@ -205,6 +214,7 @@ pub trait Inode: Send + Sync {
         _name: &str,
         _mode: InodeMode,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         todo!()
     }
 
@@ -218,16 +228,19 @@ pub trait Inode: Send + Sync {
         _mode: InodeMode,
         _dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         todo!()
     }
 
     /// Read data at the given file offset from block device
     fn read<'a>(&'a self, _offset: usize, _buf: &'a mut [u8]) -> AgeneralRet<usize> {
+        stack_trace!();
         todo!()
     }
 
     /// Write data to the given file offset in block device
     fn write<'a>(&'a self, _offset: usize, _buf: &'a [u8]) -> AgeneralRet<usize> {
+        stack_trace!();
         todo!()
     }
 
@@ -250,12 +263,14 @@ pub trait Inode: Send + Sync {
     /// Sync the inode's metadata
     /// Note that this method only sync this inode itself, not including its children.
     fn sync_metedata(&self) {
+        stack_trace!();
         // TODO: not yet implement
         // log::error!("sync dir!!");
     }
 
     /// Iterate in the children
     fn iter_children(&self) -> Option<Arc<dyn Inode>> {
+        stack_trace!();
         todo!()
     }
 
@@ -265,6 +280,7 @@ pub trait Inode: Send + Sync {
 impl dyn Inode {
     /// Load children and insert them into INODE_CACHE
     pub fn load_children(self: &Arc<Self>) {
+        stack_trace!();
         debug!("[load_children] enter");
         let state = self.metadata().inner.lock().state;
         debug!("[load_children] inode state: {:?}", state);
@@ -291,6 +307,7 @@ impl dyn Inode {
     }
 
     pub fn mkdir_v(self: &Arc<Self>, name: &str, mode: InodeMode) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         let child = self.mkdir(self.clone(), name, mode)?;
         log::info!("[mkdir_v] child inode name {}", name);
         self.metadata()
@@ -311,6 +328,7 @@ impl dyn Inode {
         mode: InodeMode,
         dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         let child = self.mknod(self.clone(), name, mode, dev_id)?;
         self.metadata()
             .inner
@@ -333,6 +351,7 @@ impl dyn Inode {
 
     /// This method will delete the inode in cache (which means deleting inode in parent's children list).
     pub fn remove_child(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
+        stack_trace!();
         self.child_removeable()?;
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         log::info!(
@@ -349,6 +368,7 @@ impl dyn Inode {
     /// Unlink the child.
     /// This method will delete the inode in inode cache and call delete() function to delete inode in disk.
     pub fn unlink(self: &Arc<Self>, child: Arc<dyn Inode>) -> GeneralRet<isize> {
+        stack_trace!();
         self.child_removeable()?;
         let key = HashKey::new(self.metadata().ino, child.metadata().name.clone());
         log::info!("[Inode::unlink] unlink child {}", child.metadata().name);
@@ -362,6 +382,7 @@ impl dyn Inode {
 
     /// Lookup the target inode of the given name from the parent
     pub fn lookup(self: &Arc<Self>, name: &str) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        stack_trace!();
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -389,6 +410,7 @@ impl dyn Inode {
 
     /// Lookup the target inode of the given path from the parent
     pub fn lookup_from_current(self: &Arc<Self>, path: &str) -> GeneralRet<Option<Arc<dyn Inode>>> {
+        stack_trace!();
         if self.metadata().mode != InodeMode::FileDIR {
             return Err(SyscallErr::ENOTDIR);
         }
@@ -431,6 +453,7 @@ impl dyn Inode {
     }
 
     fn try_find_and_insert_inode(self: &Arc<Self>, child_name: &str) -> Option<Arc<dyn Inode>> {
+        stack_trace!();
         let children = self.metadata().inner.lock().children.clone();
         let target_inode = children.get(child_name).cloned();
         if target_inode.is_some() {
@@ -464,6 +487,7 @@ impl dyn Inode {
     /// Look up from root(e.g. "/home/oscomp/workspace").
     /// Return (target inode, parent inode)
     pub fn lookup_from_root(path: &str) -> GeneralRet<(Option<Arc<Self>>, Option<Arc<Self>>)> {
+        stack_trace!();
         let mut path_names = path::split_path_string(path.to_string());
 
         let mut parent = Arc::clone(&FILE_SYSTEM_MANAGER.root_inode());
@@ -504,6 +528,7 @@ impl dyn Inode {
     }
 
     pub fn create_page_cache_if_needed(self: &Arc<Self>) {
+        stack_trace!();
         let mut meta_locked = self.metadata().inner.lock();
         if meta_locked.page_cache.is_none() {
             meta_locked.page_cache = Some(Arc::new(PageCache::new(self.clone(), 3)));
@@ -515,6 +540,7 @@ impl dyn Inode {
     /// If the inode is a regular file, sync its content.
     // #[async_recursion]
     pub fn sync<'a>(self: Arc<Self>) -> AgeneralRet<'a, ()> {
+        stack_trace!();
         Box::pin(async move {
             match self.metadata().mode {
                 InodeMode::FileDIR => {
@@ -548,6 +574,7 @@ impl dyn Inode {
 
     /// Sync regular file's content
     async fn sync_reg_file(self: &Arc<Self>) -> GeneralRet<()> {
+        stack_trace!();
         let page_cache = self.metadata().inner.lock().page_cache.clone();
         if let Some(page_cache) = page_cache {
             page_cache.sync().await?;
@@ -577,9 +604,11 @@ pub struct InodeMeta {
 
 impl InodeMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut InodeMetaInner) -> T) -> T {
+        stack_trace!();
         f(&mut self.inner.lock())
     }
     pub fn inner_set(&self, inner: InodeMetaInner) {
+        stack_trace!();
         *self.inner.lock() = inner;
     }
 }
@@ -614,6 +643,7 @@ impl InodeMeta {
         data_len: usize,
         device: Option<InodeDevice>,
     ) -> Self {
+        stack_trace!();
         let name = path::get_name(path);
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),

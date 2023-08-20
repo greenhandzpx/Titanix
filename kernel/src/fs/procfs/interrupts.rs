@@ -6,10 +6,11 @@ use crate::{
         fat32::SECTOR_SIZE,
         file::{FileMeta, FileMetaInner},
         inode::InodeMeta,
-        File, Inode, InodeMode, Mutex, OpenFlags, FILE_SYSTEM_MANAGER,
+        File, Inode, InodeMode, Mutex, OpenFlags,
     },
     irq_count::IRQ_COUNTER,
     processor::SumGuard,
+    stack_trace,
     sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallErr},
 };
@@ -19,6 +20,7 @@ pub struct InterruptsInode {
 }
 impl InterruptsInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        stack_trace!();
         Self {
             metadata: InodeMeta::new(Some(parent), path, InodeMode::FileREG, SECTOR_SIZE, None),
         }
@@ -27,6 +29,7 @@ impl InterruptsInode {
 
 impl Inode for InterruptsInode {
     fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
+        stack_trace!();
         Ok(Arc::new(InterruptsFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
@@ -41,21 +44,26 @@ impl Inode for InterruptsInode {
         }))
     }
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.metadata
     }
 
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
 
     fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        stack_trace!();
         panic!("Unsupported operation")
     }
 
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         panic!("Unsupported operation")
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(crate::utils::error::SyscallErr::EPERM)
     }
 }
@@ -66,6 +74,7 @@ pub struct InterruptsFile {
 
 impl File for InterruptsFile {
     fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         debug!("[InterruptsFile] read");
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -84,11 +93,13 @@ impl File for InterruptsFile {
     }
 
     fn write<'a>(&'a self, _buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         debug!("[InterruptsFile] cannot write");
         Box::pin(async move { Err(SyscallErr::EACCES) })
     }
 
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.meta
     }
 }

@@ -32,6 +32,7 @@ pub struct TtyInode {
 
 impl TtyInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str) -> Self {
+        stack_trace!();
         let metadata = InodeMeta::new(Some(parent), path, crate::fs::InodeMode::FileCHR, 0, None);
         Self { metadata }
     }
@@ -39,27 +40,33 @@ impl TtyInode {
 
 impl Inode for TtyInode {
     fn open(&self, _this: alloc::sync::Arc<dyn Inode>) -> GeneralRet<Arc<dyn crate::fs::File>> {
+        stack_trace!();
         Ok(TTY.get_unchecked_mut().as_ref().unwrap().clone())
         // let file: Arc<dyn File> = Arc::new(TtyFile::new());
         // file.metadata().inner.lock().file = Some(Arc::downgrade(&file));
         // Ok(file)
     }
     fn metadata(&self) -> &crate::fs::inode::InodeMeta {
+        stack_trace!();
         &self.metadata
     }
 
     fn set_metadata(&mut self, meta: crate::fs::inode::InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
 
     fn load_children_from_disk(&self, _this: alloc::sync::Arc<dyn Inode>) {
+        stack_trace!();
         panic!()
     }
 
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         panic!()
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(crate::utils::error::SyscallErr::EPERM)
     }
 }
@@ -126,6 +133,7 @@ struct WinSize {
 
 impl WinSize {
     fn new() -> Self {
+        stack_trace!();
         Self {
             // ws_row: 67,
             // ws_col: 270,
@@ -138,6 +146,7 @@ impl WinSize {
 }
 
 pub fn init() {
+    stack_trace!();
     // let tty_inode = resolve_path(AT_FDCWD, "/dev/tty", OpenFlags::empty());
     let tty_inode = <dyn Inode>::lookup_from_root("/dev/tty")
         .unwrap()
@@ -170,6 +179,7 @@ struct TtyInner {
 
 impl TtyFile {
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             buf: AtomicU8::new(255),
             metadata: FileMeta {
@@ -191,6 +201,7 @@ impl TtyFile {
     }
 
     pub fn handle_irq(&self, ch: u8) {
+        stack_trace!();
         log::debug!("[TtyFile::handle_irq] handle irq, ch {}", ch);
         self.buf.store(ch, Ordering::Release);
         if ch == CTRL_C {
@@ -215,10 +226,12 @@ impl TtyFile {
 
 impl File for TtyFile {
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.metadata
     }
 
     fn read<'a>(&'a self, buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         // println!("[TtyFile::read] read...");
         struct TtyFuture<'a> {
             tty_file: &'a TtyFile,
@@ -231,6 +244,7 @@ impl File for TtyFile {
                 self: core::pin::Pin<&mut Self>,
                 cx: &mut core::task::Context<'_>,
             ) -> core::task::Poll<Self::Output> {
+                stack_trace!();
                 let _sum_guard = SumGuard::new();
                 let ch: u8;
                 let self_buf = self.tty_file.buf.load(Ordering::Acquire);
@@ -274,6 +288,7 @@ impl File for TtyFile {
     }
 
     fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         // println!("[TtyFile::write] buf {:?}...", buf);
         Box::pin(async move {
             let _sum_guard = SumGuard::new();
@@ -289,6 +304,7 @@ impl File for TtyFile {
     }
 
     fn pollin(&self, waker: Option<Waker>) -> GeneralRet<bool> {
+        stack_trace!();
         stack_trace!();
         #[cfg(feature = "submit")]
         {
@@ -437,6 +453,7 @@ struct Termios {
 
 impl Termios {
     fn new() -> Self {
+        stack_trace!();
         Self {
             // IMAXBEL | IUTF8 | IXON | IXANY | ICRNL | BRKINT
             iflag: 0o66402,

@@ -2,6 +2,7 @@ use self::{bpb::BootSector, fat::FileAllocTable, fat32info::FAT32Info, inode::FA
 use crate::{
     driver::BlockDevice,
     fs::FileSystemType,
+    stack_trace,
     utils::error::{GeneralRet, SyscallErr},
 };
 use alloc::{string::ToString, sync::Arc, vec::Vec};
@@ -46,6 +47,7 @@ impl FAT32FileSystem {
         covered_inode: Option<Arc<dyn Inode>>,
         covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
+        stack_trace!();
         let mut bs_data: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
         block_device.read_block(BOOT_SECTOR_ID, &mut bs_data[..]);
         let raw_bs: BootSector = BootSector::new(&bs_data);
@@ -91,12 +93,14 @@ impl FileSystem for FAT32FileSystem {
     // }
 
     fn metadata(&self) -> &FileSystemMeta {
+        stack_trace!();
         &self.meta
     }
 }
 
 impl Drop for FAT32FileSystem {
     fn drop(&mut self) {
+        stack_trace!();
         self.sync_fs();
     }
 }

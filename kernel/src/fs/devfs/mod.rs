@@ -13,6 +13,7 @@ use crate::fs::devfs::r#loop::LoopInode;
 use crate::fs::ffi::StatFlags;
 use crate::fs::hash_key::HashKey;
 use crate::fs::inode::INODE_CACHE;
+use crate::stack_trace;
 use crate::utils::error::GeneralRet;
 use crate::utils::path;
 
@@ -48,6 +49,7 @@ impl Inode for DevRootInode {
         _mode: InodeMode,
         dev_id: Option<usize>,
     ) -> GeneralRet<Arc<dyn Inode>> {
+        stack_trace!();
         debug!("[DevRootInode::mknod]: mknod: {}", name);
         let dev_id = dev_id.unwrap();
         let inode = if dev_id < DEV_NAMES.len() {
@@ -67,29 +69,35 @@ impl Inode for DevRootInode {
     }
 
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = Some(meta);
     }
 
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.metadata.as_ref().unwrap()
     }
 
     /// Load children like 'sda' 'null' etc
     fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        stack_trace!();
         debug!("[DevRootInode::load_children_from_disk]: there is nothing we should do.");
     }
 
     /// Delete inode in disk
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         todo!()
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(crate::utils::error::SyscallErr::EPERM)
     }
 }
 
 impl DevRootInode {
     pub fn new() -> Self {
+        stack_trace!();
         Self { metadata: None }
     }
 }
@@ -145,6 +153,7 @@ impl DevFs {
         covered_inode: Option<Arc<dyn Inode>>,
         covered_fs: Option<Arc<dyn FileSystem>>,
     ) -> GeneralRet<Self> {
+        stack_trace!();
         let mut raw_root_inode = DevRootInode::new();
         raw_root_inode.root_init(Option::clone(&fa_inode), mount_point, InodeMode::FileDIR, 0)?;
         let root_inode = Arc::new(raw_root_inode);
@@ -184,6 +193,7 @@ impl DevFs {
 
 impl FileSystem for DevFs {
     fn metadata(&self) -> &FileSystemMeta {
+        stack_trace!();
         &self.metadata
     }
 
@@ -191,5 +201,6 @@ impl FileSystem for DevFs {
 }
 
 pub fn init() {
+    stack_trace!();
     tty::init();
 }

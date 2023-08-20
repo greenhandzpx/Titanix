@@ -1,5 +1,5 @@
 use super::util::*;
-
+use crate::stack_trace;
 #[allow(non_snake_case)]
 #[derive(Copy, Clone, Default)]
 // Boot Sector with BPB, load from Sector 0
@@ -42,12 +42,14 @@ pub struct BootSector {
 
 impl BootSector {
     pub fn new(src: &[u8; 512]) -> Self {
+        stack_trace!();
         let mut ret: Self = Self::default();
         ret.load(src);
         ret
     }
 
     pub fn load(&mut self, src: &[u8; 512]) {
+        stack_trace!();
         let mut offset: usize = 0;
         macro_rules! load {
             ($v: expr) => {

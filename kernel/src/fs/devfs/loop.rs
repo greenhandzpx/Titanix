@@ -10,6 +10,7 @@ use crate::{
     },
     mm::user_check::UserCheck,
     processor::current_process,
+    stack_trace,
     sync::mutex::SleepLock,
     utils::error::{AsyscallRet, GeneralRet, SyscallRet},
 };
@@ -25,6 +26,7 @@ pub struct LoopInode {
 
 impl LoopInode {
     pub fn new(parent: Arc<dyn Inode>, path: &str, dev_id: usize) -> Self {
+        stack_trace!();
         let metadata = InodeMeta::new(
             Some(parent),
             path,
@@ -47,6 +49,7 @@ impl LoopInode {
 
 impl Inode for LoopInode {
     fn open(&self, this: Arc<dyn Inode>) -> GeneralRet<Arc<dyn File>> {
+        stack_trace!();
         Ok(Arc::new(LoopFile {
             meta: FileMeta {
                 inner: Mutex::new(FileMetaInner {
@@ -63,18 +66,23 @@ impl Inode for LoopInode {
         }))
     }
     fn set_metadata(&mut self, meta: InodeMeta) {
+        stack_trace!();
         self.metadata = meta;
     }
     fn metadata(&self) -> &InodeMeta {
+        stack_trace!();
         &self.metadata
     }
     fn load_children_from_disk(&self, _this: Arc<dyn Inode>) {
+        stack_trace!();
         panic!("Unsupported operation")
     }
     fn delete_child(&self, _child_name: &str) {
+        stack_trace!();
         panic!("Unsupported operation delete")
     }
     fn child_removeable(&self) -> GeneralRet<()> {
+        stack_trace!();
         Err(crate::utils::error::SyscallErr::EPERM)
     }
 }
@@ -129,11 +137,13 @@ pub struct FileBlockDeviceWrapper {
 
 impl FileBlockDeviceWrapper {
     pub fn new() -> Self {
+        stack_trace!();
         Self {
             file: Mutex::new(None),
         }
     }
     fn set_file(&self, file: Arc<dyn File>) {
+        stack_trace!();
         *self.file.lock() = Some(file.clone());
     }
 }
@@ -142,12 +152,14 @@ const BLOCK_SIZE: usize = 512;
 
 impl BlockDevice for FileBlockDeviceWrapper {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
+        stack_trace!();
         let file = self.file.lock().as_ref().unwrap().clone();
         file.seek(SeekFrom::Start(block_id * BLOCK_SIZE)).unwrap();
         file.sync_read(buf).unwrap();
     }
 
     fn write_block(&self, block_id: usize, buf: &[u8]) {
+        stack_trace!();
         let file = self.file.lock().as_ref().unwrap().clone();
         file.seek(SeekFrom::Start(block_id * BLOCK_SIZE)).unwrap();
         file.sync_write(buf).unwrap();
@@ -157,15 +169,19 @@ impl BlockDevice for FileBlockDeviceWrapper {
 // #[async_trait]
 impl File for LoopFile {
     fn metadata(&self) -> &FileMeta {
+        stack_trace!();
         &self.meta
     }
     fn read<'a>(&'a self, _buf: &'a mut [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         Box::pin(async move { Ok(0) })
     }
     fn write<'a>(&'a self, buf: &'a [u8], _flags: OpenFlags) -> AsyscallRet {
+        stack_trace!();
         Box::pin(async move { Ok(buf.len()) })
     }
     fn ioctl(&self, command: usize, value: usize) -> SyscallRet {
+        stack_trace!();
         match command {
             LOOP_GET_STATUS64 => {
                 if self.lo_meta.lock().info.is_none() {

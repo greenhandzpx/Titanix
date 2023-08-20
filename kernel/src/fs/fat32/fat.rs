@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec::Vec};
 
-use crate::{driver::BlockDevice, fs::Mutex};
+use crate::{driver::BlockDevice, fs::Mutex, stack_trace};
 
 use log::info;
 
@@ -31,6 +31,7 @@ struct FATSectorBuffer {
 
 impl Default for FATSectorBuffer {
     fn default() -> Self {
+        stack_trace!();
         Self {
             sector_no: usize::default(),
             data: [u32::default(); FATENTRY_PER_SECTOR],
@@ -41,6 +42,7 @@ impl Default for FATSectorBuffer {
 
 impl FATSectorBuffer {
     pub fn sync(&mut self, block_device: Arc<dyn BlockDevice>, fatinfo: Arc<FAT32Info>) {
+        stack_trace!();
         if self.state == FATSectorBufferState::Dirty {
             for i in 0..fatinfo.fat_count {
                 unsafe {
@@ -58,6 +60,7 @@ impl FATSectorBuffer {
     }
 
     pub fn free(&mut self, block_device: Arc<dyn BlockDevice>, fatinfo: Arc<FAT32Info>) {
+        stack_trace!();
         self.sync(Arc::clone(&block_device), Arc::clone(&fatinfo));
         self.state = FATSectorBufferState::Unassigned;
     }
@@ -68,6 +71,7 @@ impl FATSectorBuffer {
         fatinfo: Arc<FAT32Info>,
         sector_no: usize,
     ) {
+        stack_trace!();
         self.free(Arc::clone(&block_device), Arc::clone(&fatinfo));
         self.state = FATSectorBufferState::Assigned;
         self.sector_no = sector_no;
@@ -83,6 +87,7 @@ impl FATSectorBuffer {
     }
 
     pub fn read(&self, offset: usize) -> Option<u32> {
+        stack_trace!();
         if self.state == FATSectorBufferState::Unassigned || offset >= FATENTRY_PER_SECTOR {
             None
         } else {
@@ -91,6 +96,7 @@ impl FATSectorBuffer {
     }
 
     pub fn write(&mut self, offset: usize, val: u32) -> Option<()> {
+        stack_trace!();
         if self.state == FATSectorBufferState::Unassigned || offset >= FATENTRY_PER_SECTOR {
             None
         } else {
@@ -109,6 +115,7 @@ struct FATBufferCache {
 
 impl FATBufferCache {
     pub fn new(block_device: Arc<dyn BlockDevice>, info: Arc<FAT32Info>) -> Self {
+        stack_trace!();
         let mut data = Vec::new();
         for sector_no in 0..info.fat_sector_count {
             let mut s = FATSectorBuffer::default();
@@ -123,6 +130,7 @@ impl FATBufferCache {
     }
 
     fn read_fat(&mut self, cluster_id: usize) -> Option<u32> {
+        stack_trace!();
         if cluster_id < 2 || cluster_id > self.info.tot_cluster_count + 1 {
             return None;
         }
@@ -145,6 +153,7 @@ impl FATBufferCache {
     }
 
     fn write_fat(&mut self, cluster_id: usize, val: u32) -> Option<()> {
+        stack_trace!();
         if cluster_id < 2 || cluster_id > self.info.tot_cluster_count + 1 {
             return None;
         }
@@ -168,6 +177,7 @@ impl FATBufferCache {
 
     #[allow(unused)]
     fn sync_buffer(&mut self, sector_id: usize) -> Option<()> {
+        stack_trace!();
         if sector_id > (self.info.tot_cluster_count + 1) / FATENTRY_PER_SECTOR {
             None
         } else {
@@ -190,6 +200,7 @@ impl FATBufferCache {
     }
 
     fn sync_all_buffers(&mut self) {
+        stack_trace!();
         for buffer in self.data.iter_mut() {
             buffer.sync(Arc::clone(&self.block_device), Arc::clone(&self.info));
         }
@@ -198,6 +209,7 @@ impl FATBufferCache {
 
 impl Drop for FATBufferCache {
     fn drop(&mut self) {
+        stack_trace!();
         self.sync_all_buffers();
     }
 }
@@ -216,6 +228,7 @@ pub struct FileAllocTable {
 
 impl FileAllocTable {
     pub fn new(block_device: Arc<dyn BlockDevice>, info: Arc<FAT32Info>) -> Self {
+        stack_trace!();
         let mut fsinfo_data: [u8; 512] = [0; 512];
         block_device.read_block(info.fsinfo_sector_id, &mut fsinfo_data);
         let fsinfo_raw = FSInfo::new(&fsinfo_data);
@@ -243,6 +256,7 @@ impl FileAllocTable {
         ret
     }
     fn stat_free(&self) {
+        stack_trace!();
         let mut fatmeta_locked = self.fatmeta.lock();
         if fatmeta_locked.free_count == (FSI_NOT_AVAILABLE as usize)
             || fatmeta_locked.nxt_free == (FSI_NOT_AVAILABLE as usize)
@@ -262,19 +276,23 @@ impl FileAllocTable {
     }
 
     pub fn read_fat(&self, cluster_id: usize) -> Option<u32> {
+        stack_trace!();
         self.fatcache.lock().read_fat(cluster_id)
     }
 
     pub fn write_fat(&self, cluster_id: usize, val: u32) -> Option<()> {
+        stack_trace!();
         self.fatcache.lock().write_fat(cluster_id, val)
     }
 
     #[allow(unused)]
     pub fn sync_fat(&self) {
+        stack_trace!();
         self.fatcache.lock().sync_all_buffers();
     }
 
     fn alloc_cluster_inner(&self) -> Option<usize> {
+        stack_trace!();
         let mut fatmeta_locked = self.fatmeta.lock();
         // println!(
         //     "[FileAllocTable::alloc_cluster_inner] tot_cluster_count: {}, nxt_free: {}",
@@ -298,6 +316,7 @@ impl FileAllocTable {
     }
 
     pub fn alloc_cluster(&self, prev: Option<usize>) -> Option<usize> {
+        stack_trace!();
         if let Some(ret) = self.alloc_cluster_inner() {
             if let Some(pre) = prev {
                 if self.read_fat(pre).unwrap() < 0x0FFFFFF8 {
@@ -313,6 +332,7 @@ impl FileAllocTable {
     }
 
     pub fn free_cluster(&self, cluster_id: usize, prev: Option<usize>) -> Option<()> {
+        stack_trace!();
         if let Some(pre) = prev {
             if self.read_fat(pre).unwrap() as usize != cluster_id {
                 info!("not a right pre!");
