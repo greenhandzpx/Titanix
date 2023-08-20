@@ -3,7 +3,7 @@
 use crate::{
     config::board::MEMORY_END,
     mm::{KernelAddr, PhysAddr, PhysPageNum},
-    sync::mutex::SpinNoIrqLock, stack_trace,
+    sync::mutex::SpinNoIrqLock,
 };
 // use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
@@ -19,7 +19,6 @@ pub struct FrameTracker {
 impl FrameTracker {
     ///Create an empty `FrameTracker`
     pub fn new(ppn: PhysPageNum) -> Self {
-        stack_trace!();
         // page cleaning
         let bytes_array = ppn.bytes_array();
         for i in bytes_array {
@@ -31,14 +30,12 @@ impl FrameTracker {
 
 impl Debug for FrameTracker {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        stack_trace!();
         f.write_fmt(format_args!("FrameTracker:PPN={:#x}", self.ppn.0))
     }
 }
 
 impl Drop for FrameTracker {
     fn drop(&mut self) {
-        stack_trace!();
         frame_dealloc(self.ppn);
     }
 }
@@ -64,7 +61,6 @@ impl StackFrameAllocator {
         }
     }
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
-        stack_trace!();
         self.current = l.0;
         self.end = r.0;
         // println!("last {} Physical Frames.", self.end - self.current);
@@ -76,7 +72,6 @@ impl StackFrameAllocator {
 }
 impl FrameAllocator for StackFrameAllocator {
     fn alloc(&mut self) -> Option<PhysPageNum> {
-        stack_trace!();
         if let Some(ppn) = self.recycled.pop() {
             Some(ppn.into())
         } else if self.current == self.end {
@@ -89,7 +84,6 @@ impl FrameAllocator for StackFrameAllocator {
         }
     }
     fn dealloc(&mut self, ppn: PhysPageNum) {
-        stack_trace!();
         // ppn.bytes_array().fill(0);
         let ppn = ppn.0;
         // validity check
@@ -100,7 +94,6 @@ impl FrameAllocator for StackFrameAllocator {
         self.recycled.push(ppn);
     }
     fn alloc_contig(&mut self, num: usize) -> Vec<PhysPageNum> {
-        stack_trace!();
         let mut ret = Vec::with_capacity(num);
         for _ in 0..num {
             if self.current == self.end {
@@ -121,7 +114,6 @@ pub static FRAME_ALLOCATOR: SpinNoIrqLock<FrameAllocatorImpl> =
     SpinNoIrqLock::new(FrameAllocatorImpl::new());
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`
 pub fn init_frame_allocator() {
-        stack_trace!();
     extern "C" {
         fn ekernel();
     }
@@ -136,12 +128,10 @@ pub fn init_frame_allocator() {
 }
 /// allocate a frame
 pub fn frame_alloc() -> Option<FrameTracker> {
-        stack_trace!();
     FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
 }
 /// allocate contiguous frames
 pub fn frame_alloc_contig(num: usize) -> Vec<FrameTracker> {
-        stack_trace!();
     FRAME_ALLOCATOR
         .lock()
         .alloc_contig(num)
@@ -151,14 +141,12 @@ pub fn frame_alloc_contig(num: usize) -> Vec<FrameTracker> {
 }
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {
-        stack_trace!();
     FRAME_ALLOCATOR.lock().dealloc(ppn);
 }
 
 #[allow(unused)]
 /// a simple test for frame allocator
 pub fn frame_allocator_test() {
-        stack_trace!();
     info!("frame_allocator_test start...");
     let mut v: Vec<FrameTracker> = Vec::new();
     for i in 0..5 {

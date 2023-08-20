@@ -2,7 +2,8 @@ use alloc::sync::Arc;
 
 use crate::{
     mm::{page_table::PTEFlags, PageTable, VirtAddr},
-    utils::{cell::SyncUnsafeCell, error::GeneralRet}, stack_trace,
+    stack_trace,
+    utils::{cell::SyncUnsafeCell, error::GeneralRet},
 };
 
 use super::{CowPageFaultHandler, PageFaultHandler, PageManager, VmArea};

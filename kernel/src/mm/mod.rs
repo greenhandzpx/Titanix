@@ -39,11 +39,9 @@ pub use page_table::PageTable;
 pub use page_table::PageTableEntry;
 
 use crate::processor::hart::HARTS;
-use crate::stack_trace;
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init() {
-        stack_trace!();
     allocator::heap_allocator::init_heap();
     allocator::heap_allocator::heap_test();
     unsafe {
