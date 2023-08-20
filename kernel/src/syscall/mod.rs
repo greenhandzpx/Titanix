@@ -107,6 +107,7 @@ const SYSCALL_PRLIMIT64: usize = 261;
 const SYSCALL_REMANEAT2: usize = 276;
 const SYSCALL_GETRANDOM: usize = 278;
 const SYSCALL_MEMBARRIER: usize = 283;
+const SYSCALL_COPY_FILE_RANGE: usize = 285;
 
 mod dev;
 mod fs;
@@ -482,6 +483,17 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         ),
         SYSCALL_GETRANDOM => sys_handler!(sys_getrandom, (args[0], args[1], args[2] as u32), await),
         SYSCALL_MEMBARRIER => sys_handler!(sys_membarrier, ()),
+        SYSCALL_COPY_FILE_RANGE => sys_handler!(
+            sys_copy_file_range,
+            (
+                args[0],
+                args[1],
+                args[2],
+                args[3],
+                args[4] as u32,
+                args[5] as u32
+            ), await
+        ),
         _ => {
             // panic!("Unsupported syscall_id: {}", syscall_id);
             error!("Unsupported syscall_id: {}", syscall_id);
