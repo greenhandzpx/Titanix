@@ -164,9 +164,48 @@ const CTRL_C: u8 = 3;
 
 pub static TTY: SyncUnsafeCell<Option<Arc<TtyFile>>> = SyncUnsafeCell::new(None);
 
+const QUEUE_BUFFER_LEN: usize = 256;
+
+struct QueueBuffer {
+    buf: [u8; QUEUE_BUFFER_LEN],
+    e: usize,
+    f: usize,
+}
+
+impl QueueBuffer {
+    fn new() -> Self {
+        Self {
+            buf: [0; QUEUE_BUFFER_LEN],
+            e: 0,
+            f: 0,
+        }
+    }
+    fn push(&mut self, val: u8) {
+        self.buf[self.f] = val;
+        self.f = (self.f + 1) % QUEUE_BUFFER_LEN;
+    }
+    fn top(&self) -> u8 {
+        if self.e == self.f {
+            0xff
+        } else {
+            self.buf[self.e]
+        }
+    }
+
+    fn pop(&mut self) -> u8 {
+        if self.e == self.f {
+            0xff
+        } else {
+            let ret = self.buf[self.e];
+            self.e = (self.e + 1) % QUEUE_BUFFER_LEN;
+            ret
+        }
+    }
+}
+
 pub struct TtyFile {
     /// Temporarily save poll in data
-    buf: AtomicU8,
+    buf: Mutex<QueueBuffer>,
     metadata: FileMeta,
     inner: SpinLock<TtyInner>,
 }
@@ -181,7 +220,7 @@ impl TtyFile {
     pub fn new() -> Self {
         stack_trace!();
         Self {
-            buf: AtomicU8::new(255),
+            buf: Mutex::new(QueueBuffer::new()),
             metadata: FileMeta {
                 inner: Mutex::new(FileMetaInner {
                     inode: None,
@@ -203,7 +242,7 @@ impl TtyFile {
     pub fn handle_irq(&self, ch: u8) {
         stack_trace!();
         log::debug!("[TtyFile::handle_irq] handle irq, ch {}", ch);
-        self.buf.store(ch, Ordering::Release);
+        self.buf.lock().push(ch);
         if ch == CTRL_C {
             let pids = PROCESS_GROUP_MANAGER.get_group_by_pgid(self.inner.lock().fg_pgid as usize);
             log::debug!("[TtyFile::handle_irq] fg pid {}", self.inner.lock().fg_pgid);
@@ -247,9 +286,8 @@ impl File for TtyFile {
                 stack_trace!();
                 let _sum_guard = SumGuard::new();
                 let ch: u8;
-                let self_buf = self.tty_file.buf.load(Ordering::Acquire);
+                let self_buf = self.tty_file.buf.lock().pop();
                 if self_buf != 0xff {
-                    self.tty_file.buf.store(0xff, Ordering::Release);
                     ch = self_buf;
                 } else {
                     ch = getchar();
@@ -339,7 +377,7 @@ impl File for TtyFile {
         }
         #[cfg(all(not(feature = "submit"), not(feature = "board_u740")))]
         {
-            if self.buf.load(Ordering::Acquire) != 255 {
+            if self.buf.lock().top() != 255 {
                 return Ok(true);
             }
             let _sum_guard = SumGuard::new();
@@ -355,7 +393,7 @@ impl File for TtyFile {
                 }
                 return Ok(false);
             } else {
-                self.buf.store(c as u8, Ordering::Release);
+                self.buf.lock().push(c as u8);
                 return Ok(true);
             }
         }
