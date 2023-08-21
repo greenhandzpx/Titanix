@@ -4,7 +4,7 @@ use crate::{
     mm::user_check::UserCheck,
     net::{
         address::{self, SocketAddrv4},
-        make_unix_socket_pair, Socket, SocketType, TCP_MSS,
+        make_unix_socket_pair, RecvFromFlags, Socket, SocketType, TCP_MSS,
     },
     processor::{current_process, SumGuard},
     stack_trace,
@@ -119,12 +119,13 @@ pub async fn sys_sendto(
     sockfd: u32,
     buf: usize,
     len: usize,
-    _flags: u32,
+    flags: u32,
     dest_addr: usize,
     addrlen: u32,
 ) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
+    let flags = RecvFromFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let socket_file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -137,7 +138,7 @@ pub async fn sys_sendto(
         .ok_or(SyscallErr::ENOTSOCK)?;
     log::info!("[sys_sendto] get socket sockfd: {}", sockfd);
     let len = match socket.socket_type() {
-        SocketType::SOCK_STREAM => socket_file.file.write(buf, socket_file.flags).await?,
+        SocketType::SOCK_STREAM => socket.send(buf, flags).await?,
         SocketType::SOCK_DGRAM => {
             info!("[sys_sendto] socket is udp");
             UserCheck::new().check_readable_slice(dest_addr as *const u8, addrlen as usize)?;
@@ -149,7 +150,7 @@ pub async fn sys_sendto(
             let dest_addr =
                 unsafe { core::slice::from_raw_parts(dest_addr as *const u8, addrlen as usize) };
             socket.connect(dest_addr).await?;
-            socket_file.file.write(buf, socket_file.flags).await?
+            socket.send(buf, flags).await?
         }
         _ => todo!(),
     };
@@ -160,12 +161,13 @@ pub async fn sys_recvfrom(
     sockfd: u32,
     buf: usize,
     len: u32,
-    _flags: u32,
+    flags: u32,
     src_addr: usize,
     addrlen: usize,
 ) -> SyscallRet {
     stack_trace!();
     let _sum_guard = SumGuard::new();
+    let flags = RecvFromFlags::from_bits(flags).ok_or(SyscallErr::EINVAL)?;
     let socket_file = current_process()
         .inner_handler(move |proc| proc.fd_table.get_ref(sockfd as usize).cloned())
         .ok_or(SyscallErr::EBADF)?;
@@ -178,14 +180,14 @@ pub async fn sys_recvfrom(
     info!("[sys_recvfrom] get socket sockfd: {}", sockfd);
     match socket.socket_type() {
         SocketType::SOCK_STREAM => {
-            let len = socket_file.file.read(buf, socket_file.flags).await?;
+            let len = socket.recv(buf, flags).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }
             Ok(len)
         }
         SocketType::SOCK_DGRAM => {
-            let len = socket_file.file.read(buf, socket_file.flags).await?;
+            let len = socket.recv(buf, flags).await?;
             if src_addr != 0 {
                 socket.peer_addr(src_addr, addrlen)?;
             }

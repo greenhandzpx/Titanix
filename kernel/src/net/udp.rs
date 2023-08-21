@@ -1,7 +1,7 @@
 use super::{address::SocketAddrv4, config::NET_INTERFACE, Mutex, Socket, MAX_BUFFER_SIZE};
 use crate::{
     fs::{File, FileMeta, OpenFlags},
-    net::address,
+    net::{address, RecvFromFlags},
     process::thread,
     processor::{current_task, SumGuard},
     sync::Event,
@@ -147,6 +147,97 @@ impl Socket for UdpSocket {
     fn set_keep_alive(&self, _enabled: bool) -> SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
+
+    fn recv<'a>(
+        &'a self,
+        buf: &'a mut [u8],
+        flags: RecvFromFlags,
+    ) -> crate::utils::error::AsyscallRet {
+        log::info!(
+            "[Ucp::recv] ({}, {}) enter",
+            self.handler_loop,
+            self.handler_dev
+        );
+        let buf_start = buf.as_ptr() as usize;
+        Box::pin(async move {
+            match Select2Futures::new(
+                Select2Futures::new(
+                    UdpRecvFuture::new(self, buf_start, buf.len(), flags, true),
+                    UdpRecvFuture::new(self, buf_start, buf.len(), flags, false),
+                ),
+                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+            )
+            .await
+            {
+                SelectOutput::Output1(ret) => match ret {
+                    SelectOutput::Output1(ret) => match ret {
+                        Ok(len) => {
+                            if len > MAX_BUFFER_SIZE / 2 {
+                                // need to be slow
+                                ksleep(Duration::from_millis(1)).await;
+                            } else {
+                                #[cfg(not(feature = "multi_hart"))]
+                                thread::yield_now().await;
+                            }
+                            ret
+                        }
+                        Err(_) => ret,
+                    },
+                    SelectOutput::Output2(ret) => match ret {
+                        Ok(len) => {
+                            if len > MAX_BUFFER_SIZE / 2 {
+                                // need to be slow
+                                ksleep(Duration::from_millis(2)).await;
+                            } else {
+                                #[cfg(not(feature = "multi_hart"))]
+                                thread::yield_now().await;
+                            }
+                            ret
+                        }
+                        Err(_) => ret,
+                    },
+                },
+                SelectOutput::Output2(intr) => {
+                    log::info!("[TcpSocket::read] interrupt by event {:?}", intr);
+                    Err(SyscallErr::EINTR)
+                }
+            }
+        })
+    }
+
+    fn send<'a>(&'a self, buf: &'a [u8], flags: RecvFromFlags) -> crate::utils::error::AsyscallRet {
+        log::info!(
+            "[Ucp::send] ({}, {}) enter",
+            self.handler_loop,
+            self.handler_dev
+        );
+        Box::pin(async move {
+            match Select2Futures::new(
+                UdpSendFuture::new(self, buf, flags),
+                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
+            )
+            .await
+            {
+                SelectOutput::Output1(ret) => match ret {
+                    Ok(len) => {
+                        if len > MAX_BUFFER_SIZE / 2 {
+                            // need to be slow
+                            ksleep(Duration::from_millis(1)).await;
+                        } else {
+                            #[cfg(not(feature = "multi_hart"))]
+                            thread::yield_now().await;
+                        }
+                        ret
+                    }
+                    Err(_) => ret,
+                },
+                SelectOutput::Output2(intr) => {
+                    log::info!("[TcpSocket::write] interrupt by event {:?}", intr);
+                    Err(SyscallErr::EINTR)
+                }
+            }
+        })
+    }
 }
 
 impl UdpSocket {
@@ -216,51 +307,11 @@ impl File for UdpSocket {
             self.handler_loop,
             self.handler_dev
         );
-        let buf_start = buf.as_ptr() as usize;
-        Box::pin(async move {
-            match Select2Futures::new(
-                Select2Futures::new(
-                    UdpRecvFuture::new(self, buf_start, buf.len(), flags, true),
-                    UdpRecvFuture::new(self, buf_start, buf.len(), flags, false),
-                ),
-                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
-            )
-            .await
-            {
-                SelectOutput::Output1(ret) => match ret {
-                    SelectOutput::Output1(ret) => match ret {
-                        Ok(len) => {
-                            if len > MAX_BUFFER_SIZE / 2 {
-                                // need to be slow
-                                ksleep(Duration::from_millis(1)).await;
-                            } else {
-                                #[cfg(not(feature = "multi_hart"))]
-                                thread::yield_now().await;
-                            }
-                            ret
-                        }
-                        Err(_) => ret,
-                    },
-                    SelectOutput::Output2(ret) => match ret {
-                        Ok(len) => {
-                            if len > MAX_BUFFER_SIZE / 2 {
-                                // need to be slow
-                                ksleep(Duration::from_millis(2)).await;
-                            } else {
-                                #[cfg(not(feature = "multi_hart"))]
-                                thread::yield_now().await;
-                            }
-                            ret
-                        }
-                        Err(_) => ret,
-                    },
-                },
-                SelectOutput::Output2(intr) => {
-                    log::info!("[TcpSocket::read] interrupt by event {:?}", intr);
-                    Err(SyscallErr::EINTR)
-                }
-            }
-        })
+        let mut flags_recv = RecvFromFlags::default();
+        if flags.contains(OpenFlags::NONBLOCK) {
+            flags_recv = RecvFromFlags::MSG_DONTWAIT;
+        }
+        self.recv(buf, flags_recv)
     }
 
     fn write<'a>(&'a self, buf: &'a [u8], flags: OpenFlags) -> crate::utils::error::AsyscallRet {
@@ -269,32 +320,11 @@ impl File for UdpSocket {
             self.handler_loop,
             self.handler_dev
         );
-        Box::pin(async move {
-            match Select2Futures::new(
-                UdpSendFuture::new(self, buf, flags),
-                current_task().wait_for_events(Event::THREAD_EXIT | Event::PROCESS_EXIT),
-            )
-            .await
-            {
-                SelectOutput::Output1(ret) => match ret {
-                    Ok(len) => {
-                        if len > MAX_BUFFER_SIZE / 2 {
-                            // need to be slow
-                            ksleep(Duration::from_millis(1)).await;
-                        } else {
-                            #[cfg(not(feature = "multi_hart"))]
-                            thread::yield_now().await;
-                        }
-                        ret
-                    }
-                    Err(_) => ret,
-                },
-                SelectOutput::Output2(intr) => {
-                    log::info!("[TcpSocket::write] interrupt by event {:?}", intr);
-                    Err(SyscallErr::EINTR)
-                }
-            }
-        })
+        let mut flags_recv = RecvFromFlags::default();
+        if flags.contains(OpenFlags::NONBLOCK) {
+            flags_recv = RecvFromFlags::MSG_DONTWAIT;
+        }
+        self.send(buf, flags_recv)
     }
 
     fn metadata(&self) -> &crate::fs::FileMeta {
@@ -362,7 +392,7 @@ struct UdpRecvFuture<'a> {
     // buf: ManagedSlice<'a, u8>,
     buf_start: usize,
     buf_len: usize,
-    flags: OpenFlags,
+    flags: RecvFromFlags,
     for_loop: bool,
 }
 
@@ -371,7 +401,7 @@ impl<'a> UdpRecvFuture<'a> {
         socket: &'a UdpSocket,
         buf_start: usize,
         buf_len: usize,
-        flags: OpenFlags,
+        flags: RecvFromFlags,
         for_loop: bool,
     ) -> Self {
         Self {
@@ -397,7 +427,7 @@ impl<'a> Future for UdpRecvFuture<'a> {
                 let this = self.get_mut();
                 if !socket.can_recv() {
                     log::info!("[UdpRecvFuture::poll] cannot recv yet");
-                    if this.flags.contains(OpenFlags::NONBLOCK) {
+                    if this.flags.contains(RecvFromFlags::MSG_DONTWAIT) {
                         log::info!("[UdpRecvFuture::poll] already set nonblock");
                         return Poll::Ready(Err(SyscallErr::EAGAIN));
                     }
@@ -406,16 +436,32 @@ impl<'a> Future for UdpRecvFuture<'a> {
                 }
                 log::info!("[UdpRecvFuture::poll] start to recv...");
                 Poll::Ready({
-                    let (ret, meta) = socket
-                        .recv_slice(unsafe {
-                            &mut core::slice::from_raw_parts_mut(
-                                this.buf_start as *mut u8,
-                                this.buf_len,
-                            )
-                        })
-                        .ok()
-                        .ok_or(SyscallErr::ENOTCONN)?;
-                    let remote = meta.endpoint;
+                    let (ret, remote) = if this.flags.bits() & RecvFromFlags::MSG_PEEK.bits() > 0 {
+                        info!("[UdpRecvFuture::poll] get flags MSG_PEEK");
+                        let (ret, meta) = socket
+                            .peek_slice(unsafe {
+                                &mut core::slice::from_raw_parts_mut(
+                                    this.buf_start as *mut u8,
+                                    this.buf_len,
+                                )
+                            })
+                            .ok()
+                            .ok_or(SyscallErr::ENOTCONN)?;
+                        let endpoint = meta.endpoint;
+                        (ret, endpoint)
+                    } else {
+                        let (ret, meta) = socket
+                            .recv_slice(unsafe {
+                                &mut core::slice::from_raw_parts_mut(
+                                    this.buf_start as *mut u8,
+                                    this.buf_len,
+                                )
+                            })
+                            .ok()
+                            .ok_or(SyscallErr::ENOTCONN)?;
+                        let endpoint = meta.endpoint;
+                        (ret, endpoint)
+                    };
                     info!(
                         "[UdpRecvFuture::poll] {:?} <- {:?}",
                         socket.endpoint(),
@@ -431,7 +477,7 @@ impl<'a> Future for UdpRecvFuture<'a> {
                 let this = self.get_mut();
                 if !socket.can_recv() {
                     log::info!("[UdpRecvFuture::poll] cannot recv yet");
-                    if this.flags.contains(OpenFlags::NONBLOCK) {
+                    if this.flags.contains(RecvFromFlags::MSG_DONTWAIT) {
                         log::info!("[UdpRecvFuture::poll] already set nonblock");
                         return Poll::Ready(Err(SyscallErr::EAGAIN));
                     }
@@ -440,16 +486,32 @@ impl<'a> Future for UdpRecvFuture<'a> {
                 }
                 log::info!("[UdpRecvFuture::poll] start to recv...");
                 Poll::Ready({
-                    let (ret, meta) = socket
-                        .recv_slice(unsafe {
-                            &mut core::slice::from_raw_parts_mut(
-                                this.buf_start as *mut u8,
-                                this.buf_len,
-                            )
-                        })
-                        .ok()
-                        .ok_or(SyscallErr::ENOTCONN)?;
-                    let remote = meta.endpoint;
+                    let (ret, remote) = if this.flags.bits() & RecvFromFlags::MSG_PEEK.bits() > 0 {
+                        info!("[UdpRecvFuture::poll] get flags MSG_PEEK");
+                        let (ret, meta) = socket
+                            .peek_slice(unsafe {
+                                &mut core::slice::from_raw_parts_mut(
+                                    this.buf_start as *mut u8,
+                                    this.buf_len,
+                                )
+                            })
+                            .ok()
+                            .ok_or(SyscallErr::ENOTCONN)?;
+                        let endpoint = meta.endpoint;
+                        (ret, endpoint)
+                    } else {
+                        let (ret, meta) = socket
+                            .recv_slice(unsafe {
+                                &mut core::slice::from_raw_parts_mut(
+                                    this.buf_start as *mut u8,
+                                    this.buf_len,
+                                )
+                            })
+                            .ok()
+                            .ok_or(SyscallErr::ENOTCONN)?;
+                        let endpoint = meta.endpoint;
+                        (ret, endpoint)
+                    };
                     info!(
                         "[UdpRecvFuture::poll] {:?} <- {:?}",
                         socket.endpoint(),
@@ -468,11 +530,11 @@ impl<'a> Future for UdpRecvFuture<'a> {
 struct UdpSendFuture<'a> {
     socket: &'a UdpSocket,
     buf: &'a [u8],
-    flags: OpenFlags,
+    flags: RecvFromFlags,
 }
 
 impl<'a> UdpSendFuture<'a> {
-    fn new(socket: &'a UdpSocket, buf: &'a [u8], flags: OpenFlags) -> Self {
+    fn new(socket: &'a UdpSocket, buf: &'a [u8], flags: RecvFromFlags) -> Self {
         Self { socket, buf, flags }
     }
 }
@@ -490,7 +552,7 @@ impl<'a> Future for UdpSendFuture<'a> {
             NET_INTERFACE.udp_socket_loop(self.socket.handler_loop, |socket| {
                 if !socket.can_send() {
                     log::info!("[UdpSendFuture::poll] cannot send yet");
-                    if self.flags.contains(OpenFlags::NONBLOCK) {
+                    if self.flags.contains(RecvFromFlags::MSG_DONTWAIT) {
                         log::info!("[UdpSendFuture::poll] already set nonblock");
                         return Poll::Ready(Err(SyscallErr::EAGAIN));
                     }
@@ -527,7 +589,7 @@ impl<'a> Future for UdpSendFuture<'a> {
             NET_INTERFACE.udp_socket_dev(self.socket.handler_dev, |socket| {
                 if !socket.can_send() {
                     log::info!("[UdpSendFuture::poll] cannot send yet");
-                    if self.flags.contains(OpenFlags::NONBLOCK) {
+                    if self.flags.contains(RecvFromFlags::MSG_DONTWAIT) {
                         log::info!("[UdpSendFuture::poll] already set nonblock");
                         return Poll::Ready(Err(SyscallErr::EAGAIN));
                     }

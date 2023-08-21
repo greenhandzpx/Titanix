@@ -72,6 +72,14 @@ impl<const N: usize> Socket for UnixSocket<N> {
     fn set_keep_alive(&self, _enabled: bool) -> crate::utils::error::SyscallRet {
         Err(SyscallErr::EOPNOTSUPP)
     }
+
+    fn recv<'a>(&'a self, buf: &'a mut [u8], flags: super::RecvFromFlags) -> AsyscallRet {
+        todo!()
+    }
+
+    fn send<'a>(&'a self, buf: &'a [u8], flags: super::RecvFromFlags) -> AsyscallRet {
+        todo!()
+    }
 }
 
 impl<const N: usize> UnixSocket<N> {

@@ -44,6 +44,24 @@ bitflags! {
         /// unused now
         const SOCK_CLOEXEC = 1 << 19;
     }
+
+    /// recv_from flags
+    pub struct RecvFromFlags: u32 {
+        /// peek
+        const MSG_PEEK = 1 << 1;
+        /// noblock
+        const MSG_DONTWAIT = 1 << 6;
+        /// nothing to do
+        const MSG_NOTHING = 1 << 0;
+    }
+}
+
+impl Default for RecvFromFlags {
+    fn default() -> Self {
+        Self {
+            bits: RecvFromFlags::MSG_NOTHING.bits,
+        }
+    }
 }
 
 // pub const MAX_BUFFER_SIZE: usize = 1 << 15;
@@ -65,6 +83,8 @@ pub trait Socket: File {
     fn shutdown(&self, how: u32) -> GeneralRet<()>;
     fn set_nagle_enabled(&self, enabled: bool) -> SyscallRet;
     fn set_keep_alive(&self, enabled: bool) -> SyscallRet;
+    fn recv<'a>(&'a self, buf: &'a mut [u8], flags: RecvFromFlags) -> AsyscallRet;
+    fn send<'a>(&'a self, buf: &'a [u8], flags: RecvFromFlags) -> AsyscallRet;
 }
 
 impl dyn Socket {
