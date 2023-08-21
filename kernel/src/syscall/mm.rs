@@ -27,12 +27,15 @@ pub fn sys_mmap(
 ) -> SyscallRet {
     stack_trace!();
     let prot = MmapProt::from_bits(prot as u32).ok_or(SyscallErr::EINVAL)?;
-    let flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
+    let mut flags = MmapFlags::from_bits(flags as u32).ok_or(SyscallErr::EINVAL)?;
     let map_permission: MapPermission = prot.into();
     info!(
         "[sys_mmap]: start...  addr {:#x}, len {:#x}, fd {}, offset {:#x}, flags {:?}, prot {:?}",
         addr, length, fd, offset, flags, prot
     );
+
+    flags.remove(MmapFlags::MAP_PRIVATE);
+    flags |= MmapFlags::MAP_SHARED;
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
         if offset != 0 {

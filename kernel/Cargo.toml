@@ -45,8 +45,8 @@ virtio-drivers = { version = "0.6.0" }
 [features]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "tmpfs"]
-# default = ["kernel_interrupt"]
 default = ["kernel_interrupt"]
+# default = ["kernel_interrupt", "kcov"]
 stack_trace = []
 board_qemu = []
 board_u740 = []
@@ -57,6 +57,7 @@ submit = []
 async_flush = []               # flush dirty blocks to disk asynchronously
 tmpfs = []                     # rootfs is tmpfs
 preliminary = []
+kcov = []
 
 [profile.release]
 debug = true

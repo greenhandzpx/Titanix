@@ -50,6 +50,7 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
             try_count += 1;
             if try_count == 0x10000000 {
                 println!("dead lock!!");
+                // panic!();
                 panic!("Mutex: deadlock detected! try_count > {:#x}\n", try_count);
             }
         }

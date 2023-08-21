@@ -7,6 +7,7 @@ use riscv::register::{
 };
 
 use crate::{
+    fs::K_COVERAGE,
     irq_count::{IrqCounter, IRQ_COUNTER},
     mm::{memory_space, VirtAddr, VA_WIDTH_SV39},
     process::thread::{self, exit_and_terminate_all_threads},
@@ -60,6 +61,7 @@ pub async fn trap_handler() {
             .await;
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
+            K_COVERAGE.commit();
             cx.user_x[10] = match result {
                 Ok(ret) => ret as usize,
                 Err(err) => {

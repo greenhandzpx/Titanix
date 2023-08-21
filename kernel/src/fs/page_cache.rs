@@ -25,7 +25,7 @@ pub struct PageCache {
 impl PageCache {
     /// Create a new page cache
     pub fn new(inode: Arc<dyn Inode>, _level_num: usize) -> Self {
-        stack_trace!();
+        // stack_trace!();
         Self {
             inode: Some(Arc::downgrade(&inode)),
             pages: SpinNoIrqLock::new(BTreeMap::new()),
@@ -33,13 +33,13 @@ impl PageCache {
     }
     /// Lookup a page according to the given file offset
     pub fn lookup(&self, offset: usize) -> Option<Arc<Page>> {
-        stack_trace!();
+        // stack_trace!();
         self.pages.lock().get(&(offset >> PAGE_SIZE_BITS)).cloned()
     }
     /// Insert a new page
     #[allow(unused)]
     pub fn insert(&self, offset: usize, page: Page) {
-        stack_trace!();
+        // stack_trace!();
         debug_assert!(self
             .pages
             .lock()
@@ -52,7 +52,7 @@ impl PageCache {
         offset: usize,
         map_perm: Option<MapPermission>,
     ) -> GeneralRet<Arc<Page>> {
-        stack_trace!();
+        // stack_trace!();
         trace!("[PageCache]: get page at file offset {:#x}", offset);
         if let Some(page) = self.lookup(offset) {
             Ok(page)
@@ -77,7 +77,7 @@ impl PageCache {
     }
     /// Flush all pages to disk if needed
     pub async fn sync(&self) -> GeneralRet<()> {
-        stack_trace!();
+        // stack_trace!();
         let mut page_set: Vec<Arc<Page>> = Vec::new();
         for (_, page) in self.pages.lock().iter() {
             page_set.push(page.clone());

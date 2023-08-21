@@ -61,4 +61,5 @@ int main(int argc, char **argv)
 }
 ```
 
-此后，我们对Titanix中使用的函数进行了手动的插桩，并编写/sys/kernel/debug/kcov路径对应的解析调用，运行Titanix并通过```./kcov```运行测试。
+此后，我们对Titanix中使用的函数进行了手动的插桩，并编写/sys/kernel/debug/kcov路径对应的解析调用，运行Titanix并通过```./kcov```运行测试。结果如下，有点小问题，但总体是没问题的：
+![](fig/3.45.png)

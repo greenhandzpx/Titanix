@@ -604,11 +604,11 @@ pub struct InodeMeta {
 
 impl InodeMeta {
     pub fn inner_get<T>(&self, f: impl FnOnce(&mut InodeMetaInner) -> T) -> T {
-        stack_trace!();
+        // stack_trace!();
         f(&mut self.inner.lock())
     }
     pub fn inner_set(&self, inner: InodeMetaInner) {
-        stack_trace!();
+        // stack_trace!();
         *self.inner.lock() = inner;
     }
 }
@@ -643,7 +643,6 @@ impl InodeMeta {
         data_len: usize,
         device: Option<InodeDevice>,
     ) -> Self {
-        stack_trace!();
         let name = path::get_name(path);
         let parent = match parent {
             Some(parent) => Some(Arc::downgrade(&parent)),

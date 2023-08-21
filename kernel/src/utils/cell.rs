@@ -21,4 +21,9 @@ impl<T> SyncUnsafeCell<T> {
     pub const fn get_mut(&mut self) -> &mut T {
         self.0.get_mut()
     }
+
+    #[inline]
+    pub fn lock(&self) -> &mut T {
+        unsafe { &mut *self.0.get() }
+    }
 }

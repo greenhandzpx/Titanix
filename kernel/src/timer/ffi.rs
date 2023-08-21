@@ -71,7 +71,7 @@ pub struct Tms {
 
 /// get current time as TimeSpec
 pub fn current_time_spec() -> TimeSpec {
-    stack_trace!();
+    // stack_trace!();
     current_time_duration().into()
 }
 

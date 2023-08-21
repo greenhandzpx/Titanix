@@ -57,7 +57,7 @@ pub struct PageBuilder {
 impl PageBuilder {
     /// Construct a page builder
     pub fn new() -> Self {
-        stack_trace!();
+        // stack_trace!();
         Self {
             offset: None,
             inode: None,
@@ -100,13 +100,13 @@ impl PageBuilder {
     }
     /// Page's physical page frame
     pub fn physical_frame(mut self, frame: FrameTracker) -> Self {
-        stack_trace!();
+        // stack_trace!();
         self.physical_frame = Some(frame);
         self
     }
     /// Build the page
     pub fn build(mut self) -> Page {
-        stack_trace!();
+        // stack_trace!();
         let frame = match self.physical_frame {
             None => mm::frame_alloc().unwrap(),
             Some(_) => self.physical_frame.take().unwrap(),

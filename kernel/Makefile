@@ -1,6 +1,7 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
+# MODE := debug
 KERNEL_ELF := target/$(TARGET)/$(MODE)/kernel
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
@@ -59,6 +60,9 @@ BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 # Building mode argument
 ifeq ($(MODE), release)
 	MODE_ARG := --release
+endif
+ifeq ($(MODE), debug)
+	MODE_ARG := 
 endif
 
 # KERNEL ENTRY
@@ -119,9 +123,9 @@ kernel:
 	@cp src/linker64.ld src/linker.ld
 	@cargo fmt
 ifeq ($(KERNEL_FEATURES), )
-	cargo build --$(MODE)
+	cargo build $(MODE_ARG)
 else
-	cargo build --$(MODE) --features "$(KERNEL_FEATURES)"
+	cargo build $(MODE_ARG) --features "$(KERNEL_FEATURES)"
 endif
 	@rm src/linker.ld
 	@echo "build kernel finished"

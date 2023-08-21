@@ -224,6 +224,7 @@ impl PageFaultHandler for MmapPageFaultHandler {
             ) {
                 (true, true) => {
                     // Copy on write
+                    log::debug!("[MmapPageFaultHandler] cow, va {:#x}", va.0);
                     let frame = frame_alloc().unwrap();
                     frame.ppn.bytes_array().copy_from_slice(&page.bytes_array());
                     let file_info = page.file_info.as_ref().unwrap().lock().await;
