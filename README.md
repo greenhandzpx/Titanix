@@ -16,6 +16,10 @@
 <!-- 初赛满分
 <img src="./docs/fig/preliminary.png" style="zoom: 43.7%;" /> -->
 
+#### 决赛第二阶段
+
+- 现场赛榜单第一：
+![](docs/fig/final2-rk.png)
 #### 决赛第一阶段
 
 - Unmatched赛道，目前总分第一：
