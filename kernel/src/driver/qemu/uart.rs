@@ -83,9 +83,15 @@ impl CharDevice for UART {
         *self.waker.lock() = Some(waker);
     }
     fn handle_irq(&self) {
-        let ch = self.getchar();
-        log::debug!("[UART::handle_irq] ch {}", ch);
-        (self.cb)(ch);
+        let mut ch = self.getchar();
+        loop {
+            log::debug!("[UART::handle_irq] ch {}", ch);
+            (self.cb)(ch);
+            ch = self.getchar();
+            if ch == 0xff {
+                break;
+            }
+        }
         if let Some(w) = self.waker.lock().take() {
             w.wake();
         }
