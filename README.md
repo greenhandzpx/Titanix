@@ -5,6 +5,13 @@
 
 使用Rust编写的，基于riscv64的支持多核的宏内核操作系统。
 
+### 分支介绍
+
+- `master`: 能通过所有测试用例（包括决赛一二阶段）以及运行各种移植应用
+- `virtnet`: 实现了Qemu平台的网卡驱动，可以联通外网、起http服务器
+- `preliminary`: 初赛截止的分支
+- 其他：开发过程中一些临时分支
+
 ### 完成情况
 <!-- 初赛满分
 <img src="./docs/fig/preliminary.png" style="zoom: 43.7%;" /> -->
@@ -62,19 +69,30 @@
 - testcase: 测试用例
 - Titanix-rootfs: 一个精简的rootfs
 
+### 环境搭建
 
-### 运行：
+请参考rCore-Tutorial中[Rust开发环境配置部分](https://rcore-os.cn/rCore-Tutorial-Book-v3/chapter0/5setup-devel-env.html)
 
-第一次运行需要先在/kernel目录下输入
+### 运行
+
+第一次运行需要先烧录文件系统镜像，在/kernel目录下输入
 ```jax
 sudo make fs-img
 ```
 
-在/kernel目录下输入
+此时文件系统根目录会有23年的所有测试用例，后续启动内核后可以在shell中随意运行测试用例；
+
+另外如果要生成rootfs用以运行移植应用，则输入
+```jax
+sudo make fs-img TEST=rootfs
+```
+
+文件系统镜像生成完毕后，在/kernel目录下输入
 
 ```jsx
 make run
 ```
+
 可以进入busybox的shell，并进行一些busybox支持的基本操作；
 
 如果要在Unmatched-U740上运行，则输入
@@ -82,12 +100,19 @@ make run
 make run BOARD=u740
 ```
 
+还有一些其他编译选项，只需要放在`make run`后面即可：
+```jsx
+LOG=debug # 设置日志等级为debug
+SMP=on # 开启多核
+STRACE=on # 开启系统调用追踪
+```
+
 
 ### 项目人员：
 
 哈尔滨工业大学（深圳）：
 
-- 曾培鑫(893522573@qq.com)：进程管理，内存管理，VFS设计，多核支持。
+- 曾培鑫(893522573@qq.com)（队长）：进程管理，内存管理，VFS设计，多核支持。
 - 陈佳豪(Straho@163.com)：VFS设计，网络模块设计，文件系统相关系统调用实现。
 - 任秦江(1342330485@qq.com)：FAT32文件系统设计与实现，设备驱动管理。
 - 指导老师：夏文，仇洁婷
