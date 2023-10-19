@@ -350,7 +350,7 @@ impl File for TtyFile {
         }
         #[cfg(all(not(feature = "submit"), feature = "board_u740"))]
         {
-            if self.buf.load(Ordering::Acquire) != 255 {
+            if self.buf.lock().top() != 255 {
                 return Ok(true);
             }
             let _sum_guard = SumGuard::new();
@@ -371,7 +371,7 @@ impl File for TtyFile {
                 }
                 return Ok(false);
             } else {
-                self.buf.store(c as u8, Ordering::Release);
+                self.buf.lock().push(c as u8);
                 return Ok(true);
             }
         }
