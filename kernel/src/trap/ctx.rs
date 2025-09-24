@@ -228,6 +228,7 @@ impl TrapContext {
     pub fn app_init_context(entry: usize, sp: usize) -> Self {
         stack_trace!();
         let mut sstatus = sstatus::read();
+
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
         sstatus.set_sie(false);

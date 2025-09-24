@@ -236,6 +236,7 @@ impl Process {
                 pselect_times: 0,
             }),
         });
+
         let trap_context = TrapContext::app_init_context(entry_point, user_sp_top);
         // create a main thread
         let thread = Arc::new(Thread::new(
@@ -253,9 +254,12 @@ impl Process {
             .insert(thread.tid(), Arc::downgrade(&thread));
         PROCESS_MANAGER.add(process.pid(), &process);
         PROCESS_GROUP_MANAGER.add_group(process.pgid());
+
         // Add the main thread into scheduler
         thread::spawn_thread(thread);
-        debug!("create a new process, pid {}", process.pid());
+
+        // debug!("create a new process, pid {}", process.pid());
+        info!("create a new process, pid {}", process.pid());
         process
     }
 

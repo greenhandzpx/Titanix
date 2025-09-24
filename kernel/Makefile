@@ -79,7 +79,7 @@ DISASM ?= -d
 
 # Qemu opts
 ifndef CPUS
-CPUS := 2
+CPUS := 1
 endif
 QFLAGS := 
 ifeq ($(SUBMIT), )

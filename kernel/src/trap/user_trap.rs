@@ -12,8 +12,8 @@ use crate::{
     mm::{memory_space, VirtAddr, VA_WIDTH_SV39},
     process::thread::{self, exit_and_terminate_all_threads},
     processor::{
-        close_interrupt, current_process, current_task, current_trap_cx, hart::local_hart,
-        open_interrupt,
+        current_process, current_task, current_trap_cx, hart::local_hart, local_irq_disable,
+        local_irq_enable,
     },
     signal::{check_signal_for_current_task, SIGSEGV},
     stack_trace,
@@ -38,7 +38,7 @@ pub async fn trap_handler() {
     //     current_trap_cx().kernel_sp,
     // );
 
-    open_interrupt();
+    local_irq_enable();
 
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
@@ -192,7 +192,8 @@ pub async fn trap_handler() {
 /// kernel use the same pagetable.
 pub fn trap_return() {
     // Important!
-    close_interrupt();
+    local_irq_disable();
+    // close_interrupt();
 
     set_user_trap_entry();
 

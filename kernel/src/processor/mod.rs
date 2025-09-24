@@ -45,17 +45,38 @@ pub fn hart_idle_now() -> bool {
 //     }
 // }
 
-pub fn close_interrupt() {
+pub fn local_irq_disable() {
     #[cfg(feature = "kernel_interrupt")]
     unsafe {
         riscv::register::sstatus::clear_sie()
     }
 }
 
-pub fn open_interrupt() {
-    // info!("open interrupt");
+pub fn local_irq_enable() {
     #[cfg(feature = "kernel_interrupt")]
     unsafe {
         riscv::register::sstatus::set_sie();
     }
 }
+
+pub fn local_irq_is_enabled() -> bool {
+    #[cfg(feature = "kernel_interrupt")]
+    return riscv::register::sstatus::read().sie();
+
+    #[cfg(not(feature = "kernel_interrupt"))]
+    false
+}
+
+// pub fn close_interrupt() {
+//     #[cfg(feature = "kernel_interrupt")]
+//     unsafe {
+//         riscv::register::sstatus::clear_sie()
+//     }
+// }
+// pub fn open_interrupt() {
+//     // info!("open interrupt");
+//     #[cfg(feature = "kernel_interrupt")]
+//     unsafe {
+//         riscv::register::sstatus::set_sie();
+//     }
+// }

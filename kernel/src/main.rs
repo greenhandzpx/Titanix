@@ -16,6 +16,7 @@
 #![feature(once_cell)]
 #![allow(incomplete_features)]
 #![feature(trait_upcasting)]
+#![feature(riscv_ext_intrinsics)]
 
 extern crate alloc;
 // extern crate intrusive_collections;
@@ -93,9 +94,10 @@ fn hart_start(hart_id: usize) {
         if i == 0 {
             continue;
         }
-        if has_another {
-            break;
-        }
+
+        // if has_another {
+        //     break;
+        // }
         if i == hart_id {
             continue;
         }
@@ -159,6 +161,7 @@ pub fn rust_main(hart_id: usize) {
             process::add_initproc();
         });
 
+        // debug thread
         #[cfg(not(feature = "submit"))]
         thread::spawn_kernel_thread(async move {
             loop {
@@ -167,6 +170,7 @@ pub fn rust_main(hart_id: usize) {
             }
         });
 
+        // timer poll thread
         #[cfg(not(feature = "submit"))]
         thread::spawn_kernel_thread(async move {
             loop {
@@ -188,7 +192,9 @@ pub fn rust_main(hart_id: usize) {
         hart::init(hart_id);
 
         // barrier
-        while !INIT_FINISHED.load(Ordering::SeqCst) {}
+        while !INIT_FINISHED.load(Ordering::SeqCst) {
+            core::hint::spin_loop();
+        }
 
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
@@ -217,8 +223,20 @@ pub fn rust_main(hart_id: usize) {
         "[kernel] ---------- hart {} start to fetch task... ---------- ",
         hart_id
     );
+
+    // idle thread
+    thread::spawn_kernel_thread(async move {
+        loop {
+            unsafe {
+                core::arch::riscv64::wfi();
+            }
+        }
+    });
+
     loop {
         executor::run_until_idle();
+
+        core::hint::spin_loop();
         #[cfg(feature = "multi_hart")]
         {
             use crate::timer::current_time_duration;

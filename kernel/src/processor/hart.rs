@@ -7,14 +7,14 @@ use crate::{
     config::{mm::PAGE_SIZE, processor::HART_NUM},
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
+    processor::{local_irq_disable, local_irq_enable},
     stack_trace,
     utils::cell::SyncUnsafeCell,
 };
 
 use super::{
-    close_interrupt,
     ctx::{EnvContext, LocalContext},
-    current_trap_cx, open_interrupt,
+    current_trap_cx,
 };
 
 /// Local context in one hart, either Idle or Something(about one thread)
@@ -93,7 +93,8 @@ impl Hart {
     /// Change thread(task) context,
     /// Now only change page table temporarily
     pub fn push_task(&mut self, task: &mut Box<LocalContext>) {
-        close_interrupt();
+        // close_interrupt();
+        local_irq_disable();
 
         let new_env = task.env();
         let old_env = self.env();
@@ -117,13 +118,16 @@ impl Hart {
             }
         }
         core::mem::swap(self.local_ctx_mut(), task);
+
         if sie {
-            open_interrupt();
+            local_irq_enable();
+            // open_interrupt();
         }
     }
 
     pub fn pop_task(&mut self, task: &mut Box<LocalContext>) {
-        close_interrupt();
+        // close_interrupt();
+        local_irq_disable();
 
         let new_env = task.env();
         let old_env = self.env();
@@ -132,11 +136,17 @@ impl Hart {
         // Save float regs
         current_trap_cx().user_fx.yield_task();
 
-        unsafe {
-            KERNEL_SPACE
-                .as_ref()
-                .expect("KERNEL SPACE not init yet")
-                .activate();
+        if task.has_user_ctx() {
+            unsafe {
+                (*task.task_ctx().page_table.get()).activate();
+            }
+        } else {
+            unsafe {
+                KERNEL_SPACE
+                    .as_ref()
+                    .expect("KERNEL SPACE not init yet")
+                    .activate();
+            }
         }
         // task.task_ctx().page_table.activate();
         core::mem::swap(self.local_ctx_mut(), task);
@@ -149,12 +159,14 @@ impl Hart {
             }
         }
         if sie {
-            open_interrupt();
+            local_irq_enable();
+            // open_interrupt();
         }
     }
 
     pub fn push_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-        close_interrupt();
+        local_irq_disable();
+        // close_interrupt();
 
         let new_env = task.env();
         let old_env = self.env();
@@ -162,12 +174,14 @@ impl Hart {
         core::mem::swap(self.local_ctx_mut(), task);
 
         if sie {
-            open_interrupt();
+            local_irq_enable();
+            // open_interrupt();
         }
     }
 
     pub fn pop_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-        close_interrupt();
+        local_irq_disable();
+        // close_interrupt();
 
         let new_env = task.env();
         let old_env = self.env();
@@ -175,13 +189,35 @@ impl Hart {
         core::mem::swap(self.local_ctx_mut(), task);
 
         if sie {
-            open_interrupt();
+            local_irq_enable();
+            // open_interrupt();
         }
+    }
+
+    pub fn enter_preempt_switch(&mut self) -> Self {
+        self.env_mut().preempt_record();
+
+        let mut new = Self::new();
+        new.hart_id = self.hart_id;
+        let env_ctx = EnvContext::new();
+        let local_ctx = Box::new(LocalContext::new(None, Some(env_ctx)));
+        new.local_ctx = Some(local_ctx);
+        core::mem::swap(&mut new, self);
+
+        new
+    }
+
+    pub fn leave_preempt_switch(&mut self, old_hart: &mut Hart) {
+        core::mem::swap(self, old_hart);
+
+        unsafe { self.env_mut().preempt_resume() };
     }
 }
 
 const HART_EACH: Hart = Hart::new();
 pub static mut HARTS: [Hart; HART_NUM] = [HART_EACH; HART_NUM];
+
+pub static mut HARTS_PREEMPTIBLE: [bool; HART_NUM] = [true; HART_NUM];
 
 unsafe fn get_hart_by_id(hart_id: usize) -> &'static mut Hart {
     &mut HARTS[hart_id]
@@ -203,6 +239,16 @@ pub fn set_hart_stack() {
     }
     println!("[kernel][hart{}] set_hart_stack: sp {:#x}", h.hart_id, sp);
     h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
+}
+
+pub fn local_hart_preemptible() -> bool {
+    unsafe { HARTS_PREEMPTIBLE[local_hart().hart_id()] }
+}
+
+pub fn set_local_hart_preemptible(preemptible: bool) {
+    unsafe {
+        HARTS_PREEMPTIBLE[local_hart().hart_id()] = preemptible;
+    }
 }
 
 /// Get the current local hart

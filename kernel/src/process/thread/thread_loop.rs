@@ -24,6 +24,8 @@ pub async fn threadloop(thread: Arc<Thread>) {
         // next time when user traps into kernel, it will come back here
         trap::user_trap::trap_handler().await;
 
+        // let sstatus = riscv::register::sstatus::read();
+        // log::info!("[threadloop] sie {}", sstatus.sie());
         if thread.is_zombie() {
             debug!("thread {} terminated", current_task().tid());
             break;

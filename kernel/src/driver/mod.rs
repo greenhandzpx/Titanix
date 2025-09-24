@@ -164,13 +164,16 @@ struct Stdout;
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let char_device = CHAR_DEVICE.get_unchecked_mut();
-        if let Some(cd) = char_device.as_ref() {
-            cd.puts(s.as_bytes());
-        } else {
-            for s in s.as_bytes() {
-                console_putchar(*s as usize);
-            }
+        // let char_device = CHAR_DEVICE.get_unchecked_mut();
+        // if let Some(cd) = char_device.as_ref() {
+        //     cd.puts(s.as_bytes());
+        // } else {
+        //     for s in s.as_bytes() {
+        //         console_putchar(*s as usize);
+        //     }
+        // }
+        for s in s.as_bytes() {
+            console_putchar(*s as usize);
         }
         Ok(())
     }

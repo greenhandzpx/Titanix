@@ -1,3 +1,5 @@
+use core::arch::{asm, riscv64::sfence_vma_all};
+
 use alloc::sync::Arc;
 use riscv::register::sstatus;
 
@@ -20,6 +22,10 @@ impl LocalContext {
             None => EnvContext::new(),
         };
         Self { user_task_ctx, env }
+    }
+
+    pub fn has_user_ctx(&self) -> bool {
+        self.user_task_ctx.is_some()
     }
 
     pub fn task_ctx_mut(&mut self) -> &mut UserTaskContext {
@@ -65,6 +71,18 @@ pub struct EnvContext {
     sum_enabled: usize,
     /// Stack tracker
     pub stack_tracker: StackTracker,
+
+    // For kernel preempt only
+    pub sstatus: usize,
+    pub sepc: usize,
+    pub satp: usize,
+}
+
+fn write(sstatus: usize) {
+    let bits = sstatus;
+    unsafe {
+        asm!("csrw sstatus, {}", in(reg) bits);
+    }
 }
 
 impl EnvContext {
@@ -73,6 +91,10 @@ impl EnvContext {
             sie_disabled: 0,
             sum_enabled: 0,
             stack_tracker: StackTracker::new(),
+
+            sstatus: 0,
+            sepc: 0,
+            satp: 0,
         }
     }
 
@@ -131,5 +153,18 @@ impl EnvContext {
             // }
         }
         return new.sie_disabled == 0;
+    }
+
+    pub fn preempt_record(&mut self) {
+        self.sstatus = riscv::register::sstatus::read().bits();
+        self.sepc = riscv::register::sepc::read();
+        self.satp = riscv::register::satp::read().bits();
+    }
+
+    pub unsafe fn preempt_resume(&self) {
+        write(self.sstatus);
+        riscv::register::sepc::write(self.sepc);
+        riscv::register::satp::write(self.satp);
+        sfence_vma_all();
     }
 }

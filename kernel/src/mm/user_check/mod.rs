@@ -8,7 +8,7 @@ use crate::{
     processor::{current_process, current_task, SumGuard},
     signal::SIGSEGV,
     stack_trace,
-    sync::mutex::SieGuard,
+    sync::mutex::IrqEnableGuard,
     trap::set_kernel_trap_entry,
     utils::{
         async_utils::block_on,
@@ -22,7 +22,7 @@ global_asm!(include_str!("check.S"));
 ///
 pub struct UserCheck {
     _sum_guard: SumGuard,
-    _sie_guard: SieGuard,
+    _sie_guard: IrqEnableGuard,
 }
 
 #[derive(Clone, Copy)]
@@ -56,7 +56,7 @@ impl UserCheck {
         stack_trace!();
         let ret = Self {
             _sum_guard: SumGuard::new(),
-            _sie_guard: SieGuard::new(),
+            _sie_guard: IrqEnableGuard::new(),
         };
         unsafe {
             stvec::write(__try_access_user_error_trap as usize, TrapMode::Direct);

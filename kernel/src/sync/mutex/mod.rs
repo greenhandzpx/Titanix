@@ -1,4 +1,4 @@
-use riscv::register::sstatus;
+use crate::processor::{local_irq_disable, local_irq_enable, local_irq_is_enabled};
 
 use self::{remutex::ReentrantMutex, sleep_mutex::SleepMutex, spin_mutex::SpinMutex};
 
@@ -41,24 +41,22 @@ impl MutexSupport for Spin {
 }
 
 /// Sie Guard
-pub struct SieGuard(bool);
+pub struct IrqEnableGuard(bool);
 
-impl SieGuard {
-    /// Construct a SieGuard
+impl IrqEnableGuard {
+    /// Construct a IrqEnableGuard
     pub fn new() -> Self {
-        Self(unsafe {
-            let sie_before = sstatus::read().sie();
-            sstatus::clear_sie();
-            sie_before
+        Self({
+            let irq_enable_before = local_irq_is_enabled();
+            local_irq_disable();
+            irq_enable_before
         })
     }
 }
-impl Drop for SieGuard {
+impl Drop for IrqEnableGuard {
     fn drop(&mut self) {
         if self.0 {
-            unsafe {
-                sstatus::set_sie();
-            }
+            local_irq_enable();
         }
     }
 }
@@ -67,10 +65,10 @@ impl Drop for SieGuard {
 pub struct SpinNoIrq;
 
 impl MutexSupport for SpinNoIrq {
-    type GuardData = SieGuard;
+    type GuardData = IrqEnableGuard;
     #[inline(always)]
     fn before_lock() -> Self::GuardData {
-        SieGuard::new()
+        IrqEnableGuard::new()
     }
     #[inline(always)]
     fn after_unlock(_: &mut Self::GuardData) {}

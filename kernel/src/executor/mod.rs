@@ -30,6 +30,10 @@ impl TaskQueue {
     pub fn fetch(&self) -> Option<Runnable> {
         self.queue.lock().as_mut().unwrap().pop_front()
     }
+
+    fn is_empty(&self) -> bool {
+        self.queue.lock().as_ref().unwrap().is_empty()
+    }
 }
 
 static TASK_QUEUE: TaskQueue = TaskQueue::new();
@@ -63,14 +67,26 @@ pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
-            // info!("fetch a task");
+            // log::info!("fetch a task");
             task.run();
             n += 1;
         } else {
+            // log::info!("No more task");
             break;
         }
     }
     n
+}
+
+pub fn run_one_task() {
+    if let Some(task) = TASK_QUEUE.fetch() {
+        // log::info!("fetch a task");
+        task.run();
+    }
+}
+
+pub fn has_task() -> bool {
+    !TASK_QUEUE.is_empty()
 }
 
 #[allow(unused)]
