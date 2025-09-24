@@ -1408,7 +1408,9 @@ pub async fn sys_pselect6(
                 }
                 if let Some(writefds) = writefds.as_ref() {
                     if writefds.fds_bits[fd_slot] & (1 << offset) != 0 {
-                        if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                        if let Some(last_fd) = fds.last()
+                            && last_fd.fd == fd as i32
+                        {
                             let events = PollEvents::from_bits(last_fd.events).unwrap()
                                 | PollEvents::POLLOUT;
                             fds.last_mut().unwrap().events = events.bits();
@@ -1427,7 +1429,9 @@ pub async fn sys_pselect6(
                 }
                 if let Some(exceptfds) = exceptfds.as_ref() {
                     if exceptfds.fds_bits[fd_slot] & (1 << offset) != 0 {
-                        if let Some(last_fd) = fds.last() && last_fd.fd == fd as i32 {
+                        if let Some(last_fd) = fds.last()
+                            && last_fd.fd == fd as i32
+                        {
                             let events = PollEvents::from_bits(last_fd.events).unwrap()
                                 | PollEvents::POLLPRI;
                             fds.last_mut().unwrap().events = events.bits();

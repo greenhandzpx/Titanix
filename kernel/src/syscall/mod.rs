@@ -230,16 +230,19 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_PREAD64 => sys_handler!(sys_pread64, (args[0], args[1], args[2], args[3]), await),
         SYSCALL_PWRITE64 => sys_handler!(sys_pwrite64, (args[0], args[1], args[2], args[3]), await),
         SYSCALL_SENDFILE => sys_handler!(
-            sys_sendfile, (
-                args[0] as isize  ,
-                args[1] as isize  ,
+            sys_sendfile,
+            (
+                args[0] as isize,
+                args[1] as isize,
                 args[2],
                 args[3] as usize,
-            )
-            , await
+            ),
+            await
         ),
         SYSCALL_PSELECT6 => sys_handler!(
-            sys_pselect6, (args[0] as i32, args[1], args[2], args[3], args[4], args[5]), await
+            sys_pselect6,
+            (args[0] as i32, args[1], args[2], args[3], args[4], args[5]),
+            await
         ),
         SYSCALL_PPOLL => sys_handler!(sys_ppoll, (args[0], args[1], args[2], args[3]), await),
         SYSCALL_READLINKAT => sys_handler!(sys_readlinkat, (args[0], args[1], args[2], args[3])),
@@ -268,7 +271,18 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_EXIT_GROUP => sys_handler!(sys_exit_group, (args[0] as i8)),
         SYSCALL_SET_TID_ADDRESS => sys_handler!(sys_set_tid_address, (args[0])),
         SYSCALL_FUTEX => {
-            sys_handler!(sys_futex, (args[0], args[1] as u32, args[2] as u32, args[3], args[4], args[5] as u32), await)
+            sys_handler!(
+                sys_futex,
+                (
+                    args[0],
+                    args[1] as u32,
+                    args[2] as u32,
+                    args[3],
+                    args[4],
+                    args[5] as u32
+                ),
+                await
+            )
         }
         SYSCALL_SET_ROBUST_LIST => {
             sys_handler!(sys_set_robust_list, (args[0], args[1]))
@@ -294,12 +308,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_CLOCK_GETRES => sys_handler!(sys_clock_getres, (args[0], args[1] as *mut TimeSpec)),
         SYSCALL_CLOCK_NANOSLEEP => sys_handler!(
             sys_clock_nanosleep,
-            (
-                args[0],
-                args[1] as u32,
-                args[2],
-                args[3]
-            ), await
+            (args[0], args[1] as u32, args[2], args[3]),
+            await
         ),
         SYSCALL_SYSLOG => sys_handler!(
             sys_syslog,
@@ -371,7 +381,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_LISTEN => sys_handler!(sys_listen, (args[0] as u32, args[1] as u32)),
         SYSCALL_ACCEPT => sys_handler!(sys_accept, (args[0] as u32, args[1], args[2]), await),
         SYSCALL_CONNECT => {
-            sys_handler!(sys_connect, (args[0] as u32, args[1], args[2] as u32), await)
+            sys_handler!(
+                sys_connect,
+                (args[0] as u32, args[1], args[2] as u32),
+                await
+            )
         }
         SYSCALL_GETSOCKNAME => sys_handler!(sys_getsockname, (args[0] as u32, args[1], args[2])),
         SYSCALL_GETPEERNAME => sys_handler!(sys_getpeername, (args[0] as u32, args[1], args[2])),
@@ -384,7 +398,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[3] as u32,
                 args[4],
                 args[5] as u32
-            ), await
+            ),
+            await
         ),
         SYSCALL_RECVFROM => sys_handler!(
             sys_recvfrom,
@@ -395,7 +410,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[3] as u32,
                 args[4],
                 args[5]
-            ), await
+            ),
+            await
         ),
         SYSCALL_SETSOCKOPT => sys_handler!(
             sys_setsockopt,
@@ -428,13 +444,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_MUNMAP => sys_handler!(sys_munmap, (args[0] as usize, args[1] as usize)),
         SYSCALL_CLONE => sys_handler!(
             sys_clone,
-            (
-                args[0],
-                args[1],
-                args[2],
-                args[3],
-                args[4],
-            ),
+            (args[0], args[1], args[2], args[3], args[4],),
             await
         ),
         SYSCALL_EXECVE => sys_handler!(
@@ -460,7 +470,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
         SYSCALL_MSYNC => sys_handler!(sys_msync, (args[0], args[1], args[2] as i32)),
         SYSCALL_MADVISE => sys_handler!(sys_madvise, ()),
         SYSCALL_WAIT4 => {
-            sys_handler!(sys_wait4, (args[0] as isize  , args[1], args[2] as i32), await)
+            sys_handler!(
+                sys_wait4,
+                (args[0] as isize, args[1], args[2] as i32),
+                await
+            )
         }
         SYSCALL_PRLIMIT64 => sys_handler!(
             sys_prlimit64,
@@ -492,7 +506,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SyscallRet {
                 args[3],
                 args[4] as u32,
                 args[5] as u32
-            ), await
+            ),
+            await
         ),
         _ => {
             // panic!("Unsupported syscall_id: {}", syscall_id);

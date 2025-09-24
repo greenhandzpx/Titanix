@@ -66,7 +66,9 @@ impl PollQueue {
                     true => file.pollin(None),
                     false => file.pollout(None),
                 };
-                if let Some(ret) = ret.ok() && ret {
+                if let Some(ret) = ret.ok()
+                    && ret
+                {
                     event.waker.wake_by_ref();
                 } else {
                     inner.queue.as_mut().unwrap().push_back(event);

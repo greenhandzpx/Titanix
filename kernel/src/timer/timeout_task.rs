@@ -57,7 +57,8 @@ impl<F: Future + Send + 'static> Future for TimeoutTaskFuture<F> {
                 Poll::Pending
             }
         } else {
-            Poll::Ready(TimeoutTaskOutput::Ok(ret.ready()?))
+            ret.map(|ret| TimeoutTaskOutput::Ok(ret))
+            // Poll::Ready(TimeoutTaskOutput::Ok(ret.ready()?))
         }
     }
 }

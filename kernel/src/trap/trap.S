@@ -8,6 +8,7 @@
     .section .text
     .globl __trap_from_user
     .globl __return_to_user
+    .globl __trap_from_kernel
     .align 2
 
 

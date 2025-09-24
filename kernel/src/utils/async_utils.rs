@@ -116,11 +116,13 @@ where
         let this = unsafe { self.get_unchecked_mut() };
         let ret = unsafe { Pin::new_unchecked(&mut this.future1).poll(cx) };
         if ret.is_ready() {
-            return Poll::Ready(SelectOutput::Output1(ret.ready()?));
+            return ret.map(|ret| SelectOutput::Output1(ret));
+            // return Poll::Ready(SelectOutput::Output1(ret.ready()?));
         }
         let ret = unsafe { Pin::new_unchecked(&mut this.future2).poll(cx) };
         if ret.is_ready() {
-            return Poll::Ready(SelectOutput::Output2(ret.ready()?));
+            return ret.map(|ret| SelectOutput::Output2(ret));
+            // return Poll::Ready(SelectOutput::Output2(ret.ready()?));
         }
         Poll::Pending
     }
