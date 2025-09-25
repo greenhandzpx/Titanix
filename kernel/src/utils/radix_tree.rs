@@ -58,7 +58,7 @@ impl<T: Clone> RadixTree<T> {
                 match node {
                     RadixTreeNode::InternalNode(node) => {
                         let node = node.clone();
-                        drop(children);
+                        let _ = children;
                         parent = node;
                     }
                     RadixTreeNode::LeafNode(node) => {

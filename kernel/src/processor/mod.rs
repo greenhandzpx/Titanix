@@ -34,7 +34,11 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 }
 
 pub fn hart_idle_now() -> bool {
-    local_hart().is_idle()
+    local_hart().is_absolutely_idle()
+}
+
+pub fn hart_is_kthread_now() -> bool {
+    local_hart().is_kthread()
 }
 
 // pub fn init() {

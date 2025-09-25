@@ -6,3 +6,6 @@ pub const SYSCALL_STR_ARG_MAX_LEN: usize = 4096;
 
 /// Init proc's pid
 pub const INITPROC_PID: usize = 1;
+
+/// Init kthread's tid
+pub const INIT_KTID: usize = 1;

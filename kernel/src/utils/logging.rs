@@ -3,7 +3,7 @@ use core::fmt;
 use log::{self, Level, LevelFilter, Log, Metadata, Record};
 
 use crate::{
-    processor::{current_process, current_task, hart_idle_now, local_hart},
+    processor::{current_process, current_task, hart_idle_now, hart_is_kthread_now, local_hart},
     timer::current_time_duration,
 };
 
@@ -50,7 +50,7 @@ impl Log for SimpleLogger {
         if hart_idle_now() {
             print_in_color(
                 format_args!(
-                    "[{:>5}][{}:{}][{},-,-][{:?}] {}\n",
+                    "[{:>5}][{}:{}][{},-,-,-][{:?}] {}\n",
                     record.level(),
                     record.file().unwrap(),
                     record.line().unwrap(),
@@ -60,14 +60,29 @@ impl Log for SimpleLogger {
                 ),
                 level_to_color_code(record.level()),
             );
-        } else {
+        } else if hart_is_kthread_now() {
             print_in_color(
                 format_args!(
-                    "[{:>5}][{}:{}][{},{},{}][{:?}] {}\n",
+                    "[{:>5}][{}:{}][{},{},-,-][{:?}] {}\n",
                     record.level(),
                     record.file().unwrap(),
                     record.line().unwrap(),
                     local_hart().hart_id(),
+                    local_hart().ktid(),
+                    current_time_duration(),
+                    record.args()
+                ),
+                level_to_color_code(record.level()),
+            );
+        } else {
+            print_in_color(
+                format_args!(
+                    "[{:>5}][{}:{}][{},{},{},{}][{:?}] {}\n",
+                    record.level(),
+                    record.file().unwrap(),
+                    record.line().unwrap(),
+                    local_hart().hart_id(),
+                    local_hart().ktid(),
                     current_process().pid(),
                     current_task().tid(),
                     current_time_duration(),

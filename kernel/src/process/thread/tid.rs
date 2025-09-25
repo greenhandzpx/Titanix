@@ -1,4 +1,5 @@
 //!Implementation of [`TidAllocator`]
+use crate::config::process::INIT_KTID;
 use crate::mm::user_check::UserCheck;
 use crate::mm::RecycleAllocator;
 use crate::processor::SumGuard;
@@ -9,6 +10,7 @@ use log::{debug, warn};
 
 static TID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
     SpinNoIrqLock::new(RecycleAllocator::new(INITPROC_PID));
+
 ///Bind pid lifetime to `TidHandle`
 pub struct TidHandle(pub usize);
 
@@ -63,4 +65,24 @@ impl TidAddress {
             }
         }
     }
+}
+
+static KTID_ALLOCATOR: SpinNoIrqLock<RecycleAllocator> =
+    SpinNoIrqLock::new(RecycleAllocator::new(INIT_KTID));
+
+pub struct KTidHandle(pub usize);
+
+impl Drop for KTidHandle {
+    fn drop(&mut self) {
+        // stack_trace!();
+        // debug!("drop ktid {}", self.0);
+
+        KTID_ALLOCATOR.lock().dealloc(self.0);
+    }
+}
+
+pub fn ktid_alloc() -> KTidHandle {
+    // stack_trace!();
+    // KTidHandle(0)
+    KTidHandle(KTID_ALLOCATOR.lock().alloc())
 }

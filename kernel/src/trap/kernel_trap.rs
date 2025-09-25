@@ -34,6 +34,9 @@ pub fn kernel_trap_handler() {
             handle_timeout_events();
             set_next_trigger();
 
+            #[cfg(not(feature = "kernel_preempt"))]
+            return;
+
             if !local_hart_preemptible() {
                 log::info!("[kernel_trap_handler] cannot preempt");
                 return;
@@ -56,7 +59,6 @@ pub fn kernel_trap_handler() {
         }
         _ => {
             // error!("other exception!!");
-
             error!(
                 "[kernel] {:?}(scause:{}) in application, bad addr = {:#x}, bad instruction = {:#x}, kernel panicked!!",
                 scause::read().cause(),

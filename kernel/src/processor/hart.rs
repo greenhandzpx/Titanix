@@ -52,8 +52,22 @@ impl Hart {
         &self.local_ctx.as_ref().unwrap().task_ctx().thread
     }
 
+    pub fn ktid(&self) -> usize {
+        self.local_ctx.as_ref().unwrap().ktid()
+    }
+
     pub fn is_idle(&self) -> bool {
         self.local_ctx.is_none() || self.local_ctx.as_ref().unwrap().is_idle()
+        // self.local_ctx.is_none() |
+    }
+
+    pub fn is_absolutely_idle(&self) -> bool {
+        self.local_ctx.is_none()
+        // self.local_ctx.is_none() |
+    }
+
+    pub fn is_kthread(&self) -> bool {
+        self.local_ctx.as_ref().unwrap().is_idle()
     }
 
     pub fn change_page_table(&mut self, page_table: Arc<SyncUnsafeCell<PageTable>>) {

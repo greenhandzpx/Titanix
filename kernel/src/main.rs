@@ -224,6 +224,7 @@ pub fn rust_main(hart_id: usize) {
         hart_id
     );
 
+    #[cfg(feature = "kernel_preempt")]
     // idle thread
     thread::spawn_kernel_thread(async move {
         loop {

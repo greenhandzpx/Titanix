@@ -69,8 +69,13 @@ pub fn run_until_idle() -> usize {
         if let Some(task) = TASK_QUEUE.fetch() {
             // log::info!("fetch a task");
             task.run();
+
             n += 1;
         } else {
+            #[cfg(feature = "kernel_preempt")]
+            panic!("There must be at least the idle task thread");
+
+            #[cfg(not(feature = "kernel_preempt"))]
             // log::info!("No more task");
             break;
         }

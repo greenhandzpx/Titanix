@@ -5,13 +5,17 @@ use riscv::register::sstatus;
 
 use crate::{
     mm::PageTable,
-    process::thread::Thread,
+    process::thread::{
+        tid::{ktid_alloc, KTidHandle},
+        Thread,
+    },
     utils::{cell::SyncUnsafeCell, stack_trace::stack_tracker::StackTracker},
 };
 
 pub struct LocalContext {
     /// If no user task now(i.e. kernel thread is running), then None
     user_task_ctx: Option<UserTaskContext>,
+    ktid: KTidHandle,
     env: EnvContext,
 }
 
@@ -21,7 +25,12 @@ impl LocalContext {
             Some(env) => env,
             None => EnvContext::new(),
         };
-        Self { user_task_ctx, env }
+        let ktid = ktid_alloc();
+        Self {
+            user_task_ctx,
+            ktid,
+            env,
+        }
     }
 
     pub fn has_user_ctx(&self) -> bool {
@@ -50,6 +59,10 @@ impl LocalContext {
         &self.env
     }
 
+    pub fn ktid(&self) -> usize {
+        self.ktid.0
+    }
+
     /// Whether there is no user task now(i.e. kernel thread is running)
     pub fn is_idle(&self) -> bool {
         self.user_task_ctx.is_none()
@@ -73,9 +86,9 @@ pub struct EnvContext {
     pub stack_tracker: StackTracker,
 
     // For kernel preempt only
-    pub sstatus: usize,
-    pub sepc: usize,
-    pub satp: usize,
+    sstatus: usize,
+    sepc: usize,
+    satp: usize,
 }
 
 fn write(sstatus: usize) {
