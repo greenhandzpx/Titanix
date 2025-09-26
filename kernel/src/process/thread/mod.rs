@@ -1,4 +1,5 @@
 mod exit;
+pub mod idle;
 mod schedule;
 #[allow(clippy::module_inception)]
 mod thread_loop;

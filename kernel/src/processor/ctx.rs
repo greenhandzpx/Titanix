@@ -79,7 +79,7 @@ pub struct UserTaskContext {
 /// Store some permission flags
 pub struct EnvContext {
     /// Supervisor interrupt disable
-    sie_disabled: usize,
+    sie_disabled: bool,
     /// Permit supervisor user memory access
     sum_enabled: usize,
     /// Stack tracker
@@ -101,7 +101,7 @@ fn write(sstatus: usize) {
 impl EnvContext {
     pub fn new() -> Self {
         Self {
-            sie_disabled: 0,
+            sie_disabled: false,
             sum_enabled: 0,
             stack_tracker: StackTracker::new(),
 
@@ -111,8 +111,21 @@ impl EnvContext {
         }
     }
 
+    pub fn irq_disable(&mut self) {
+        self.sie_disabled = true;
+    }
+
+    pub fn irq_enable(&mut self) {
+        self.sie_disabled = false;
+    }
+
+    pub fn irq_is_disabled(&self) -> bool {
+        self.sie_disabled
+    }
+
     // pub fn sie_dec(&mut self) {
     //     if self.sie_disabled == 0 {
+    //         #[cfg(feature = "kernel_interrupt")]
     //         unsafe {
     //             sstatus::clear_sie();
     //         }
@@ -165,7 +178,7 @@ impl EnvContext {
             //     }
             // }
         }
-        return new.sie_disabled == 0;
+        return new.sie_disabled == false;
     }
 
     pub fn preempt_record(&mut self) {

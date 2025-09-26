@@ -5,10 +5,9 @@ use riscv::register::{scause::Scause, stvec, utvec::TrapMode};
 
 use crate::{
     config::{mm::PAGE_SIZE, process::SYSCALL_STR_ARG_MAX_LEN},
-    processor::{current_process, current_task, SumGuard},
+    processor::{current_process, current_task, env::IrqEnableGuard, SumGuard},
     signal::SIGSEGV,
     stack_trace,
-    sync::mutex::IrqEnableGuard,
     trap::set_kernel_trap_entry,
     utils::{
         async_utils::block_on,

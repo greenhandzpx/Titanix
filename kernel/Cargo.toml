@@ -40,13 +40,13 @@ managed = { version = "0.8", default-features = false, features = ["map"] }
 riscv = { path = "../dependencies/riscv", features = ["inline-asm"] }
 # virtio-drivers = { path = "../dependencies/virtio-drivers" }
 virtio-drivers = { version = "0.6.0" }
-
+# lwext4_rust = { git = "https://github.com/ChenRuiwei/lwext4_rust.git", rev = "293f" }
 
 [features]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "multi_hart"]
 # default = ["stack_trace", "board_qemu", "kernel_interrupt", "tmpfs"]
 # default = ["kernel_interrupt"]
-default = ["kernel_interrupt", "multi_hart", "kernel_preempt"]
+default = ["kernel_interrupt", "multi_hart", "kernel_preempt", "async_flush"]
 # default = ["kernel_interrupt", "kcov"]
 kernel_preempt = []
 stack_trace = []

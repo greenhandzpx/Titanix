@@ -1,5 +1,6 @@
 use crate::{
     process::{thread::Thread, Process},
+    processor::hart::set_local_hart_preemptible,
     trap::TrapContext,
 };
 
@@ -12,6 +13,7 @@ pub mod hart;
 
 use alloc::sync::Arc;
 pub use env::SumGuard;
+use riscv::register::sstatus;
 
 /// We store the local hart's addr in `tp` reg, instead of the hart id,
 
@@ -49,17 +51,22 @@ pub fn hart_is_kthread_now() -> bool {
 //     }
 // }
 
+/// C-style irq disable way.
+/// Should better Use `IrqEnableGuard`(RAII) instead.
 pub fn local_irq_disable() {
-    #[cfg(feature = "kernel_interrupt")]
+    let before = local_irq_is_enabled();
+    if before {
+        local_env().irq_disable();
+    }
     unsafe {
-        riscv::register::sstatus::clear_sie()
+        sstatus::clear_sie();
     }
 }
 
 pub fn local_irq_enable() {
-    #[cfg(feature = "kernel_interrupt")]
+    local_env().irq_enable();
     unsafe {
-        riscv::register::sstatus::set_sie();
+        sstatus::set_sie();
     }
 }
 
@@ -71,16 +78,10 @@ pub fn local_irq_is_enabled() -> bool {
     false
 }
 
-// pub fn close_interrupt() {
-//     #[cfg(feature = "kernel_interrupt")]
-//     unsafe {
-//         riscv::register::sstatus::clear_sie()
-//     }
+// pub fn preempt_disable() {
+//     set_local_hart_preemptible(false);
 // }
-// pub fn open_interrupt() {
-//     // info!("open interrupt");
-//     #[cfg(feature = "kernel_interrupt")]
-//     unsafe {
-//         riscv::register::sstatus::set_sie();
-//     }
+
+// pub fn preempt_enable() {
+//     set_local_hart_preemptible(true);
 // }

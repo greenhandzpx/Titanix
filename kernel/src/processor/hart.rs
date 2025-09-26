@@ -7,7 +7,7 @@ use crate::{
     config::{mm::PAGE_SIZE, processor::HART_NUM},
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
-    processor::{local_irq_disable, local_irq_enable},
+    processor::{env, local_irq_disable, local_irq_enable},
     stack_trace,
     utils::cell::SyncUnsafeCell,
 };
@@ -107,13 +107,12 @@ impl Hart {
     /// Change thread(task) context,
     /// Now only change page table temporarily
     pub fn push_task(&mut self, task: &mut Box<LocalContext>) {
-        // close_interrupt();
         local_irq_disable();
 
         let new_env = task.env();
         let old_env = self.env();
 
-        let sie = EnvContext::env_change(new_env, old_env);
+        let enable_irq = EnvContext::env_change(new_env, old_env);
         if self.is_idle()
             || task.task_ctx().thread.process.pid() != self.current_task().process.pid()
         {
@@ -133,19 +132,17 @@ impl Hart {
         }
         core::mem::swap(self.local_ctx_mut(), task);
 
-        if sie {
+        if enable_irq {
             local_irq_enable();
-            // open_interrupt();
         }
     }
 
     pub fn pop_task(&mut self, task: &mut Box<LocalContext>) {
-        // close_interrupt();
         local_irq_disable();
 
         let new_env = task.env();
         let old_env = self.env();
-        let sie = EnvContext::env_change(new_env, old_env);
+        let enable_irq = EnvContext::env_change(new_env, old_env);
 
         // Save float regs
         current_trap_cx().user_fx.yield_task();
@@ -165,6 +162,9 @@ impl Hart {
         // task.task_ctx().page_table.activate();
         core::mem::swap(self.local_ctx_mut(), task);
 
+        if task.env().irq_is_disabled() {
+            log::warn!("IRQ disabled while scheduling!");
+        }
         if !task.is_idle() {
             unsafe {
                 (*task.task_ctx().thread.inner.get())
@@ -172,42 +172,42 @@ impl Hart {
                     .when_leaving()
             }
         }
-        if sie {
+        if enable_irq {
             local_irq_enable();
-            // open_interrupt();
         }
     }
 
     pub fn push_kernel_task(&mut self, task: &mut Box<LocalContext>) {
         local_irq_disable();
-        // close_interrupt();
 
         let new_env = task.env();
         let old_env = self.env();
-        let sie = EnvContext::env_change(new_env, old_env);
+        let enable_irq = EnvContext::env_change(new_env, old_env);
         core::mem::swap(self.local_ctx_mut(), task);
 
-        if sie {
+        if enable_irq {
             local_irq_enable();
-            // open_interrupt();
         }
     }
 
     pub fn pop_kernel_task(&mut self, task: &mut Box<LocalContext>) {
         local_irq_disable();
-        // close_interrupt();
 
         let new_env = task.env();
         let old_env = self.env();
-        let sie = EnvContext::env_change(new_env, old_env);
+        let enable_irq = EnvContext::env_change(new_env, old_env);
         core::mem::swap(self.local_ctx_mut(), task);
 
-        if sie {
+        if task.env().irq_is_disabled() {
+            log::warn!("IRQ disabled while scheduling!");
+        }
+        if enable_irq {
             local_irq_enable();
-            // open_interrupt();
         }
     }
 
+    /// Provide a new temporary hart ctx for preempted task,
+    /// which will be replaced when fetching a task from task queue.
     pub fn enter_preempt_switch(&mut self) -> Self {
         self.env_mut().preempt_record();
 
@@ -255,10 +255,12 @@ pub fn set_hart_stack() {
     h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
 }
 
+/// Don't use this
 pub fn local_hart_preemptible() -> bool {
     unsafe { HARTS_PREEMPTIBLE[local_hart().hart_id()] }
 }
 
+/// Don't use this
 pub fn set_local_hart_preemptible(preemptible: bool) {
     unsafe {
         HARTS_PREEMPTIBLE[local_hart().hart_id()] = preemptible;

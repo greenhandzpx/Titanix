@@ -5,7 +5,7 @@ _start:
     # pc = 0x80200000
 
     # set sp(each hart has one kstack)
-    slli t0, a0, 16  # t0 = hart_id << 16(4096 * 16)
+    slli t0, a0, 17  # t0 = hart_id << 17(4096 * 32)
     la sp, boot_stack_top
     sub sp, sp, t0  # sp = stack top - hart_id * stack_size
 

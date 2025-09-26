@@ -43,6 +43,7 @@ mod signal;
 ///
 mod sync;
 mod syscall;
+mod tests;
 mod timer;
 mod trap;
 mod utils;
@@ -53,11 +54,16 @@ use core::{
     time::Duration,
 };
 
+use riscv::register::sstatus;
+
 use crate::{
     config::mm::{KERNEL_DIRECT_OFFSET, PAGE_SIZE_BITS},
     // fs::inode_tmp::list_apps,
     mm::KERNEL_SPACE,
-    process::{thread, PROCESS_MANAGER},
+    process::{
+        thread::{self, idle::start_idle_thread},
+        PROCESS_MANAGER,
+    },
     processor::hart,
     timer::{timeout_task::ksleep, POLL_QUEUE},
 };
@@ -179,6 +185,10 @@ pub fn rust_main(hart_id: usize) {
             }
         });
 
+        thread::spawn_kernel_thread(async move {
+            // tests::init();
+        });
+
         // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);
 
@@ -224,15 +234,7 @@ pub fn rust_main(hart_id: usize) {
         hart_id
     );
 
-    #[cfg(feature = "kernel_preempt")]
-    // idle thread
-    thread::spawn_kernel_thread(async move {
-        loop {
-            unsafe {
-                core::arch::riscv64::wfi();
-            }
-        }
-    });
+    start_idle_thread();
 
     loop {
         executor::run_until_idle();

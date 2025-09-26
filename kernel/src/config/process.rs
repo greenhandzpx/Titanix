@@ -9,3 +9,5 @@ pub const INITPROC_PID: usize = 1;
 
 /// Init kthread's tid
 pub const INIT_KTID: usize = 1;
+
+pub const MAX_PREEMPT_DEPTH: usize = 4;
