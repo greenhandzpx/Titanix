@@ -4,10 +4,7 @@ use crate::{
     process::thread,
     register_test,
     sync::mutex::SpinNoIrqLock,
-    timer::{
-        current_time_ms, current_time_us,
-        timeout_task::{ksleep, TimeoutTaskFuture},
-    },
+    timer::{current_time_ms, current_time_us, timeout_task::ksleep},
     utils::async_utils::block_on,
 };
 

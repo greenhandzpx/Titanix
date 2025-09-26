@@ -28,7 +28,9 @@ use crate::{
 };
 use alloc::sync::Arc;
 use core::{cell::UnsafeCell, task::Waker};
-pub use schedule::{spawn_kernel_thread, spawn_thread, yield_now};
+pub use schedule::{
+    spawn_kernel_thread, spawn_thread, spawn_time_consuming_kernel_thread, yield_now,
+};
 
 pub use exit::{
     exit_and_terminate_all_threads, terminate_all_threads_except_main, terminate_given_thread,

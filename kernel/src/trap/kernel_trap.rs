@@ -10,7 +10,7 @@ use crate::{
     processor::{
         env::IrqEnableGuard,
         hart::{local_hart_preemptible, set_local_hart_preemptible},
-        local_hart, local_irq_disable, local_irq_enable,
+        local_hart, local_irq_disable, local_irq_enable, preempt_disable, preempt_enable,
     },
     timer::{handle_timeout_events, set_next_trigger},
 };
@@ -48,16 +48,19 @@ pub fn kernel_trap_handler() {
 
             // log::info!("[kernel_trap_handler] run one task");
 
-            set_local_hart_preemptible(false);
+            // Prevent nested preempt
+            preempt_disable();
 
             let mut old_hart = local_hart().enter_preempt_switch();
             executor::run_one_task();
             local_hart().leave_preempt_switch(&mut old_hart);
 
             // log::info!("[kernel_trap_handler] run one task finished");
+
             // local_irq_disable();
             let _guard = IrqEnableGuard::new();
-            set_local_hart_preemptible(true);
+
+            preempt_enable();
             // local_irq_enable();
         }
         _ => {

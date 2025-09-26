@@ -37,9 +37,11 @@ impl TaskQueue {
 }
 
 static TASK_QUEUE: TaskQueue = TaskQueue::new();
+static TIME_CONSUMING_TASK_QUEUE: TaskQueue = TaskQueue::new();
 
 pub fn init() {
     TASK_QUEUE.init();
+    TIME_CONSUMING_TASK_QUEUE.init();
 }
 
 /// Add a task into task queue
@@ -62,12 +64,36 @@ where
     async_task::spawn(future, WithInfo(schedule))
 }
 
+/// Add a task into task queue
+pub fn spawn_time_consuming<F>(future: F) -> (Runnable, Task<F::Output>)
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    let schedule = move |runnable: Runnable, info: ScheduleInfo| {
+        // TASK_QUEUE.push(runnable);
+        if info.woken_while_running {
+            // i.e `yield_now()`
+            // log::error!("yield now");
+            TIME_CONSUMING_TASK_QUEUE.push(runnable);
+        } else {
+            // i.e. woken up by some signal
+            TIME_CONSUMING_TASK_QUEUE.push_preempt(runnable);
+        }
+    };
+    async_task::spawn(future, WithInfo(schedule))
+}
+
 /// Return the number of the tasks executed
 pub fn run_until_idle() -> usize {
     let mut n = 0;
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
             // log::info!("fetch a task");
+            task.run();
+
+            n += 1;
+        } else if let Some(task) = TIME_CONSUMING_TASK_QUEUE.fetch() {
             task.run();
 
             n += 1;
@@ -83,6 +109,7 @@ pub fn run_until_idle() -> usize {
     n
 }
 
+/// Only run tasks that are NOT time-consuming
 pub fn run_one_task() {
     if let Some(task) = TASK_QUEUE.fetch() {
         // log::info!("fetch a task");
@@ -90,6 +117,7 @@ pub fn run_one_task() {
     }
 }
 
+/// Only take care of NOT time-consuming tasks
 pub fn has_task() -> bool {
     !TASK_QUEUE.is_empty()
 }

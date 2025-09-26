@@ -231,8 +231,6 @@ impl Hart {
 const HART_EACH: Hart = Hart::new();
 pub static mut HARTS: [Hart; HART_NUM] = [HART_EACH; HART_NUM];
 
-pub static mut HARTS_PREEMPTIBLE: [bool; HART_NUM] = [true; HART_NUM];
-
 unsafe fn get_hart_by_id(hart_id: usize) -> &'static mut Hart {
     &mut HARTS[hart_id]
 }
@@ -255,15 +253,22 @@ pub fn set_hart_stack() {
     h.set_stack((sp & !(PAGE_SIZE - 1)) + PAGE_SIZE);
 }
 
-/// Don't use this
+static mut HARTS_DISABLE_PREEMPT: [usize; HART_NUM] = [0; HART_NUM];
+
 pub fn local_hart_preemptible() -> bool {
-    unsafe { HARTS_PREEMPTIBLE[local_hart().hart_id()] }
+    unsafe { HARTS_DISABLE_PREEMPT[local_hart().hart_id()] == 0 }
 }
 
 /// Don't use this
 pub fn set_local_hart_preemptible(preemptible: bool) {
     unsafe {
-        HARTS_PREEMPTIBLE[local_hart().hart_id()] = preemptible;
+        if preemptible {
+            if HARTS_DISABLE_PREEMPT[local_hart().hart_id()] > 0 {
+                HARTS_DISABLE_PREEMPT[local_hart().hart_id()] -= 1;
+            }
+        } else {
+            HARTS_DISABLE_PREEMPT[local_hart().hart_id()] += 1;
+        }
     }
 }
 

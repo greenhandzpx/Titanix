@@ -141,3 +141,12 @@ pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(kernel_threa
     runnable.schedule();
     task.detach();
 }
+
+pub fn spawn_time_consuming_kernel_thread<F: Future<Output = ()> + Send + 'static>(
+    kernel_thread: F,
+) {
+    let future = KernelTaskFuture::new(kernel_thread);
+    let (runnable, task) = executor::spawn_time_consuming(future);
+    runnable.schedule();
+    task.detach();
+}

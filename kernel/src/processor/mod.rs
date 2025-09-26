@@ -78,10 +78,10 @@ pub fn local_irq_is_enabled() -> bool {
     false
 }
 
-// pub fn preempt_disable() {
-//     set_local_hart_preemptible(false);
-// }
+pub fn preempt_disable() {
+    set_local_hart_preemptible(false);
+}
 
-// pub fn preempt_enable() {
-//     set_local_hart_preemptible(true);
-// }
+pub fn preempt_enable() {
+    set_local_hart_preemptible(true);
+}
