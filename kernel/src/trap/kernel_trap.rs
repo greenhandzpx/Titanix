@@ -8,9 +8,8 @@ use crate::{
     executor,
     irq_count::IRQ_COUNTER,
     processor::{
-        env::IrqEnableGuard,
-        hart::{local_hart_preemptible, set_local_hart_preemptible},
-        local_hart, local_irq_disable, local_irq_enable, preempt_disable, preempt_enable,
+        env::IrqEnableGuard, hart::local_hart_preemptible, local_hart, preempt_disable,
+        preempt_enable,
     },
     timer::{handle_timeout_events, set_next_trigger},
 };

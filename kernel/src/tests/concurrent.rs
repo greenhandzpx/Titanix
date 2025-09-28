@@ -99,16 +99,19 @@ async fn writer_thread(id: usize, competitor: Competitor) {
 }
 
 fn run_spec_testsuit(competitor: Competitor) {
+    println!("Running testsuit, competitor: {:?}...", competitor);
     for id in 0..NUM_READERS {
-        thread::spawn_kernel_thread(reader_thread(id, competitor));
+        thread::spawn_kernel_thread(reader_thread(id, competitor), "reader");
     }
     for id in 0..NUM_WRITERS {
-        thread::spawn_kernel_thread(writer_thread(id, competitor));
+        thread::spawn_kernel_thread(writer_thread(id, competitor), "writer");
     }
 
     block_on(async move {
         ksleep(Duration::from_millis(THREAD_RUN_TIME_MS as u64 + 1000)).await;
-    })
+    });
+
+    println!("Running testsuit, competitor: {:?} Done", competitor);
 }
 
 fn test_lock_perf() {

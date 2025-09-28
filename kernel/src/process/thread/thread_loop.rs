@@ -3,7 +3,7 @@ use log::debug;
 
 use crate::{
     process::thread::exit::handle_exit,
-    processor::current_task,
+    processor::{current_task, local_irq_disable, local_irq_enable},
     stack_trace,
     trap::{self, TrapContext},
     utils::async_utils,

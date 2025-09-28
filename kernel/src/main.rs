@@ -163,28 +163,38 @@ pub fn rust_main(hart_id: usize) {
         timer::init();
         net::config::init();
 
-        thread::spawn_kernel_thread(async move {
-            process::add_initproc();
-        });
+        thread::spawn_kernel_thread(
+            async move {
+                process::add_initproc();
+            },
+            "kinitprocd",
+        );
 
         // debug thread
         #[cfg(not(feature = "submit"))]
-        thread::spawn_kernel_thread(async move {
-            loop {
-                log::info!("[daemon] process cnt {}", PROCESS_MANAGER.total_num());
-                ksleep(Duration::from_secs(3)).await;
-            }
-        });
+        thread::spawn_kernel_thread(
+            async move {
+                loop {
+                    log::info!("[daemon] process cnt {}", PROCESS_MANAGER.total_num());
+                    ksleep(Duration::from_secs(3)).await;
+                }
+            },
+            "kreportd",
+        );
 
         // timer poll thread
         #[cfg(not(feature = "submit"))]
-        thread::spawn_kernel_thread(async move {
-            loop {
-                POLL_QUEUE.poll();
-                ksleep(Duration::from_millis(30)).await;
-            }
-        });
+        thread::spawn_kernel_thread(
+            async move {
+                loop {
+                    POLL_QUEUE.poll();
+                    ksleep(Duration::from_millis(30)).await;
+                }
+            },
+            "kpolld",
+        );
 
+        #[cfg(feature = "test_when_boot")]
         thread::spawn_kernel_thread(async move {
             tests::init();
         });

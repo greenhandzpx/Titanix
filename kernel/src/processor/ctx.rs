@@ -16,11 +16,16 @@ pub struct LocalContext {
     /// If no user task now(i.e. kernel thread is running), then None
     user_task_ctx: Option<UserTaskContext>,
     ktid: KTidHandle,
+    kname: &'static str,
     env: EnvContext,
 }
 
 impl LocalContext {
-    pub fn new(user_task_ctx: Option<UserTaskContext>, env: Option<EnvContext>) -> Self {
+    pub fn new(
+        user_task_ctx: Option<UserTaskContext>,
+        env: Option<EnvContext>,
+        kname: &'static str,
+    ) -> Self {
         let env = match env {
             Some(env) => env,
             None => EnvContext::new(),
@@ -29,6 +34,7 @@ impl LocalContext {
         Self {
             user_task_ctx,
             ktid,
+            kname,
             env,
         }
     }
@@ -61,6 +67,10 @@ impl LocalContext {
 
     pub fn ktid(&self) -> usize {
         self.ktid.0
+    }
+
+    pub fn kname(&self) -> &'static str {
+        self.kname
     }
 
     /// Whether there is no user task now(i.e. kernel thread is running)

@@ -58,6 +58,10 @@ pub fn local_irq_disable() {
     if before {
         local_env().irq_disable();
     }
+    local_irq_hw_disable();
+}
+
+pub fn local_irq_hw_disable() {
     unsafe {
         sstatus::clear_sie();
     }
@@ -65,6 +69,10 @@ pub fn local_irq_disable() {
 
 pub fn local_irq_enable() {
     local_env().irq_enable();
+    local_irq_hw_enable();
+}
+
+pub fn local_irq_hw_enable() {
     unsafe {
         sstatus::set_sie();
     }

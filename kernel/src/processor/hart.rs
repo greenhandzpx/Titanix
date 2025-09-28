@@ -7,7 +7,10 @@ use crate::{
     config::{mm::PAGE_SIZE, processor::HART_NUM},
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
-    processor::{env, local_irq_disable, local_irq_enable},
+    processor::{
+        env, local_env, local_irq_disable, local_irq_enable, local_irq_hw_disable,
+        local_irq_is_enabled,
+    },
     stack_trace,
     utils::cell::SyncUnsafeCell,
 };
@@ -56,6 +59,10 @@ impl Hart {
         self.local_ctx.as_ref().unwrap().ktid()
     }
 
+    pub fn kname(&self) -> &'static str {
+        self.local_ctx.as_ref().unwrap().kname()
+    }
+
     pub fn is_idle(&self) -> bool {
         self.local_ctx.is_none() || self.local_ctx.as_ref().unwrap().is_idle()
         // self.local_ctx.is_none() |
@@ -89,7 +96,7 @@ impl Hart {
     }
 
     pub fn init_local_ctx(&mut self) {
-        self.local_ctx = Some(Box::new(LocalContext::new(None, None)));
+        self.local_ctx = Some(Box::new(LocalContext::new(None, None, "init")));
     }
 
     pub fn set_hart_id(&mut self, hart_id: usize) {
@@ -138,6 +145,10 @@ impl Hart {
     }
 
     pub fn pop_task(&mut self, task: &mut Box<LocalContext>) {
+        if !local_irq_is_enabled() {
+            log::warn!("IRQ disabled while scheduling!");
+        }
+
         local_irq_disable();
 
         let new_env = task.env();
@@ -162,9 +173,6 @@ impl Hart {
         // task.task_ctx().page_table.activate();
         core::mem::swap(self.local_ctx_mut(), task);
 
-        if task.env().irq_is_disabled() {
-            log::warn!("IRQ disabled while scheduling!");
-        }
         if !task.is_idle() {
             unsafe {
                 (*task.task_ctx().thread.inner.get())
@@ -178,7 +186,8 @@ impl Hart {
     }
 
     pub fn push_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-        local_irq_disable();
+        // local_irq_disable();
+        local_irq_hw_disable();
 
         let new_env = task.env();
         let old_env = self.env();
@@ -186,21 +195,27 @@ impl Hart {
         core::mem::swap(self.local_ctx_mut(), task);
 
         if enable_irq {
+            // log::info!("enable irq, preempt level {}", local_hart_preempt_level());
             local_irq_enable();
         }
     }
 
     pub fn pop_kernel_task(&mut self, task: &mut Box<LocalContext>) {
-        local_irq_disable();
+        if !local_irq_is_enabled() {
+            log::warn!(
+                "IRQ disabled while scheduling!, preempt level {}, sie disabled {}",
+                local_hart_preempt_level(),
+                local_env().irq_is_disabled()
+            );
+        }
+        local_irq_hw_disable();
+        // local_irq_disable();
 
         let new_env = task.env();
         let old_env = self.env();
         let enable_irq = EnvContext::env_change(new_env, old_env);
         core::mem::swap(self.local_ctx_mut(), task);
 
-        if task.env().irq_is_disabled() {
-            log::warn!("IRQ disabled while scheduling!");
-        }
         if enable_irq {
             local_irq_enable();
         }
@@ -214,7 +229,7 @@ impl Hart {
         let mut new = Self::new();
         new.hart_id = self.hart_id;
         let env_ctx = EnvContext::new();
-        let local_ctx = Box::new(LocalContext::new(None, Some(env_ctx)));
+        let local_ctx = Box::new(LocalContext::new(None, Some(env_ctx), "preempt tmp"));
         new.local_ctx = Some(local_ctx);
         core::mem::swap(&mut new, self);
 
@@ -257,6 +272,10 @@ static mut HARTS_DISABLE_PREEMPT: [usize; HART_NUM] = [0; HART_NUM];
 
 pub fn local_hart_preemptible() -> bool {
     unsafe { HARTS_DISABLE_PREEMPT[local_hart().hart_id()] == 0 }
+}
+
+pub fn local_hart_preempt_level() -> usize {
+    unsafe { HARTS_DISABLE_PREEMPT[local_hart().hart_id()] }
 }
 
 /// Don't use this

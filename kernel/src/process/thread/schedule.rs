@@ -48,7 +48,7 @@ impl<F: Future + Send + 'static> UserTaskFuture<F> {
             page_table: thread.process.inner.lock().memory_space.page_table.clone(),
         };
         // task_ctx.env.stack_tracker = Some(StackTracker::new());
-        let local_ctx = Box::new(LocalContext::new(Some(task_ctx), None));
+        let local_ctx = Box::new(LocalContext::new(Some(task_ctx), None, "user task"));
         Self {
             task_ctx: local_ctx,
             task_future: future,
@@ -89,9 +89,9 @@ pub struct KernelTaskFuture<F: Future<Output = ()> + Send + 'static> {
 }
 
 impl<F: Future<Output = ()> + Send + 'static> KernelTaskFuture<F> {
-    pub fn new(task: F) -> Self {
+    pub fn new(task: F, name: &'static str) -> Self {
         Self {
-            task_ctx: Box::new(LocalContext::new(None, None)),
+            task_ctx: Box::new(LocalContext::new(None, None, name)),
             // always_local: AlwaysLocal::new(),
             task,
         }
@@ -135,8 +135,11 @@ pub fn spawn_thread(thread: Arc<Thread>) {
 }
 
 /// Spawn a new kernel thread(used for doing some kernel init work or timed tasks)
-pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(kernel_thread: F) {
-    let future = KernelTaskFuture::new(kernel_thread);
+pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(
+    kernel_thread: F,
+    name: &'static str,
+) {
+    let future = KernelTaskFuture::new(kernel_thread, name);
     let (runnable, task) = executor::spawn(future);
     runnable.schedule();
     task.detach();
@@ -144,8 +147,9 @@ pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(kernel_threa
 
 pub fn spawn_time_consuming_kernel_thread<F: Future<Output = ()> + Send + 'static>(
     kernel_thread: F,
+    name: &'static str,
 ) {
-    let future = KernelTaskFuture::new(kernel_thread);
+    let future = KernelTaskFuture::new(kernel_thread, name);
     let (runnable, task) = executor::spawn_time_consuming(future);
     runnable.schedule();
     task.detach();

@@ -297,24 +297,27 @@ impl FileSystemManager {
         {
             // Write back in background
             let fs_moved = fs.clone();
-            crate::process::thread::spawn_kernel_thread(async move {
-                loop {
-                    use crate::config::fs::ASYNC_WB_INTERVAL;
+            crate::process::thread::spawn_kernel_thread(
+                async move {
+                    loop {
+                        use crate::config::fs::ASYNC_WB_INTERVAL;
 
-                    crate::timer::timeout_task::ksleep(core::time::Duration::from_millis(
-                        ASYNC_WB_INTERVAL,
-                    ))
-                    .await;
-                    // log::error!("I'm going to write back!!");
-                    if fs_moved.sync_fs().await.is_err() {
-                        log::info!(
-                            "[fs write back] fs {} must have already been umounted",
-                            fs_moved.metadata().mount_point
-                        );
-                        break;
+                        crate::timer::timeout_task::ksleep(core::time::Duration::from_millis(
+                            ASYNC_WB_INTERVAL,
+                        ))
+                        .await;
+                        // log::error!("I'm going to write back!!");
+                        if fs_moved.sync_fs().await.is_err() {
+                            log::info!(
+                                "[fs write back] fs {} must have already been umounted",
+                                fs_moved.metadata().mount_point
+                            );
+                            break;
+                        }
                     }
-                }
-            });
+                },
+                "kflushd",
+            );
         }
 
         Ok(fs)

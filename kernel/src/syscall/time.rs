@@ -329,10 +329,17 @@ pub fn sys_setitimer(
                     proc.timers[ITIMER_REAL as usize].it_value =
                         (current_time_duration() + next_timeout).into();
                 });
-                spawn_kernel_thread(async move {
-                    TimedTaskFuture::new(interval, callback, next_timeout + current_time_duration())
+                spawn_kernel_thread(
+                    async move {
+                        TimedTaskFuture::new(
+                            interval,
+                            callback,
+                            next_timeout + current_time_duration(),
+                        )
                         .await
-                });
+                    },
+                    "timer",
+                );
             }
             which
         }
