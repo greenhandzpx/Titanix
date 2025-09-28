@@ -1,1 +1,1 @@
-pub const HART_NUM: usize = 8;
+pub const HART_NUM: usize = 16;

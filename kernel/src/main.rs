@@ -195,9 +195,12 @@ pub fn rust_main(hart_id: usize) {
         );
 
         #[cfg(feature = "test_when_boot")]
-        thread::spawn_kernel_thread(async move {
-            tests::init();
-        });
+        thread::spawn_kernel_thread(
+            async move {
+                tests::init();
+            },
+            "ktestinitd",
+        );
 
         // barrier
         INIT_FINISHED.store(true, Ordering::SeqCst);

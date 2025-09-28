@@ -79,13 +79,13 @@ DISASM ?= -d
 
 # Qemu opts
 ifndef CPUS
-CPUS := 1
+CPUS := 8
 endif
 QFLAGS := 
 ifeq ($(SUBMIT), )
 	QFLAGS += -m 512M
 else
-	QFLAGS += -m 128M
+	QFLAGS += -m 512M
 endif
 QFLAGS += -machine virt 
 QFLAGS += -nographic
