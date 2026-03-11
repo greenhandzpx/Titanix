@@ -1,4 +1,4 @@
-use crate::sync::mutex::SpinNoIrqLock;
+use crate::{processor::local_hart, sync::mutex::SpinNoIrqLock};
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use core::future::Future;
@@ -124,9 +124,17 @@ pub fn has_task() -> bool {
 
 #[allow(unused)]
 pub fn run_forever() -> ! {
+    let mut cnt = 0;
     loop {
         if let Some(task) = TASK_QUEUE.fetch() {
+            println!("{} fetch a task", local_hart().hart_id());
             task.run();
+        } else {
+            cnt += 1;
+            if cnt == 1000000 {
+                println!("{} no more task", local_hart().hart_id());
+                cnt = 0;
+            }
         }
     }
 }

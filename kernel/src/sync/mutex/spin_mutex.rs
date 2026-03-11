@@ -7,7 +7,10 @@ use core::{
 
 // use riscv::register::sstatus;
 
-use crate::utils::async_utils::SendWrapper;
+use crate::{
+    processor::{local_hart, local_irq_is_enabled},
+    utils::async_utils::SendWrapper,
+};
 
 use super::MutexSupport;
 
@@ -49,9 +52,11 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
             core::hint::spin_loop();
             try_count += 1;
             if try_count == 0x10000000 {
-                println!("dead lock!!");
-                // panic!();
-                panic!("Mutex: deadlock detected! try_count > {:#x}\n", try_count);
+                println!(
+                    "============ dead lock!!!! hart {}===========",
+                    local_hart().hart_id()
+                );
+                // panic!("Mutex: deadlock detected! try_count > {:#x}\n", try_count);
             }
         }
     }
@@ -75,6 +80,14 @@ impl<'a, T, S: MutexSupport> SpinMutex<T, S> {
             mutex: self,
             support_guard,
         }
+    }
+
+    /// # Safety
+    ///
+    /// Users must ensure the correctness by themselves.
+    #[inline(always)]
+    pub unsafe fn unsafe_get(&self) -> &T {
+        &*self.data.get()
     }
 
     /// # SAFETY

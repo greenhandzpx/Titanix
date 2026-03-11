@@ -38,7 +38,7 @@ pub fn kernel_trap_handler() {
             return;
 
             if !local_hart_preemptible() {
-                log::info!("[kernel_trap_handler] cannot preempt");
+                log::debug!("[kernel_trap_handler] cannot preempt");
                 return;
             }
             if !executor::has_task() {

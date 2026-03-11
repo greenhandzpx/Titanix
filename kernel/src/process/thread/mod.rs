@@ -262,7 +262,7 @@ impl Thread {
 
     /// Tid of this thread
     pub fn tid(&self) -> usize {
-        stack_trace!();
+        // stack_trace!();
         self.tid.0
     }
 

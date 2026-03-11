@@ -57,8 +57,8 @@ pub fn local_irq_disable() {
     let before = local_irq_is_enabled();
     if before {
         local_env().irq_disable();
+        local_irq_hw_disable();
     }
-    local_irq_hw_disable();
 }
 
 pub fn local_irq_hw_disable() {

@@ -1,5 +1,6 @@
 use core::time::Duration;
 
+use alloc::string::ToString;
 use log::{debug, info, trace};
 
 use crate::{
@@ -338,7 +339,7 @@ pub fn sys_setitimer(
                         )
                         .await
                     },
-                    "timer",
+                    "timer".to_string(),
                 );
             }
             which

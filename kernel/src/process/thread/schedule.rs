@@ -1,4 +1,8 @@
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+    sync::Arc,
+};
 use core::{
     future::Future,
     pin::Pin,
@@ -48,7 +52,11 @@ impl<F: Future + Send + 'static> UserTaskFuture<F> {
             page_table: thread.process.inner.lock().memory_space.page_table.clone(),
         };
         // task_ctx.env.stack_tracker = Some(StackTracker::new());
-        let local_ctx = Box::new(LocalContext::new(Some(task_ctx), None, "user task"));
+        let local_ctx = Box::new(LocalContext::new(
+            Some(task_ctx),
+            None,
+            "user task".to_string(),
+        ));
         Self {
             task_ctx: local_ctx,
             task_future: future,
@@ -89,7 +97,7 @@ pub struct KernelTaskFuture<F: Future<Output = ()> + Send + 'static> {
 }
 
 impl<F: Future<Output = ()> + Send + 'static> KernelTaskFuture<F> {
-    pub fn new(task: F, name: &'static str) -> Self {
+    pub fn new(task: F, name: String) -> Self {
         Self {
             task_ctx: Box::new(LocalContext::new(None, None, name)),
             // always_local: AlwaysLocal::new(),
@@ -137,7 +145,7 @@ pub fn spawn_thread(thread: Arc<Thread>) {
 /// Spawn a new kernel thread(used for doing some kernel init work or timed tasks)
 pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(
     kernel_thread: F,
-    name: &'static str,
+    name: String,
 ) {
     let future = KernelTaskFuture::new(kernel_thread, name);
     let (runnable, task) = executor::spawn(future);
@@ -147,7 +155,7 @@ pub fn spawn_kernel_thread<F: Future<Output = ()> + Send + 'static>(
 
 pub fn spawn_time_consuming_kernel_thread<F: Future<Output = ()> + Send + 'static>(
     kernel_thread: F,
-    name: &'static str,
+    name: String,
 ) {
     let future = KernelTaskFuture::new(kernel_thread, name);
     let (runnable, task) = executor::spawn_time_consuming(future);

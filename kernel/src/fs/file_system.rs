@@ -316,7 +316,7 @@ impl FileSystemManager {
                         }
                     }
                 },
-                "kflushd",
+                "kflushd".to_string(),
             );
         }
 

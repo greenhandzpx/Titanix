@@ -122,7 +122,7 @@ impl Process {
 
     /// Get the process's pid
     pub fn pid(&self) -> usize {
-        stack_trace!();
+        // stack_trace!();
         self.pid.0
     }
 

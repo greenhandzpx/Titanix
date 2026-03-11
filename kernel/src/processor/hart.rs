@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, format, string::ToString, sync::Arc};
 use riscv::register::sstatus::{self, FS};
 
 use crate::{
@@ -8,10 +8,10 @@ use crate::{
     mm::{PageTable, KERNEL_SPACE},
     process::thread::Thread,
     processor::{
-        env, local_env, local_irq_disable, local_irq_enable, local_irq_hw_disable,
-        local_irq_is_enabled,
+        local_env, local_irq_disable, local_irq_enable, local_irq_hw_disable, local_irq_is_enabled,
     },
     stack_trace,
+    sync::rcu,
     utils::cell::SyncUnsafeCell,
 };
 
@@ -59,7 +59,7 @@ impl Hart {
         self.local_ctx.as_ref().unwrap().ktid()
     }
 
-    pub fn kname(&self) -> &'static str {
+    pub fn kname(&self) -> &str {
         self.local_ctx.as_ref().unwrap().kname()
     }
 
@@ -95,8 +95,9 @@ impl Hart {
         }
     }
 
-    pub fn init_local_ctx(&mut self) {
-        self.local_ctx = Some(Box::new(LocalContext::new(None, None, "init")));
+    pub fn init_local_ctx(&mut self, hart_id: usize) {
+        let name = format!("init{}", hart_id);
+        self.local_ctx = Some(Box::new(LocalContext::new(None, None, name)));
     }
 
     pub fn set_hart_id(&mut self, hart_id: usize) {
@@ -139,6 +140,8 @@ impl Hart {
         }
         core::mem::swap(self.local_ctx_mut(), task);
 
+        rcu::critical_start(self.hart_id());
+
         if enable_irq {
             local_irq_enable();
         }
@@ -180,6 +183,7 @@ impl Hart {
                     .when_leaving()
             }
         }
+        rcu::critical_end(self.hart_id());
         if enable_irq {
             local_irq_enable();
         }
@@ -193,6 +197,8 @@ impl Hart {
         let old_env = self.env();
         let enable_irq = EnvContext::env_change(new_env, old_env);
         core::mem::swap(self.local_ctx_mut(), task);
+
+        rcu::critical_start(self.hart_id());
 
         if enable_irq {
             // log::info!("enable irq, preempt level {}", local_hart_preempt_level());
@@ -216,6 +222,7 @@ impl Hart {
         let enable_irq = EnvContext::env_change(new_env, old_env);
         core::mem::swap(self.local_ctx_mut(), task);
 
+        rcu::critical_end(self.hart_id());
         if enable_irq {
             local_irq_enable();
         }
@@ -229,7 +236,11 @@ impl Hart {
         let mut new = Self::new();
         new.hart_id = self.hart_id;
         let env_ctx = EnvContext::new();
-        let local_ctx = Box::new(LocalContext::new(None, Some(env_ctx), "preempt tmp"));
+        let local_ctx = Box::new(LocalContext::new(
+            None,
+            Some(env_ctx),
+            "preempt tmp".to_string(),
+        ));
         new.local_ctx = Some(local_ctx);
         core::mem::swap(&mut new, self);
 

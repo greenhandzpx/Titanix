@@ -45,8 +45,8 @@ pub fn init() {
     allocator::heap_allocator::init_heap();
     allocator::heap_allocator::heap_test();
     unsafe {
-        for hart in HARTS.iter_mut() {
-            hart.init_local_ctx();
+        for (hart_id, hart) in HARTS.iter_mut().enumerate() {
+            hart.init_local_ctx(hart_id);
         }
     }
     allocator::frame_allocator::init_frame_allocator();

@@ -50,10 +50,11 @@ mod utils;
 
 use core::{
     arch::{asm, global_asm},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
     time::Duration,
 };
 
+use alloc::string::ToString;
 use riscv::register::sstatus;
 
 use crate::{
@@ -84,6 +85,7 @@ fn clear_bss() {
 
 // pub static FIRST_HART_ID: AtomicU8 = AtomicU8::new(0);
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
+static FIRST_HART_ID: AtomicUsize = AtomicUsize::new(0);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 
 #[allow(unused)]
@@ -138,6 +140,8 @@ pub fn rust_main(hart_id: usize) {
         // The first hart
         clear_bss();
 
+        FIRST_HART_ID.store(hart_id, Ordering::Relaxed);
+
         // processor::init();
         hart::init(hart_id);
         utils::logging::init();
@@ -167,7 +171,7 @@ pub fn rust_main(hart_id: usize) {
             async move {
                 process::add_initproc();
             },
-            "kinitprocd",
+            "kinitprocd".to_string(),
         );
 
         // debug thread
@@ -179,7 +183,7 @@ pub fn rust_main(hart_id: usize) {
                     ksleep(Duration::from_secs(3)).await;
                 }
             },
-            "kreportd",
+            "kreportd".to_string(),
         );
 
         // timer poll thread
@@ -191,15 +195,7 @@ pub fn rust_main(hart_id: usize) {
                     ksleep(Duration::from_millis(30)).await;
                 }
             },
-            "kpolld",
-        );
-
-        #[cfg(feature = "test_when_boot")]
-        thread::spawn_kernel_thread(
-            async move {
-                tests::init();
-            },
-            "ktestinitd",
+            "kpolld".to_string(),
         );
 
         // barrier
@@ -249,19 +245,36 @@ pub fn rust_main(hart_id: usize) {
 
     start_idle_thread();
 
-    loop {
-        executor::run_until_idle();
+    if hart_id == FIRST_HART_ID.load(Ordering::Relaxed) {
+        #[cfg(feature = "test_when_boot")]
+        thread::spawn_kernel_thread(
+            async move {
+                ksleep(Duration::from_secs(1)).await;
+                tests::init();
+            },
+            "ktestinitd".to_string(),
+        );
+    }
 
-        core::hint::spin_loop();
-        #[cfg(feature = "multi_hart")]
+    loop {
+        #[cfg(not(feature = "kernel_preempt"))]
+        executor::run_forever();
+
+        #[cfg(feature = "kernel_preempt")]
         {
-            use crate::timer::current_time_duration;
-            // core::hint::spin_loop();
-            let start_ts = current_time_duration();
-            loop {
-                let current_ts = current_time_duration();
-                if current_ts - start_ts > Duration::from_millis(2) {
-                    break;
+            executor::run_until_idle();
+
+            core::hint::spin_loop();
+            #[cfg(feature = "multi_hart")]
+            {
+                use crate::timer::current_time_duration;
+                // core::hint::spin_loop();
+                let start_ts = current_time_duration();
+                loop {
+                    let current_ts = current_time_duration();
+                    if current_ts - start_ts > Duration::from_millis(2) {
+                        break;
+                    }
                 }
             }
         }

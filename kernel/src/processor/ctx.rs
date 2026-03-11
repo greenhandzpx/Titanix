@@ -1,6 +1,6 @@
 use core::arch::{asm, riscv64::sfence_vma_all};
 
-use alloc::sync::Arc;
+use alloc::{string::String, sync::Arc};
 use riscv::register::sstatus;
 
 use crate::{
@@ -16,7 +16,7 @@ pub struct LocalContext {
     /// If no user task now(i.e. kernel thread is running), then None
     user_task_ctx: Option<UserTaskContext>,
     ktid: KTidHandle,
-    kname: &'static str,
+    kname: String,
     env: EnvContext,
 }
 
@@ -24,7 +24,7 @@ impl LocalContext {
     pub fn new(
         user_task_ctx: Option<UserTaskContext>,
         env: Option<EnvContext>,
-        kname: &'static str,
+        kname: String,
     ) -> Self {
         let env = match env {
             Some(env) => env,
@@ -69,8 +69,8 @@ impl LocalContext {
         self.ktid.0
     }
 
-    pub fn kname(&self) -> &'static str {
-        self.kname
+    pub fn kname(&self) -> &str {
+        &self.kname
     }
 
     /// Whether there is no user task now(i.e. kernel thread is running)

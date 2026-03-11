@@ -1,4 +1,7 @@
 #[cfg(feature = "kernel_preempt")]
+use alloc::string::ToString;
+
+#[cfg(feature = "kernel_preempt")]
 use crate::process::thread;
 
 pub fn start_idle_thread() {
@@ -12,6 +15,6 @@ pub fn start_idle_thread() {
                 }
             }
         },
-        "idle",
+        "idle".to_string(),
     );
 }

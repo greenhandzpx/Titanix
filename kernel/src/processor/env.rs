@@ -21,6 +21,9 @@ impl Drop for SumGuard {
 /// use RAII to guard `sie` flag
 pub struct IrqEnableGuard(bool);
 
+impl !Sync for IrqEnableGuard {}
+impl !Send for IrqEnableGuard {}
+
 impl IrqEnableGuard {
     #[allow(unused)]
     pub fn new() -> Self {

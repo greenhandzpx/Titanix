@@ -1,4 +1,4 @@
-use crate::processor::env::IrqEnableGuard;
+use crate::processor::{env::IrqEnableGuard, local_irq_is_enabled};
 
 use self::{remutex::ReentrantMutex, sleep_mutex::SleepMutex, spin_mutex::SpinMutex};
 
@@ -47,7 +47,9 @@ impl MutexSupport for SpinNoIrq {
     type GuardData = IrqEnableGuard;
     #[inline(always)]
     fn before_lock() -> Self::GuardData {
-        IrqEnableGuard::new()
+        let ret = IrqEnableGuard::new();
+        assert!(!local_irq_is_enabled());
+        ret
     }
     #[inline(always)]
     fn after_unlock(_: &mut Self::GuardData) {}
